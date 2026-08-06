@@ -15,6 +15,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QUrl>
 #include <QtNetwork/QNetworkProxy>
 
 namespace {
@@ -66,7 +67,9 @@ QString LuxuryLanguage::getCacheDir() const {
 }
 
 QString LuxuryLanguage::getCachePath(const QString &langId) const {
-	return getCacheDir() + langId + u".json"_q;
+	return getCacheDir()
+		+ QString::fromLatin1(QUrl::toPercentEncoding(langId))
+		+ u".json"_q;
 }
 
 void LuxuryLanguage::loadCachedLanguage() {
