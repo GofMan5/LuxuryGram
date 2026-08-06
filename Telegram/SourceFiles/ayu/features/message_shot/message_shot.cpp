@@ -38,28 +38,10 @@
 
 namespace LuxuryFeatures::MessageShot {
 
-ShotConfig *config = nullptr;
-
 bool takingShot = false;
 bool choosingTheme = false;
 
-void setShotConfig(ShotConfig &config) {
-	MessageShot::config = &config;
-}
-
-void resetShotConfig() {
-	config = nullptr;
-}
-
-ShotConfig getShotConfig() {
-	return *config;
-}
-
 bool ignoreRender(RenderPart part) {
-	if (!config) {
-		return false;
-	}
-
 	const auto &s = LuxurySettings::getInstance().messageShotSettings();
 	return isTakingShot()
 		&& ((part == RenderPart::Date && !s.showDate())

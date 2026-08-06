@@ -29,10 +29,6 @@ enum RenderPart
 	HeaderDecorations,
 };
 
-void setShotConfig(ShotConfig &config);
-void resetShotConfig();
-ShotConfig getShotConfig();
-
 bool ignoreRender(RenderPart part);
 bool isTakingShot();
 

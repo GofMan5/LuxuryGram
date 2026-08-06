@@ -72,8 +72,6 @@ void MessageShotBox::setupContent() {
 		}
 	}
 
-	LuxuryFeatures::MessageShot::setShotConfig(_config);
-
 	setTitle(rpl::single(tr::luxury_MessageShotTopBarText(tr::now)));
 
 	auto wrap = object_ptr<Ui::VerticalLayout>(this);
@@ -428,8 +426,6 @@ void MessageShotBox::setupContent() {
 		{
 			LuxuryFeatures::MessageShot::resetCustomSelected();
 			LuxuryFeatures::MessageShot::resetDefaultSelected();
-			LuxuryFeatures::MessageShot::resetShotConfig();
-
 			LuxurySettings::getInstance().setSimpleQuotesAndReplies(savedSimpleQuotesAndReplies);
 		},
 		content->lifetime());
