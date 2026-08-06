@@ -21,8 +21,9 @@
 #include "rpl/combine.h"
 #include "window/window_controller.h"
 
-#include <fstream>
 #include <QApplication>
+#include <QSaveFile>
+#include <fstream>
 
 using json = nlohmann::json;
 
@@ -419,11 +420,13 @@ void LuxurySettings::load() {
 void LuxurySettings::save() {
 	auto &settings = getInstance();
 	json p = settings;
-
-	std::ofstream file;
-	file.open(getSettingsPath());
-	file << p.dump(4);
-	file.close();
+	const auto data = QByteArray::fromStdString(p.dump(4));
+	QSaveFile file(QString::fromStdString(getSettingsPath()));
+	if (!file.open(QIODevice::WriteOnly)
+		|| file.write(data) != data.size()
+		|| !file.commit()) {
+		LOG(("LuxuryGramSettings: failed to save settings file"));
+	}
 }
 
 void LuxurySettings::reset() {
