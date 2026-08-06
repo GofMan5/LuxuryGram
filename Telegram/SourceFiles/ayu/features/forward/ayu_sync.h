@@ -33,7 +33,6 @@ void sendDocumentSync(not_null<Main::Session*> session,
 void sendStickerSync(not_null<Main::Session*> session,
 					 Api::MessageToSend &&message,
 					 not_null<DocumentData*> document);
-void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &action);
 void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<PhotoData*>, FullMsgId> &photos);
 void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_null<HistoryItem*> item);
 void forwardMessagesSync(not_null<Main::Session*> session,

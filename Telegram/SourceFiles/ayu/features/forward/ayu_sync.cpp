@@ -24,6 +24,45 @@
 
 namespace LuxurySync {
 
+namespace {
+
+template <typename Callback>
+void SendAndWait(
+		not_null<Main::Session*> session,
+		const Api::SendAction &action,
+		int count,
+		Callback &&callback) {
+	Expects(count > 0);
+
+	auto latch = std::make_shared<TimedCountDownLatch>(count);
+	auto lifetime = std::make_shared<rpl::lifetime>();
+
+	crl::on_main(session, [
+		session,
+		action,
+		count,
+		latch,
+		lifetime,
+		callback = std::forward<Callback>(callback)
+	]() mutable {
+		const auto peerId = action.history->peer->id;
+		session->data().itemIdChanged(
+		) | rpl::filter([peerId](const Data::Session::IdChange &update) {
+			return peerId == update.newId.peer;
+		}) | rpl::take(count) | rpl::on_next([latch] {
+			latch->countDown();
+		}, *lifetime);
+		callback();
+	});
+
+	latch->await(std::chrono::minutes(5));
+	crl::on_main([lifetime = std::move(lifetime)] {
+		lifetime->destroy();
+	});
+}
+
+} // namespace
+
 QString pathForSave(not_null<Main::Session*> session) {
 	auto path = Core::App().settings().downloadPath();
 	if (path.isEmpty()) {
@@ -236,39 +275,12 @@ void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<Ph
 
 void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&message) {
 	const auto action = message.action;
-	crl::on_main([=, message = std::move(message)]() mutable
-	{
+	SendAndWait(session, action, 1, [session, message = std::move(message)]() mutable {
 		// we cannot send events to objects
 		// owned by a different thread
 		// because sendMessage updates UI too
 
 		session->api().sendMessage(std::move(message));
-	});
-
-
-	waitForMsgSync(session, action);
-}
-
-void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &action) {
-	auto latch = std::make_shared<TimedCountDownLatch>(1);
-	auto lifetime = std::make_shared<rpl::lifetime>();
-
-	crl::on_main([=]
-	{
-		session->data().itemIdChanged()
-			| rpl::filter([=](const Data::Session::IdChange &update)
-			{
-				return action.history->peer->id == update.newId.peer;
-			}) | rpl::on_next([=]
-									  {
-										  latch->countDown();
-									  },
-									  *lifetime);
-	});
-
-	latch->await(std::chrono::minutes(5));
-	crl::on_main([lifetime = std::move(lifetime)] {
-		lifetime->destroy();
 	});
 }
 
@@ -279,9 +291,16 @@ void sendDocumentSync(not_null<Main::Session*> session,
 					  const Api::SendAction &action) {
 	auto groupId = std::make_shared<SendingAlbum>();
 	groupId->groupId = base::RandomValue<uint64>();
+	const auto count = int(group.list.files.size());
 
-	crl::on_main([=, lst = std::move(group.list), caption = std::move(caption)]() mutable
-	{
+	SendAndWait(session, action, count, [
+		session,
+		groupId,
+		type,
+		action,
+		lst = std::move(group.list),
+		caption = std::move(caption)
+	]() mutable {
 		auto size = lst.files.size();
 		if (!lst.files.empty()) {
 			lst.files.front().caption = std::move(caption);
@@ -292,20 +311,15 @@ void sendDocumentSync(not_null<Main::Session*> session,
 			size > 1 ? groupId : nullptr,
 			action);
 	});
-
-	waitForMsgSync(session, action);
 }
 
 void sendStickerSync(not_null<Main::Session*> session,
 					 Api::MessageToSend &&message,
 					 not_null<DocumentData*> document) {
 	const auto action = message.action;
-	crl::on_main([=, message = std::move(message)]() mutable
-	{
+	SendAndWait(session, action, 1, [document, message = std::move(message)]() mutable {
 		Api::SendExistingDocument(std::move(message), document, std::nullopt);
 	});
-
-	waitForMsgSync(session, action);
 }
 
 void sendVoiceSync(not_null<Main::Session*> session,
@@ -315,8 +329,14 @@ void sendVoiceSync(not_null<Main::Session*> session,
 				   Api::MessageToSend &&message) {
 	const auto action = message.action;
 
-	crl::on_main([=]
-	{
+	SendAndWait(session, action, 1, [
+		session,
+		data,
+		duration,
+		video,
+		action,
+		message = std::move(message)
+	] {
 		const auto to = FileLoadTo(
 			action.history->peer->id,
 			action.options,
@@ -332,7 +352,6 @@ void sendVoiceSync(not_null<Main::Session*> session,
 			.caption = message.textWithTags
 		}));
 	});
-	waitForMsgSync(session, action);
 }
 
 } // namespace LuxurySync
