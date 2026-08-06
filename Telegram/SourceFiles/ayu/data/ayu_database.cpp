@@ -156,12 +156,8 @@ namespace LuxuryMigrations {
 
 void migrateToV1(decltype(storage) &storage) {
 	// drop RegexFilter table as we've added primary_key()
-	try {
-		storage.drop_table_if_exists("RegexFilter");
-		LOG(("Migration to V1 successful."));
-	} catch (const std::exception &ex) {
-		LOG(("Migration to V1 failed: %1").arg(ex.what()));
-	}
+	storage.drop_table_if_exists("RegexFilter");
+	LOG(("Migration to V1 successful."));
 }
 
 }
