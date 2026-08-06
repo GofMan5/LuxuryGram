@@ -127,10 +127,12 @@ void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_
 	{
 		data->save(Data::FileOriginMessage(item->fullId()), path);
 
-		session->downloaderTaskFinished() | rpl::filter([=]
+		rpl::single() | rpl::then(
+			session->downloaderTaskFinished()
+		) | rpl::filter([=]
 		{
 			return !data || data->status == FileDownloadFailed || fileSize(item) == data->size;
-		}) | rpl::on_next([=]() mutable
+		}) | rpl::take(1) | rpl::on_next([=]() mutable
 								  {
 									  latch->countDown();
 								  },
@@ -211,10 +213,12 @@ void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<Ph
 	} else {
 		crl::on_main([=]
 		{
-			session->downloaderTaskFinished() | rpl::filter([=]
+			rpl::single() | rpl::then(
+				session->downloaderTaskFinished()
+			) | rpl::filter([=]
 			{
 				return finalCheck();
-			}) | rpl::on_next([=]() mutable
+			}) | rpl::take(1) | rpl::on_next([=]() mutable
 									  {
 										  saveToFiles();
 										  latch->countDown();
