@@ -176,6 +176,7 @@ private:
 	rpl::variable<bool> _sendOnlinePacketsLocked = false;
 	rpl::variable<bool> _sendUploadProgressLocked = false;
 	rpl::variable<bool> _sendOfflinePacketAfterOnlineLocked = false;
+	rpl::lifetime _lifetime;
 };
 
 void to_json(nlohmann::json &j, const GhostModeAccountSettings &s);

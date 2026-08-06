@@ -39,8 +39,6 @@ void repaintApp() {
 	}
 }
 
-rpl::lifetime lifetime; // idk reactivity dies when placed in `GhostModeAccountSettings` as field
-
 } // namespace
 
 GhostModeAccountSettings::GhostModeAccountSettings() {
@@ -66,7 +64,7 @@ GhostModeAccountSettings::GhostModeAccountSettings() {
 			&& (onlineLocked || !online)
 			&& (uploadLocked || !upload)
 			&& (offlineLocked || offline);
-	}, lifetime);
+	}, _lifetime);
 }
 
 void GhostModeAccountSettings::setSendReadMessages(bool val) {
