@@ -19,8 +19,8 @@ endif()
 project(Telegram
     LANGUAGES C CXX
     VERSION ${desktop_app_version_cmake}
-    DESCRIPTION "AyuGram Desktop"
-    HOMEPAGE_URL "https://ayugram.one"
+    DESCRIPTION "LuxuryGram Desktop"
+    HOMEPAGE_URL "https://github.com/GofMan5/LuxuryGram"
 )
 
 if (APPLE)
@@ -42,6 +42,9 @@ get_filename_component(cmake_helpers_loc "cmake" REALPATH)
 if (NOT DESKTOP_APP_USE_PACKAGED AND WIN32)
     set(Python3_EXECUTABLE ${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/python/Scripts/python)
 endif()
+
+set(DESKTOP_APP_DISABLE_AUTOUPDATE ON CACHE BOOL
+    "Disable autoupdate until the LuxuryGram update feed is published.")
 
 include(cmake/variables.cmake)
 include(cmake/nice_target_sources.cmake)

@@ -75,7 +75,7 @@ void runOnce() {
 					)).send();
 					state[id] = false;
 
-					DEBUG_LOG(("[AyuGram] Sent offline for account with id %1").arg(id));
+					DEBUG_LOG(("[LuxuryGram] Sent offline for account with id %1").arg(id));
 				}
 			}
 		}

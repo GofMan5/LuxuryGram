@@ -56,7 +56,7 @@ Some features operate locally and cannot change Telegram server-side behavior. A
 | Linux | Build guide available; first verified package pending |
 | Official package managers | Not published |
 
-The project is actively replacing inherited AyuGram-facing branding. Compatibility-critical internal identifiers may remain until they can be migrated without breaking updates, profiles, or platform integration.
+The user-facing application identity is LuxuryGram across supported desktop platforms. A small set of inherited AyuGram paths, service endpoints, and attribution references remains intentionally preserved where changing them would break profile, protocol, or source-line compatibility.
 
 ## Get LuxuryGram
 

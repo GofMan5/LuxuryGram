@@ -140,6 +140,9 @@ void processNewShortcuts(const QString &iconPath) {
 	}
 
 	const auto shortcuts = {
+		path + u"LuxuryGram Desktop/LuxuryGram.lnk"_q,
+		path + u"LuxuryGram/LuxuryGram.lnk"_q,
+		path + u"LuxuryGram.lnk"_q,
 		path + u"AyuGram Desktop/AyuGram.lnk"_q,
 		path + u"AyuGram/AyuGram.lnk"_q,
 		path + u"AyuGram.lnk"_q,

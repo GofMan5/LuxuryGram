@@ -8621,9 +8621,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // Keys finished
 
 
-// AyuGram keys generated
+// LuxuryGram keys generated
 
-"luxury_LuxuryPreferences" = "AyuGram Preferences";
+"luxury_LuxuryPreferences" = "LuxuryGram Preferences";
 "luxury_DocsText" = "Documentation";
 "luxury_CategoryGeneral" = "General";
 "luxury_CategoryAppearance" = "Appearance";
@@ -8681,7 +8681,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ExportDatabaseButton" = "Export Database";
 "luxury_ImportDatabaseButton" = "Import Database";
 "luxury_QoLTogglesHeader" = "Useful features";
-"luxury_KeepAliveService" = "AyuGram Push Service";
+"luxury_KeepAliveService" = "LuxuryGram Push Service";
 "luxury_KeepAliveServiceNote" = "We recommend migrating to **FCM** version.";
 "luxury_DisableAds" = "Disable Ads";
 "luxury_DisableStories" = "Disable Stories";
@@ -8722,7 +8722,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_CrashReporting" = "Crash Reporting";
 "luxury_CrashReportingDescription" = "When this option is enabled, you'll be prompted to send a report after the app crashes. You can decide whether to send it or not.";
 "luxury_ResetSettings" = "Reset Settings";
-"luxury_ResetSettingsConfirmation" = "Are you sure you want to reset **all** AyuGram preferences to their defaults?";
+"luxury_ResetSettingsConfirmation" = "Are you sure you want to reset **all** LuxuryGram preferences to their defaults?";
 "luxury_DisableColorfulCover" = "Disable adaptive color";
 "luxury_EnableColorfulCover" = "Enable adaptive color";
 "luxury_CustomizationHeader" = "Customization";
@@ -8781,14 +8781,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SettingsBiggerWindow" = "Bigger Window";
 "luxury_SettingsIncreaseWebviewHeight" = "Increase Content Height";
 "luxury_SettingsIncreaseWebviewWidth" = "Increase Content Width";
-"luxury_ExportDataTitle" = "Export AyuGram Database?";
+"luxury_ExportDataTitle" = "Export LuxuryGram Database?";
 "luxury_ExportDataDescription" = "It will be exported to the public folder under Saved Attachments.";
 "luxury_ExportDataConfirm" = "Yes, export";
 "luxury_ExportDataCancel" = "No, close window";
 "luxury_ExportDataSuccess" = "Database exported successfully.";
 "luxury_ExportDataFailure" = "Failed to export database.";
 "luxury_ImportDataNotFound" = "No database to import.";
-"luxury_ImportDataTitle" = "Import AyuGram Database?";
+"luxury_ImportDataTitle" = "Import LuxuryGram Database?";
 "luxury_ImportDataDescription" = "It will replace the current database.";
 "luxury_ImportDataConfirm" = "Yes, replace existing";
 "luxury_ImportDataCancel" = "No, close window";
@@ -8855,7 +8855,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_FiltersClearPopupAltActionText" = "Clear unknown";
 "luxury_AppIconHeader" = "App Icon";
 "luxury_IconDefault" = "Default";
-"luxury_IconAlternative" = "AyuGram Alt";
+"luxury_IconAlternative" = "LuxuryGram Alt";
 "luxury_IconDiscord" = "Discord";
 "luxury_IconSpotify" = "Spotify";
 "luxury_IconExtera" = "extera";
@@ -8865,8 +8865,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_IconLuxuryTyan" = "AyuTyan";
 "luxury_WALMode" = "Enable WAL mode";
 "luxury_PushNotificationCount" = "FCM notifications received";
-"luxury_LuxuryAttachments" = "AyuGram Attachments Folder";
-"luxury_LuxuryDatabase" = "AyuGram Messages Database";
+"luxury_LuxuryAttachments" = "LuxuryGram Attachments Folder";
+"luxury_LuxuryDatabase" = "LuxuryGram Messages Database";
 "luxury_TelegramCacheDatabase" = "Telegram Messages Database";
 "luxury_ConfirmationsTitle" = "Send Confirmations";
 "luxury_StickerConfirmation" = "Stickers";
@@ -8941,9 +8941,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SuggestGhostModeStoryText" = "Do you want to enable **Ghost Mode** before viewing the story?";
 "luxury_SuggestGhostModeStoryActionTextYes" = "Yes";
 "luxury_SuggestGhostModeStoryActionTextNo" = "No";
-"luxury_FirstLaunchAlert" = "AyuGram is **free** software and should only be obtained from our **official sources**. You assume **full responsibility** for using this application with your account.";
+"luxury_FirstLaunchAlert" = "LuxuryGram is **free** software and should only be obtained from our **official sources**. You assume **full responsibility** for using this application with your account.";
 "luxury_LocalPremiumAlert" = "With local Telegram Premium, you won't get increased limits or be able to send animated emojis. Other users won't see your premium emoji and quote color.";
-"luxury_ExteraChatsAlert" = "Don't ask questions related to **AyuGram** in **exteraGram** chats. If you need help, ask in the official **AyuGram** chat.";
+"luxury_ExteraChatsAlert" = "Please keep **LuxuryGram** support requests in the project's official issue tracker instead of **exteraGram** chats.";
 "luxury_HideNextViewsDescriptionLuxury" = "Hide my views forever, until Ghost Mode is disabled.";
 "luxury_EnableGhostModeStories" = "Enable Ghost Mode";
 "luxury_GhostModeIsActive" = "Ghost Mode is Active";
@@ -9015,7 +9015,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_PluginVersion" = "Version";
 "luxury_PluginNoDescription" = "No description provided.";
 "luxury_PluginNoAuthor" = "Unknown Author";
-"luxury_PluginsNotAvailable" = "Plugins are not supported by AyuGram Desktop yet.";
+"luxury_PluginsNotAvailable" = "Plugins are not supported by LuxuryGram Desktop yet.";
 "luxury_SessionTerminated" = "Session **{item}** was terminated. You may still browse cached messages.";
 "luxury_InvalidConnectionLayerNote" = "You should re-login due to an error during the update.";
 "luxury_LocalPremiumNotice" = "You're using **local** Telegram Premium.\nIt **won't** give you any benefits.\n**Enjoy the star near your nickname!**";
@@ -9024,13 +9024,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OfficialResourcePopup" = "**{item}** is the official resource of **exteraGram** or **AyuGram**.";
 "luxury_MutualContactInfo" = "This contact is mutual.";
 "luxury_SessionInfoOfficialApp" = "Official app";
-"luxury_SettingsWatermark" = "AyuGram is developed and maintained by Radolyn Labs.";
+"luxury_SettingsWatermark" = "LuxuryGram builds on AyuGram by Radolyn Labs and Telegram Desktop.";
 "luxury_SettingsDescription" = "Telegram Desktop fork focused on customization and ToS-breaking features.";
 "luxury_ConfirmationSticker" = "Do you want to send this sticker?";
 "luxury_ConfirmationGIF" = "Do you want to send this GIF?";
 "luxury_ConfirmationVoice" = "Do you want to send this voice message?";
 "luxury_ConfirmationRound" = "Do you want to send this round video?";
-"luxury_IntroAbout" = "Welcome to the AyuGram Desktop.\nMake Telegram your own.";
+"luxury_IntroAbout" = "Welcome to LuxuryGram Desktop.\nMake Telegram your own.";
 "luxury_AboutText1" = "ToS breaking Telegram client based on {api_link}.";
-"luxury_UpdateLuxuryGram" = "Update AyuGram";
+"luxury_UpdateLuxuryGram" = "Update LuxuryGram";
 "luxury_UtilityRestartRequired" = "The app will close in 5 seconds.";

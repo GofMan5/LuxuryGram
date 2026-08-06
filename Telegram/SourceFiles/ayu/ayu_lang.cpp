@@ -101,7 +101,7 @@ void LuxuryLanguage::loadCachedLanguage() {
 		QJsonParseError error{};
 		const auto doc = QJsonDocument::fromJson(data, &error);
 		if (error.error == QJsonParseError::NoError) {
-			LOG(("Loading cached AyuGram language: %1").arg(finalLangPackId));
+			LOG(("Loading cached LuxuryGram language: %1").arg(finalLangPackId));
 			applyLanguageJson(doc);
 		}
 	}
@@ -116,7 +116,7 @@ void LuxuryLanguage::saveCachedLanguage(const QByteArray &json, const QString &l
 	if (file.open(QIODevice::WriteOnly)) {
 		file.write(json);
 		file.close();
-		LOG(("Cached AyuGram language: %1").arg(langId));
+		LOG(("Cached LuxuryGram language: %1").arg(langId));
 	}
 }
 
@@ -184,7 +184,7 @@ void LuxuryLanguage::fetchFinished() {
 		QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
 	if (statusCode == 404 && !langPackId.isEmpty() && !langPackBaseId.isEmpty() && !needFallback) {
-		LOG(("AyuGram Language not found! Fallback to main language: %1...").arg(langPackBaseId));
+		LOG(("LuxuryGram Language not found! Fallback to main language: %1...").arg(langPackBaseId));
 		needFallback = true;
 		clearReply();
 		fetchLanguage("", langPackBaseId);
@@ -217,12 +217,12 @@ void LuxuryLanguage::fetchError(QNetworkReply::NetworkError e) {
 		const auto id = Lang::GetInstance().id();
 
 		if (!id.isEmpty() && !baseId.isEmpty() && !needFallback) {
-			LOG(("AyuGram Language not found! Fallback to main language: %1...").arg(baseId));
+			LOG(("LuxuryGram Language not found! Fallback to main language: %1...").arg(baseId));
 			needFallback = true;
 			clearReply();
 			fetchLanguage("", baseId);
 		} else {
-			LOG(("AyuGram Language not found!"));
+			LOG(("LuxuryGram Language not found!"));
 			clearReply();
 		}
 	} else {

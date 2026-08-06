@@ -153,7 +153,7 @@ jobs:
           -D CMAKE_CXX_FLAGS_DEBUG="-O0 -fpch-preprocess" \
           -D CMAKE_COMPILE_WARNING_AS_ERROR=ON \
           -D TDESKTOP_API_TEST=ON \
-          -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF \
+          -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF \
           $DEFINE
 
@@ -186,7 +186,7 @@ jobs:
       - name: Check.
         if: env.ONLY_CACHE == 'false'
         run: |
-          filePath="out/Debug/AyuGram"
+          filePath="out/Debug/LuxuryGram"
           if test -f "$filePath"; then
             echo "Build successfully done! :)"
 
@@ -202,7 +202,7 @@ jobs:
         run: |
           cd out/Debug
           mkdir artifact
-          mv {AyuGram,Updater} artifact/
+          mv LuxuryGram artifact/
       - uses: actions/upload-artifact@v7
         if: env.UPLOAD_ARTIFACT == 'true'
         name: Upload artifact.

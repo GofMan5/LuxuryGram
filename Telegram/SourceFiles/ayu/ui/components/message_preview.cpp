@@ -75,7 +75,7 @@ MessagePreview::MessagePreview(
 
 	const auto luxuryGramUser = HistoryView::GenerateUser(
 		history,
-		u"AyuGram Releases"_q);
+		u"LuxuryGram"_q);
 	const auto messageItem = history->addNewLocalMessage({
 		.id = history->nextNonHistoryEntryId(),
 		.flags = (MessageFlag::FakeHistoryItem

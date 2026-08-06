@@ -6,35 +6,28 @@
 // Copyright @Radolyn, 2026
 #include "ayu/ui/components/avatar_corners_preview.h"
 
-#include "apiwrap.h"
-#include "data/data_peer.h"
 #include "data/data_peer_id.h"
-#include "data/data_session.h"
-#include "main/main_session.h"
 #include "styles/style_ayu_icons.h"
 #include "styles/style_dialogs.h"
 #include "styles/style_settings.h"
 #include "ui/empty_userpic.h"
 #include "ui/painter.h"
-#include "ui/userpic_view.h"
 #include "ui/effects/ripple_animation.h"
-#include "window/window_session_controller.h"
-#include "window/window_session_controller_link_info.h"
+
+#include <QDesktopServices>
 
 AvatarCornersPreview::AvatarCornersPreview(
 	QWidget *parent,
-	not_null<Window::SessionController*> controller)
+	not_null<Window::SessionController*>)
 : RpWidget(parent)
-, _controller(controller)
 , _emptyUserpic(
 	Ui::EmptyUserpic::UserpicColor(
 		Data::DecideColorIndex(
 			peerFromChannel(ChannelId(2331068091)))),
-	u"AyuGram Releases"_q) {
+	u"LuxuryGram"_q) {
 	const auto &row = st::defaultDialogRow;
 	setFixedHeight(row.height);
 	setCursor(Qt::PointingHandCursor);
-	resolveChannel();
 }
 
 void AvatarCornersPreview::paintEvent(QPaintEvent *e) {
@@ -56,14 +49,9 @@ void AvatarCornersPreview::paintEvent(QPaintEvent *e) {
 		}
 	}
 
-	if (_peer) {
-		_peer->paintUserpicLeft(
-			p, _userpicView, userpicX, userpicY, width(), photoSize);
-	} else {
-		_emptyUserpic.paintCircle(p, userpicX, userpicY, width(), photoSize);
-	}
+	_emptyUserpic.paintCircle(p, userpicX, userpicY, width(), photoSize);
 
-	const auto nameText = u"AyuGram Releases"_q;
+	const auto nameText = u"LuxuryGram"_q;
 	p.setPen(st::dialogsNameFg);
 	p.setFont(st::semiboldFont);
 	p.drawText(row.nameLeft + xShift, row.nameTop + st::semiboldFont->ascent, nameText);
@@ -95,44 +83,7 @@ void AvatarCornersPreview::mouseReleaseEvent(QMouseEvent *e) {
 		_ripple->lastStop();
 	}
 	if (e->button() == Qt::LeftButton && rect().contains(e->pos())) {
-		_controller->showPeerByLink(Window::PeerByLinkInfo{
-			.usernameOrId = u"AyuGramReleases"_q,
-		});
+		QDesktopServices::openUrl(
+			u"https://github.com/GofMan5/LuxuryGram/releases"_q);
 	}
-}
-
-void AvatarCornersPreview::resolveChannel() {
-	const auto session = &_controller->session();
-	_peer = session->data().peerByUsername(u"AyuGramReleases"_q);
-	if (_peer) {
-		_peer->loadUserpic();
-		subscribeToUpdates();
-		return;
-	}
-	const auto weak = base::make_weak(this);
-	session->api().request(MTPcontacts_ResolveUsername(
-		MTP_flags(0),
-		MTP_string(u"AyuGramReleases"_q),
-		MTP_string()
-	)).done([=](const MTPcontacts_ResolvedPeer &result) {
-		if (const auto strong = weak.get()) {
-			session->data().processUsers(result.data().vusers());
-			session->data().processChats(result.data().vchats());
-			strong->_peer = session->data().peerLoaded(
-				peerFromMTP(result.data().vpeer()));
-			if (strong->_peer) {
-				strong->_peer->loadUserpic();
-				strong->subscribeToUpdates();
-			}
-			strong->update();
-		}
-	}).send();
-}
-
-void AvatarCornersPreview::subscribeToUpdates() {
-	if (!_peer) return;
-	_peer->session().downloaderTaskFinished(
-	) | rpl::on_next([=] {
-		update();
-	}, lifetime());
 }

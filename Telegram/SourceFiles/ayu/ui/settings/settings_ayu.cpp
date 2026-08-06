@@ -681,7 +681,7 @@ void BuildOther(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 const auto kMeta = BuildHelper({
 	.id = LuxuryGhost::Id(),
 	.parentId = LuxuryMain::Id(),
-	.title = u"AyuGram"_q,
+	.title = u"LuxuryGram"_q,
 	.icon = &st::menuIconGroupReactions,
 }, [](SectionBuilder &builder) {
 	auto luxury = LuxurySectionBuilder(builder);
@@ -700,7 +700,7 @@ const auto kMeta = BuildHelper({
 } // namespace
 
 rpl::producer<QString> LuxuryGhost::title() {
-	return rpl::single(QString("AyuGram"));
+	return rpl::single(QString("LuxuryGram"));
 }
 
 LuxuryGhost::LuxuryGhost(

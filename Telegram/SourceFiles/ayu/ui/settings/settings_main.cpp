@@ -28,7 +28,6 @@
 #include "ui/widgets/labels.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
-#include "window/window_session_controller_link_info.h"
 
 #include <QDesktopServices>
 
@@ -70,7 +69,7 @@ void BuildVersionInfo(SectionBuilder &builder) {
 			.widget = object_ptr<Ui::FlatLabel>(
 				ctx.container,
 				rpl::single(
-					QString("AyuGram Desktop v")
+					QString("LuxuryGram Desktop v")
 					+ QString::fromLatin1(AppVersionStr)),
 				st::boxTitle),
 			.align = style::al_top,
@@ -101,7 +100,7 @@ void BuildCategories(SectionBuilder &builder) {
 	builder.addSubsectionTitle(tr::luxury_CategoriesHeader());
 
 	builder.addSectionButton({
-		.title = rpl::single(QString("AyuGram")),
+		.title = rpl::single(QString("LuxuryGram")),
 		.targetSection = LuxuryGhost::Id(),
 		.icon = { &st::menuIconGroupReactions },
 	});
@@ -139,48 +138,44 @@ void BuildLinks(SectionBuilder &builder) {
 
 	builder.addSubsectionTitle(tr::luxury_LinksHeader());
 
-	const auto controller = builder.controller();
-
 	builder.addButton({
-		.id = u"ayu/channel"_q,
+		.id = u"luxury/repository"_q,
 		.title = tr::luxury_LinksChannel(),
 		.icon = { &st::menuIconChannel },
-		.label = rpl::single(QString("@ayugram")),
+		.label = rpl::single(QString("GitHub")),
 		.onClick = [=] {
-			controller->showPeerByLink(Window::PeerByLinkInfo{
-				.usernameOrId = QString("ayugram"),
-			});
+			QDesktopServices::openUrl(
+				QString("https://github.com/GofMan5/LuxuryGram"));
 		},
 	});
 	builder.addButton({
-		.id = u"ayu/chat"_q,
+		.id = u"luxury/issues"_q,
 		.title = tr::luxury_LinksChats(),
 		.icon = { &st::menuIconChats },
-		.label = rpl::single(QString("@ayugramchat")),
+		.label = rpl::single(QString("Issues")),
 		.onClick = [=] {
-			controller->showPeerByLink(Window::PeerByLinkInfo{
-				.usernameOrId = QString("ayugramchat"),
-			});
+			QDesktopServices::openUrl(
+				QString("https://github.com/GofMan5/LuxuryGram/issues"));
 		},
 	});
 	builder.addButton({
-		.id = u"ayu/crowdin"_q,
+		.id = u"luxury/contributing"_q,
 		.title = tr::luxury_LinksTranslate(),
 		.icon = { &st::menuIconTranslate },
-		.label = rpl::single(QString("Crowdin")),
+		.label = rpl::single(QString("Contributing")),
 		.onClick = [=] {
 			QDesktopServices::openUrl(
-				QString("https://translate.ayugram.one"));
+				QString("https://github.com/GofMan5/LuxuryGram/blob/dev/CONTRIBUTING.md"));
 		},
 	});
 	builder.addButton({
-		.id = u"ayu/website"_q,
+		.id = u"luxury/documentation"_q,
 		.title = tr::luxury_LinksDocumentation(),
 		.icon = { &st::menuIconIpAddress },
-		.label = rpl::single(QString("docs.ayugram.one")),
+		.label = rpl::single(QString("Docs")),
 		.onClick = [=] {
 			QDesktopServices::openUrl(
-				QString("https://docs.ayugram.one"));
+				QString("https://github.com/GofMan5/LuxuryGram/tree/dev/docs"));
 		},
 	});
 

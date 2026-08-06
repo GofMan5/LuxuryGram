@@ -21,7 +21,7 @@ namespace LuxuryAssets {
 QString appIcoPath() {
 	const auto &settings = LuxurySettings::getInstance();
 	return cWorkingDir()
-		+ u"tdata/AyuGram-"_q
+		+ u"tdata/LuxuryGram-"_q
 		+ settings.appIcon()
 		+ u".ico"_q;
 }
