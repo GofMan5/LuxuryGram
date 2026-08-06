@@ -94,18 +94,21 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 	struct State {
 		base::weak_ptr<Main::Session> session;
 		PeerId peerId;
-		std::vector<MsgId> collected;
-		Fn<void(int)> removeNext;
+		int totalDeleted = 0;
 		Fn<void(MsgId)> requestNext;
+		Fn<void(QVector<MTPint>, MsgId, bool)> removeBatch;
 	};
 	const auto state = std::make_shared<State>();
 	state->session = base::make_weak(session);
 	state->peerId = peer->id;
 	const auto weak = std::weak_ptr<State>(state);
 
-	state->removeNext = [weak](int index) {
+	state->removeBatch = [weak](
+			QVector<MTPint> ids,
+			MsgId nextFrom,
+			bool hasMore) {
 		const auto state = weak.lock();
-		if (!state) {
+		if (!state || ids.isEmpty()) {
 			return;
 		}
 		const auto session = state->session.get();
@@ -115,20 +118,8 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 		if (!peer) {
 			return;
 		}
-		if (index >= int(state->collected.size())) {
-			DEBUG_LOG(("Deleted all %1 my messages in this chat").arg(
-				state->collected.size()));
-			return;
-		}
-
-		auto ids = QVector<MTPint>();
-		ids.reserve(std::min<int>(100, state->collected.size() - index));
-		for (auto i = 0; i < 100 && (index + i) < int(state->collected.size()); ++i) {
-			ids.push_back(MTP_int(state->collected[index + i].bare));
-		}
-
-		const auto batch = index / 100 + 1;
-		const auto done = [state, ids, index, batch](
+		const auto batch = state->totalDeleted / 100 + 1;
+		const auto done = [state, ids, nextFrom, hasMore, batch](
 				const MTPmessages_AffectedMessages &result) {
 			const auto session = state->session.get();
 			const auto peer = session
@@ -143,21 +134,25 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 			} else {
 				session->data().processNonChannelMessagesDeleted(ids);
 			}
-			const auto deleted = index + ids.size();
-			DEBUG_LOG(("Deleted batch %1, total deleted %2/%3")
+			state->totalDeleted += ids.size();
+			DEBUG_LOG(("Deleted batch %1, total deleted %2")
 				.arg(batch)
-				.arg(deleted)
-				.arg(state->collected.size()));
+				.arg(state->totalDeleted));
+			if (!hasMore) {
+				DEBUG_LOG(("Deleted all %1 my messages in this chat")
+					.arg(state->totalDeleted));
+				return;
+			}
 			const auto delay = crl::time(
 				500 + base::RandomValue<int>() % 500);
-			base::call_delayed(delay, [state, deleted] {
-				state->removeNext(deleted);
+			base::call_delayed(delay, [state, nextFrom] {
+				state->requestNext(nextFrom);
 			});
 		};
-		const auto fail = [state, ids, index, batch](const MTP::Error &error) {
+		const auto fail = [state, ids, nextFrom, hasMore, batch](
+				const MTP::Error &error) {
 			const auto type = error.type();
 			DEBUG_LOG(("Delete batch %1 failed: %2").arg(batch).arg(type));
-
 			if (type.startsWith(u"FLOOD_WAIT_"_q)
 				|| type.startsWith(u"FLOOD_PREMIUM_WAIT_"_q)) {
 				const auto underscore = type.lastIndexOf('_');
@@ -165,26 +160,26 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 					? type.mid(underscore + 1).toInt()
 					: 0;
 				const auto delay = crl::time(std::max(seconds, 1) * 1000);
-				base::call_delayed(delay, [state, index] {
-					state->removeNext(index);
+				base::call_delayed(delay, [state, ids, nextFrom, hasMore] {
+					state->removeBatch(ids, nextFrom, hasMore);
 				});
 				return;
 			}
-
 			if (type == u"MESSAGE_DELETE_FORBIDDEN"_q
 				|| type == u"MSG_ID_INVALID"_q
 				|| type == u"MESSAGE_ID_INVALID"_q) {
 				DEBUG_LOG(("Skipping batch %1 (%2 ids)")
 					.arg(batch)
 					.arg(ids.size()));
-				const auto delay = crl::time(
-					500 + base::RandomValue<int>() % 500);
-				base::call_delayed(delay, [state, next = index + ids.size()] {
-					state->removeNext(next);
-				});
+				if (hasMore) {
+					const auto delay = crl::time(
+						500 + base::RandomValue<int>() % 500);
+					base::call_delayed(delay, [state, nextFrom] {
+						state->requestNext(nextFrom);
+					});
+				}
 				return;
 			}
-
 			DEBUG_LOG(("Stopping deletion, unrecoverable error: %1").arg(type));
 		};
 
@@ -257,23 +252,25 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 					from,
 					Data::LoadDirection::Before,
 					result);
+				auto ids = QVector<MTPint>();
+				ids.reserve(parsed.messageIds.size());
 				auto minId = MsgId();
 				for (const auto &id : parsed.messageIds) {
+					ids.push_back(MTP_int(id.bare));
 					if (!minId || id < minId) {
 						minId = id;
 					}
-					state->collected.push_back(id);
 				}
-				DEBUG_LOG(("Batch found %1 my messages, total %2")
-					.arg(parsed.messageIds.size())
-					.arg(state->collected.size()));
-				if (parsed.messageIds.size() == 100 && minId) {
-					state->requestNext(minId - MsgId(1));
-				} else {
-					DEBUG_LOG(("Found %1 my messages in this chat (SEARCH)")
-						.arg(state->collected.size()));
-					state->removeNext(0);
+				if (ids.isEmpty()) {
+					DEBUG_LOG(("Deleted all %1 my messages in this chat")
+						.arg(state->totalDeleted));
+					return;
 				}
+				const auto hasMore = parsed.messageIds.size() == 100 && minId;
+				state->removeBatch(
+					std::move(ids),
+					hasMore ? (minId - MsgId(1)) : MsgId(),
+					hasMore);
 			})
 			.fail([state](const MTP::Error &error) {
 				DEBUG_LOG(("History fetch failed: %1").arg(error.type()));
