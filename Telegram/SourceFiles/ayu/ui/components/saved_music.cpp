@@ -69,7 +69,7 @@ struct Cover
 {
 	QPixmap pixToDraw;
 	QPixmap pixToBg;
-	bool noCover;
+	bool noCover = true;
 };
 
 QPixmap MakeNoCoverImage(const QSize &size) {

@@ -31,16 +31,16 @@ public:
 private:
 	void ensureTextColorsGenerated() const;
 
-	int _red;
-	int _green;
-	int _blue;
-	QRgb _rgb;
-	int _population;
+	int _red = 0;
+	int _green = 0;
+	int _blue = 0;
+	QRgb _rgb = 0;
+	int _population = 0;
 
 	mutable bool _generatedTextColors = false;
 	mutable QColor _titleTextColor;
 	mutable QColor _bodyTextColor;
-	mutable std::array<float, 3> _hsl;
+	mutable std::array<float, 3> _hsl = {};
 	mutable bool _hslCalculated = false;
 };
 

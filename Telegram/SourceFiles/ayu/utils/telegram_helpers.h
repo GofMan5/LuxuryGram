@@ -49,9 +49,9 @@ public:
     }
 
 private:
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    int count_;
+	std::mutex mutex_;
+	std::condition_variable cv_;
+	int count_ = 0;
 };
 
 Main::Session *getSession(ID userId);

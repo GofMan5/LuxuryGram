@@ -24,7 +24,7 @@ struct ResultCover
 {
 	QPixmap pix;
 	QColor bg;
-	bool noCover;
+	bool noCover = true;
 };
 
 class LuxuryMusicButton final : public Ui::RippleButton

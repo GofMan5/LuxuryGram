@@ -59,7 +59,7 @@ private:
 
 	const not_null<Main::Session*> _session;
 	not_null<Window::SessionController*> _controller;
-	bool shadowBan;
+	bool shadowBan = false;
 };
 
 } // namespace Settings

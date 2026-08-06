@@ -58,7 +58,7 @@ public:
 		QStringList altIds;
 		rpl::producer<QString> title;
 		rpl::producer<QString> boxTitle;
-		int initialSelection;
+		int initialSelection = 0;
 		std::vector<QString> options;
 		Fn<void(int)> setter;
 		IconDescriptor icon;
@@ -71,8 +71,8 @@ public:
 		QStringList altIds;
 		rpl::producer<QString> title;
 		bool showTitle = true;
-		int steps;
-		int current;
+		int steps = 0;
+		int current = 0;
 		Fn<int(int)> indexToValue;
 		Fn<void(int)> onChanged;
 		Fn<void(int)> onFinalChanged;

@@ -44,13 +44,16 @@ private:
 		[[nodiscard]] int longestColorDimension() const;
 		[[nodiscard]] int findSplitPoint();
 
-		int _lowerIndex;
-		int _upperIndex;
-		int _population;
-		int _minRed, _maxRed;
-		int _minGreen, _maxGreen;
-		int _minBlue, _maxBlue;
-		ColorCutQuantizer *_quantizer;
+		int _lowerIndex = 0;
+		int _upperIndex = 0;
+		int _population = 0;
+		int _minRed = 0;
+		int _maxRed = 0;
+		int _minGreen = 0;
+		int _maxGreen = 0;
+		int _minBlue = 0;
+		int _maxBlue = 0;
+		ColorCutQuantizer *_quantizer = nullptr;
 	};
 
 	static constexpr int COMPONENT_RED = -3;
@@ -82,7 +85,7 @@ private:
 	std::vector<int> _histogram;
 	std::vector<Swatch> _quantizedColors;
 	std::vector<Filter*> _filters;
-	mutable std::array<float, 3> _tempHsl;
+	mutable std::array<float, 3> _tempHsl = {};
 
 	friend class Vbox;
 };

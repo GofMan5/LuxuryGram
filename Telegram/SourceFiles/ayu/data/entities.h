@@ -13,37 +13,37 @@ using ID = long long;
 class LuxuryMessageBase
 {
 public:
-	ID fakeId;
-	ID userId;
-	ID dialogId;
-	ID groupedId;
-	ID peerId;
-	ID fromId;
-	ID topicId;
-	int messageId;
-	int date;
-	int flags;
-	int editDate;
-	int views;
-	int fwdFlags;
-	ID fwdFromId;
+	ID fakeId = 0;
+	ID userId = 0;
+	ID dialogId = 0;
+	ID groupedId = 0;
+	ID peerId = 0;
+	ID fromId = 0;
+	ID topicId = 0;
+	int messageId = 0;
+	int date = 0;
+	int flags = 0;
+	int editDate = 0;
+	int views = 0;
+	int fwdFlags = 0;
+	ID fwdFromId = 0;
 	std::string fwdName;
-	int fwdDate;
+	int fwdDate = 0;
 	std::string fwdPostAuthor;
 	std::string postAuthor;
-	int replyFlags;
-	int replyMessageId;
-	ID replyPeerId;
-	int replyTopId;
-	bool replyForumTopic;
+	int replyFlags = 0;
+	int replyMessageId = 0;
+	ID replyPeerId = 0;
+	int replyTopId = 0;
+	bool replyForumTopic = false;
 	std::vector<char> replySerialized;
 	std::vector<char> replyMarkupSerialized;
-	int entityCreateDate;
+	int entityCreateDate = 0;
 	std::string text;
 	std::vector<char> textEntities;
 	std::string mediaPath;
 	std::string hqThumbPath;
-	int documentType;
+	int documentType = 0;
 	std::vector<char> documentSerialized;
 	std::vector<char> thumbsSerialized;
 	std::vector<char> documentAttributesSerialized;
@@ -61,15 +61,15 @@ class EditedMessage : public LuxuryMessageBase
 class DeletedDialog
 {
 public:
-	ID fakeId;
-	ID userId;
-	ID dialogId;
-	ID peerId;
+	ID fakeId = 0;
+	ID userId = 0;
+	ID dialogId = 0;
+	ID peerId = 0;
 	std::unique_ptr<int> folderId; // nullable
-	int topMessage;
-	int lastMessageDate;
-	int flags;
-	int entityCreateDate;
+	int topMessage = 0;
+	int lastMessageDate = 0;
+	int flags = 0;
+	int entityCreateDate = 0;
 };
 
 class RegexFilter
@@ -77,9 +77,9 @@ class RegexFilter
 public:
 	std::vector<char> id;
 	std::string text;
-	bool enabled;
-	bool reversed;
-	bool caseInsensitive;
+	bool enabled = false;
+	bool reversed = false;
+	bool caseInsensitive = false;
 	std::optional<ID> dialogId; // nullable
 
 	bool operator==(const RegexFilter &other) const {
@@ -107,8 +107,8 @@ public:
 class RegexFilterGlobalExclusion
 {
 public:
-	ID fakeId;
-	ID dialogId;
+	ID fakeId = 0;
+	ID dialogId = 0;
 	std::vector<char> filterId;
 
 	bool operator==(const RegexFilterGlobalExclusion& other) const {
@@ -119,19 +119,19 @@ public:
 class SpyMessageRead
 {
 public:
-	ID fakeId;
-	ID userId;
-	ID dialogId;
-	int messageId;
-	int entityCreateDate;
+	ID fakeId = 0;
+	ID userId = 0;
+	ID dialogId = 0;
+	int messageId = 0;
+	int entityCreateDate = 0;
 };
 
 class SpyMessageContentsRead
 {
 public:
-	ID fakeId;
-	ID userId;
-	ID dialogId;
-	int messageId;
-	int entityCreateDate;
+	ID fakeId = 0;
+	ID userId = 0;
+	ID dialogId = 0;
+	int messageId = 0;
+	int entityCreateDate = 0;
 };

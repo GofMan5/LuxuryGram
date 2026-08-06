@@ -47,7 +47,7 @@ private:
 	Ui::FlatLabel *excludedTitle = nullptr;
 
 	std::optional<long long> dialogId;
-	bool shadowBan;
+	bool shadowBan = false;
 };
 
 } // namespace Settings

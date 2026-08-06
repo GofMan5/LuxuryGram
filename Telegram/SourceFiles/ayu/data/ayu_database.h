@@ -13,8 +13,8 @@
 class SchemaVersion
 {
 public:
-	int id;
-	int version;
+	int id = 0;
+	int version = 0;
 };
 
 namespace LuxuryDatabase {

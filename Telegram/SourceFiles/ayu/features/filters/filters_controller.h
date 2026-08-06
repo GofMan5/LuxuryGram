@@ -27,7 +27,7 @@ void invalidate(not_null<HistoryItem*> item);
 struct ReversiblePattern
 {
 	std::shared_ptr<icu::RegexPattern> pattern;
-	bool reversed;
+	bool reversed = false;
 };
 
 struct HashablePattern
