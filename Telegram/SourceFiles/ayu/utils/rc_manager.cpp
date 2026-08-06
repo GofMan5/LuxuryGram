@@ -116,10 +116,10 @@ void RCManager::gotResponse() {
 		return;
 	}
 
-	const auto response = _reply->readAll();
+	const auto response = _reply->read(kMaxResponseBytes + 1);
 	clearSentRequest();
 
-	if (!handleResponse(response)) {
+	if (response.size() > kMaxResponseBytes || !handleResponse(response)) {
 		LOG(("RCManager: Error bad map size: %1").arg(response.size()));
 		gotFailure(QNetworkReply::UnknownContentError);
 	}

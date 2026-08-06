@@ -364,13 +364,18 @@ void FilterUtils::importFromLink(const QString &link) {
 }
 
 void FilterUtils::publishFilters() {
-	const auto exported = exportFilters();
+	const auto exported = exportFilters().toUtf8();
+	if (exported.size() > kMaxFilterBackupBytes) {
+		LOG(("FilterUtils: backup exceeds publish size limit."));
+		Ui::Toast::Show(tr::luxury_FiltersToastFailPublish(tr::now));
+		return;
+	}
 
 	auto multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
 
 	QHttpPart contentPart;
 	contentPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"content\""));
-	contentPart.setBody(exported.toUtf8());
+	contentPart.setBody(exported);
 
 	QHttpPart syntaxPart;
 	syntaxPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"syntax\""));

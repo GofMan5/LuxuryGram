@@ -873,8 +873,8 @@ HttpLoaderActor::HttpLoaderActor(
 		not_null<HttpLoader*> parent,
 		not_null<QThread*> thread,
 		const QString &url)
-: _parent(parent) {
-	_url = url;
+: _parent(parent)
+, _url(url) {
 	moveToThread(thread);
 	_manager.moveToThread(thread);
 

@@ -39,6 +39,10 @@ std::shared_ptr<ForwardState> FindForwardState(PeerId id) {
 
 void SetForwardState(PeerId id, std::shared_ptr<ForwardState> state) {
 	const auto lock = std::lock_guard(ForwardStatesMutex);
+	if (const auto i = ForwardStates.find(id);
+		i != end(ForwardStates) && i->second != state) {
+		i->second->requestStop();
+	}
 	ForwardStates[id] = std::move(state);
 }
 
