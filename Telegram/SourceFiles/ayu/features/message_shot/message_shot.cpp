@@ -9,7 +9,7 @@
 #include "qguiapplication.h"
 #include "ayu/ayu_settings.h"
 #include "ayu/ui/boxes/message_shot_box.h"
-#include "ayu/utils/telegram_helpers.h"
+#include "base/call_delayed.h"
 #include "boxes/abstract_box.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
@@ -409,8 +409,25 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 	if (!preload->documents.empty() || !preload->photos.empty()) {
 		render(false); // render immediately to give box width
 
-		auto lifetime = std::make_shared<rpl::lifetime>();
-		auto latch = std::make_shared<TimedCountDownLatch>(1);
+		struct PreloadState {
+			bool finished = false;
+			rpl::lifetime lifetime;
+			Fn<void()> render;
+
+			void finish() {
+				if (finished) {
+					return;
+				}
+				finished = true;
+				lifetime.destroy();
+				render();
+			}
+		};
+		const auto state = std::make_shared<PreloadState>();
+		state->render = [render = std::move(render)]() mutable {
+			render(true);
+		};
+		const auto weakState = std::weak_ptr<PreloadState>(state);
 		rpl::single() | rpl::then(
 			config.controller->session().downloaderTaskFinished()
 		) | rpl::filter([=]
@@ -423,20 +440,15 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 				}
 				return true;
 			}
-		) | rpl::take(1) | rpl::on_next([=]
-		{
-			latch->countDown();
-		}, *lifetime);
-
-		crl::async([=, render = std::move(render)]
-		{
-			latch->await(std::chrono::seconds(3));
-			crl::on_main([=]
-			{
-				lifetime->destroy();
-				render(true);
-			});
-		});
+		) | rpl::take(1) | rpl::on_next([weakState] {
+			if (const auto state = weakState.lock()) {
+				state->finish();
+			}
+		}, state->lifetime);
+		base::call_delayed(
+			3 * crl::time(1000),
+			config.controller,
+			[state] { state->finish(); });
 	} else {
 		render(true);
 	}

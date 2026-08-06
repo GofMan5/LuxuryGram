@@ -10,7 +10,6 @@
 #include "ayu/ayu_settings.h"
 #include "ayu/ui/boxes/theme_selector_box.h"
 #include "ayu/ui/components/image_view.h"
-#include "ayu/utils/telegram_helpers.h"
 #include "boxes/abstract_box.h"
 #include "data/data_chat.h"
 #include "data/data_channel.h"
@@ -203,7 +202,6 @@ void MessageShotBox::setupContent() {
 		}
 	}
 
-	const auto firstPreviewLatch = std::make_shared<TimedCountDownLatch>(1);
 	const auto generation = content->lifetime().make_state<int>(0);
 	const auto weak = base::make_weak(this);
 
@@ -219,7 +217,6 @@ void MessageShotBox::setupContent() {
 			if (final || imageView->getImage().isNull()) {
 				imageView->setImage(image);
 			}
-			firstPreviewLatch->countDown();
 		});
 	};
 
@@ -423,7 +420,6 @@ void MessageShotBox::setupContent() {
 			  });
 
 	updatePreview();
-	firstPreviewLatch->await(std::chrono::seconds(1));
 
 	const auto boxWidth = imageView->getImage().width() / style::DevicePixelRatio() + (st::boxPadding.left() + st::boxPadding.right()) * 4;
 
