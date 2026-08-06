@@ -15,6 +15,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QUrl>
 #include <QtNetwork/QNetworkProxy>
 
@@ -98,8 +99,11 @@ void LuxuryLanguage::loadCachedLanguage() {
 		if (file.size() > kMaxLanguageBytes) {
 			return;
 		}
-		const auto data = file.readAll();
+		const auto data = file.read(kMaxLanguageBytes + 1);
 		file.close();
+		if (data.size() > kMaxLanguageBytes) {
+			return;
+		}
 
 		QJsonParseError error{};
 		const auto doc = QJsonDocument::fromJson(data, &error);
@@ -112,14 +116,19 @@ void LuxuryLanguage::loadCachedLanguage() {
 
 void LuxuryLanguage::saveCachedLanguage(const QByteArray &json, const QString &langId) {
 	const auto cacheDir = getCacheDir();
-	QDir().mkpath(cacheDir);
+	if (!QDir().mkpath(cacheDir)) {
+		LOG(("Failed to create LuxuryGram language cache directory."));
+		return;
+	}
 
 	const auto cachePath = getCachePath(langId);
-	QFile file(cachePath);
-	if (file.open(QIODevice::WriteOnly)) {
-		file.write(json);
-		file.close();
+	QSaveFile file(cachePath);
+	if (file.open(QIODevice::WriteOnly)
+		&& file.write(json) == json.size()
+		&& file.commit()) {
 		LOG(("Cached LuxuryGram language: %1").arg(langId));
+	} else {
+		LOG(("Failed to cache LuxuryGram language: %1").arg(langId));
 	}
 }
 
