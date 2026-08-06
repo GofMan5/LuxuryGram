@@ -1613,26 +1613,26 @@ void FillContextMenuItems(
 					.append('\n')
 					.append(item->originalText()))
 				: item->originalText();
-			if ((!item->translation() || !item->history()->translatedTo())
-				&& !translate.text.isEmpty()
-				&& !Ui::SkipTranslate(translate)) {
-				result->addAction(tr::lng_context_translate(tr::now), [=] {
-					if (const auto item = owner->message(itemId)) {
-						list->controller()->show(Box(
-							Ui::TranslateBox,
-							item->history()->peer,
-							mediaHasTextForCopy
-								? MsgId()
-								: item->fullId().msg,
-							translate,
-							list->hasCopyRestriction(view->data())));
-					}
-				}, &st::menuIconTranslate);
+			if (!translate.text.isEmpty()) {
+				AyuUi::AddTranslateMessageAction(
+					result,
+					list->controller(),
+					item,
+					translate,
+					list->hasCopyRestriction(view->data()));
 			}
 		}
 	}
 
 	AddCopyLinkAction(result, link);
+	if (item && !hasSelection && !request.overSelection) {
+		AyuUi::AddTranslateMessageAction(
+			result,
+			list->controller(),
+			item,
+			item->originalText(),
+			item->forbidsForward());
+	}
 	AddMessageActions(result, request, list);
 
 	const auto wasAmount = result->actions().size();
@@ -2040,16 +2040,12 @@ void AddPollActions(
 		for (const auto &answer : poll->answers) {
 			text.append('\n').append(radio).append(answer.text);
 		}
-		if (!Ui::SkipTranslate(text)) {
-			menu->addAction(tr::lng_context_translate(tr::now), [=] {
-				controller->show(Box(
-					Ui::TranslateBox,
-					item->history()->peer,
-					MsgId(),
-					std::move(text),
-					item->forbidsForward()));
-			}, &st::menuIconTranslate);
-		}
+		AyuUi::AddTranslateMessageAction(
+			menu,
+			controller,
+			item,
+			std::move(text),
+			item->forbidsForward());
 	}
 	if ((context != Context::History)
 		&& (context != Context::Replies)

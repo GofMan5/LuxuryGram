@@ -12,7 +12,9 @@
 #include "ayu/ui/settings/settings_ayu_utils.h"
 #include "ayu/ui/settings/settings_main.h"
 #include "base/platform/base_platform_info.h"
+#include "boxes/translate_box.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "lang/lang_text_entity.h"
 #include "platform/platform_translate_provider.h"
 #include "settings/settings_builder.h"
@@ -20,6 +22,7 @@
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "ui/boxes/single_choice_box.h"
+#include "ui/boxes/choose_language_box.h"
 #include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
 #include "ui/wrap/vertical_layout.h"
@@ -113,6 +116,22 @@ void BuildTranslator(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	if (button) {
 		ayu.addBetaBadge(button);
 	}
+	builder.addButton({
+		.id = u"ayu/translationLanguage"_q,
+		.title = tr::lng_translate_menu_to(),
+		.st = &st::settingsButtonNoIcon,
+		.label = Core::App().settings().translateToValue()
+			| rpl::map([](LanguageId id) {
+				return Ui::LanguageName(id);
+			}),
+		.onClick = [] {
+			if (const auto controller = Core::App().activeWindow()->sessionController()) {
+				controller->show(Ui::ChooseTranslateToBox(
+					Core::App().settings().translateTo(),
+					[](LanguageId) {}));
+			}
+		},
+	});
 }
 
 void BuildShowPeerId(SectionBuilder &builder) {

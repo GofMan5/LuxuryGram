@@ -24,6 +24,13 @@ void TranslateBox(
 	MsgId msgId,
 	TextWithEntities text,
 	bool hasCopyRestriction);
+void TranslateBoxTo(
+	not_null<GenericBox*> box,
+	not_null<PeerData*> peer,
+	MsgId msgId,
+	TextWithEntities text,
+	bool hasCopyRestriction,
+	LanguageId target);
 
 [[nodiscard]] bool SkipTranslate(TextWithEntities textWithEntities);
 

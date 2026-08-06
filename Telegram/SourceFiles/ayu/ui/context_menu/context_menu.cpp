@@ -24,6 +24,9 @@
 #include "base/call_delayed.h"
 #include "base/random.h"
 #include "base/unixtime.h"
+#include "boxes/translate_box.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "core/mime_type.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
@@ -41,6 +44,7 @@
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/boxes/choose_language_box.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "window/window_peer_menu.h"
@@ -510,6 +514,40 @@ void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 			}
 		},
 		&st::ayuEditsHistoryIcon);
+}
+
+void AddTranslateMessageAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<Window::SessionController*> controller,
+		HistoryItem *item,
+		TextWithEntities text,
+		bool hasCopyRestriction) {
+	if (!item || text.text.isEmpty()) {
+		return;
+	}
+	const auto to = Core::App().settings().translateTo();
+	const auto title = tr::lng_translate_bar_to(
+		tr::now,
+		lt_name,
+		Ui::LanguageName(to));
+	for (const auto action : menu->actions()) {
+		if (action->text() == title) {
+			return;
+		}
+	}
+	const auto owner = &item->history()->owner();
+	const auto itemId = item->fullId();
+	menu->addAction(title, [=, text = std::move(text)]() mutable {
+		if (const auto item = owner->message(itemId)) {
+			controller->show(Box(
+				Ui::TranslateBoxTo,
+				item->history()->peer,
+				MsgId(),
+				std::move(text),
+				hasCopyRestriction,
+				to));
+		}
+	}, &st::menuIconTranslate);
 }
 
 void AddHideMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {

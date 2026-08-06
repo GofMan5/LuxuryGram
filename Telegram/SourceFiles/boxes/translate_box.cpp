@@ -219,7 +219,8 @@ void SetupRichArticleBody(
 		MsgId msgId,
 		std::shared_ptr<const Iv::RichPage> page,
 		TextWithEntities summaryText,
-		bool hasCopyRestriction) {
+		bool hasCopyRestriction,
+		LanguageId target) {
 	struct State {
 		State(not_null<Main::Session*> session)
 		: api(&session->mtp()) {
@@ -243,7 +244,7 @@ void SetupRichArticleBody(
 			page)) {
 		return false;
 	}
-	state->to = ChooseTranslateTo(peer->owner().history(peer));
+	state->to = target;
 
 	box->setWidth(st::boxWideWidth);
 	box->addButton(tr::lng_box_ok(), [=] { box->closeBox(); });
@@ -409,12 +410,13 @@ void SetupRichArticleBody(
 
 } // namespace
 
-void TranslateBox(
+void TranslateBoxTo(
 		not_null<Ui::GenericBox*> box,
 		not_null<PeerData*> peer,
 		MsgId msgId,
 		TextWithEntities text,
-		bool hasCopyRestriction) {
+		bool hasCopyRestriction,
+		LanguageId target) {
 	struct State {
 		State(not_null<Main::Session*> session)
 		: provider(CreateTranslateProvider(session)) {
@@ -433,13 +435,14 @@ void TranslateBox(
 						msgId,
 						page,
 						text,
-						hasCopyRestriction)) {
+						hasCopyRestriction,
+						target)) {
 					return;
 				}
 			}
 		}
 	}
-	state->to = ChooseTranslateTo(peer->owner().history(peer));
+	state->to = target;
 	const auto request = std::make_shared<TranslateProviderRequest>(
 		PrepareTranslateProviderRequest(
 			state->provider.get(),
@@ -478,6 +481,21 @@ void TranslateBox(
 				});
 		},
 	});
+}
+
+void TranslateBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<PeerData*> peer,
+		MsgId msgId,
+		TextWithEntities text,
+		bool hasCopyRestriction) {
+	TranslateBoxTo(
+		box,
+		peer,
+		msgId,
+		std::move(text),
+		hasCopyRestriction,
+		ChooseTranslateTo(peer->owner().history(peer)));
 }
 
 bool SkipTranslate(TextWithEntities textWithEntities) {
