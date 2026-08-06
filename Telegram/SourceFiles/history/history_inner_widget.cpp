@@ -1591,7 +1591,7 @@ void HistoryInner::paintEvent(QPaintEvent *e) {
 			}
 			if (markingAsViewed && item->hasUnwatchedEffect()) {
 				const auto peer = item->history()->peer;
-				const auto &settings = AyuSettings::getInstance();
+				const auto &settings = LuxurySettings::getInstance();
 				const auto hide = (!settings.showChannelReactions() && peer->isChannel() && !peer->isMegagroup()) ||
 					(!settings.showGroupReactions() && peer->isMegagroup()) ||
 					(!settings.showPrivateChatReactions() && peer->isUser());
@@ -3125,11 +3125,11 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				&st::menuIconStats);
 		}
 
-		AyuUi::AddHistoryAction(_menu, item);
-		AyuUi::AddHideMessageAction(_menu, item);
-		AyuUi::AddUserMessagesAction(_menu, item);
-		AyuUi::AddRepeatMessageAction(_menu, item, HistoryView::Context::History);
-		AyuUi::AddMessageDetailsAction(_menu, item);
+		LuxuryUi::AddHistoryAction(_menu, item);
+		LuxuryUi::AddHideMessageAction(_menu, item);
+		LuxuryUi::AddUserMessagesAction(_menu, item);
+		LuxuryUi::AddRepeatMessageAction(_menu, item, HistoryView::Context::History);
+		LuxuryUi::AddMessageDetailsAction(_menu, item);
 	};
 	const auto addPhotoActions = [&](not_null<PhotoData*> photo, HistoryItem *item) {
 		const auto media = photo->activeMediaView();
@@ -3352,8 +3352,8 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			}();
 		}
 
-		AyuUi::AddReadUntilAction(_menu, item);
-		AyuUi::AddBurnAction(_menu, item);
+		LuxuryUi::AddReadUntilAction(_menu, item);
+		LuxuryUi::AddBurnAction(_menu, item);
 	};
 
 	const auto addReplyAction = [&](HistoryItem *item) {
@@ -3614,7 +3614,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						hasCopyRestrictionForSelected()));
 				}, &st::menuIconTranslate);
 			}
-			AyuUi::AddCreateFilterAction(_menu, _controller, item, selectedText.rich.text);
+			LuxuryUi::AddCreateFilterAction(_menu, _controller, item, selectedText.rich.text);
 			const auto editItem = [&]() -> HistoryItem* {
 				const auto view = (item && item->groupId())
 					? viewByItem(item)

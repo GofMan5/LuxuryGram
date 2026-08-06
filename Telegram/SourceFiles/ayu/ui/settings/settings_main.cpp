@@ -49,7 +49,7 @@ void BuildLogo(SectionBuilder &builder) {
 		logoRaw->paintRequest(
 		) | rpl::on_next([=] {
 			auto p = QPainter(logoRaw);
-			const auto image = AyuAssets::currentAppLogoPad();
+			const auto image = LuxuryAssets::currentAppLogoPad();
 			if (!image.isNull()) {
 				const auto size = st::settingsCloudPasswordIconSize;
 				const auto scaled = image.scaled(
@@ -83,7 +83,7 @@ void BuildVersionInfo(SectionBuilder &builder) {
 		return {
 			.widget = object_ptr<Ui::FlatLabel>(
 				ctx.container,
-				tr::ayu_SettingsDescription(),
+				tr::luxury_SettingsDescription(),
 				st::centeredBoxLabel),
 			.align = style::al_top,
 		};
@@ -98,36 +98,36 @@ void BuildCategories(SectionBuilder &builder) {
 	builder.addDivider();
 	builder.addSkip();
 
-	builder.addSubsectionTitle(tr::ayu_CategoriesHeader());
+	builder.addSubsectionTitle(tr::luxury_CategoriesHeader());
 
 	builder.addSectionButton({
 		.title = rpl::single(QString("AyuGram")),
-		.targetSection = AyuGhost::Id(),
+		.targetSection = LuxuryGhost::Id(),
 		.icon = { &st::menuIconGroupReactions },
 	});
 	builder.addSectionButton({
-		.title = tr::ayu_CategoryFilters(),
-		.targetSection = AyuFilters::Id(),
+		.title = tr::luxury_CategoryFilters(),
+		.targetSection = LuxuryFilters::Id(),
 		.icon = { &st::menuIconTagFilter },
 	});
 	builder.addSectionButton({
-		.title = tr::ayu_CategoryGeneral(),
-		.targetSection = AyuGeneral::Id(),
+		.title = tr::luxury_CategoryGeneral(),
+		.targetSection = LuxuryGeneral::Id(),
 		.icon = { &st::menuIconShowAll },
 	});
 	builder.addSectionButton({
-		.title = tr::ayu_CategoryAppearance(),
-		.targetSection = AyuAppearance::Id(),
+		.title = tr::luxury_CategoryAppearance(),
+		.targetSection = LuxuryAppearance::Id(),
 		.icon = { &st::menuIconPalette },
 	});
 	builder.addSectionButton({
-		.title = tr::ayu_CategoryChats(),
-		.targetSection = AyuChats::Id(),
+		.title = tr::luxury_CategoryChats(),
+		.targetSection = LuxuryChats::Id(),
 		.icon = { &st::menuIconChatBubble },
 	});
 	builder.addSectionButton({
-		.title = tr::ayu_CategoryOther(),
-		.targetSection = AyuOther::Id(),
+		.title = tr::luxury_CategoryOther(),
+		.targetSection = LuxuryOther::Id(),
 		.icon = { &st::menuIconFave },
 	});
 }
@@ -137,13 +137,13 @@ void BuildLinks(SectionBuilder &builder) {
 	builder.addDivider();
 	builder.addSkip();
 
-	builder.addSubsectionTitle(tr::ayu_LinksHeader());
+	builder.addSubsectionTitle(tr::luxury_LinksHeader());
 
 	const auto controller = builder.controller();
 
 	builder.addButton({
 		.id = u"ayu/channel"_q,
-		.title = tr::ayu_LinksChannel(),
+		.title = tr::luxury_LinksChannel(),
 		.icon = { &st::menuIconChannel },
 		.label = rpl::single(QString("@ayugram")),
 		.onClick = [=] {
@@ -154,7 +154,7 @@ void BuildLinks(SectionBuilder &builder) {
 	});
 	builder.addButton({
 		.id = u"ayu/chat"_q,
-		.title = tr::ayu_LinksChats(),
+		.title = tr::luxury_LinksChats(),
 		.icon = { &st::menuIconChats },
 		.label = rpl::single(QString("@ayugramchat")),
 		.onClick = [=] {
@@ -165,7 +165,7 @@ void BuildLinks(SectionBuilder &builder) {
 	});
 	builder.addButton({
 		.id = u"ayu/crowdin"_q,
-		.title = tr::ayu_LinksTranslate(),
+		.title = tr::luxury_LinksTranslate(),
 		.icon = { &st::menuIconTranslate },
 		.label = rpl::single(QString("Crowdin")),
 		.onClick = [=] {
@@ -175,7 +175,7 @@ void BuildLinks(SectionBuilder &builder) {
 	});
 	builder.addButton({
 		.id = u"ayu/website"_q,
-		.title = tr::ayu_LinksDocumentation(),
+		.title = tr::luxury_LinksDocumentation(),
 		.icon = { &st::menuIconIpAddress },
 		.label = rpl::single(QString("docs.ayugram.one")),
 		.onClick = [=] {
@@ -188,9 +188,9 @@ void BuildLinks(SectionBuilder &builder) {
 }
 
 const auto kMeta = BuildHelper({
-	.id = AyuMain::Id(),
+	.id = LuxuryMain::Id(),
 	.parentId = MainId(),
-	.title = &tr::ayu_AyuPreferences,
+	.title = &tr::luxury_LuxuryPreferences,
 	.icon = &st::menuIconPremium,
 }, [](SectionBuilder &builder) {
 	BuildLogo(builder);
@@ -202,25 +202,25 @@ const auto kMeta = BuildHelper({
 
 } // namespace
 
-rpl::producer<QString> AyuMain::title() {
+rpl::producer<QString> LuxuryMain::title() {
 	return rpl::single(QString(""));
 }
 
-AyuMain::AyuMain(
+LuxuryMain::LuxuryMain(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 : Section(parent, controller) {
 	setupContent();
 }
 
-void AyuMain::setupContent() {
+void LuxuryMain::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
 }
 
-Type AyuMainId() {
-	return AyuMain::Id();
+Type LuxuryMainId() {
+	return LuxuryMain::Id();
 }
 
 } // namespace Settings

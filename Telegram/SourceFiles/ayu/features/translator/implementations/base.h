@@ -15,7 +15,7 @@
 #include <QtCore/QString>
 #include <QtNetwork/QNetworkReply>
 
-namespace Ayu::Translator {
+namespace Luxury::Translator {
 
 using CallbackSuccess = std::function<void(const std::vector<TextWithEntities> &)>;
 using CallbackFail = std::function<void()>;

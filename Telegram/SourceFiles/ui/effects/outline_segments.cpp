@@ -20,8 +20,8 @@ void PaintOutlineSegments(
 		float64 fromFullProgress) {
 	Expects(!segments.empty());
 
-	if (!AyuUserpic::IsCircle()) {
-		const auto r = AyuUserpic::ComputeRadiusF(std::min(ellipse.width(), ellipse.height()));
+	if (!LuxuryUserpic::IsCircle()) {
+		const auto r = LuxuryUserpic::ComputeRadiusF(std::min(ellipse.width(), ellipse.height()));
 		PaintOutlineSegments(p, ellipse, r, segments);
 		return;
 	}

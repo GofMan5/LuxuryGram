@@ -12,7 +12,7 @@
 #include <queue>
 #include <vector>
 
-namespace Ayu::Ui {
+namespace Luxury::Ui {
 
 class ColorCutQuantizer
 {
@@ -87,5 +87,5 @@ private:
 	friend class Vbox;
 };
 
-} // namespace Ayu::Ui
+} // namespace Luxury::Ui
 

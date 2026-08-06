@@ -84,7 +84,7 @@ void TranslateTracker::setup() {
 		}
 	}, _lifetime);
 
-	AyuSettings::getInstance().translationProviderChanges(
+	LuxurySettings::getInstance().translationProviderChanges(
 	) | rpl::on_next([=](TranslationProvider) {
 		resetProvider();
 	}, _lifetime);

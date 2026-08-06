@@ -534,7 +534,7 @@ HistoryItem::HistoryItem(
 						}
 
 						const auto time = media.vttl_seconds()->v;
-						setAyuHint(formatTTL(time, false));
+						setLuxuryHint(formatTTL(time, false));
 						_unsupportedTTL = time;
 					},
 					[&](const MTPDmessageMediaDocument &media)
@@ -545,7 +545,7 @@ HistoryItem::HistoryItem(
 						}
 
 						const auto time = media.vttl_seconds()->v;
-						setAyuHint(formatTTL(time, true));
+						setLuxuryHint(formatTTL(time, true));
 						_unsupportedTTL = time;
 					},
 					[](const auto &) {});
@@ -2137,8 +2137,8 @@ bool HistoryItem::isSponsored() const {
 	return _flags & MessageFlag::Sponsored;
 }
 
-bool HistoryItem::isAyuNoForwards() const {
-	return _flags & MessageFlag::AyuNoForwards;
+bool HistoryItem::isLuxuryNoForwards() const {
+	return _flags & MessageFlag::LuxuryNoForwards;
 }
 
 bool HistoryItem::canLookupMessageAuthor() const {
@@ -2732,7 +2732,7 @@ void HistoryItem::clearMediaAsExpired() {
 		return;
 	}
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.saveDeletedMessages()) {
 		return;
 	}
@@ -3538,11 +3538,11 @@ void HistoryItem::updateReactionsUnknown() {
 
 const std::vector<Data::MessageReaction> &HistoryItem::reactions() const {
 	static const auto kEmpty = std::vector<Data::MessageReaction>();
-	return _reactions && !AyuFeatures::MessageShot::ignoreRender(AyuFeatures::MessageShot::RenderPart::Reactions) ? _reactions->list() : kEmpty;
+	return _reactions && !LuxuryFeatures::MessageShot::ignoreRender(LuxuryFeatures::MessageShot::RenderPart::Reactions) ? _reactions->list() : kEmpty;
 }
 
 std::vector<Data::MessageReaction> HistoryItem::reactionsWithLocal() const {
-	if (!_reactions || AyuFeatures::MessageShot::ignoreRender(AyuFeatures::MessageShot::RenderPart::Reactions)) {
+	if (!_reactions || LuxuryFeatures::MessageShot::ignoreRender(LuxuryFeatures::MessageShot::RenderPart::Reactions)) {
 		return {};
 	}
 	auto result = _reactions->list();
@@ -3945,8 +3945,8 @@ void HistoryItem::setDeleted() {
 	}
 
 	if (isService()) {
-		const auto &settings = AyuSettings::getInstance();
-		setAyuHint(settings.deletedMark());
+		const auto &settings = LuxurySettings::getInstance();
+		setLuxuryHint(settings.deletedMark());
 	} else {
 		history()->owner().requestItemViewRefresh(this);
 		history()->owner().requestItemResize(this);
@@ -3969,7 +3969,7 @@ void HistoryItem::markDeletedAnimated() {
 	_deletedAnimated = false;
 }
 
-void HistoryItem::setAyuHint(const QString &hint) {
+void HistoryItem::setLuxuryHint(const QString &hint) {
 	try {
 		auto msgsigned = Get<HistoryMessageSigned>();
 		if (hint.isEmpty()) {
@@ -4427,7 +4427,7 @@ void HistoryItem::detectTextLinks(
 
 void HistoryItem::setText(TextWithEntities textWithEntities) {
 	auto text = textWithEntities;
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.filterZalgo()) {
 		text.text = filterZalgo(text.text);
 	}

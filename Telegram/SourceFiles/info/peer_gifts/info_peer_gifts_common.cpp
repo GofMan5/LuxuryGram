@@ -823,8 +823,8 @@ void GiftButton::paint(QPainter &p, float64 craftProgress) {
 			_userpic->subscribeToUpdates([=] { update(); });
 		}
 		const auto image = _userpic->image(st::giftBoxUserpicSize);
-		const auto corners = AyuUiSettings::getAvatarCorners();
-		const auto extraSkip = int(double(AyuUiSettings::kMaxAvatarCorners - corners) / AyuUiSettings::kMaxAvatarCorners * 6.0);
+		const auto corners = LuxuryUiSettings::getAvatarCorners();
+		const auto extraSkip = int(double(LuxuryUiSettings::kMaxAvatarCorners - corners) / LuxuryUiSettings::kMaxAvatarCorners * 6.0);
 		const auto skip = st::giftBoxUserpicSkip + extraSkip;
 		p.drawImage(extend.left() + skip, extend.top() + skip, image);
 	} else if (_check) {

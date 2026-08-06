@@ -4352,10 +4352,10 @@ void OverlayWidget::activate() {
 	QApplication::setActiveWindow(_window);
 	setFocus();
 
-	if (AyuSettings::getInstance().streamerMode()) {
-		AyuFeatures::StreamerMode::hideWidgetWindow(_window);
+	if (LuxurySettings::getInstance().streamerMode()) {
+		LuxuryFeatures::StreamerMode::hideWidgetWindow(_window);
 	} else {
-		AyuFeatures::StreamerMode::showWidgetWindow(_window);
+		LuxuryFeatures::StreamerMode::showWidgetWindow(_window);
 	}
 }
 
@@ -8578,7 +8578,7 @@ Window::SessionController *OverlayWidget::findWindow(bool switchTo) const {
 
 // #TODO unite and check
 void OverlayWidget::clearBeforeHide() {
-	AyuState::disableGhostModeOnStoryClose(_storiesSession);
+	LuxuryState::disableGhostModeOnStoryClose(_storiesSession);
 	_message = nullptr;
 	_sharedMedia = nullptr;
 	_sharedMediaData = std::nullopt;

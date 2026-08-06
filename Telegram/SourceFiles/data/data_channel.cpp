@@ -139,7 +139,7 @@ void ChannelData::setName(
 		const QString &newName,
 		const QString &newUsername) {
 	auto filteredName = newName;
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.filterZalgo()) {
 		filteredName = filterZalgo(filteredName);
 	}
@@ -780,8 +780,8 @@ bool ChannelData::canAddAdmins() const {
 	return amCreator() || (adminRights() & AdminRight::AddAdmins);
 }
 
-bool ChannelData::isAyuNoForwards() const {
-	return flags() & Flag::AyuNoForwards;
+bool ChannelData::isLuxuryNoForwards() const {
+	return flags() & Flag::LuxuryNoForwards;
 }
 
 bool ChannelData::allowsForwarding() const {

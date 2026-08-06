@@ -15,9 +15,9 @@ class SessionController;
 
 namespace Settings {
 
-class AyuOther : public Section<AyuOther> {
+class LuxuryOther : public Section<LuxuryOther> {
 public:
-	AyuOther(QWidget *parent, not_null<Window::SessionController*> controller);
+	LuxuryOther(QWidget *parent, not_null<Window::SessionController*> controller);
 
 	[[nodiscard]] rpl::producer<QString> title() override;
 
@@ -25,6 +25,6 @@ private:
 	void setupContent();
 };
 
-[[nodiscard]] Type AyuOtherId();
+[[nodiscard]] Type LuxuryOtherId();
 
 } // namespace Settings

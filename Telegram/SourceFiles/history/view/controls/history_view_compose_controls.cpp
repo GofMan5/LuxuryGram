@@ -2473,17 +2473,17 @@ void ComposeControls::init() {
 	}, _wrap->lifetime());
 
 	rpl::merge(
-		AyuSettings::getInstance().showAttachButtonInMessageFieldChanges() | rpl::to_empty,
-		AyuSettings::getInstance().showCommandsButtonInMessageFieldChanges() | rpl::to_empty,
-		AyuSettings::getInstance().showEmojiButtonInMessageFieldChanges() | rpl::to_empty,
-		AyuSettings::getInstance().showMicrophoneButtonInMessageFieldChanges() | rpl::to_empty,
-		AyuSettings::getInstance().showAutoDeleteButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showAttachButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showCommandsButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showEmojiButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showMicrophoneButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showAutoDeleteButtonInMessageFieldChanges() | rpl::to_empty,
 		session().data().aiComposeTones().updated() | rpl::to_empty,
-		AyuSettings::getInstance().showAiEditorButtonInMessageFieldChanges() | rpl::to_empty,
-		AyuSettings::getInstance().showAttachPopupChanges() | rpl::to_empty,
-		AyuSettings::getInstance().showEmojiPopupChanges() | rpl::to_empty,
-		AyuSettings::getInstance().channelBottomButtonChanges() | rpl::to_empty,
-		AyuSettings::getInstance().removeMessageTailChanges() | rpl::to_empty
+		LuxurySettings::getInstance().showAiEditorButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showAttachPopupChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showEmojiPopupChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().channelBottomButtonChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().removeMessageTailChanges() | rpl::to_empty
 	) | rpl::on_next([=] {
 		updateSendButtonType();
 		updateControlsVisibility();
@@ -2491,7 +2491,7 @@ void ComposeControls::init() {
 		orderControls();
 	}, _wrap->lifetime());
 
-	AyuSettings::getInstance().translationProviderChanges(
+	LuxurySettings::getInstance().translationProviderChanges(
 	) | rpl::on_next([=](TranslationProvider) {
 		if (_history) {
 			for (const auto &block : _history->blocks) {
@@ -2515,7 +2515,7 @@ void ComposeControls::orderControls() {
 }
 
 bool ComposeControls::showRecordButton() const {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (!settings.showMicrophoneButtonInMessageField()) {
 		return false;
 	}
@@ -4121,7 +4121,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 	// (_commentsShown) (_attachToggle|_replaceMedia) (_sendAs) -- _inlineResults ------ _tabbedPanel -- _fieldBarCancel (_starsReaction)
 	// (_attachDocument|_attachPhoto) _field (_ttlInfo) (_scheduled) (_silent|_botCommandStart) _tabbedSelectorToggle _send
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	const auto oldComposeHeight = shouldShowRichDraftPreview()
 		? _richDraftPreview->height()
@@ -4264,7 +4264,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 }
 
 void ComposeControls::updateControlsVisibility() {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	const auto hide = hideExtraButtons();
 	if (_botCommandStart) {

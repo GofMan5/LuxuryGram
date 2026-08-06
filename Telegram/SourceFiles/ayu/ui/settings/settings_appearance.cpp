@@ -34,7 +34,7 @@
 namespace Settings {
 
 using namespace Builder;
-using namespace AyuBuilder;
+using namespace LuxuryBuilder;
 
 namespace {
 
@@ -50,10 +50,10 @@ bool HasDrawerBots(not_null<Window::SessionController*> controller) {
 	return false;
 }
 
-void BuildAppIcon(SectionBuilder &builder, AyuSectionBuilder &ayu) {
+void BuildAppIcon(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	builder.addSubsectionTitle({
 		.id = u"ayu/appIcon"_q,
-		.title = tr::ayu_AppIconHeader(),
+		.title = tr::luxury_AppIconHeader(),
 	});
 
 	builder.add([](const WidgetContext &ctx) -> SectionBuilder::WidgetToAdd {
@@ -66,14 +66,14 @@ void BuildAppIcon(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 #if defined Q_OS_WIN || defined Q_OS_MAC
 	builder.addDivider();
 	builder.addSkip();
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/hideNotificationBadge"_q,
-		.title = tr::ayu_HideNotificationBadge(),
-		.getter = &AyuSettings::hideNotificationBadge,
-		.setter = &AyuSettings::setHideNotificationBadge,
+		.title = tr::luxury_HideNotificationBadge(),
+		.getter = &LuxurySettings::hideNotificationBadge,
+		.setter = &LuxurySettings::setHideNotificationBadge,
 	});
 	builder.addSkip();
-	builder.addDividerText(tr::ayu_HideNotificationBadgeDescription());
+	builder.addDividerText(tr::luxury_HideNotificationBadgeDescription());
 	builder.addSkip();
 #else
     builder.addDivider();
@@ -81,16 +81,16 @@ void BuildAppIcon(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 #endif
 }
 
-void BuildAvatarCorners(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	auto *settings = &AyuSettings::getInstance();
+void BuildAvatarCorners(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	auto *settings = &LuxurySettings::getInstance();
 	const auto controller = builder.controller();
 
 	const auto mapRadius = [](int val)
 	{
 		if (val == 0) {
-			return tr::ayu_AvatarCornersSquare(tr::now).toUpper();
-		} else if (val == AyuUiSettings::kMaxAvatarCorners) {
-			return tr::ayu_AvatarCornersCircle(tr::now).toUpper();
+			return tr::luxury_AvatarCornersSquare(tr::now).toUpper();
+		} else if (val == LuxuryUiSettings::kMaxAvatarCorners) {
+			return tr::luxury_AvatarCornersCircle(tr::now).toUpper();
 		}
 		return QString::number(val);
 	};
@@ -99,7 +99,7 @@ void BuildAvatarCorners(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 		const auto container = ctx.container;
 		auto title = object_ptr<Ui::FlatLabel>(
 			container,
-			tr::ayu_AvatarCorners(),
+			tr::luxury_AvatarCorners(),
 			st::defaultSubsectionTitle);
 		const auto titleRaw = title.data();
 
@@ -109,7 +109,7 @@ void BuildAvatarCorners(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 				container,
 				settings->avatarCornersValue() | rpl::map(mapRadius),
 				st::settingsPremiumNewBadge),
-			st::ayuBetaBadgePadding);
+			st::luxuryBetaBadgePadding);
 		badge->show();
 		badge->setAttribute(Qt::WA_TransparentForMouseEvents);
 		badge->paintRequest() | rpl::on_next([=] {
@@ -117,7 +117,7 @@ void BuildAvatarCorners(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 			auto hq = PainterHighQualityEnabler(p);
 			p.setPen(Qt::NoPen);
 			p.setBrush(st::windowBgActive);
-			const auto r = st::ayuBetaBadgePadding.left();
+			const auto r = st::luxuryBetaBadgePadding.left();
 			p.drawRoundedRect(badge->rect(), r, r);
 		}, badge->lifetime());
 
@@ -137,7 +137,7 @@ void BuildAvatarCorners(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	}, [] {
 		return SearchEntry{
 			.id = u"ayu/avatarCorners"_q,
-			.title = tr::ayu_AvatarCorners(tr::now),
+			.title = tr::luxury_AvatarCorners(tr::now),
 		};
 	});
 
@@ -155,219 +155,219 @@ void BuildAvatarCorners(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 		};
 	});
 
-	ayu.addSlider({
+	luxury.addSlider({
 		.id = u"ayu/avatarCornersSlider"_q,
 		.title = rpl::single(QString()),
 		.showTitle = false,
-		.steps = AyuUiSettings::kMaxAvatarCorners + 1,
+		.steps = LuxuryUiSettings::kMaxAvatarCorners + 1,
 		.current = settings->avatarCorners(),
 		.onChanged = [=](int val) {
-			AyuSettings::getInstance().setAvatarCorners(val);
+			LuxurySettings::getInstance().setAvatarCorners(val);
 			if (previewRaw) {
 				previewRaw->update();
 			}
 		},
 		.onFinalChanged = [=](int val) {
-			AyuSettings::getInstance().setAvatarCorners(val);
+			LuxurySettings::getInstance().setAvatarCorners(val);
 			ShowRestartPrompt(controller);
 		},
 	});
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/singleCornerRadius"_q,
-		.title = tr::ayu_SingleCornerRadius(),
-		.getter = &AyuSettings::singleCornerRadius,
-		.setter = &AyuSettings::setSingleCornerRadius,
+		.title = tr::luxury_SingleCornerRadius(),
+		.getter = &LuxurySettings::singleCornerRadius,
+		.setter = &LuxurySettings::setSingleCornerRadius,
 	});
 
 	builder.addSkip();
-	builder.addDividerText(tr::ayu_SingleCornerRadiusDescription());
+	builder.addDividerText(tr::luxury_SingleCornerRadiusDescription());
 	builder.addSkip();
 }
 
-void BuildAppearance(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	auto *settings = &AyuSettings::getInstance();
+void BuildAppearance(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	auto *settings = &LuxurySettings::getInstance();
 
-	builder.addSubsectionTitle(tr::ayu_CategoryAppearance());
+	builder.addSubsectionTitle(tr::luxury_CategoryAppearance());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/materialSwitches"_q,
 		.altIds = { u"ayu/newSwitchStyle"_q },
-		.title = tr::ayu_MaterialSwitches(),
-		.getter = &AyuSettings::materialSwitches,
-		.setter = &AyuSettings::setMaterialSwitches,
+		.title = tr::luxury_MaterialSwitches(),
+		.getter = &LuxurySettings::materialSwitches,
+		.setter = &LuxurySettings::setMaterialSwitches,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/disableCustomBackgrounds"_q,
 		.altIds = { u"ayu/customThemes"_q },
-		.title = tr::ayu_DisableCustomBackgrounds(),
-		.getter = &AyuSettings::disableCustomBackgrounds,
-		.setter = &AyuSettings::setDisableCustomBackgrounds,
+		.title = tr::luxury_DisableCustomBackgrounds(),
+		.getter = &LuxurySettings::disableCustomBackgrounds,
+		.setter = &LuxurySettings::setDisableCustomBackgrounds,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/hidePremiumStatuses"_q,
-		.title = tr::ayu_HidePremiumStatuses(),
-		.getter = &AyuSettings::hidePremiumStatuses,
-		.setter = &AyuSettings::setHidePremiumStatuses,
+		.title = tr::luxury_HidePremiumStatuses(),
+		.getter = &LuxurySettings::hidePremiumStatuses,
+		.setter = &LuxurySettings::setHidePremiumStatuses,
 	});
 
 	const auto controller = builder.controller();
 	builder.addButton({
 		.id = u"ayu/monoFont"_q,
-		.title = tr::ayu_MonospaceFont(),
+		.title = tr::luxury_MonospaceFont(),
 		.st = &st::settingsButtonNoIcon,
 		.label = rpl::single(
 			settings->monoFont().isEmpty()
-				? tr::ayu_FontDefault(tr::now)
+				? tr::luxury_FontDefault(tr::now)
 				: settings->monoFont()),
 		.onClick = [=] {
-			AyuUi::FontSelectorBox::Show(
+			LuxuryUi::FontSelectorBox::Show(
 				controller,
 				[=](const QString &font) {
-					AyuSettings::getInstance().setMonoFont(font);
+					LuxurySettings::getInstance().setMonoFont(font);
 				});
 		},
 	});
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 }
 
-void BuildChatFolders(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	builder.addSubsectionTitle(tr::ayu_ChatFoldersHeader());
+void BuildChatFolders(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_ChatFoldersHeader());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/hideNotificationCounters"_q,
 		.altIds = { u"ayu/tabCounter"_q },
-		.title = tr::ayu_HideNotificationCounters(),
-		.getter = &AyuSettings::hideNotificationCounters,
-		.setter = &AyuSettings::setHideNotificationCounters,
+		.title = tr::luxury_HideNotificationCounters(),
+		.getter = &LuxurySettings::hideNotificationCounters,
+		.setter = &LuxurySettings::setHideNotificationCounters,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/hideAllChatsFolder"_q,
 		.altIds = { u"ayu/hideAllChats"_q },
-		.title = tr::ayu_HideAllChats(),
-		.getter = &AyuSettings::hideAllChatsFolder,
-		.setter = &AyuSettings::setHideAllChatsFolder,
+		.title = tr::luxury_HideAllChats(),
+		.getter = &LuxurySettings::hideAllChatsFolder,
+		.setter = &LuxurySettings::setHideAllChatsFolder,
 	});
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 }
 
-void BuildTrayElements(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	builder.addSubsectionTitle(tr::ayu_TrayElementsHeader());
+void BuildTrayElements(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_TrayElementsHeader());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showGhostToggleInTray"_q,
-		.title = tr::ayu_EnableGhostModeTray(),
-		.getter = &AyuSettings::showGhostToggleInTray,
-		.setter = &AyuSettings::setShowGhostToggleInTray,
+		.title = tr::luxury_EnableGhostModeTray(),
+		.getter = &LuxurySettings::showGhostToggleInTray,
+		.setter = &LuxurySettings::setShowGhostToggleInTray,
 	});
 
 #if defined Q_OS_WIN || defined Q_OS_MAC
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showStreamerToggleInTray"_q,
-		.title = tr::ayu_EnableStreamerModeTray(),
-		.getter = &AyuSettings::showStreamerToggleInTray,
-		.setter = &AyuSettings::setShowStreamerToggleInTray,
+		.title = tr::luxury_EnableStreamerModeTray(),
+		.getter = &LuxurySettings::showStreamerToggleInTray,
+		.setter = &LuxurySettings::setShowStreamerToggleInTray,
 	});
 #endif
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 }
 
-void BuildDrawerElements(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	builder.addSubsectionTitle(tr::ayu_DrawerElementsHeader());
+void BuildDrawerElements(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_DrawerElementsHeader());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showMyProfileInDrawer"_q,
 		.title = tr::lng_menu_my_profile(),
-		.getter = &AyuSettings::showMyProfileInDrawer,
-		.setter = &AyuSettings::setShowMyProfileInDrawer,
+		.getter = &LuxurySettings::showMyProfileInDrawer,
+		.setter = &LuxurySettings::setShowMyProfileInDrawer,
 		.icon = { &st::menuIconProfile },
 	});
 
 	const auto controller = builder.controller();
 	if (controller && HasDrawerBots(controller)) {
-		ayu.addSettingToggle({
+		luxury.addSettingToggle({
 			.id = u"ayu/showBotsInDrawer"_q,
 			.title = tr::lng_filters_type_bots(),
-			.getter = &AyuSettings::showBotsInDrawer,
-			.setter = &AyuSettings::setShowBotsInDrawer,
+			.getter = &LuxurySettings::showBotsInDrawer,
+			.setter = &LuxurySettings::setShowBotsInDrawer,
 			.icon = { &st::menuIconBot },
 		});
 	}
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showNewGroupInDrawer"_q,
 		.title = tr::lng_create_group_title(),
-		.getter = &AyuSettings::showNewGroupInDrawer,
-		.setter = &AyuSettings::setShowNewGroupInDrawer,
+		.getter = &LuxurySettings::showNewGroupInDrawer,
+		.setter = &LuxurySettings::setShowNewGroupInDrawer,
 		.icon = { &st::menuIconGroups },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showNewChannelInDrawer"_q,
 		.title = tr::lng_create_channel_title(),
-		.getter = &AyuSettings::showNewChannelInDrawer,
-		.setter = &AyuSettings::setShowNewChannelInDrawer,
+		.getter = &LuxurySettings::showNewChannelInDrawer,
+		.setter = &LuxurySettings::setShowNewChannelInDrawer,
 		.icon = { &st::menuIconChannel },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showContactsInDrawer"_q,
 		.title = tr::lng_menu_contacts(),
-		.getter = &AyuSettings::showContactsInDrawer,
-		.setter = &AyuSettings::setShowContactsInDrawer,
+		.getter = &LuxurySettings::showContactsInDrawer,
+		.setter = &LuxurySettings::setShowContactsInDrawer,
 		.icon = { &st::menuIconUserShow },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showCallsInDrawer"_q,
 		.title = tr::lng_menu_calls(),
-		.getter = &AyuSettings::showCallsInDrawer,
-		.setter = &AyuSettings::setShowCallsInDrawer,
+		.getter = &LuxurySettings::showCallsInDrawer,
+		.setter = &LuxurySettings::setShowCallsInDrawer,
 		.icon = { &st::menuIconPhone },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showSavedMessagesInDrawer"_q,
 		.title = tr::lng_saved_messages(),
-		.getter = &AyuSettings::showSavedMessagesInDrawer,
-		.setter = &AyuSettings::setShowSavedMessagesInDrawer,
+		.getter = &LuxurySettings::showSavedMessagesInDrawer,
+		.setter = &LuxurySettings::setShowSavedMessagesInDrawer,
 		.icon = { &st::menuIconSavedMessages },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showLReadToggleInDrawer"_q,
-		.title = tr::ayu_LReadMessages(),
-		.getter = &AyuSettings::showLReadToggleInDrawer,
-		.setter = &AyuSettings::setShowLReadToggleInDrawer,
-		.icon = { &st::ayuLReadMenuIcon },
+		.title = tr::luxury_LReadMessages(),
+		.getter = &LuxurySettings::showLReadToggleInDrawer,
+		.setter = &LuxurySettings::setShowLReadToggleInDrawer,
+		.icon = { &st::luxuryLReadMenuIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showSReadToggleInDrawer"_q,
-		.title = tr::ayu_SReadMessages(),
-		.getter = &AyuSettings::showSReadToggleInDrawer,
-		.setter = &AyuSettings::setShowSReadToggleInDrawer,
-		.icon = { &st::ayuSReadMenuIcon },
+		.title = tr::luxury_SReadMessages(),
+		.getter = &LuxurySettings::showSReadToggleInDrawer,
+		.setter = &LuxurySettings::setShowSReadToggleInDrawer,
+		.icon = { &st::luxurySReadMenuIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showNightModeToggleInDrawer"_q,
 		.title = tr::lng_menu_night_mode(),
-		.getter = &AyuSettings::showNightModeToggleInDrawer,
-		.setter = &AyuSettings::setShowNightModeToggleInDrawer,
+		.getter = &LuxurySettings::showNightModeToggleInDrawer,
+		.setter = &LuxurySettings::setShowNightModeToggleInDrawer,
 		.icon = { &st::menuIconNightMode },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showGhostToggleInDrawer"_q,
-		.title = tr::ayu_GhostModeToggle(),
-		.getter = &AyuSettings::showGhostToggleInDrawer,
-		.setter = &AyuSettings::setShowGhostToggleInDrawer,
-		.icon = { &st::ayuGhostIcon },
+		.title = tr::luxury_GhostModeToggle(),
+		.getter = &LuxurySettings::showGhostToggleInDrawer,
+		.setter = &LuxurySettings::setShowGhostToggleInDrawer,
+		.icon = { &st::luxuryGhostIcon },
 	});
 
 #if defined Q_OS_WIN || defined Q_OS_MAC
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showStreamerToggleInDrawer"_q,
-		.title = tr::ayu_StreamerModeToggle(),
-		.getter = &AyuSettings::showStreamerToggleInDrawer,
-		.setter = &AyuSettings::setShowStreamerToggleInDrawer,
-		.icon = { &st::ayuStreamerModeMenuIcon },
+		.title = tr::luxury_StreamerModeToggle(),
+		.getter = &LuxurySettings::showStreamerToggleInDrawer,
+		.setter = &LuxurySettings::setShowStreamerToggleInDrawer,
+		.icon = { &st::luxuryStreamerModeMenuIcon },
 	});
 #endif
 
@@ -375,44 +375,44 @@ void BuildDrawerElements(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 }
 
 const auto kMeta = BuildHelper({
-	.id = AyuAppearance::Id(),
-	.parentId = AyuMain::Id(),
-	.title = &tr::ayu_CategoryAppearance,
+	.id = LuxuryAppearance::Id(),
+	.parentId = LuxuryMain::Id(),
+	.title = &tr::luxury_CategoryAppearance,
 	.icon = &st::menuIconPalette,
 }, [](SectionBuilder &builder) {
-	auto ayu = AyuSectionBuilder(builder);
+	auto luxury = LuxurySectionBuilder(builder);
 
 	builder.addSkip();
-	BuildAppIcon(builder, ayu);
-	BuildAvatarCorners(builder, ayu);
-	BuildAppearance(builder, ayu);
-	BuildChatFolders(builder, ayu);
-	BuildTrayElements(builder, ayu);
-	BuildDrawerElements(builder, ayu);
+	BuildAppIcon(builder, luxury);
+	BuildAvatarCorners(builder, luxury);
+	BuildAppearance(builder, luxury);
+	BuildChatFolders(builder, luxury);
+	BuildTrayElements(builder, luxury);
+	BuildDrawerElements(builder, luxury);
 	builder.addSkip();
 });
 
 } // namespace
 
-rpl::producer<QString> AyuAppearance::title() {
-	return tr::ayu_CategoryAppearance();
+rpl::producer<QString> LuxuryAppearance::title() {
+	return tr::luxury_CategoryAppearance();
 }
 
-AyuAppearance::AyuAppearance(
+LuxuryAppearance::LuxuryAppearance(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 : Section(parent, controller) {
 	setupContent();
 }
 
-void AyuAppearance::setupContent() {
+void LuxuryAppearance::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
 }
 
-Type AyuAppearanceId() {
-	return AyuAppearance::Id();
+Type LuxuryAppearanceId() {
+	return LuxuryAppearance::Id();
 }
 
 } // namespace Settings

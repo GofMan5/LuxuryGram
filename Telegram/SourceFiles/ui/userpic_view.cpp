@@ -52,19 +52,19 @@ void PaintCommunityUserpicEffect(
 	const auto version = style::PaletteVersion();
 	const auto rgba = color.rgba();
 	const auto peek = size * kPeek;
-	const auto ayuState = AyuUserpic::PackedState();
+	const auto luxuryState = LuxuryUserpic::PackedState();
 	const auto regenerate = cache.image.isNull()
 		|| (cache.size != size)
 		|| (cache.color != rgba)
 		|| (cache.paletteVersion != version)
 		|| (cache.dpr != dpr)
-		|| (cache.ayuState != ayuState);
+		|| (cache.luxuryState != luxuryState);
 	if (regenerate) {
 		cache.size = size;
 		cache.color = rgba;
 		cache.paletteVersion = version;
 		cache.dpr = dpr;
-		cache.ayuState = ayuState;
+		cache.luxuryState = luxuryState;
 
 		const auto imageW = int(std::ceil((peek + size * kCover) * dpr));
 		const auto imageH = int(std::ceil(size * dpr));
@@ -79,9 +79,9 @@ void PaintCommunityUserpicEffect(
 		auto q = QPainter(&cache.image);
 		auto hq = PainterHighQualityEnabler(q);
 		const auto gap = size * kGap;
-		const auto rounding = AyuUserpic::ShouldOverrideShape(
+		const auto rounding = LuxuryUserpic::ShouldOverrideShape(
 			Ui::PeerUserpicShape::Forum)
-			? AyuUserpic::ComputeRadiusF(size)
+			? LuxuryUserpic::ComputeRadiusF(size)
 			: size * Ui::ForumUserpicRadiusMultiplier();
 
 		// The userpic and every card share a pivot on the userpic's left edge
@@ -151,10 +151,10 @@ void ValidateUserpicCache(
 	const auto full = QSize(size, size);
 	const auto version = style::PaletteVersion();
 	const auto shapeValue = static_cast<uint32>(shape) & 3;
-	const auto ayuState = AyuUserpic::PackedState();
+	const auto luxuryState = LuxuryUserpic::PackedState();
 	const auto regenerate = (view.cached.size() != QSize(size, size))
 		|| (view.shape != shapeValue)
-		|| (view.ayuState != ayuState)
+		|| (view.luxuryState != luxuryState)
 		|| (cloud && !view.empty.null())
 		|| (empty && empty != view.empty.get())
 		|| (empty && view.paletteVersion != version);
@@ -164,19 +164,19 @@ void ValidateUserpicCache(
 	view.empty = empty;
 	view.shape = shapeValue;
 	view.paletteVersion = version;
-	view.ayuState = ayuState;
+	view.luxuryState = luxuryState;
 
-	const auto ayuOverride = AyuUserpic::ShouldOverrideShape(shape);
+	const auto luxuryOverride = LuxuryUserpic::ShouldOverrideShape(shape);
 
 	if (cloud) {
 		view.cached = cloud->scaled(
 			full,
 			Qt::IgnoreAspectRatio,
 			Qt::SmoothTransformation);
-		if (ayuOverride) {
+		if (luxuryOverride) {
 			view.cached = Images::Round(
 				std::move(view.cached),
-				ImageRoundRadius::AyuUserpic);
+				ImageRoundRadius::LuxuryUserpic);
 		} else if (shape == PeerUserpicShape::Monoforum) {
 			view.cached = Ui::ApplyMonoforumShape(std::move(view.cached));
 		} else if (shape == PeerUserpicShape::Forum) {
@@ -195,7 +195,7 @@ void ValidateUserpicCache(
 		view.cached.fill(Qt::transparent);
 
 		auto p = QPainter(&view.cached);
-		if (ayuOverride) {
+		if (luxuryOverride) {
 			empty->paintCircle(p, 0, 0, size, size);
 		} else if (shape == PeerUserpicShape::Monoforum) {
 			empty->paintMonoforum(p, 0, 0, size, size);

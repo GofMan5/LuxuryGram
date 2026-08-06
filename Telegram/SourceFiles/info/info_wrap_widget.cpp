@@ -474,7 +474,7 @@ void WrapWidget::setupTopBarMenuToggle() {
 					Ui::DefaultShowFillPeerQrBoxCallback(show, self);
 				});
 			}
-		} else if (section.settingsType() == ::Settings::AyuFiltersList::Id()) {
+		} else if (section.settingsType() == ::Settings::LuxuryFiltersList::Id()) {
 			const auto controller = _controller->parentController();
 			const auto &st = st::filtersAddIcon;
 			const auto button = _topBar->addButton(base::make_unique_q<Ui::IconButton>(_topBar, st));
@@ -494,10 +494,10 @@ void WrapWidget::setupTopBarMenuToggle() {
 							const auto peer = thread->peer();
 							const auto realId = getDialogIdFromPeer(peer);
 
-							AyuSettings::getInstance().addShadowBan(realId);
+							LuxurySettings::getInstance().addShadowBan(realId);
 							return true;
 						},
-						tr::ayu_FiltersMenuSelectChat(),
+						tr::luxury_FiltersMenuSelectChat(),
 						nullptr,
 						types
 					);
@@ -518,7 +518,7 @@ void WrapWidget::setupTopBarMenuToggle() {
 				{
 					// open new
 					controller->showExclude = false;
-					controller->showSettings(::Settings::AyuFiltersList::Id());
+					controller->showSettings(::Settings::LuxuryFiltersList::Id());
 				});
 			}
 		}

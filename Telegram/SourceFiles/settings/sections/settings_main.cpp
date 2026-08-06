@@ -190,7 +190,7 @@ Cover::Cover(
 	_name->setContextCopyText(tr::lng_profile_copy_fullname(tr::now));
 
 	_id->setSelectable(true);
-	_id->setContextCopyText(tr::ayu_ContextCopyID(tr::now));
+	_id->setContextCopyText(tr::luxury_ContextCopyID(tr::now));
 	const auto hook = [=](Ui::FlatLabel::ContextMenuRequest request) {
 		if (request.selection.empty()) {
 			const auto callback = [=] {
@@ -198,7 +198,7 @@ Cover::Cover(
 				TextUtilities::SetClipboardText({ id });
 			};
 			request.menu->addAction(
-				tr::ayu_ContextCopyID(tr::now),
+				tr::luxury_ContextCopyID(tr::now),
 				callback,
 				&st::menuIconCopy);
 		} else {
@@ -389,8 +389,8 @@ void BuildSectionButtons(SectionBuilder &builder) {
 	const auto showOther = builder.showOther();
 
 	builder.addSectionButton({
-		.title = tr::ayu_AyuPreferences(),
-		.targetSection = AyuMain::Id(),
+		.title = tr::luxury_LuxuryPreferences(),
+		.targetSection = LuxuryMain::Id(),
 		.icon = { &st::menuIconPremium },
 		.keywords = { u"ayu"_q },
 	});

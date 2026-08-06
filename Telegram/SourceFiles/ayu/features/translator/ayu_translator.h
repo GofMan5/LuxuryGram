@@ -21,7 +21,7 @@ namespace Main {
 class Session;
 }
 
-namespace Ayu::Translator {
+namespace Luxury::Translator {
 
 class TranslateManager
 {
@@ -132,4 +132,4 @@ private:
     std::unordered_map<mtpRequestId, Pending> _pending;
 };
 
-} // namespace Ayu::Translator
+} // namespace Luxury::Translator

@@ -463,7 +463,7 @@ void RoundImageCheckbox::paintFrame(
 				segments ? _segments.front().width : _st.selectWidth);
 			p.setPen(pen);
 			if (!radius) {
-				AyuUserpic::PaintShape(p, outline);
+				LuxuryUserpic::PaintShape(p, outline);
 			} else {
 				p.drawRoundedRect(outline, *radius, *radius);
 			}

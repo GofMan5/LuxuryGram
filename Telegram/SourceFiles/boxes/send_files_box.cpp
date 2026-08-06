@@ -1261,7 +1261,7 @@ void SendFilesBox::addMenuButton() {
 		using ImageInfo = Ui::PreparedFileInformation::Image;
 		if (_list.files.size() == 1 && std::get_if<ImageInfo>(&_list.files[0].information->media)) {
 			_menu->addAction(
-				tr::ayu_SendAsSticker(tr::now),
+				tr::luxury_SendAsSticker(tr::now),
 				[=]() mutable
 				{
 					const auto file = std::move(_list.files[0]);

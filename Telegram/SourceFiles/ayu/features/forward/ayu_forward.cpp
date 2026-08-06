@@ -23,7 +23,7 @@
 #include "ui/chat/attach/attach_prepare.h"
 #include "ui/text/text_utilities.h"
 
-namespace AyuForward {
+namespace LuxuryForward {
 
 namespace {
 
@@ -87,7 +87,7 @@ std::pair<QString, QString> stateName(const PeerId &id) {
 	}
 	const auto snapshot = state->snapshot();
 
-	QString messagesString = tr::ayu_AyuForwardStatusSentCount(tr::now,
+	QString messagesString = tr::luxury_LuxuryForwardStatusSentCount(tr::now,
 														   lt_count1,
 														   QString::number(snapshot.sentMessages),
 														   lt_count2,
@@ -95,7 +95,7 @@ std::pair<QString, QString> stateName(const PeerId &id) {
 
 	);
 
-	QString chunkString = tr::ayu_AyuForwardStatusChunkCount(tr::now,
+	QString chunkString = tr::luxury_LuxuryForwardStatusChunkCount(tr::now,
 													 lt_count1,
 													 QString::number(snapshot.currentChunk + 1),
 													 lt_count2,
@@ -110,14 +110,14 @@ std::pair<QString, QString> stateName(const PeerId &id) {
 	QString status;
 
 	if (snapshot.state == ForwardState::State::Preparing) {
-		status = tr::ayu_AyuForwardStatusPreparing(tr::now);
+		status = tr::luxury_LuxuryForwardStatusPreparing(tr::now);
 	} else if (snapshot.state == ForwardState::State::Downloading) {
-		return std::make_pair(tr::ayu_AyuForwardStatusLoadingMedia(tr::now), "");
+		return std::make_pair(tr::luxury_LuxuryForwardStatusLoadingMedia(tr::now), "");
 	} else if (snapshot.state == ForwardState::State::Sending) {
-		status = tr::ayu_AyuForwardStatusForwarding(tr::now);
+		status = tr::luxury_LuxuryForwardStatusForwarding(tr::now);
 	} else {
 		// ForwardState::State::Finished
-		status = tr::ayu_AyuForwardStatusFinished(tr::now);
+		status = tr::luxury_LuxuryForwardStatusFinished(tr::now);
 	}
 
 
@@ -181,7 +181,7 @@ static Ui::PreparedList prepareMedia(not_null<Main::Session*> session,
 									 std::vector<not_null<Data::Media*>> &groupMedia) {
 	const auto prepare = [&](not_null<Data::Media*> media)
 	{
-		auto prepared = Ui::PreparedFile(AyuSync::filePath(session, media));
+		auto prepared = Ui::PreparedFile(LuxurySync::filePath(session, media));
 		if (prepared.path.isEmpty()) {
 			// otherwise will fail assertion in PrepareDetails
 			return prepared;
@@ -226,7 +226,7 @@ void sendMedia(
 	Api::MessageToSend &&message,
 	bool sendImagesAsPhotos) {
 	if (const auto document = primaryMedia->document(); document && document->sticker()) {
-		AyuSync::sendStickerSync(session, std::move(message), document);
+		LuxurySync::sendStickerSync(session, std::move(message), document);
 		return;
 	}
 
@@ -256,7 +256,7 @@ void sendMedia(
 		} else if (file.size() > 0 && file.size() <= kMaxVoiceBytes) {
 			const auto data = file.read(kMaxVoiceBytes + 1);
 			if (!data.isEmpty() && data.size() <= kMaxVoiceBytes) {
-				AyuSync::sendVoiceSync(
+				LuxurySync::sendVoiceSync(
 					session,
 					data,
 					primaryMedia->document()->duration(),
@@ -277,7 +277,7 @@ void sendMedia(
 	}
 
 	for (auto &group : bundle->groups) {
-		AyuSync::sendDocumentSync(
+		LuxurySync::sendDocumentSync(
 			session,
 			group,
 			mediaType,
@@ -286,28 +286,28 @@ void sendMedia(
 	}
 }
 
-bool isAyuForwardNeeded(const std::vector<not_null<HistoryItem*>> &items) {
-	const auto needAyuForward = [&](const auto &item)
+bool isLuxuryForwardNeeded(const std::vector<not_null<HistoryItem*>> &items) {
+	const auto needLuxuryForward = [&](const auto &item)
 	{
-		return isAyuForwardNeeded(item);
+		return isLuxuryForwardNeeded(item);
 	};
-	return std::ranges::any_of(items, needAyuForward);
+	return std::ranges::any_of(items, needLuxuryForward);
 }
 
-bool isAyuForwardNeeded(not_null<HistoryItem*> item) {
-	if (item->isDeleted() || item->isAyuNoForwards() || item->unsupportedTTL() || (item->media() && item->media()->ttlSeconds())) {
+bool isLuxuryForwardNeeded(not_null<HistoryItem*> item) {
+	if (item->isDeleted() || item->isLuxuryNoForwards() || item->unsupportedTTL() || (item->media() && item->media()->ttlSeconds())) {
 		return true;
 	}
 	return false;
 }
 
-bool isFullAyuForwardNeeded(not_null<HistoryItem*> item) {
-	return item->from()->isAyuNoForwards() || item->history()->peer->isAyuNoForwards();
+bool isFullLuxuryForwardNeeded(not_null<HistoryItem*> item) {
+	return item->from()->isLuxuryNoForwards() || item->history()->peer->isLuxuryNoForwards();
 }
 
 struct ForwardChunk
 {
-	bool isAyuForwardNeeded;
+	bool isLuxuryForwardNeeded;
 	std::vector<not_null<HistoryItem*>> items;
 };
 
@@ -333,19 +333,19 @@ void intelligentForward(
 	auto currentArray = std::vector<not_null<HistoryItem*>>();
 
 	auto currentChunk = ForwardChunk({
-		.isAyuForwardNeeded = isAyuForwardNeeded(items[0]),
+		.isLuxuryForwardNeeded = isLuxuryForwardNeeded(items[0]),
 		.items = currentArray
 	});
 
 	for (const auto &item : items) {
-		if (isAyuForwardNeeded(item) != currentChunk.isAyuForwardNeeded) {
+		if (isLuxuryForwardNeeded(item) != currentChunk.isLuxuryForwardNeeded) {
 			currentChunk.items = currentArray;
 			chunks.push_back(currentChunk);
 
 			currentArray = std::vector<not_null<HistoryItem*>>();
 
 			currentChunk = ForwardChunk({
-				.isAyuForwardNeeded = isAyuForwardNeeded(item),
+				.isLuxuryForwardNeeded = isLuxuryForwardNeeded(item),
 				.items = currentArray
 			});
 		}
@@ -363,13 +363,13 @@ void intelligentForward(
 		if (state->stopRequested()) {
 			break;
 		}
-		if (chunk.isAyuForwardNeeded) {
+		if (chunk.isLuxuryForwardNeeded) {
 			forwardMessages(session, action, true, Data::ResolvedForwardDraft(chunk.items));
 		} else {
 			state->setMessages(chunk.items.size(), 0);
 			state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
 
-			AyuSync::forwardMessagesSync(session, chunk.items, action, draft.options);
+			LuxurySync::forwardMessagesSync(session, chunk.items, action, draft.options);
 
 			state->setSentMessages(chunk.items.size());
 		}
@@ -416,7 +416,7 @@ void forwardMessages(
 	state->setMessages(items.size(), 0);
 	if (!toBeDownloaded.empty()) {
 		state->updateBottomBar(*session, peer->id, ForwardState::State::Downloading);
-		AyuSync::loadDocuments(session, toBeDownloaded);
+		LuxurySync::loadDocuments(session, toBeDownloaded);
 	}
 
 
@@ -446,10 +446,10 @@ void forwardMessages(
 		}
 
 		if (!mediaDownloadable(item->media())) {
-			AyuSync::sendMessageSync(session, std::move(message));
+			LuxurySync::sendMessageSync(session, std::move(message));
 		} else if (const auto media = item->media()) {
 			if (media->poll()) {
-				AyuSync::sendMessageSync(session, std::move(message));
+				LuxurySync::sendMessageSync(session, std::move(message));
 				continue;
 			}
 
@@ -510,4 +510,4 @@ void forwardMessages(
 	}
 }
 
-} // namespace AyuFeatures::AyuForward
+} // namespace LuxuryFeatures::LuxuryForward

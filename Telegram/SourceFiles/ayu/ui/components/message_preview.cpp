@@ -55,7 +55,7 @@ MessagePreview::MessagePreview(
 : RpWidget(parent)
 , _controller(controller)
 , _state(lifetime().make_state<State>()) {
-	_state->bubbleRadius = AyuSettings::getInstance().messageBubbleRadius();
+	_state->bubbleRadius = LuxurySettings::getInstance().messageBubbleRadius();
 	_state->delegate = std::make_unique<PreviewDelegate>(
 		controller,
 		crl::guard(this, [=] { update(); }));
@@ -73,7 +73,7 @@ MessagePreview::MessagePreview(
 		FullMsgId(),
 		u"Update wehn?"_q);
 
-	const auto ayugramUser = HistoryView::GenerateUser(
+	const auto luxuryGramUser = HistoryView::GenerateUser(
 		history,
 		u"AyuGram Releases"_q);
 	const auto messageItem = history->addNewLocalMessage({
@@ -81,7 +81,7 @@ MessagePreview::MessagePreview(
 		.flags = (MessageFlag::FakeHistoryItem
 			| MessageFlag::HasFromId
 			| MessageFlag::HasReplyInfo),
-		.from = ayugramUser,
+		.from = luxuryGramUser,
 		.replyTo = FullReplyTo{
 			.messageId = _state->reply->data()->fullId(),
 		},
@@ -120,19 +120,19 @@ MessagePreview::MessagePreview(
 	}, lifetime());
 
 	rpl::merge(
-		AyuSettings::getInstance().replaceBottomInfoWithIconsChanges()
+		LuxurySettings::getInstance().replaceBottomInfoWithIconsChanges()
 			| rpl::to_empty,
-		AyuSettings::getInstance().deletedMarkChanges()
+		LuxurySettings::getInstance().deletedMarkChanges()
 			| rpl::to_empty,
-		AyuSettings::getInstance().editedMarkChanges()
+		LuxurySettings::getInstance().editedMarkChanges()
 			| rpl::to_empty,
-		AyuSettings::getInstance().removeMessageTailChanges()
+		LuxurySettings::getInstance().removeMessageTailChanges()
 			| rpl::to_empty,
-		AyuSettings::getInstance().hideFastShareChanges()
+		LuxurySettings::getInstance().hideFastShareChanges()
 			| rpl::to_empty,
-		AyuSettings::getInstance().simpleQuotesAndRepliesChanges()
+		LuxurySettings::getInstance().simpleQuotesAndRepliesChanges()
 			| rpl::to_empty,
-		AyuSettings::getInstance().semiTransparentDeletedMessagesChanges()
+		LuxurySettings::getInstance().semiTransparentDeletedMessagesChanges()
 			| rpl::to_empty
 	) | rpl::on_next([=] {
 		refresh();
@@ -170,7 +170,7 @@ void MessagePreview::paintEvent(QPaintEvent *e) {
 	view->draw(p, context);
 	Ui::ClearBubbleRadiusOverride();
 
-	if (!AyuSettings::getInstance().hideFastShare()) {
+	if (!LuxurySettings::getInstance().hideFastShare()) {
 		const auto size = st::historyFastShareSize;
 		const auto g = view->innerGeometry();
 		const auto shareLeft = g.x() + g.width()

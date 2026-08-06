@@ -768,7 +768,7 @@ void UnreadBar::paint(
 		int y,
 		int w,
 		ElementChatMode mode) const {
-	if (AyuFeatures::MessageShot::isTakingShot()) {
+	if (LuxuryFeatures::MessageShot::isTakingShot()) {
 		return;
 	}
 	const auto previousTranslation = p.transform().dx();
@@ -1281,7 +1281,7 @@ Element::Element(
 		}
 	}
 	const auto deletedOpacityEnabled
-		= AyuSettings::getInstance().semiTransparentDeletedMessages();
+		= LuxurySettings::getInstance().semiTransparentDeletedMessages();
 	if (deletedOpacityEnabled
 		&& replacing
 		&& replacing->_deletedOpacityAnimation.animating()) {
@@ -1457,7 +1457,7 @@ void Element::refreshDeletedAnimationTarget() {
 }
 
 float64 Element::deletedOpacity() const {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (!settings.semiTransparentDeletedMessages()) {
 		_deletedOpacityAnimation.stop();
 		_deletedOpacityAnimationTarget = nullptr;
@@ -1484,7 +1484,7 @@ float64 Element::deletedOpacity() const {
 }
 
 void Element::startDeletedAnimation() {
-	if (!AyuSettings::getInstance().semiTransparentDeletedMessages()) {
+	if (!LuxurySettings::getInstance().semiTransparentDeletedMessages()) {
 		_deletedOpacityAnimation.stop();
 		_deletedOpacityAnimationTarget = nullptr;
 		return;
@@ -1492,7 +1492,7 @@ void Element::startDeletedAnimation() {
 	refreshDeletedAnimationTarget();
 	_deletedOpacityAnimation.start(
 		[target = _deletedOpacityAnimationTarget] {
-			if (!AyuSettings::getInstance().semiTransparentDeletedMessages()) {
+			if (!LuxurySettings::getInstance().semiTransparentDeletedMessages()) {
 				return false;
 			}
 			if (const auto view = target->get()) {
@@ -1596,7 +1596,7 @@ bool Element::isTopicRootReply() const {
 }
 
 int Element::skipBlockWidth() const {
-	if (AyuFeatures::MessageShot::ignoreRender(AyuFeatures::MessageShot::RenderPart::Date)) {
+	if (LuxuryFeatures::MessageShot::ignoreRender(LuxuryFeatures::MessageShot::RenderPart::Date)) {
 		return st::msgDateDelta.x();
 	}
 
@@ -2446,7 +2446,7 @@ void Element::destroyUnreadBar() {
 }
 
 int Element::displayedDateHeight() const {
-	if (AyuFeatures::MessageShot::isTakingShot() || isMessageHidden(data())) {
+	if (LuxuryFeatures::MessageShot::isTakingShot() || isMessageHidden(data())) {
 		return 0;
 	}
 

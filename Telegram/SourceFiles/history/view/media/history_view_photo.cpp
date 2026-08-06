@@ -421,7 +421,7 @@ void Photo::draw(Painter &p, const PaintContext &context) const {
 			p.setBrush(over ? st->msgDateImgBgOver() : st->msgDateImgBg());
 		}
 	}
-	if (paintInCenter && !AyuFeatures::MessageShot::isTakingShot()) {
+	if (paintInCenter && !LuxuryFeatures::MessageShot::isTakingShot()) {
 		const auto radialOpacity = (radial && loaded && !_data->uploading())
 			? _animation->radial.opacity() :
 			1.;
@@ -536,10 +536,10 @@ void Photo::validateUserpicImageCache(QSize size, bool forum) const {
 	const auto shape = forumValue
 		? Ui::PeerUserpicShape::Forum
 		: Ui::PeerUserpicShape::Circle;
-	if (AyuUserpic::ShouldOverrideShape(shape)) {
+	if (LuxuryUserpic::ShouldOverrideShape(shape)) {
 		original = Images::Round(
 			std::move(original),
-			ImageRoundRadius::AyuUserpic);
+			ImageRoundRadius::LuxuryUserpic);
 	} else {
 		original = Images::Round(
 			std::move(original),
@@ -641,8 +641,8 @@ void Photo::paintUserpicFrame(
 		const auto shape = forum
 			? Ui::PeerUserpicShape::Forum
 			: Ui::PeerUserpicShape::Circle;
-		if (AyuUserpic::ShouldOverrideShape(shape)) {
-			AyuUserpic::ApplyFrameRounding(
+		if (LuxuryUserpic::ShouldOverrideShape(shape)) {
+			LuxuryUserpic::ApplyFrameRounding(
 				request,
 				_streamed->roundingCorners,
 				_streamed->roundingMask,
@@ -866,7 +866,7 @@ void Photo::drawGrouped(
 		&& (radial
 			|| (!loaded && !_data->loading())
 			|| _data->waitingForAlbum());
-	if (paintInCenter && !AyuFeatures::MessageShot::isTakingShot()) {
+	if (paintInCenter && !LuxuryFeatures::MessageShot::isTakingShot()) {
 		const auto radialOpacity = radial
 			? _animation->radial.opacity()
 			: 1.;
@@ -959,11 +959,11 @@ bool Photo::dataLoaded() const {
 }
 
 bool Photo::needInfoDisplay() const {
-	if (AyuFeatures::MessageShot::ignoreRender(AyuFeatures::MessageShot::RenderPart::Date)) {
+	if (LuxuryFeatures::MessageShot::ignoreRender(LuxuryFeatures::MessageShot::RenderPart::Date)) {
 		return false;
 	}
 
-	if (AyuFeatures::MessageShot::isTakingShot()) {
+	if (LuxuryFeatures::MessageShot::isTakingShot()) {
 		return true;
 	}
 

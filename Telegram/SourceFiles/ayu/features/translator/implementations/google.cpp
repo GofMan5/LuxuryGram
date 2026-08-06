@@ -21,7 +21,7 @@
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
 
-namespace Ayu::Translator {
+namespace Luxury::Translator {
 
 namespace {
 

@@ -270,7 +270,7 @@ auto GenerateChatIntro(
 				st::defaultTextStyle,
 				links));
 		};
-		const auto disableGreeting = AyuSettings::getInstance().disableGreetingSticker();
+		const auto disableGreeting = LuxurySettings::getInstance().disableGreetingSticker();
 		const auto title = data.customPhrases()
 			? data.title
 			: tr::lng_chat_intro_default_title(tr::now);
@@ -760,7 +760,7 @@ bool AboutView::refresh() {
 				makeIntro(user);
 			} else if (const auto stars = user->starsPerMessageChecked()) {
 				setItem(makeStarsPerMessage(stars), nullptr);
-			} else if (!AyuSettings::getInstance().disableGreetingSticker()) {
+			} else if (!LuxurySettings::getInstance().disableGreetingSticker()) {
 				makeIntro(user);
 			}
 			return true;

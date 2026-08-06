@@ -70,7 +70,7 @@ Main::Session &PerDialogFiltersListController::session() const {
 }
 
 void PerDialogFiltersListController::prepareShadowBan() {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	const auto &shadowBanned = settings.shadowBanIds();
 
 	for (const auto id : shadowBanned) {
@@ -83,8 +83,8 @@ void PerDialogFiltersListController::prepare() {
 		prepareShadowBan();
 		return;
 	}
-	const auto filters = AyuDatabase::getAllRegexFilters();
-	const auto exclusions = AyuDatabase::getAllFiltersExclusions();
+	const auto filters = LuxuryDatabase::getAllRegexFilters();
+	const auto exclusions = LuxuryDatabase::getAllFiltersExclusions();
 
 	if (filters.empty() && exclusions.empty()) {
 		return;
@@ -105,13 +105,13 @@ void PerDialogFiltersListController::prepare() {
 		auto row = std::make_unique<PerDialogFiltersListRow>(id);
 		auto status = QString();
 		if (count.filters > 0) {
-			status += tr::ayu_RegexFiltersAmount(tr::now, lt_count, count.filters);
+			status += tr::luxury_RegexFiltersAmount(tr::now, lt_count, count.filters);
 			if (count.exclusions > 0) {
 				status += ", ";
 			}
 		}
 		if (count.exclusions > 0) {
-			status += tr::ayu_RegexFiltersExcludedAmount(tr::now, lt_count, count.exclusions);
+			status += tr::luxury_RegexFiltersExcludedAmount(tr::now, lt_count, count.exclusions);
 		}
 
 		row->setCustomStatus(status, false);
@@ -142,10 +142,10 @@ void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
 			tr::lng_theme_delete(tr::now),
 			[=]
 			{
-				if (AyuSettings::getInstance().isShadowBanned(did)) {
-					AyuSettings::getInstance().removeShadowBan(did);
+				if (LuxurySettings::getInstance().isShadowBanned(did)) {
+					LuxurySettings::getInstance().removeShadowBan(did);
 				} else {
-					AyuSettings::getInstance().addShadowBan(did);
+					LuxurySettings::getInstance().addShadowBan(did);
 				}
 			},
 			&st::menuIconDelete);
@@ -155,7 +155,7 @@ void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
 	}
 	_controller->dialogId = did;
 	_controller->showExclude = true;
-	_controller->showSettings(AyuFiltersList::Id());
+	_controller->showSettings(LuxuryFiltersList::Id());
 }
 
 }

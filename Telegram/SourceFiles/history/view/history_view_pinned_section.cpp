@@ -158,7 +158,7 @@ PinnedWidget::PinnedWidget(
 	}, _topBar->lifetime());
 	_topBar->messageShotSelectionRequest(
 	) | rpl::on_next([=] {
-		AyuFeatures::MessageShot::Wrapper(_inner, [=] { clearSelected(); });
+		LuxuryFeatures::MessageShot::Wrapper(_inner, [=] { clearSelected(); });
 	}, _topBar->lifetime());
 	_topBar->forwardSelectionRequest(
 	) | rpl::on_next([=] {

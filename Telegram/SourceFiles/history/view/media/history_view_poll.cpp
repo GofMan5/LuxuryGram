@@ -3461,7 +3461,7 @@ void Poll::Header::paintRecentVoters(
 			p.setPen(pen);
 			p.setBrush(Qt::NoBrush);
 			PainterHighQualityEnabler hq(p);
-			AyuUserpic::PaintShape(p, x, y, size);
+			LuxuryUserpic::PaintShape(p, x, y, size);
 		};
 		if (_owner->usesBubblePattern(context)) {
 			const auto add = st::lineWidth * 2;

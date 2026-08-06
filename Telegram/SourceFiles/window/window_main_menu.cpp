@@ -108,7 +108,7 @@ constexpr auto kPlayStatusLimit = 12;
 
 [[nodiscard]] rpl::producer<TextWithEntities> SetStatusLabel(
 		not_null<Main::Session*> session) {
-	return tr::ayu_AyuPreferences() | rpl::map([](const QString& text) {
+	return tr::luxury_LuxuryPreferences() | rpl::map([](const QString& text) {
 		return tr::link(text);
 	});
 }
@@ -664,7 +664,7 @@ void MainMenu::setupAccountsToggle() {
 
 void MainMenu::setupSetEmojiStatus() {
 	_setEmojiStatus->overrideLinkClickHandler([=] {
-		_controller->showSettings(Settings::AyuMain::Id());
+		_controller->showSettings(Settings::LuxuryMain::Id());
 	});
 }
 
@@ -687,7 +687,7 @@ void MainMenu::showFinished() {
 void MainMenu::setupMenu() {
 	using namespace Settings;
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	const auto controller = _controller;
 	const auto addAction = [&](
@@ -764,11 +764,11 @@ void MainMenu::setupMenu() {
 
 		if (settings.showLReadToggleInDrawer()) {
 			addAction(
-				tr::ayu_LReadMessages(),
-				{&st::ayuLReadMenuIcon}
+				tr::luxury_LReadMessages(),
+				{&st::luxuryLReadMenuIcon}
 			)->setClickedCallback([=]() mutable
 			{
-				auto &ghost = AyuSettings::ghost(&controller->session());
+				auto &ghost = LuxurySettings::ghost(&controller->session());
 				const auto prev = ghost.sendReadMessages();
 				ghost.setSendReadMessages(false);
 
@@ -781,7 +781,7 @@ void MainMenu::setupMenu() {
 
 		if (settings.showSReadToggleInDrawer()) {
 			auto callback = [=](Fn<void()> &&close) mutable {
-				auto &ghost = AyuSettings::ghost(&controller->session());
+				auto &ghost = LuxurySettings::ghost(&controller->session());
 				const auto prev = ghost.sendReadMessages();
 				ghost.setSendReadMessages(true);
 
@@ -790,21 +790,21 @@ void MainMenu::setupMenu() {
 
 				// slight delay for forums to send packets
 				dispatchToMainThread(crl::guard(controller, [=] {
-					auto &ghost = AyuSettings::ghost(&controller->session());
+					auto &ghost = LuxurySettings::ghost(&controller->session());
 					ghost.setSendReadMessages(prev);
 				}), 200);
 				close();
 			};
 
 			addAction(
-				tr::ayu_SReadMessages(),
-				{&st::ayuSReadMenuIcon}
+				tr::luxury_SReadMessages(),
+				{&st::luxurySReadMenuIcon}
 			)->setClickedCallback([=]
 			{
 				auto box = Ui::MakeConfirmBox({
-					.text = tr::ayu_ReadConfirmationBoxQuestion(),
+					.text = tr::luxury_ReadConfirmationBoxQuestion(),
 					.confirmed = callback,
-					.confirmText = tr::ayu_ReadConfirmationBoxActionText()
+					.confirmText = tr::luxury_ReadConfirmationBoxActionText()
 				});
 				Ui::show(std::move(box));
 			});
@@ -883,22 +883,22 @@ void MainMenu::setupMenu() {
 	}
 
 	if (settings.showGhostToggleInDrawer()) {
-		auto ghostActiveChanges = AyuSettings::getInstance().useGlobalGhostModeValue()
+		auto ghostActiveChanges = LuxurySettings::getInstance().useGlobalGhostModeValue()
 			| rpl::map([controller = _controller](bool) {
-				return AyuSettings::ghost(&controller->session()).ghostModeActiveValue();
+				return LuxurySettings::ghost(&controller->session()).ghostModeActiveValue();
 			})
 			| rpl::flatten_latest();
 
 		const auto ghostModeToggle = addAction(
-			tr::ayu_GhostModeToggle(),
-			{&st::ayuGhostIcon}
+			tr::luxury_GhostModeToggle(),
+			{&st::luxuryGhostIcon}
 		)->toggleOn(std::move(ghostActiveChanges));
 
 		ghostModeToggle->toggledChanges(
 		) | rpl::on_next(
 			[controller = _controller](bool ghostMode)
 			{
-				auto &ghost = AyuSettings::ghost(&controller->session());
+				auto &ghost = LuxurySettings::ghost(&controller->session());
 				ghost.setGhostModeEnabled(ghostMode);
 			},
 			ghostModeToggle->lifetime());
@@ -906,15 +906,15 @@ void MainMenu::setupMenu() {
 
 	if (settings.showStreamerToggleInDrawer()) {
 		const auto streamerModeToggle = addAction(
-			tr::ayu_StreamerModeToggle(),
-			{&st::ayuStreamerModeMenuIcon}
-		)->toggleOn(AyuSettings::getInstance().streamerModeValue());
+			tr::luxury_StreamerModeToggle(),
+			{&st::luxuryStreamerModeMenuIcon}
+		)->toggleOn(LuxurySettings::getInstance().streamerModeValue());
 
 		streamerModeToggle->toggledChanges(
 		) | rpl::on_next(
 			[=](bool enabled)
 			{
-				AyuSettings::getInstance().setStreamerMode(enabled);
+				LuxurySettings::getInstance().setStreamerMode(enabled);
 			},
 			streamerModeToggle->lifetime());
 	}

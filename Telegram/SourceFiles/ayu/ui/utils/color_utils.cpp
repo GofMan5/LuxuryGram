@@ -12,7 +12,7 @@
 #include <cmath>
 #include <QColor>
 
-namespace Ayu::Ui {
+namespace Luxury::Ui {
 
 std::array<float, 3> ColorUtils::RGBToHSL(int r, int g, int b) {
 	const auto rf = r / 255.0f;
@@ -226,5 +226,5 @@ QRgb ColorUtils::setAlphaComponent(QRgb color, int alpha) {
 	return qRgba(qRed(color), qGreen(color), qBlue(color), alpha);
 }
 
-} // namespace Ayu::Ui
+} // namespace Luxury::Ui
 

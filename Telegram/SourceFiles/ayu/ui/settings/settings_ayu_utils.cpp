@@ -58,7 +58,7 @@ void AddBetaBadge(not_null<Button*> parent) {
 			parent,
 			rpl::single(QString("BETA")),
 			st::settingsPremiumNewBadge),
-		st::ayuBetaBadgePadding);
+		st::luxuryBetaBadgePadding);
 	badge->show();
 	badge->setAttribute(Qt::WA_TransparentForMouseEvents);
 	badge->paintRequest() | rpl::on_next([=] {
@@ -66,7 +66,7 @@ void AddBetaBadge(not_null<Button*> parent) {
 		auto hq = PainterHighQualityEnabler(p);
 		p.setPen(Qt::NoPen);
 		p.setBrush(st::windowBgActive);
-		const auto r = st::ayuBetaBadgePadding.left();
+		const auto r = st::luxuryBetaBadgePadding.left();
 		p.drawRoundedRect(badge->rect(), r, r);
 	}, badge->lifetime());
 
@@ -93,7 +93,7 @@ void SetupCopyLinkMenus(
 		if (!widget || id.size() <= prefix.size() || !id.startsWith(prefix)) {
 			continue;
 		}
-		const auto link = u"https://t.me/ayuSettings?s="_q
+		const auto link = u"https://t.me/luxurySettings?s="_q
 			+ id.mid(prefix.size());
 		base::install_event_filter(widget, [=](not_null<QEvent*> e) {
 			if (e->type() != QEvent::ContextMenu) {
@@ -692,8 +692,8 @@ not_null<Button*> AddSettingToggle(
 	return AddToggle(
 		container,
 		std::move(text),
-		[getter] { return (AyuSettings::getInstance().*getter)(); },
-		[setter](bool v) { (AyuSettings::getInstance().*setter)(v); });
+		[getter] { return (LuxurySettings::getInstance().*getter)(); },
+		[setter](bool v) { (LuxurySettings::getInstance().*setter)(v); });
 }
 
 not_null<Button*> AddSettingToggle(
@@ -705,8 +705,8 @@ not_null<Button*> AddSettingToggle(
 	return AddToggle(
 		container,
 		std::move(text),
-		[getter] { return (AyuSettings::getInstance().*getter)(); },
-		[setter](bool v) { (AyuSettings::getInstance().*setter)(v); },
+		[getter] { return (LuxurySettings::getInstance().*getter)(); },
+		[setter](bool v) { (LuxurySettings::getInstance().*setter)(v); },
 		icon);
 }
 

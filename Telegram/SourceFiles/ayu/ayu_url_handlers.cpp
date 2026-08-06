@@ -23,7 +23,7 @@
 
 #include <QDesktopServices>
 
-namespace AyuUrlHandlers {
+namespace LuxuryUrlHandlers {
 
 bool ResolveUser(
 	Window::SessionController *controller,
@@ -56,7 +56,7 @@ bool ResolveUser(
 			}
 
 			Core::App().hideMediaView();
-			Ui::show(Ui::MakeInformBox(tr::ayu_UserNotFoundMessage()));
+			Ui::show(Ui::MakeInformBox(tr::luxury_UserNotFoundMessage()));
 		}
 	);
 
@@ -94,14 +94,14 @@ bool ResolveChat(
 			}
 
 			Core::App().hideMediaView();
-			Ui::show(Ui::MakeInformBox(tr::ayu_UserNotFoundMessage()));
+			Ui::show(Ui::MakeInformBox(tr::luxury_UserNotFoundMessage()));
 		}
 	);
 
 	return true;
 }
 
-bool HandleAyu(
+bool HandleLuxury(
 	Window::SessionController *controller,
 	const Match &match,
 	const QVariant &context) {
@@ -114,7 +114,7 @@ bool HandleAyu(
 		const auto type = [&]() -> std::optional<::Settings::Type>
 		{
 			if (section == u"settings"_q || section == u"preferences"_q || section == u"prefs"_q) {
-				return ::Settings::AyuMain::Id();
+				return ::Settings::LuxuryMain::Id();
 			}
 			return std::nullopt;
 		}();
@@ -147,7 +147,7 @@ bool HandleSupport(
 
 struct ResolvedSetting {
 	QString controlId;
-	::Settings::Type section = ::Settings::AyuMain::Id();
+	::Settings::Type section = ::Settings::LuxuryMain::Id();
 };
 
 [[nodiscard]] ResolvedSetting ResolveSetting(
@@ -175,7 +175,7 @@ struct ResolvedSetting {
 	return { .controlId = controlId };
 }
 
-bool HandleAyuSettings(
+bool HandleLuxurySettings(
 	Window::SessionController *controller,
 	const Match &match,
 	const QVariant &context) {
@@ -189,7 +189,7 @@ bool HandleAyuSettings(
 	const auto settingName = params.value(u"s"_q);
 
 	if (settingName.isEmpty()) {
-		controller->showSettings(::Settings::AyuMain::Id());
+		controller->showSettings(::Settings::LuxuryMain::Id());
 	} else {
 		const auto resolved = ResolveSetting(
 			u"ayu/"_q + settingName,

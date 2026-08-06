@@ -20,7 +20,7 @@
 
 // todo: expose available languages from current translator and use in `ChooseTranslateToBox`
 
-namespace Ayu::Translator {
+namespace Luxury::Translator {
 namespace {
 
 BaseTranslator *translatorForProvider(TranslationProvider provider) {

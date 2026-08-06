@@ -1505,9 +1505,9 @@ base::weak_qptr<Ui::RpWidget> Premium::createPinnedToTop(
 			}
 		}
 
-		const auto &settings = AyuSettings::getInstance();
+		const auto &settings = LuxurySettings::getInstance();
 		if (settings.localPremium()) {
-			return tr::ayu_LocalPremiumNotice(tr::rich);
+			return tr::luxury_LocalPremiumNotice(tr::rich);
 		}
 
 		return rpl::conditional(

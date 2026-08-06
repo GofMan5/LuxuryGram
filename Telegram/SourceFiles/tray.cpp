@@ -106,12 +106,12 @@ void Tray::rebuildMenu() {
 			[=] { toggleSoundNotifications(); });
 	}
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	if (settings.showGhostToggleInTray()) {
-		auto ghostActiveChanges = AyuSettings::getInstance().useGlobalGhostModeValue()
+		auto ghostActiveChanges = LuxurySettings::getInstance().useGlobalGhostModeValue()
 			| rpl::map([](bool) {
-				return AyuSettings::ghost().ghostModeActiveValue();
+				return LuxurySettings::ghost().ghostModeActiveValue();
 			})
 			| rpl::flatten_latest();
 
@@ -120,14 +120,14 @@ void Tray::rebuildMenu() {
 			std::move(ghostActiveChanges)
 		) | rpl::map([=](auto, bool active) {
 			return active
-				? tr::ayu_DisableGhostModeTray(tr::now)
-				: tr::ayu_EnableGhostModeTray(tr::now);
+				? tr::luxury_DisableGhostModeTray(tr::now)
+				: tr::luxury_EnableGhostModeTray(tr::now);
 		});
 		_tray.addAction(
 			std::move(turnGhostModeText),
 			[=]
 			{
-				auto &ghost = AyuSettings::ghost();
+				auto &ghost = LuxurySettings::ghost();
 				ghost.setGhostModeEnabled(!ghost.isGhostModeActive());
 			});
 	}
@@ -135,18 +135,18 @@ void Tray::rebuildMenu() {
 	if (settings.showStreamerToggleInTray()) {
 		auto turnStreamerModeText = rpl::combine(
 			_textUpdates.events_starting_with({}),
-			AyuSettings::getInstance().streamerModeValue()
+			LuxurySettings::getInstance().streamerModeValue()
 		) | rpl::map([=](auto, bool enabled) {
 			return enabled
-					   ? tr::ayu_DisableStreamerModeTray(tr::now)
-					   : tr::ayu_EnableStreamerModeTray(tr::now);
+					   ? tr::luxury_DisableStreamerModeTray(tr::now)
+					   : tr::luxury_EnableStreamerModeTray(tr::now);
 		});
 		_tray.addAction(
 			std::move(turnStreamerModeText),
 			[]
 			{
-				auto &ayuSettings = AyuSettings::getInstance();
-				ayuSettings.setStreamerMode(!ayuSettings.streamerMode());
+				auto &luxurySettings = LuxurySettings::getInstance();
+				luxurySettings.setStreamerMode(!luxurySettings.streamerMode());
 			});
 	}
 

@@ -875,7 +875,7 @@ void StickersListWidget::fillLocalSearchShortcuts(const QString &query) {
 }
 
 bool StickersListWidget::addSearchShortcut(not_null<StickersSet*> set) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.showOnlyAddedEmojisAndStickers()
 		&& !SetInMyList(set->flags)) {
 		return false;
@@ -2825,7 +2825,7 @@ void StickersListWidget::mouseReleaseEvent(QMouseEvent *e) {
 				&& (e->modifiers() & Qt::ControlModifier)) {
 				showStickerSetBox(document, set.id);
 			} else {
-				const auto &settings = AyuSettings::getInstance();
+				const auto &settings = LuxurySettings::getInstance();
 				auto from = messageSentAnimationInfo(
 					sticker->section,
 					sticker->index,
@@ -2845,7 +2845,7 @@ void StickersListWidget::mouseReleaseEvent(QMouseEvent *e) {
 
 				if (settings.stickerConfirmation() && (_mode == Mode::Full || _mode == Mode::ChatIntro) && _requireConfirmation) {
 					_show->showBox(Ui::MakeConfirmBox({
-						.text = tr::ayu_ConfirmationSticker(),
+						.text = tr::luxury_ConfirmationSticker(),
 						.confirmed = sendStickerCallback,
 						.confirmText = tr::lng_send_button()
 					}));
@@ -3331,7 +3331,7 @@ auto StickersListWidget::collectRecentStickers() -> std::vector<Sticker> {
 
 	auto add = [&](not_null<DocumentData*> document, bool custom) {
 		if (result.size() >= kRecentDisplayLimit
-			&& !AyuSettings::getInstance().unlimitedRecentStickers()) {
+			&& !LuxurySettings::getInstance().unlimitedRecentStickers()) {
 			return;
 		}
 		const auto i = ranges::find(result, document, &Sticker::document);

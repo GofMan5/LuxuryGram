@@ -205,7 +205,7 @@ void UpdateIcon(const NSStatusItem *status) {
 	auto resultActive = result;
 	resultActive.detach();
 
-    const auto &settings = AyuSettings::getInstance();
+    const auto &settings = LuxurySettings::getInstance();
 
 	const auto counter = settings.hideNotificationBadge() ? 0 : Core::App().unreadBadge();
 	const auto muted = settings.hideNotificationBadge() ? 0 : Core::App().unreadBadgeMuted();

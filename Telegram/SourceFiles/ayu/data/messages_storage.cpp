@@ -17,19 +17,19 @@
 #include "history/history_item_components.h"
 #include "main/main_session.h"
 
-namespace AyuMessages {
+namespace LuxuryMessages {
 
 template<typename DerivedMessage>
-std::vector<AyuMessageBase> convertToBase(const std::vector<DerivedMessage> &messages) {
-	std::vector<AyuMessageBase> based;
+std::vector<LuxuryMessageBase> convertToBase(const std::vector<DerivedMessage> &messages) {
+	std::vector<LuxuryMessageBase> based;
 	based.reserve(messages.size());
 	for (const auto &msg : messages) {
-		based.push_back(static_cast<AyuMessageBase>(msg));
+		based.push_back(static_cast<LuxuryMessageBase>(msg));
 	}
 	return based;
 }
 
-void map(not_null<HistoryItem*> item, AyuMessageBase &message) {
+void map(not_null<HistoryItem*> item, LuxuryMessageBase &message) {
 	const ID userId = item->history()->owner().session().userId().bare & PeerId::kChatTypeMask;
 
 	message.userId = userId;
@@ -44,7 +44,7 @@ void map(not_null<HistoryItem*> item, AyuMessageBase &message) {
 	}
 	message.messageId = item->id.bare;
 	message.date = item->date();
-	message.flags = AyuMapper::mapItemFlagsToMTPFlags(item);
+	message.flags = LuxuryMapper::mapItemFlagsToMTPFlags(item);
 
 	if (const auto edited = item->Get<HistoryMessageEdited>()) {
 		message.editDate = edited->date;
@@ -70,7 +70,7 @@ void map(not_null<HistoryItem*> item, AyuMessageBase &message) {
 	// message.replyMarkupSerialized
 	message.entityCreateDate = base::unixtime::now();
 
-	auto serializedText = AyuMapper::serializeTextWithEntities(item);
+	auto serializedText = LuxuryMapper::serializeTextWithEntities(item);
 	message.text = serializedText.first;
 	message.textEntities = serializedText.second;
 
@@ -92,10 +92,10 @@ void addEditedMessage(not_null<HistoryItem *> item) {
 		return;
 	}
 
-	AyuDatabase::addEditedMessage(message);
+	LuxuryDatabase::addEditedMessage(message);
 }
 
-std::vector<AyuMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit) {
+std::vector<LuxuryMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit) {
 	const ID userId = item->history()->owner().session().userId().bare & PeerId::kChatTypeMask;
 	const auto dialogId = getDialogIdFromPeer(item->history()->peer);
 	const auto msgId = item->id.bare;
@@ -103,14 +103,14 @@ std::vector<AyuMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID mi
 	return getEditedMessages(userId, dialogId, msgId, minId, maxId, totalLimit);
 }
 
-std::vector<AyuMessageBase> getEditedMessages(
+std::vector<LuxuryMessageBase> getEditedMessages(
 		ID userId,
 		ID dialogId,
 		ID messageId,
 		ID minId,
 		ID maxId,
 		int totalLimit) {
-	return convertToBase(AyuDatabase::getEditedMessages(
+	return convertToBase(LuxuryDatabase::getEditedMessages(
 		userId,
 		dialogId,
 		messageId,
@@ -124,7 +124,7 @@ bool hasRevisions(not_null<HistoryItem*> item) {
 	const auto dialogId = getDialogIdFromPeer(item->history()->peer);
 	const auto msgId = item->id.bare;
 
-	return AyuDatabase::hasRevisions(userId, dialogId, msgId);
+	return LuxuryDatabase::hasRevisions(userId, dialogId, msgId);
 }
 
 void addDeletedMessage(not_null<HistoryItem*> item) {
@@ -135,10 +135,10 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 		return;
 	}
 
-	AyuDatabase::addDeletedMessage(message);
+	LuxuryDatabase::addDeletedMessage(message);
 }
 
-std::vector<AyuMessageBase>
+std::vector<LuxuryMessageBase>
 getDeletedMessages(not_null<PeerData*> peer, ID topicId, ID minId, ID maxId, int totalLimit, const QString &searchQuery) {
 	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
 	return getDeletedMessages(
@@ -151,7 +151,7 @@ getDeletedMessages(not_null<PeerData*> peer, ID topicId, ID minId, ID maxId, int
 		searchQuery);
 }
 
-std::vector<AyuMessageBase> getDeletedMessages(
+std::vector<LuxuryMessageBase> getDeletedMessages(
 		ID userId,
 		ID dialogId,
 		ID topicId,
@@ -159,7 +159,7 @@ std::vector<AyuMessageBase> getDeletedMessages(
 		ID maxId,
 		int totalLimit,
 		const QString &searchQuery) {
-	return convertToBase(AyuDatabase::getDeletedMessages(
+	return convertToBase(LuxuryDatabase::getDeletedMessages(
 		userId,
 		dialogId,
 		topicId,
@@ -171,18 +171,18 @@ std::vector<AyuMessageBase> getDeletedMessages(
 
 bool hasDeletedMessages(not_null<PeerData*> peer, ID topicId) {
 	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
-	return AyuDatabase::hasDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
+	return LuxuryDatabase::hasDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
 }
 
 void removeDeletedMessage(not_null<HistoryItem*> item) {
 	const auto peer = item->history()->peer;
 	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
-	AyuDatabase::removeDeletedMessage(userId, getDialogIdFromPeer(peer), item->id.bare);
+	LuxuryDatabase::removeDeletedMessage(userId, getDialogIdFromPeer(peer), item->id.bare);
 }
 
 void clearDeletedMessages(not_null<PeerData*> peer, ID topicId) {
 	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
-	AyuDatabase::clearDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
+	LuxuryDatabase::clearDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
 }
 
 }

@@ -11,7 +11,7 @@
 
 #include <mutex>
 
-namespace AyuForward {
+namespace LuxuryForward {
 bool isForwarding(const PeerId &id);
 void cancelForward(const PeerId &id, const Main::Session &session);
 std::pair<QString, QString> stateName(const PeerId &id);
@@ -53,9 +53,9 @@ private:
 	Snapshot _data;
 };
 
-bool isAyuForwardNeeded(const std::vector<not_null<HistoryItem*>> &items);
-bool isAyuForwardNeeded(not_null<HistoryItem*> item);
-bool isFullAyuForwardNeeded(not_null<HistoryItem*> item);
+bool isLuxuryForwardNeeded(const std::vector<not_null<HistoryItem*>> &items);
+bool isLuxuryForwardNeeded(not_null<HistoryItem*> item);
+bool isFullLuxuryForwardNeeded(not_null<HistoryItem*> item);
 void intelligentForward(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,

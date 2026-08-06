@@ -226,12 +226,12 @@ Fn<void()> badgeClickHandler(not_null<PeerData*> peer) {
 			const auto custom = getCustomBadge(getBareID(peer));
 			text = custom.text.isEmpty()
 					   ? (isExtera
-							  ? tr::ayu_DeveloperPopup(
+							  ? tr::luxury_DeveloperPopup(
 								  tr::now,
 								  lt_item,
 								  TextWithEntities{peer->name()},
 								  tr::rich)
-							  : tr::ayu_SupporterPopup(
+							  : tr::luxury_SupporterPopup(
 								  tr::now,
 								  lt_item,
 								  TextWithEntities{peer->name()},
@@ -239,18 +239,18 @@ Fn<void()> badgeClickHandler(not_null<PeerData*> peer) {
 					   : tr::rich(custom.text);
 		} else if (isExtera) {
 			text = peer->isUser()
-					   ? tr::ayu_DeveloperPopup(
+					   ? tr::luxury_DeveloperPopup(
 						   tr::now,
 						   lt_item,
 						   TextWithEntities{peer->name()},
 						   tr::rich)
-					   : tr::ayu_OfficialResourcePopup(
+					   : tr::luxury_OfficialResourcePopup(
 						   tr::now,
 						   lt_item,
 						   TextWithEntities{peer->name()},
 						   tr::rich);
 		} else if (isSupporter) {
-			text = tr::ayu_SupporterPopup(
+			text = tr::luxury_SupporterPopup(
 				tr::now,
 				lt_item,
 				TextWithEntities{peer->name()},
@@ -267,7 +267,7 @@ Fn<void()> badgeClickHandler(not_null<PeerData*> peer) {
 			.duration = 3 * crl::time(1000),
 		};
 		if (badge.badge == Info::Profile::BadgeType::ExteraSupporter) {
-			Ayu::Ui::ShowToastWithAction(
+			Luxury::Ui::ShowToastWithAction(
 				std::move(config),
 				tr::lng_collectible_learn_more(tr::now),
 				[=] {
@@ -288,7 +288,7 @@ Fn<void()> badgeClickHandler(not_null<PeerData*> peer) {
 }
 
 bool isMessageHidden(const not_null<HistoryItem*> item) {
-	if (AyuState::isHidden(item)) {
+	if (LuxuryState::isHidden(item)) {
 		return true;
 	}
 
@@ -400,7 +400,7 @@ void MarkAsReadThread(not_null<Data::Thread*> thread) {
 		sendReadReactions(thread);
 	}
 
-	AyuWorker::markAsOnline(&thread->session());
+	LuxuryWorker::markAsOnline(&thread->session());
 }
 
 void readHistory(not_null<HistoryItem*> message) {
@@ -416,7 +416,7 @@ void readHistory(not_null<HistoryItem*> message) {
 							 return history->session().api().request(MTPchannels_ReadHistory(
 								 channel->inputChannel(),
 								 MTP_int(tillId)
-							 )).done([=] { AyuWorker::markAsOnline(&history->session()); }).send();
+							 )).done([=] { LuxuryWorker::markAsOnline(&history->session()); }).send();
 						 }
 
 						 return history->session().api().request(MTPmessages_ReadHistory(
@@ -425,7 +425,7 @@ void readHistory(not_null<HistoryItem*> message) {
 						 )).done([=](const MTPmessages_AffectedMessages &result)
 						 {
 							 history->session().api().applyAffectedMessages(history->peer, result);
-							 AyuWorker::markAsOnline(&history->session());
+							 LuxuryWorker::markAsOnline(&history->session());
 						 }).fail([=]
 						 {
 						 }).send();
@@ -441,7 +441,7 @@ void readHistory(not_null<HistoryItem*> message) {
 }
 
 void markReadAfterAction(not_null<History*> history) {
-	const auto &ghost = AyuSettings::ghost(&history->session());
+	const auto &ghost = LuxurySettings::ghost(&history->session());
 	if (ghost.sendReadMessages() || !ghost.markReadAfterAction()) {
 		return;
 	}
@@ -452,7 +452,7 @@ void markReadAfterAction(not_null<History*> history) {
 
 QString formatTTL(int time, bool isDoc) {
 	if (time == 0x7FFFFFFF) {
-		return isDoc ? tr::ayu_OnePlayTTL(tr::now) : tr::ayu_OneViewTTL(tr::now);
+		return isDoc ? tr::luxury_OnePlayTTL(tr::now) : tr::luxury_OneViewTTL(tr::now);
 	}
 
 	return QString("%1s").arg(time);
@@ -497,7 +497,7 @@ QString formatDateTime(const QDateTime &date) {
 }
 
 QString formatMessageTime(const QTime &time) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	const auto format =
 		settings.showMessageSeconds()
@@ -706,7 +706,7 @@ int getScheduleTime(int64 sumSize) {
 }
 
 bool isMessageSavable(const not_null<HistoryItem*> item) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	if (!settings.saveDeletedMessages()) {
 		return false;
@@ -726,7 +726,7 @@ void processMessageDelete(not_null<HistoryItem*> item) {
 			item->applyTTL(0);
 		}
 		item->setDeleted();
-		AyuMessages::addDeletedMessage(item);
+		LuxuryMessages::addDeletedMessage(item);
 	}
 }
 
@@ -1386,7 +1386,7 @@ void getUserRegistrationDateInner(
 
 			if (flag == "EXACT" || flag == "INTERPOLATED") {
 				if (!isSelf) {
-					resultText = tr::ayu_CreationDateUserApproximately(
+					resultText = tr::luxury_CreationDateUserApproximately(
 						tr::now,
 						lt_item1,
 						TextWithEntities{userName},
@@ -1395,7 +1395,7 @@ void getUserRegistrationDateInner(
 						tr::rich
 					);
 				} else {
-					resultText = tr::ayu_CreationDateSelfApproximately(
+					resultText = tr::luxury_CreationDateSelfApproximately(
 						tr::now,
 						lt_item,
 						TextWithEntities{formattedDate},
@@ -1404,7 +1404,7 @@ void getUserRegistrationDateInner(
 				}
 			} else if (flag == "LT") {
 				if (!isSelf) {
-					resultText = tr::ayu_CreationDateUserEarlier(
+					resultText = tr::luxury_CreationDateUserEarlier(
 						tr::now,
 						lt_item1,
 						TextWithEntities{userName},
@@ -1413,7 +1413,7 @@ void getUserRegistrationDateInner(
 						tr::rich
 					);
 				} else {
-					resultText = tr::ayu_CreationDateSelfEarlier(
+					resultText = tr::luxury_CreationDateSelfEarlier(
 						tr::now,
 						lt_item,
 						TextWithEntities{formattedDate},
@@ -1422,7 +1422,7 @@ void getUserRegistrationDateInner(
 				}
 			} else if (flag == "ET") {
 				if (!isSelf) {
-					resultText = tr::ayu_CreationDateUserLater(
+					resultText = tr::luxury_CreationDateUserLater(
 						tr::now,
 						lt_item1,
 						TextWithEntities{userName},
@@ -1431,7 +1431,7 @@ void getUserRegistrationDateInner(
 						tr::rich
 					);
 				} else {
-					resultText = tr::ayu_CreationDateSelfLater(
+					resultText = tr::luxury_CreationDateSelfLater(
 						tr::now,
 						lt_item,
 						TextWithEntities{formattedDate},
@@ -1476,7 +1476,7 @@ void getChannelJoinOrCreateDate(not_null<ChannelData*> channel, Fn<void(TextWith
 
 	if (channel->inviteDate) {
 		const auto formattedDate = langDayOfMonthFull(base::unixtime::parse(channel->inviteDate).date());
-		result = tr::ayu_JoinDateChat(
+		result = tr::luxury_JoinDateChat(
 			tr::now,
 			lt_item1,
 			TextWithEntities{channel->name()},
@@ -1486,7 +1486,7 @@ void getChannelJoinOrCreateDate(not_null<ChannelData*> channel, Fn<void(TextWith
 		);
 	} else if (channel->date) {
 		const auto formattedDate = langDayOfMonthFull(base::unixtime::parse(channel->date).date());
-		result = tr::ayu_CreationDateChat(
+		result = tr::luxury_CreationDateChat(
 			tr::now,
 			lt_item1,
 			TextWithEntities{channel->name()},
@@ -1506,7 +1506,7 @@ void getChatCreateDate(not_null<ChatData*> chat, Fn<void(TextWithEntities)> call
 
 	if (chat->date) {
 		const auto formattedDate = langDayOfMonthFull(base::unixtime::parse(chat->date).date());
-		result = tr::ayu_CreationDateChat(
+		result = tr::luxury_CreationDateChat(
 			tr::now,
 			lt_item1,
 			TextWithEntities{chat->name()},
@@ -1536,7 +1536,7 @@ void getRegistrationDate(not_null<PeerData*> peer, Fn<void(TextWithEntities)> ca
 }
 
 QString getBetterLinkPreview(const QString &url) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (!settings.improveLinkPreviews()) {
 		return url;
 	}
@@ -1570,7 +1570,7 @@ void applyGhostScheduling(
 		not_null<Main::Session*> session,
 		Api::SendOptions &options,
 		int delaySeconds) {
-	const auto &ghost = AyuSettings::ghost(session);
+	const auto &ghost = LuxurySettings::ghost(session);
 	if (ghost.isUseScheduledMessages() && !options.scheduled) {
 		const auto delay = Core::App().settings().proxy().isEnabled()
 			? (delaySeconds * 6 + 4) / 5 //ceil(delaySeconds * 1.2)

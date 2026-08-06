@@ -11,11 +11,11 @@
 #include "settings/settings_builder.h"
 #include "settings/settings_common.h"
 
-namespace Settings::AyuBuilder {
+namespace Settings::LuxuryBuilder {
 
-class AyuSectionBuilder {
+class LuxurySectionBuilder {
 public:
-	explicit AyuSectionBuilder(Builder::SectionBuilder &builder);
+	explicit LuxurySectionBuilder(Builder::SectionBuilder &builder);
 
 	[[nodiscard]] Builder::SectionBuilder &base();
 
@@ -89,4 +89,4 @@ private:
 	Builder::SectionBuilder &_builder;
 };
 
-} // namespace Settings::AyuBuilder
+} // namespace Settings::LuxuryBuilder

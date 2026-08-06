@@ -988,10 +988,10 @@ void Pip::setupPanel() {
 	_panel.setPosition(Deserialize(_delegate->pipLoadGeometry()));
 	_panel.widget()->show();
 
-	if (AyuSettings::getInstance().streamerMode()) {
-		AyuFeatures::StreamerMode::hideWidgetWindow(_panel.widget());
+	if (LuxurySettings::getInstance().streamerMode()) {
+		LuxuryFeatures::StreamerMode::hideWidgetWindow(_panel.widget());
 	} else {
-		AyuFeatures::StreamerMode::showWidgetWindow(_panel.widget());
+		LuxuryFeatures::StreamerMode::showWidgetWindow(_panel.widget());
 	}
 
 	_panel.saveGeometryRequests(

@@ -21,7 +21,7 @@
 #include "ayu/utils/windows_utils.h"
 #endif
 
-namespace AyuInfra {
+namespace LuxuryInfra {
 
 void initLang() {
 	QString id = Lang::GetInstance().id();
@@ -30,26 +30,26 @@ void initLang() {
 		LOG(("Language is not loaded"));
 		return;
 	}
-	AyuLanguage::init();
-	AyuLanguage::currentInstance()->fetchLanguage(id, baseId);
+	LuxuryLanguage::init();
+	LuxuryLanguage::currentInstance()->fetchLanguage(id, baseId);
 }
 
 void initUiSettings() {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
-	AyuUiSettings::setMonoFont(settings.monoFont());
-	AyuUiSettings::setWideMultiplier(settings.wideMultiplier());
-	AyuUiSettings::setMaterialSwitches(settings.materialSwitches());
-	AyuUiSettings::setAvatarCorners(settings.avatarCorners());
+	LuxuryUiSettings::setMonoFont(settings.monoFont());
+	LuxuryUiSettings::setWideMultiplier(settings.wideMultiplier());
+	LuxuryUiSettings::setMaterialSwitches(settings.materialSwitches());
+	LuxuryUiSettings::setAvatarCorners(settings.avatarCorners());
 	Ui::SetAppliedBubbleRadius(settings.messageBubbleRadius());
 }
 
 void initDatabase() {
-	AyuDatabase::initialize();
+	LuxuryDatabase::initialize();
 }
 
 void initWorker() {
-	AyuWorker::initialize();
+	LuxuryWorker::initialize();
 }
 
 void initRCManager() {
@@ -57,12 +57,12 @@ void initRCManager() {
 }
 
 void initTranslator() {
-	Ayu::Translator::TranslateManager::init();
+	Luxury::Translator::TranslateManager::init();
 }
 
 void initIcon() {
 #ifdef Q_OS_WIN
-	AyuAssets::loadAppIco();
+	LuxuryAssets::loadAppIco();
 	reloadAppIconFromTaskBar();
 #endif
 }

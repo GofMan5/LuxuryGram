@@ -384,7 +384,7 @@ void Polls::sendVotes(
 			}
 		}
 		_session->updates().applyUpdates(result);
-		const auto &ghost = AyuSettings::ghost(_session);
+		const auto &ghost = LuxurySettings::ghost(_session);
 		if (!ghost.sendReadMessages()
 			&& ghost.markReadAfterAction()
 			&& item) {

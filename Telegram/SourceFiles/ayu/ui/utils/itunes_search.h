@@ -8,7 +8,7 @@
 
 #include <QtGui/QImage>
 
-namespace Ayu::Ui::Itunes {
+namespace Luxury::Ui::Itunes {
 
 QImage FetchCover(const QString &performer,
                    const QString &title,

@@ -696,7 +696,7 @@ void Histories::sendReadRequests() {
 	DEBUG_LOG(("Reading: send requests with count %1.").arg(_states.size()));
 
 	// AyuGram sendReadMessages
-	const auto &ghost = AyuSettings::ghost(&_owner->session());
+	const auto &ghost = LuxurySettings::ghost(&_owner->session());
 	if (!ghost.sendReadMessages()) {
 		DEBUG_LOG(("[AyuGram] Don't read messages"));
 		_states.clear();
@@ -995,7 +995,7 @@ void Histories::deleteMessages(const MessageIdsList &ids, bool revoke) {
 			}
 			remove.push_back(item);
 			if (item->isDeleted()) {
-				AyuMessages::removeDeletedMessage(item);
+				LuxuryMessages::removeDeletedMessage(item);
 			} else if (item->isRegular()) {
 				idsByPeer[history].push_back(MTP_int(itemId.msg));
 			}
@@ -1169,7 +1169,7 @@ int Histories::sendPreparedMessage(
 					const MTPUpdates &result,
 					const MTP::Response &response) {
 				api->applyUpdates(result, randomId);
-				AyuWorker::markAsOnline(&history->owner().session());
+				LuxuryWorker::markAsOnline(&history->owner().session());
 				done(result, response);
 				finish();
 			}).fail([=](

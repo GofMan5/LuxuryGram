@@ -599,7 +599,7 @@ void List::paint(
 					p.setPen(QPen(gradient, line));
 				}
 				p.setBrush(Qt::NoBrush);
-				AyuUserpic::PaintShape(p, outer);
+				LuxuryUserpic::PaintShape(p, outer);
 			} else {
 				validateSegments(itemFull, gradient, line, true);
 				Ui::PaintOutlineSegments(
@@ -644,7 +644,7 @@ void List::paint(
 			p.setCompositionMode(QPainter::CompositionMode_Source);
 			p.setPen(Qt::NoPen);
 			p.setBrush(st::transparent);
-			AyuUserpic::PaintShape(p, rect);
+			LuxuryUserpic::PaintShape(p, rect);
 			p.setCompositionMode(QPainter::CompositionMode_SourceOver);
 		}
 		if (hasReadLine) {

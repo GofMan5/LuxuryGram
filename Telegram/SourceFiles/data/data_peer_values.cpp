@@ -408,7 +408,7 @@ rpl::producer<bool> PeerPremiumValue(not_null<PeerData*> peer) {
 }
 
 rpl::producer<bool> AmPremiumValue(not_null<Main::Session*> session) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.localPremium()) {
 		return rpl::single(true);
 	}
@@ -493,7 +493,7 @@ QString OnlineTextFull(not_null<UserData*> user, TimeId now) {
 	} else if (const auto common = OnlineTextCommon(user->lastseen(), now)) {
 		return *common;
 	}
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	const auto till = user->lastseen().onlineTill();
 	const auto onlineFull = base::unixtime::parse(till);
 	const auto nowFull = base::unixtime::parse(now);

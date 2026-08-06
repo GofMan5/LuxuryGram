@@ -1487,7 +1487,7 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 			p.fillRect(0, 0, fullWidth, st::searchedBarHeight, st::searchedBarBg);
 			p.setFont(st::searchedBarFont);
 			p.setPen(st::searchedBarFg);
-			p.drawTextLeft(st::searchedBarPosition.x(), st::searchedBarPosition.y(), width(), tr::ayu_SearchByIDResults(tr::now));
+			p.drawTextLeft(st::searchedBarPosition.x(), st::searchedBarPosition.y(), width(), tr::luxury_SearchByIDResults(tr::now));
 			p.translate(0, st::searchedBarHeight);
 
 			auto skip = idSearchOffset();
@@ -6178,7 +6178,7 @@ void InnerWidget::repaintDialogRowCornerStatus(not_null<History*> history) {
 		? st::dialogsOnlineBadgeSize
 		: st::dialogsCallBadgeSize;
 	const auto stroke = st::dialogsOnlineBadgeStroke;
-	const auto updateRect = AyuUserpic::OnlineBadgeRect(
+	const auto updateRect = LuxuryUserpic::OnlineBadgeRect(
 		_st->photoSize,
 		size,
 		stroke

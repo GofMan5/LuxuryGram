@@ -672,7 +672,7 @@ void PreviewPainter::paintReply(Painter &p) {
 			outline,
 			_replyRect.height());
 		p.drawRoundedRect(_replyRect, radius, radius);
-		if (!AyuSettings::getInstance().simpleQuotesAndReplies()) {
+		if (!LuxurySettings::getInstance().simpleQuotesAndReplies()) {
 			p.setOpacity(Ui::kDefaultBgOpacity);
 			p.setClipRect(
 				_replyRect.x() + outline,

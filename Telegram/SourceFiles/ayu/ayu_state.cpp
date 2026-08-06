@@ -9,7 +9,7 @@
 #include "ayu/ayu_settings.h"
 #include "main/main_session.h"
 
-namespace AyuState {
+namespace LuxuryState {
 
 std::unordered_map<PeerId, std::unordered_set<MsgId>> hiddenMessages;
 base::weak_ptr<Main::Session> disableGhostModeOnStoryCloseSession;
@@ -47,7 +47,7 @@ void disableGhostModeOnStoryClose(Main::Session *session) {
 	}
 	disableGhostModeOnStoryCloseSession = {};
 	if (current) {
-		AyuSettings::ghost(current).setGhostModeEnabled(false);
+		LuxurySettings::ghost(current).setGhostModeEnabled(false);
 	}
 }
 

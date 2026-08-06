@@ -749,11 +749,11 @@ FillMenuResult FillSendMenu(
 
 	if (sending && type != Type::Reminder) {
 		const auto &ghost = maybeShow
-			? AyuSettings::ghost(&maybeShow->session())
-			: AyuSettings::ghost();
+			? LuxurySettings::ghost(&maybeShow->session())
+			: LuxurySettings::ghost();
 		const auto sendWithoutSound = ghost.shouldSendWithoutSound();
 		menu->addAction(
-			sendWithoutSound ? tr::ayu_SendWithSound(tr::now) : tr::lng_send_silent_message(tr::now),
+			sendWithoutSound ? tr::luxury_SendWithSound(tr::now) : tr::lng_send_silent_message(tr::now),
 			[=] { action({ Api::SendOptions{ .silent = true } }, details); },
 			sendWithoutSound ? &icons.menuUnmute : &icons.menuMute);
 	}

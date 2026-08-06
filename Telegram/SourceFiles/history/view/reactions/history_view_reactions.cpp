@@ -637,7 +637,7 @@ void InlineList::paint(
 			p.setOpacity(1.);
 		}
 	}
-	if (!animations.empty() && !AyuFeatures::MessageShot::isTakingShot()) { // fix crash when taking shot
+	if (!animations.empty() && !LuxuryFeatures::MessageShot::isTakingShot()) { // fix crash when taking shot
 		const auto now = context.now;
 		context.reactionInfo->effectPaint = [
 			now,
@@ -723,7 +723,7 @@ void InlineList::paintSingleBg(
 		float64 opacity) const {
 	p.setOpacity(opacity);
 	if (!areTags()) {
-		const auto radius = AyuUserpic::ComputeRadiusF(fill.height());
+		const auto radius = LuxuryUserpic::ComputeRadiusF(fill.height());
 		p.setBrush(color);
 		p.drawRoundedRect(fill, radius, radius);
 		return;
@@ -923,7 +923,7 @@ void InlineList::continueAnimations(base::flat_map<
 InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 	using Flag = InlineListData::Flag;
 	const auto item = view->data();
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (!settings.showChannelReactions()
 		&& item->history()->peer->isChannel()
 		&& !item->history()->peer->isMegagroup()) {
@@ -1009,7 +1009,7 @@ InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 			}
 		}
 	}
-	if (AyuSettings::getInstance().filtersEnabled()) {
+	if (LuxurySettings::getInstance().filtersEnabled()) {
 		for (auto &[id, peers] : result.recent) {
 			peers.erase(ranges::remove_if(peers, [](not_null<PeerData*> peer) {
 				return FiltersController::isBlocked(peer);

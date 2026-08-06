@@ -37,7 +37,7 @@ base::options::toggle TabbedPanelShowOnClick({
 const char kOptionTabbedPanelShowOnClick[] = "tabbed-panel-show-on-click";
 
 bool ShowPanelOnClick() {
-	return !AyuSettings::getInstance().showEmojiPopup();
+	return !LuxurySettings::getInstance().showEmojiPopup();
 }
 
 TabbedPanel::TabbedPanel(
@@ -489,7 +489,7 @@ void TabbedPanel::showStarted() {
 }
 
 bool TabbedPanel::eventFilter(QObject *obj, QEvent *e) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	if (!settings.showEmojiPopup()) {
 		return false;

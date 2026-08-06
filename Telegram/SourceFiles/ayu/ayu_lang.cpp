@@ -42,34 +42,34 @@ constexpr auto postfixes = {
 	"other"
 };
 
-AyuLanguage *AyuLanguage::instance = nullptr;
+LuxuryLanguage *LuxuryLanguage::instance = nullptr;
 
-AyuLanguage::AyuLanguage()
+LuxuryLanguage::LuxuryLanguage()
 : QObject(qApp) {
 }
 
-AyuLanguage::~AyuLanguage() {
+LuxuryLanguage::~LuxuryLanguage() {
 	clearReply();
 }
 
-void AyuLanguage::init() {
-	if (!instance) instance = new AyuLanguage;
+void LuxuryLanguage::init() {
+	if (!instance) instance = new LuxuryLanguage;
 	instance->loadCachedLanguage();
 }
 
-AyuLanguage *AyuLanguage::currentInstance() {
+LuxuryLanguage *LuxuryLanguage::currentInstance() {
 	return instance;
 }
 
-QString AyuLanguage::getCacheDir() const {
+QString LuxuryLanguage::getCacheDir() const {
 	return cWorkingDir() + u"tdata/ayu/languages/"_q;
 }
 
-QString AyuLanguage::getCachePath(const QString &langId) const {
+QString LuxuryLanguage::getCachePath(const QString &langId) const {
 	return getCacheDir() + langId + u".json"_q;
 }
 
-void AyuLanguage::loadCachedLanguage() {
+void LuxuryLanguage::loadCachedLanguage() {
 	const auto langPackId = Lang::GetInstance().id();
 	const auto langPackBaseId = Lang::GetInstance().baseId();
 	auto finalLangPackId = langMapping.contains(langPackId) ? langMapping[langPackId] : langPackId;
@@ -107,7 +107,7 @@ void AyuLanguage::loadCachedLanguage() {
 	}
 }
 
-void AyuLanguage::saveCachedLanguage(const QByteArray &json, const QString &langId) {
+void LuxuryLanguage::saveCachedLanguage(const QByteArray &json, const QString &langId) {
 	const auto cacheDir = getCacheDir();
 	QDir().mkpath(cacheDir);
 
@@ -120,7 +120,7 @@ void AyuLanguage::saveCachedLanguage(const QByteArray &json, const QString &lang
 	}
 }
 
-void AyuLanguage::fetchLanguage(const QString &id, const QString &baseId) {
+void LuxuryLanguage::fetchLanguage(const QString &id, const QString &baseId) {
 	if (!id.isEmpty() || !needFallback) {
 		needFallback = false;
 	}
@@ -155,12 +155,12 @@ void AyuLanguage::fetchLanguage(const QString &id, const QString &baseId) {
 		_chkReply,
 		&QNetworkReply::errorOccurred,
 		this,
-		&AyuLanguage::fetchError);
+		&LuxuryLanguage::fetchError);
 	connect(
 		_chkReply,
 		&QNetworkReply::finished,
 		this,
-		&AyuLanguage::fetchFinished);
+		&LuxuryLanguage::fetchFinished);
 	const auto reply = _chkReply;
 	connect(
 		reply,
@@ -173,7 +173,7 @@ void AyuLanguage::fetchLanguage(const QString &id, const QString &baseId) {
 		});
 }
 
-void AyuLanguage::fetchFinished() {
+void LuxuryLanguage::fetchFinished() {
 	if (!_chkReply) {
 		return;
 	}
@@ -206,7 +206,7 @@ void AyuLanguage::fetchFinished() {
 	}
 }
 
-void AyuLanguage::fetchError(QNetworkReply::NetworkError e) {
+void LuxuryLanguage::fetchError(QNetworkReply::NetworkError e) {
 	if (!_chkReply) {
 		return;
 	}
@@ -230,7 +230,7 @@ void AyuLanguage::fetchError(QNetworkReply::NetworkError e) {
 	}
 }
 
-void AyuLanguage::clearReply() {
+void LuxuryLanguage::clearReply() {
 	const auto reply = base::take(_chkReply);
 	if (!reply) {
 		return;
@@ -240,10 +240,10 @@ void AyuLanguage::clearReply() {
 	reply->deleteLater();
 }
 
-void AyuLanguage::applyLanguageJson(QJsonDocument doc) {
+void LuxuryLanguage::applyLanguageJson(QJsonDocument doc) {
 	const auto json = doc.object();
 	for (const QString &brokenKey : json.keys()) {
-		auto key = qsl("ayu_") + brokenKey;
+		auto key = qsl("luxury_") + brokenKey;
 		auto val = json.value(brokenKey).toString().replace(qsl("&amp;"), qsl("&"));
 
 		if (key.endsWith("_Android")) {

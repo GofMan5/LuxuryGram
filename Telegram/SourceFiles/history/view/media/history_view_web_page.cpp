@@ -1041,7 +1041,7 @@ void WebPage::draw(Painter &p, const PaintContext &context) const {
 			useColorIndex ? (colorIndex + 1) : 0)];
 	Ui::Text::ValidateQuotePaintCache(*cache, _st);
 	Ui::Text::FillQuotePaint(p, outer, *cache, _st);
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (!settings.simpleQuotesAndReplies() && backgroundEmojiData) {
 		ValidateBackgroundEmoji(
 			backgroundEmojiId,

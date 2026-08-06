@@ -1123,7 +1123,7 @@ void PeerListRow::paintDisabledCheckUserpic(
 				* Ui::ForumUserpicRadiusMultiplier();
 			p.drawRoundedRect(userpicEllipse, radius, radius);
 		} else {
-			AyuUserpic::PaintShape(p, userpicEllipse);
+			LuxuryUserpic::PaintShape(p, userpicEllipse);
 		}
 
 		p.setPen(iconBorderPen);

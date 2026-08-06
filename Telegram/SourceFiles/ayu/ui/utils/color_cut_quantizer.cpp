@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Ayu::Ui {
+namespace Luxury::Ui {
 
 ColorCutQuantizer::ColorCutQuantizer(
 	const std::vector<int> &pixels,
@@ -337,4 +337,4 @@ Swatch ColorCutQuantizer::Vbox::averageColor() const {
 	return Swatch(approximateToRgb888(redMean, greenMean, blueMean), totalPopulation);
 }
 
-} // namespace Ayu::Ui
+} // namespace Luxury::Ui

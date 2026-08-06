@@ -47,7 +47,7 @@ void PaintBubbleGeneric(
 		return;
 	}
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.removeMessageTail()) {
 		if (bottomWithTailLeft == Corner::Tail) {
 			bottomWithTailLeft = Corner::Large;

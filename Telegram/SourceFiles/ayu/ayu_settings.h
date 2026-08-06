@@ -158,7 +158,7 @@ public:
 	friend void from_json(const nlohmann::json &j, GhostModeAccountSettings &s);
 
 private:
-	friend class AyuSettings;
+	friend class LuxurySettings;
 
 	rpl::variable<bool> _sendReadMessages = true;
 	rpl::variable<bool> _sendReadStories = true;
@@ -212,7 +212,7 @@ public:
 	friend void from_json(const nlohmann::json &j, MessageShotSettings &s);
 
 private:
-	friend class AyuSettings;
+	friend class LuxurySettings;
 	[[nodiscard]] bool isCloudThemeEmpty() const;
 	void clearCloudThemeData();
 
@@ -237,14 +237,14 @@ private:
 void to_json(nlohmann::json &j, const MessageShotSettings &s);
 void from_json(const nlohmann::json &j, MessageShotSettings &s);
 
-class AyuSettings {
+class LuxurySettings {
 public:
-	AyuSettings(const AyuSettings &) = delete;
-	AyuSettings &operator=(const AyuSettings &) = delete;
-	AyuSettings(AyuSettings &&) noexcept = default;
-	AyuSettings &operator=(AyuSettings &&) noexcept = default;
+	LuxurySettings(const LuxurySettings &) = delete;
+	LuxurySettings &operator=(const LuxurySettings &) = delete;
+	LuxurySettings(LuxurySettings &&) noexcept = default;
+	LuxurySettings &operator=(LuxurySettings &&) noexcept = default;
 
-	[[nodiscard]] static AyuSettings &getInstance();
+	[[nodiscard]] static LuxurySettings &getInstance();
 
 	static void load();
 	static void save();
@@ -616,11 +616,11 @@ public:
 	[[nodiscard]] rpl::producer<bool> streamerModeValue() const { return _streamerMode.value(); }
 	[[nodiscard]] rpl::producer<bool> streamerModeChanges() const { return _streamerMode.changes(); }
 
-	friend void to_json(nlohmann::json &j, const AyuSettings &s);
-	friend void from_json(const nlohmann::json &j, AyuSettings &s);
+	friend void to_json(nlohmann::json &j, const LuxurySettings &s);
+	friend void from_json(const nlohmann::json &j, LuxurySettings &s);
 
 private:
-	AyuSettings();
+	LuxurySettings();
 
 	[[nodiscard]] uint64 getOverriddenGhostUserId(uint64 userId) const { return _useGlobalGhostMode.current() ? 0 : userId; }
 
@@ -718,5 +718,5 @@ private:
 	MessageShotSettings _messageShotSettings;
 };
 
-void to_json(nlohmann::json &j, const AyuSettings &s);
-void from_json(const nlohmann::json &j, AyuSettings &s);
+void to_json(nlohmann::json &j, const LuxurySettings &s);
+void from_json(const nlohmann::json &j, LuxurySettings &s);

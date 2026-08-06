@@ -14,7 +14,7 @@
 #include <memory>
 #include <optional>
 
-namespace AyuFeatures::MessageShot {
+namespace LuxuryFeatures::MessageShot {
 
 enum class SavedThemeApplyResult {
 	AppliedSync,

@@ -914,14 +914,14 @@ void StickerSetBox::updateButtons() {
 		const auto addPackIdActions = [=](Ui::PopupMenu *menu)
 		{
 			if (type == Data::StickersType::Stickers || type == Data::StickersType::Emoji) {
-				const auto &settings = AyuSettings::getInstance();
+				const auto &settings = LuxurySettings::getInstance();
 				const auto weak = base::make_weak(this);
 				const auto session = _session;
 				const auto setId = _inner->setId();
 				const auto innerId = setId >> 32;
 
 				menu->addAction(
-					tr::ayu_MessageDetailsPackOwnerPC(tr::now),
+					tr::luxury_MessageDetailsPackOwnerPC(tr::now),
 					[weak, session, innerId]
 					{
 						if (!weak) {
@@ -949,7 +949,7 @@ void StickerSetBox::updateButtons() {
 
 								if (!user) {
 									QGuiApplication::clipboard()->setText(QString::number(innerId));
-									strongInner->showToast(tr::ayu_IDCopiedToast(tr::now));
+									strongInner->showToast(tr::luxury_IDCopiedToast(tr::now));
 									return;
 								}
 
@@ -964,7 +964,7 @@ void StickerSetBox::updateButtons() {
 
 				if (settings.showPeerId() != PeerIdDisplay::Hidden) {
 					menu->addAction(
-						tr::ayu_ContextCopyID(tr::now),
+						tr::luxury_ContextCopyID(tr::now),
 						[weak, setId]
 						{
 							if (!weak) {
@@ -977,7 +977,7 @@ void StickerSetBox::updateButtons() {
 							}
 
 							QGuiApplication::clipboard()->setText(QString::number(setId));
-							strongInner->showToast(tr::ayu_IDCopiedToast(tr::now));
+							strongInner->showToast(tr::luxury_IDCopiedToast(tr::now));
 						},
 						&st::menuIconCopy);
 				}
@@ -1737,9 +1737,9 @@ void StickerSetBox::Inner::contextMenuEvent(QContextMenuEvent *e) {
 				}
 			}, &st::menuIconCopy);
 
-			const auto &settings = AyuSettings::getInstance();
+			const auto &settings = LuxurySettings::getInstance();
 			if (settings.showPeerId() != PeerIdDisplay::Hidden) {
-				_menu->addAction(tr::ayu_ContextCopyID(tr::now),
+				_menu->addAction(tr::luxury_ContextCopyID(tr::now),
 								 [=]
 								 {
 									 QGuiApplication::clipboard()->setText(QString::number(_pack[index]->id));

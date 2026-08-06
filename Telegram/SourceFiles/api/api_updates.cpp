@@ -1000,7 +1000,7 @@ void Updates::updateOnline(crl::time lastNonIdleTime, bool gotOtherOffline) {
 	});
 
 	// AyuGram sendOnlinePackets
-	const auto &ghost = AyuSettings::ghost(_session);
+	const auto &ghost = LuxurySettings::ghost(_session);
 	const auto& config = _session->serverConfig();
 	bool isOnlineOrig = Core::App().hasActiveWindow(&session());
 	bool isOnline = ghost.sendOnlinePackets() && isOnlineOrig;
@@ -2080,7 +2080,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 			} else if (d.vstatus().type() == mtpc_userStatusOnline) {
 				cSetOtherOnline(
 					d.vstatus().c_userStatusOnline().vexpires().v);
-				AyuWorker::markAsOnline(_session);
+				LuxuryWorker::markAsOnline(_session);
 			}
 		}
 	} break;

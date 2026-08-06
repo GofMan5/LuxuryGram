@@ -757,9 +757,9 @@ void InnerWidget::preloadMore(Direction direction) {
 	const auto weak = base::make_weak(this);
 
 	crl::async([=] {
-		std::vector<AyuMessageBase> messages;
+		std::vector<LuxuryMessageBase> messages;
 		if (editing) { // viewing edited history
-			messages = AyuMessages::getEditedMessages(
+			messages = LuxuryMessages::getEditedMessages(
 				userId,
 				dialogId,
 				messageId,
@@ -767,7 +767,7 @@ void InnerWidget::preloadMore(Direction direction) {
 				maxId,
 				perPage);
 		} else { // viewing deleted messages
-			messages = AyuMessages::getDeletedMessages(
+			messages = LuxuryMessages::getDeletedMessages(
 				userId,
 				dialogId,
 				topicId,
@@ -795,7 +795,7 @@ void InnerWidget::preloadMore(Direction direction) {
 	});
 }
 
-void InnerWidget::addMessages(Direction direction, const std::vector<AyuMessageBase> &messages) {
+void InnerWidget::addMessages(Direction direction, const std::vector<LuxuryMessageBase> &messages) {
 	auto up = (direction == Direction::Up);
 	if (messages.empty()) {
 		(up ? _upLoaded : _downLoaded) = true;

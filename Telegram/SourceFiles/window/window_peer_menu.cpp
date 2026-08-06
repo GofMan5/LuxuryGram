@@ -1554,7 +1554,7 @@ void Filler::addToggleNoForwards() {
 			}
 		}).send();
 	};
-	const auto disabledNow = user->isAyuNoForwards();
+	const auto disabledNow = user->isLuxuryNoForwards();
 	_addAction(disabledNow
 		? tr::lng_enable_sharing(tr::now)
 		: tr::lng_disable_sharing(tr::now), [=] {
@@ -1867,7 +1867,7 @@ void Filler::fillContextMenuActions() {
 		}
 	}
 	addClearHistory();
-	AyuUi::AddDeleteOwnMessagesAction(_peer, _topic, _controller, _addAction);
+	LuxuryUi::AddDeleteOwnMessagesAction(_peer, _topic, _controller, _addAction);
 	addDeleteChat();
 	addLeaveChat();
 	addDeleteTopic();
@@ -1875,11 +1875,11 @@ void Filler::fillContextMenuActions() {
 
 void Filler::fillHistoryActions() {
 	addToggleMuteSubmenu(true);
-	AyuUi::AddAyuGramActions(_peer, _thread, _controller, _addAction);
+	LuxuryUi::AddLuxuryGramActions(_peer, _thread, _controller, _addAction);
 	addCreateTopic();
 	addInfo();
-	AyuUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
-	AyuUi::AddOpenChannelAction(_peer, _controller, _addAction);
+	LuxuryUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
+	LuxuryUi::AddOpenChannelAction(_peer, _controller, _addAction);
 	addViewAsTopics();
 	addManageChat();
 	addStoryArchive();
@@ -1895,7 +1895,7 @@ void Filler::fillHistoryActions() {
 	addTranslate();
 	addReport();
 	addClearHistory();
-	AyuUi::AddDeleteOwnMessagesAction(_peer, _topic, _controller, _addAction);
+	LuxuryUi::AddDeleteOwnMessagesAction(_peer, _topic, _controller, _addAction);
 	addDeleteChat();
 	addLeaveChat();
 }
@@ -1916,8 +1916,8 @@ void Filler::fillProfileActions() {
 	addTopicLink();
 	addManageTopic();
 	addToggleTopicClosed();
-	AyuUi::AddOpenChannelAction(_peer, _controller, _addAction);
-	AyuUi::AddShadowBanAction(_peer, _addAction);
+	LuxuryUi::AddOpenChannelAction(_peer, _controller, _addAction);
+	LuxuryUi::AddShadowBanAction(_peer, _addAction);
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();
@@ -1931,10 +1931,10 @@ void Filler::fillProfileActions() {
 }
 
 void Filler::fillRepliesActions() {
-	AyuUi::AddAyuGramActions(_peer, _thread, _controller, _addAction);
+	LuxuryUi::AddLuxuryGramActions(_peer, _thread, _controller, _addAction);
 	if (_topic) {
 		addInfo();
-		AyuUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
+		LuxuryUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
 		addManageTopic();
 	}
 	addBoostChat();
@@ -3417,10 +3417,10 @@ base::weak_qptr<Ui::BoxContent> ShowForwardMessagesBox(
 			options,
 			forwardOptions);
 		const auto items = history->owner().idsToItems(msgIds);
-		const auto ayuForwarding = AyuForward::isAyuForwardNeeded(items)
-			|| AyuForward::isFullAyuForwardNeeded(items.front());
+		const auto luxuryForwarding = LuxuryForward::isLuxuryForwardNeeded(items)
+			|| LuxuryForward::isFullLuxuryForwardNeeded(items.front());
 
-		if ((!state->submit || ayuForwarding) && successCallback) {
+		if ((!state->submit || luxuryForwarding) && successCallback) {
 			successCallback();
 		}
 		// AyuGram-changed

@@ -297,7 +297,7 @@ void MainWindow::unreadCounterChangedHook() {
 }
 
 void MainWindow::updateDockCounter() {
-	const auto counter = AyuSettings::getInstance().hideNotificationBadge()
+	const auto counter = LuxurySettings::getInstance().hideNotificationBadge()
 		? 0
 		: Core::App().unreadBadge();
 

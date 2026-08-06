@@ -841,7 +841,7 @@ void TopPeersStrip::paintUserpic(
 		pen.setWidthF(stroke * online);
 		q.setPen(pen);
 		q.setBrush(st::dialogsOnlineBadgeFg);
-		const auto badge = AyuUserpic::OnlineBadgePosition(size, onlineSize, stroke);
+		const auto badge = LuxuryUserpic::OnlineBadgePosition(size, onlineSize, stroke);
 		q.drawEllipse(QRectF(
 			badge.x(),
 			badge.y(),

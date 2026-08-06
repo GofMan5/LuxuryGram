@@ -11,7 +11,7 @@
 
 #include <windows.h>
 
-namespace AyuFeatures::StreamerMode::Platform {
+namespace LuxuryFeatures::StreamerMode::Platform {
 
 void SetWindowCaptureExcluded(
 		not_null<QWidget*> widget,
@@ -22,4 +22,4 @@ void SetWindowCaptureExcluded(
 		excluded ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
 }
 
-} // namespace AyuFeatures::StreamerMode::Platform
+} // namespace LuxuryFeatures::StreamerMode::Platform

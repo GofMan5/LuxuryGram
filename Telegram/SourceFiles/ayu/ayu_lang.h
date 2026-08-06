@@ -9,15 +9,15 @@
 #include <QtNetwork/QNetworkReply>
 #include <QtXml/QDomDocument>
 
-class AyuLanguage : public QObject
+class LuxuryLanguage : public QObject
 {
 	Q_OBJECT
-	Q_DISABLE_COPY(AyuLanguage)
+	Q_DISABLE_COPY(LuxuryLanguage)
 
 public:
-	static AyuLanguage *currentInstance();
+	static LuxuryLanguage *currentInstance();
 	static void init();
-	static AyuLanguage *instance;
+	static LuxuryLanguage *instance;
 
 	void fetchLanguage(const QString &id, const QString &baseId);
 	void applyLanguageJson(QJsonDocument doc);
@@ -27,8 +27,8 @@ public Q_SLOTS:
 	void fetchError(QNetworkReply::NetworkError e);
 
 private:
-	AyuLanguage();
-	~AyuLanguage() override;
+	LuxuryLanguage();
+	~LuxuryLanguage() override;
 
 	void clearReply();
 	void loadCachedLanguage();

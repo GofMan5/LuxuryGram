@@ -64,7 +64,7 @@ void OwnedItem::clearView() {
 void GenerateItems(
 	not_null<HistoryView::ElementDelegate*> delegate,
 	not_null<History*> history,
-	AyuMessageBase message,
+	LuxuryMessageBase message,
 	Fn<void(OwnedItem item, TimeId sentDate, MsgId)> callback) {
 	PeerData *from = history->owner().userLoaded(message.fromId);
 	if (!from) {
@@ -116,7 +116,7 @@ void GenerateItems(
 
 	const auto text = QString::fromStdString(message.text);
 	auto textAndEntities = Ui::Text::WithEntities(text);
-	const auto entities = AyuMapper::deserializeTextWithEntities(message.textEntities);
+	const auto entities = LuxuryMapper::deserializeTextWithEntities(message.textEntities);
 	textAndEntities.entities = Api::EntitiesFromMTP(&history->session(), entities.v);
 	addSimpleTextMessage(std::move(textAndEntities));
 }

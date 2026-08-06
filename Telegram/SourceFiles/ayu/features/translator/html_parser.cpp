@@ -6,7 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "ayu/features/translator/html_parser.h"
 
-namespace Ayu::Translator::Html {
+namespace Luxury::Translator::Html {
 
 // yandex messes up HTML badly, so formatting removed for now
 

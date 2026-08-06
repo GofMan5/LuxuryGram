@@ -212,7 +212,7 @@ style::colorizer ColorizerForTheme(const QString &absolutePath) {
 		}
 	}
 	const auto &colors = settings.themesAccentColors();
-	if (const auto accent = AyuFeatures::MessageShot::isChoosingTheme() ? AyuFeatures::MessageShot::getSelectedColorFromDefault() : colors.get(i->type)) {
+	if (const auto accent = LuxuryFeatures::MessageShot::isChoosingTheme() ? LuxuryFeatures::MessageShot::getSelectedColorFromDefault() : colors.get(i->type)) {
 		return ColorizerFrom(*i, *accent);
 	}
 	return {};

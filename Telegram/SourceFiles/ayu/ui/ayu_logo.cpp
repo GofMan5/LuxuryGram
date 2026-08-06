@@ -16,10 +16,10 @@ static QString LAST_LOADED_NAME;
 static QImage LAST_LOADED;
 static QImage LAST_LOADED_PAD;
 
-namespace AyuAssets {
+namespace LuxuryAssets {
 
 QString appIcoPath() {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	return cWorkingDir()
 		+ u"tdata/AyuGram-"_q
 		+ settings.appIcon()
@@ -27,7 +27,7 @@ QString appIcoPath() {
 }
 
 void loadAppIco() {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	const auto iconPath = appIcoPath();
 
 	auto f = QFile(iconPath);
@@ -92,7 +92,7 @@ QImage CreateImage(const QString &name, const QSize resultImageSize, const int p
 }
 
 void loadIcons() {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (LAST_LOADED_NAME != settings.appIcon()) {
 		LAST_LOADED_NAME = settings.appIcon();
 		LAST_LOADED = CreateImage(settings.appIcon(), Size(256));

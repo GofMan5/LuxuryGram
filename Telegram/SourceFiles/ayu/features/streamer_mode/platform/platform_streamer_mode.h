@@ -10,10 +10,10 @@
 
 class QWidget;
 
-namespace AyuFeatures::StreamerMode::Platform {
+namespace LuxuryFeatures::StreamerMode::Platform {
 
 void SetWindowCaptureExcluded(
 	not_null<QWidget*> widget,
 	bool excluded);
 
-} // namespace AyuFeatures::StreamerMode::Platform
+} // namespace LuxuryFeatures::StreamerMode::Platform

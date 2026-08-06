@@ -71,7 +71,7 @@ public:
 protected:
 	QSize rightActionSize() const override {
 		return isMutualContact()
-			? QSize(st::ayuContactsMutualIcon.width(), st::ayuContactsMutualIcon.height())
+			? QSize(st::luxuryContactsMutualIcon.width(), st::luxuryContactsMutualIcon.height())
 			: QSize();
 	}
 
@@ -103,8 +103,8 @@ protected:
 			return;
 		}
 		(selected || actionSelected
-			? st::ayuContactsMutualIconOver
-			: st::ayuContactsMutualIcon).paint(p, x, y, outerWidth);
+			? st::luxuryContactsMutualIconOver
+			: st::luxuryContactsMutualIcon).paint(p, x, y, outerWidth);
 	}
 
 private:
@@ -154,7 +154,7 @@ object_ptr<Ui::BoxContent> PrepareContactsBox(
 			if (const auto user = row->peer()->asUser();
 				user && (user->flags() & UserDataFlag::MutualContact)) {
 				delegate()->peerListUiShow()->showToast(
-					tr::ayu_MutualContactInfo(tr::now));
+					tr::luxury_MutualContactInfo(tr::now));
 			}
 		}
 

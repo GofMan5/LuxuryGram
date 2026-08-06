@@ -20,7 +20,7 @@
 
 #include <unordered_set>
 
-namespace AyuFeatures::MessageShot {
+namespace LuxuryFeatures::MessageShot {
 namespace {
 
 Window::Theme::EmbeddedType defaultSelected = Window::Theme::EmbeddedType(-1);
@@ -262,7 +262,7 @@ rpl::producer<style::palette> paletteChosen() {
 }
 
 void ensureChatThemesRefreshed() {
-	const auto accountId = AyuSettings::getInstance().messageShotSettings().cloudThemeAccountId();
+	const auto accountId = LuxurySettings::getInstance().messageShotSettings().cloudThemeAccountId();
 	if (!accountId) {
 		return;
 	}
@@ -293,11 +293,11 @@ QString embeddedThemeDisplayName(Window::Theme::EmbeddedType type) {
 	case Window::Theme::EmbeddedType::NightGreen:
 		return tr::lng_settings_theme_night(tr::now);
 	}
-	return tr::ayu_MessageShotThemeDefault(tr::now);
+	return tr::luxury_MessageShotThemeDefault(tr::now);
 }
 
 QString resolveThemeName() {
-	const auto &shot = AyuSettings::getInstance().messageShotSettings();
+	const auto &shot = LuxurySettings::getInstance().messageShotSettings();
 	if (shot.cloudThemeId() != 0) {
 		return shot.cloudThemeTitle();
 	}
@@ -305,7 +305,7 @@ QString resolveThemeName() {
 		const auto type = static_cast<Window::Theme::EmbeddedType>(shot.embeddedThemeType());
 		return embeddedThemeDisplayName(type);
 	}
-	return tr::ayu_MessageShotThemeDefault(tr::now);
+	return tr::luxury_MessageShotThemeDefault(tr::now);
 }
 
 std::shared_ptr<style::palette> getPersistedPalette() {
@@ -319,7 +319,7 @@ void setPersistedPalette(std::shared_ptr<style::palette> palette) {
 SavedThemeApplyResult applySavedThemePalette(
 		std::shared_ptr<style::palette> palette,
 		Fn<void()> onApplied) {
-	const auto &shot = AyuSettings::getInstance().messageShotSettings();
+	const auto &shot = LuxurySettings::getInstance().messageShotSettings();
 
 	if (shot.embeddedThemeType() != -1) {
 		return tryApplyEmbeddedThemePalette(shot, std::move(palette), std::move(onApplied));
@@ -362,7 +362,7 @@ void subscribeToCloudThemeLoad(
 		not_null<Window::SessionController*> controller,
 		std::shared_ptr<style::palette> palette,
 		Fn<void()> onApplied) {
-	const auto &shot = AyuSettings::getInstance().messageShotSettings();
+	const auto &shot = LuxurySettings::getInstance().messageShotSettings();
 	if (shot.cloudThemeId() == 0) {
 		return;
 	}

@@ -63,7 +63,7 @@ void GenerateUserpicsInRow(
 		q.setCompositionMode(QPainter::CompositionMode_Source);
 		q.setBrush(Qt::NoBrush);
 		q.setPen(pen);
-		AyuUserpic::PaintShape(q, QRectF(x, 0, single, single));
+		LuxuryUserpic::PaintShape(q, QRectF(x, 0, single, single));
 		x -= single - shift;
 	}
 }

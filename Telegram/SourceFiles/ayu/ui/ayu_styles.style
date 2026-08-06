@@ -116,11 +116,11 @@ ghostPickerButton: LinkButton(defaultLinkButton) {
 	overFont: font(boxFontSize);
 }
 
-ayuBetaBadgePadding: margins(4px, 1px, 4px, 1px);
+luxuryBetaBadgePadding: margins(4px, 1px, 4px, 1px);
 
-ayuServiceTimeBadgeFont: font(11px semibold);
-ayuServiceTimeBadgeHorizontalPadding: 7px;
-ayuServiceTimeBadgeVerticalPadding: 2px;
-ayuServiceTimeBadgeGap: 8px;
-ayuServiceTimeBadgeTrailingInset: 3px;
-ayuServiceTimeBadgeLastLineWidthAdd: 9px;
+luxuryServiceTimeBadgeFont: font(11px semibold);
+luxuryServiceTimeBadgeHorizontalPadding: 7px;
+luxuryServiceTimeBadgeVerticalPadding: 2px;
+luxuryServiceTimeBadgeGap: 8px;
+luxuryServiceTimeBadgeTrailingInset: 3px;
+luxuryServiceTimeBadgeLastLineWidthAdd: 9px;

@@ -13,7 +13,7 @@ namespace Main {
 class Session;
 } // namespace Main
 
-namespace AyuState {
+namespace LuxuryState {
 
 void hide(PeerId peerId, MsgId messageId);
 void hide(not_null<HistoryItem*> item);

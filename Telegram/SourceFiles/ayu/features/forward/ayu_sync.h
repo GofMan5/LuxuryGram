@@ -17,7 +17,7 @@
 #include "storage/storage_account.h"
 #include "ui/chat/attach/attach_prepare.h"
 
-namespace AyuSync {
+namespace LuxurySync {
 
 QString pathForSave(not_null<Main::Session*> session);
 QString filePath(not_null<Main::Session*> session, const Data::Media *media);

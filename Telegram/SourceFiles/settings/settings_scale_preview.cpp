@@ -707,7 +707,7 @@ void Preview::paintReply(Painter &p, QRect clip) {
 			outline,
 			_replyRect.height());
 		p.drawRoundedRect(_replyRect, radius, radius);
-		if (!AyuSettings::getInstance().simpleQuotesAndReplies()) {
+		if (!LuxurySettings::getInstance().simpleQuotesAndReplies()) {
 			p.setOpacity(Ui::kDefaultBgOpacity);
 			p.setClipRect(
 				_replyRect.x() + outline,
@@ -758,10 +758,10 @@ void Preview::validateUserpicCache() {
 		_userpic.size() * _ratio,
 		Qt::IgnoreAspectRatio,
 		Qt::SmoothTransformation);
-	if (AyuUserpic::IsCircle()) {
+	if (LuxuryUserpic::IsCircle()) {
 		_userpicImage = Images::Circle(std::move(scaled));
 	} else {
-		const auto r = AyuUserpic::ComputeRadius(
+		const auto r = LuxuryUserpic::ComputeRadius(
 			std::min(scaled.width(), scaled.height()));
 		_userpicImage = Images::Round(
 			std::move(scaled),

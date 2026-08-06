@@ -22,18 +22,18 @@
 namespace {
 
 const QVector<QString> icons{
-	AyuAssets::DEFAULT_ICON,
-	AyuAssets::ALT_ICON,
-	AyuAssets::DISCORD_ICON,
-	AyuAssets::SPOTIFY_ICON,
-	AyuAssets::EXTERA_ICON,
-	AyuAssets::NOTHING_ICON,
-	AyuAssets::BARD_ICON,
-	AyuAssets::YAPLUS_ICON,
-	AyuAssets::WIN95_ICON,
-	AyuAssets::CHIBI_ICON,
-	AyuAssets::CHIBI2_ICON,
-	AyuAssets::EXTERA2_ICON,
+	LuxuryAssets::DEFAULT_ICON,
+	LuxuryAssets::ALT_ICON,
+	LuxuryAssets::DISCORD_ICON,
+	LuxuryAssets::SPOTIFY_ICON,
+	LuxuryAssets::EXTERA_ICON,
+	LuxuryAssets::NOTHING_ICON,
+	LuxuryAssets::BARD_ICON,
+	LuxuryAssets::YAPLUS_ICON,
+	LuxuryAssets::WIN95_ICON,
+	LuxuryAssets::CHIBI_ICON,
+	LuxuryAssets::CHIBI2_ICON,
+	LuxuryAssets::EXTERA2_ICON,
 };
 
 const auto rows = static_cast<int>(icons.size()) / IconPicker::kColumns
@@ -41,11 +41,11 @@ const auto rows = static_cast<int>(icons.size()) / IconPicker::kColumns
 
 void applyIcon() {
 #ifdef Q_OS_WIN
-	AyuAssets::loadAppIco();
+	LuxuryAssets::loadAppIco();
 	reloadAppIconFromTaskBar();
 #endif
 
-	Window::OverrideApplicationIcon(AyuAssets::currentAppLogo());
+	Window::OverrideApplicationIcon(LuxuryAssets::currentAppLogo());
 	Core::App().refreshApplicationIcon();
 	Core::App().tray().updateIconCounters();
 	Core::App().domain().notifyUnreadBadgeChanged();
@@ -114,12 +114,12 @@ void IconPicker::paintEvent(QPaintEvent *e) {
 			if (const auto cached = _cachedIcons.find(iconName); cached != _cachedIcons.end()) {
 				icon = cached->second;
 			} else {
-				icon = _cachedIcons[iconName] = AyuAssets::loadPreview(iconName);
+				icon = _cachedIcons[iconName] = LuxuryAssets::loadPreview(iconName);
 			}
 			auto opacity = 0.0f;
 			if (iconName == _wasSelected) {
 				opacity = 1.0f - _animation.value(1.0f);
-			} else if (iconName == AyuAssets::currentAppLogoName()) {
+			} else if (iconName == LuxuryAssets::currentAppLogoName()) {
 				opacity = _wasSelected.isEmpty() ? 1.0f : _animation.value(1.0f);
 			}
 
@@ -132,7 +132,7 @@ void IconPicker::paintEvent(QPaintEvent *e) {
 }
 
 void IconPicker::mousePressEvent(QMouseEvent *e) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	auto changed = false;
 
 	const auto cell = cellWidth();
@@ -166,7 +166,7 @@ void IconPicker::mousePressEvent(QMouseEvent *e) {
 						anim::easeOutCubic
 					);
 
-					AyuSettings::getInstance().setAppIcon(iconName);
+					LuxurySettings::getInstance().setAppIcon(iconName);
 					changed = true;
 					break;
 				}

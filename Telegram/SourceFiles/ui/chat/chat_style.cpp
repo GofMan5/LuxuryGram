@@ -50,7 +50,7 @@ void EnsureBlockquoteCache(
 	cache->outlines = colors.outlines;
 	cache->icon = colors.name;
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.simpleQuotesAndReplies()) {
 		cache->bg = QColor(0, 0, 0, 0);
 	}
@@ -521,10 +521,10 @@ ChatStyle::ChatStyle(rpl::producer<ColorIndicesCompressed> colorIndices) {
 		st::historyFileOutDocumentSelected);
 	make(
 		&MessageStyle::historyFilePlugin,
-		st::ayuHistoryFileInPlugin,
-		st::ayuHistoryFileInPluginSelected,
-		st::ayuHistoryFileOutPlugin,
-		st::ayuHistoryFileOutPluginSelected);
+		st::luxuryHistoryFileInPlugin,
+		st::luxuryHistoryFileInPluginSelected,
+		st::luxuryHistoryFileOutPlugin,
+		st::luxuryHistoryFileOutPluginSelected);
 	make(
 		&MessageStyle::historyAudioDownload,
 		st::historyAudioInDownload,

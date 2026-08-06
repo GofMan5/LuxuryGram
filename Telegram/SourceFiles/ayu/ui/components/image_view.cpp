@@ -106,7 +106,7 @@ QImage ImageView::getImage() const {
 void ImageView::paintEvent(QPaintEvent *e) {
 	Painter p(this);
 
-	const auto brush = QBrush(AyuFeatures::MessageShot::makeDefaultBackgroundColor());
+	const auto brush = QBrush(LuxuryFeatures::MessageShot::makeDefaultBackgroundColor());
 
 	QPainterPath path;
 	path.addRoundedRect(rect(), st::roundRadiusLarge, st::roundRadiusLarge);

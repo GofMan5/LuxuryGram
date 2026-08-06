@@ -16,7 +16,7 @@ constexpr auto kMaxChannelId = -1000000000000;
 QString IDString(const not_null<PeerData*> peer) {
 	auto resultId = QString::number(getBareID(peer));
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.showPeerId() == PeerIdDisplay::BotApi) {
 		if (peer->isChannel()) {
 			resultId = QString::number(peerToChannel(peer->id).bare - kMaxChannelId).prepend("-");
@@ -33,7 +33,7 @@ QString IDString(MsgId topicRootId) {
 }
 
 rpl::producer<TextWithEntities> IDValue(not_null<PeerData*> peer) {
-	return AyuSettings::getInstance().showPeerIdValue(
+	return LuxurySettings::getInstance().showPeerIdValue(
 	) | rpl::map([=](PeerIdDisplay display) {
 		return (display == PeerIdDisplay::Hidden)
 			? TextWithEntities()
@@ -42,7 +42,7 @@ rpl::producer<TextWithEntities> IDValue(not_null<PeerData*> peer) {
 }
 
 rpl::producer<TextWithEntities> IDValue(MsgId topicRootId) {
-	return AyuSettings::getInstance().showPeerIdValue(
+	return LuxurySettings::getInstance().showPeerIdValue(
 	) | rpl::map([=](PeerIdDisplay display) {
 		return (display == PeerIdDisplay::Hidden)
 			? TextWithEntities()

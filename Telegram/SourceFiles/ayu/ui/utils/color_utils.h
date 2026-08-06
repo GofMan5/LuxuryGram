@@ -10,7 +10,7 @@
 #include <array>
 #include <cmath>
 
-namespace Ayu::Ui {
+namespace Luxury::Ui {
 
 class ColorUtils
 {
@@ -41,5 +41,5 @@ private:
 	static int compositeComponent(int fgC, int fgA, int bgC, int bgA, int a);
 };
 
-} // namespace Ayu::Ui
+} // namespace Luxury::Ui
 

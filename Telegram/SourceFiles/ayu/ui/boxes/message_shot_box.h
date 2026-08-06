@@ -12,7 +12,7 @@
 class MessageShotBox : public Ui::BoxContent
 {
 public:
-	MessageShotBox(QWidget *parent, AyuFeatures::MessageShot::ShotConfig config);
+	MessageShotBox(QWidget *parent, LuxuryFeatures::MessageShot::ShotConfig config);
 
 	bool tookShot() const {
 		return _tookShot;
@@ -24,7 +24,7 @@ protected:
 private:
 	void setupContent();
 
-	AyuFeatures::MessageShot::ShotConfig _config;
+	LuxuryFeatures::MessageShot::ShotConfig _config;
 	std::shared_ptr<style::palette> _selectedPalette;
 
 	bool _tookShot = false;

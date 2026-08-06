@@ -11,7 +11,7 @@
 
 #include <Cocoa/Cocoa.h>
 
-namespace AyuFeatures::StreamerMode::Platform {
+namespace LuxuryFeatures::StreamerMode::Platform {
 
 void SetWindowCaptureExcluded(
 		not_null<QWidget*> widget,
@@ -22,4 +22,4 @@ void SetWindowCaptureExcluded(
 		: NSWindowSharingReadOnly;
 }
 
-} // namespace AyuFeatures::StreamerMode::Platform
+} // namespace LuxuryFeatures::StreamerMode::Platform

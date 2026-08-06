@@ -12,16 +12,16 @@ using "ui/chat/chat.style";
 using "ui/widgets/widgets.style";
 using "dialogs/dialogs.style";
 
-ayuGhostIcon: icon {{ "ayu/ghost", menuIconColor }};
-ayuGhostModeGlobalIcon: icon {{ "ayu/ghost_mode_global", historyPeerUserpicFg }};
-ayuEditsHistoryIcon: icon {{ "ayu/edits_history", menuIconColor }};
-ayuLReadMenuIcon: icon {{ "ayu/lread", menuIconColor }};
-ayuSReadMenuIcon: icon {{ "ayu/sread", menuIconColor }};
-ayuStreamerModeMenuIcon: icon {{ "ayu/streamer", menuIconColor }};
-ayuToBeginningMenuIcon: icon {{ "ayu/to_beginning", menuIconColor }};
-ayuRepeatMenuIcon: icon {{ "ayu/repeat", menuIconColor }};
-ayuContactsMutualIcon: icon {{ "ayu/contacts_mutual", contactsStatusFg }};
-ayuContactsMutualIconOver: icon {{ "ayu/contacts_mutual", contactsStatusFgOver }};
+luxuryGhostIcon: icon {{ "ayu/ghost", menuIconColor }};
+luxuryGhostModeGlobalIcon: icon {{ "ayu/ghost_mode_global", historyPeerUserpicFg }};
+luxuryEditsHistoryIcon: icon {{ "ayu/edits_history", menuIconColor }};
+luxuryLReadMenuIcon: icon {{ "ayu/lread", menuIconColor }};
+luxurySReadMenuIcon: icon {{ "ayu/sread", menuIconColor }};
+luxuryStreamerModeMenuIcon: icon {{ "ayu/streamer", menuIconColor }};
+luxuryToBeginningMenuIcon: icon {{ "ayu/to_beginning", menuIconColor }};
+luxuryRepeatMenuIcon: icon {{ "ayu/repeat", menuIconColor }};
+luxuryContactsMutualIcon: icon {{ "ayu/contacts_mutual", contactsStatusFg }};
+luxuryContactsMutualIconOver: icon {{ "ayu/contacts_mutual", contactsStatusFgOver }};
 
 messageFieldAttachIcon: icon {{ "ayu/message_field/attach", menuIconColor }};
 messageFieldCommandsIcon: icon {{ "ayu/message_field/commands", menuIconColor }};
@@ -74,9 +74,9 @@ dialogsExteraSupporterIcon: ThreeStateIcon {
 	active: icon {{ "ayu/dialogs_extera_supporter", dialogsVerifiedIconBgActive }};
 }
 
-ayuHistoryFileInPlugin: icon {{ "ayu/history_file_plugin", historyFileInIconFg }};
-ayuHistoryFileInPluginSelected: icon {{ "ayu/history_file_plugin", historyFileInIconFgSelected }};
-ayuHistoryFileOutPlugin: icon {{ "ayu/history_file_plugin", historyFileOutIconFg }};
-ayuHistoryFileOutPluginSelected: icon {{ "ayu/history_file_plugin", historyFileOutIconFgSelected }};
+luxuryHistoryFileInPlugin: icon {{ "ayu/history_file_plugin", historyFileInIconFg }};
+luxuryHistoryFileInPluginSelected: icon {{ "ayu/history_file_plugin", historyFileInIconFgSelected }};
+luxuryHistoryFileOutPlugin: icon {{ "ayu/history_file_plugin", historyFileOutIconFg }};
+luxuryHistoryFileOutPluginSelected: icon {{ "ayu/history_file_plugin", historyFileOutIconFgSelected }};
 
 menuIconClearAttention: icon {{ "menu/clear", menuIconAttentionColor }};

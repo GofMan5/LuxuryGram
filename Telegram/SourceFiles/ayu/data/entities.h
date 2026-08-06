@@ -10,7 +10,7 @@
 
 using ID = long long;
 
-class AyuMessageBase
+class LuxuryMessageBase
 {
 public:
 	ID fakeId;
@@ -50,11 +50,11 @@ public:
 	std::string mimeType;
 };
 
-class DeletedMessage : public AyuMessageBase
+class DeletedMessage : public LuxuryMessageBase
 {
 };
 
-class EditedMessage : public AyuMessageBase
+class EditedMessage : public LuxuryMessageBase
 {
 };
 

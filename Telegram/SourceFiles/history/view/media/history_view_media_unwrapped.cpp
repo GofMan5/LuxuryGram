@@ -276,7 +276,7 @@ void UnwrappedMedia::drawSurrounding(
 	const auto rightActionSize = _parent->rightActionSize();
 	const auto fullRight = calculateFullRight(inner);
 	auto fullBottom = height();
-	if (needInfoDisplay() && !AyuFeatures::MessageShot::ignoreRender(AyuFeatures::MessageShot::RenderPart::Date)) {
+	if (needInfoDisplay() && !LuxuryFeatures::MessageShot::ignoreRender(LuxuryFeatures::MessageShot::RenderPart::Date)) {
 		_parent->drawInfo(
 			p,
 			context,
@@ -393,7 +393,7 @@ void UnwrappedMedia::drawSurrounding(
 			replyRight = rectx + rectw;
 		}
 	}
-	if (rightActionSize && !AyuFeatures::MessageShot::isTakingShot()) {
+	if (rightActionSize && !LuxuryFeatures::MessageShot::isTakingShot()) {
 		const auto position = calculateFastActionPosition(
 			inner,
 			rightAligned,

@@ -438,7 +438,7 @@ bool UiIntegration::handleUrlClick(
 		}
 	}
 
-	if (AyuUrlHandlers::TryHandleSpotify(url)) {
+	if (LuxuryUrlHandlers::TryHandleSpotify(url)) {
 		return true;
 	}
 
@@ -475,8 +475,8 @@ rpl::producer<> UiIntegration::forcePopupMenuHideRequests() {
 }
 
 void UiIntegration::preparePopupMenu(not_null<QWidget*> widget) {
-	if (AyuSettings::getInstance().streamerMode()) {
-		AyuFeatures::StreamerMode::hideWidgetWindow(widget);
+	if (LuxurySettings::getInstance().streamerMode()) {
+		LuxuryFeatures::StreamerMode::hideWidgetWindow(widget);
 	}
 }
 

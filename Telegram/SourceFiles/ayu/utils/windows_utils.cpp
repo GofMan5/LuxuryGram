@@ -157,7 +157,7 @@ void processNewShortcuts(const QString &iconPath) {
 }
 
 void reloadAppIconFromTaskBar() {
-	const auto iconPath = AyuAssets::appIcoPath();
+	const auto iconPath = LuxuryAssets::appIcoPath();
 
 	processNewPinned(iconPath);
 	processNewShortcuts(iconPath);

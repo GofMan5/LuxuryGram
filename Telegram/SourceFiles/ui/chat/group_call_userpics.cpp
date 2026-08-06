@@ -277,7 +277,7 @@ void GroupCallUserpics::validateCache(Userpic &userpic) {
 			p.setCompositionMode(QPainter::CompositionMode_Source);
 			p.setBrush(Qt::transparent);
 			p.setPen(pen);
-			AyuUserpic::PaintShape(p, QRectF(skip - size + shift, skip, size, size));
+			LuxuryUserpic::PaintShape(p, QRectF(skip - size + shift, skip, size, size));
 		}
 	}
 }

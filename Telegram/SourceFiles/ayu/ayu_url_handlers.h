@@ -9,7 +9,7 @@
 #include "base/qthelp_regex.h"
 #include "window/window_session_controller.h"
 
-namespace AyuUrlHandlers {
+namespace LuxuryUrlHandlers {
 
 using Match = qthelp::RegularExpressionMatch;
 
@@ -23,7 +23,7 @@ bool ResolveChat(
 	const Match &match,
 	const QVariant &context);
 
-bool HandleAyu(
+bool HandleLuxury(
 	Window::SessionController *controller,
 	const Match &match,
 	const QVariant &context);
@@ -33,7 +33,7 @@ bool HandleSupport(
 	const Match &match,
 	const QVariant &context);
 
-bool HandleAyuSettings(
+bool HandleLuxurySettings(
 	Window::SessionController *controller,
 	const Match &match,
 	const QVariant &context);

@@ -10,7 +10,7 @@
 
 #include <QtCore/QString>
 
-namespace Ayu::Translator::Html {
+namespace Luxury::Translator::Html {
 
 [[nodiscard]] QString entitiesToHtml(const TextWithEntities &text);
 [[nodiscard]] TextWithEntities htmlToEntities(const QString &text);

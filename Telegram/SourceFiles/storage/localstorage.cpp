@@ -446,7 +446,7 @@ void writeSettings() {
 
 	if (!QDir().exists(_basePath)) QDir().mkpath(_basePath);
 
-    AyuSettings::save();
+    LuxurySettings::save();
 
 	// We dropped old test authorizations when migrated to multi auth.
 	//const auto name = cTestMode() ? u"settings_test"_q : u"settings"_q;

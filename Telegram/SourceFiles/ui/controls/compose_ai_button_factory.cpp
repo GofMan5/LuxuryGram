@@ -40,7 +40,7 @@ base::options::toggle HideAiButtonOption({
 bool HasEnoughLinesForAi(
 		not_null<Main::Session*> session,
 		not_null<Ui::InputField*> field) {
-	if (!AyuSettings::getInstance().showAiEditorButtonInMessageField()
+	if (!LuxurySettings::getInstance().showAiEditorButtonInMessageField()
 		|| session->data().aiComposeTones().list().empty()) {
 		return false;
 	}
@@ -208,7 +208,7 @@ auto SetupCaptionAiButton(SetupCaptionAiButtonArgs &&args)
 		field->changes() | rpl::to_empty,
 		field->shownValue() | rpl::to_empty,
 		session->data().aiComposeTones().updated() | rpl::to_empty,
-		AyuSettings::getInstance().showAiEditorButtonInMessageFieldChanges()
+		LuxurySettings::getInstance().showAiEditorButtonInMessageFieldChanges()
 			| rpl::to_empty
 	) | rpl::on_next([=] {
 		updateVisibility();

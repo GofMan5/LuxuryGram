@@ -314,7 +314,7 @@ void HiddenUrlClickHandler::Open(QString url, QVariant context) {
 			|| (confirmAfterIvFallback && !canTryIv)
 			|| (HiddenUrlRequiresConfirmation(parsedUrl)
 				&& !skipConfirmation);
-		if (!AyuSettings::getInstance().disableOpenLinkWarning()
+		if (!LuxurySettings::getInstance().disableOpenLinkWarning()
 			&& requiresConfirmation) {
 			if (!my.show) {
 				Core::App().hideMediaView();

@@ -26,7 +26,7 @@
 namespace Settings {
 
 using namespace Builder;
-using namespace AyuBuilder;
+using namespace LuxuryBuilder;
 
 namespace {
 
@@ -34,101 +34,101 @@ struct PreviewState {
 	MessagePreview *widget = nullptr;
 };
 
-void BuildStickersAndEmoji(SectionBuilder &builder, AyuSectionBuilder &ayu) {
+void BuildStickersAndEmoji(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	builder.addSubsectionTitle(tr::lng_settings_stickers_emoji());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showOnlyAddedEmojisAndStickers"_q,
-		.title = tr::ayu_ShowOnlyAddedEmojisAndStickers(),
-		.getter = &AyuSettings::showOnlyAddedEmojisAndStickers,
-		.setter = &AyuSettings::setShowOnlyAddedEmojisAndStickers,
+		.title = tr::luxury_ShowOnlyAddedEmojisAndStickers(),
+		.getter = &LuxurySettings::showOnlyAddedEmojisAndStickers,
+		.setter = &LuxurySettings::setShowOnlyAddedEmojisAndStickers,
 	});
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/unlimitedRecentStickers"_q,
 		.altIds = { u"ayu/recentStickersCount"_q },
-		.title = tr::ayu_SettingsUnlimitedRecentStickers(),
-		.getter = &AyuSettings::unlimitedRecentStickers,
-		.setter = &AyuSettings::setUnlimitedRecentStickers,
+		.title = tr::luxury_SettingsUnlimitedRecentStickers(),
+		.getter = &LuxurySettings::unlimitedRecentStickers,
+		.setter = &LuxurySettings::setUnlimitedRecentStickers,
 	});
 
-	ayu.addCollapsibleToggle({
+	luxury.addCollapsibleToggle({
 		.id = u"ayu/hideReactions"_q,
-		.title = tr::ayu_HideReactions(),
+		.title = tr::luxury_HideReactions(),
 		.checkboxes = {
 			NestedEntry{
-				tr::ayu_HideReactionsInChannels(tr::now),
-				[] { return !AyuSettings::getInstance().showChannelReactions(); },
-				[](bool v) { AyuSettings::getInstance().setShowChannelReactions(!v); }
+				tr::luxury_HideReactionsInChannels(tr::now),
+				[] { return !LuxurySettings::getInstance().showChannelReactions(); },
+				[](bool v) { LuxurySettings::getInstance().setShowChannelReactions(!v); }
 			},
 			NestedEntry{
-				tr::ayu_HideReactionsInGroups(tr::now),
-				[] { return !AyuSettings::getInstance().showGroupReactions(); },
-				[](bool v) { AyuSettings::getInstance().setShowGroupReactions(!v); }
+				tr::luxury_HideReactionsInGroups(tr::now),
+				[] { return !LuxurySettings::getInstance().showGroupReactions(); },
+				[](bool v) { LuxurySettings::getInstance().setShowGroupReactions(!v); }
 			},
 			NestedEntry{
-				tr::ayu_HideReactionsInPrivateChats(tr::now),
-				[] { return !AyuSettings::getInstance().showPrivateChatReactions(); },
-				[](bool v) { AyuSettings::getInstance().setShowPrivateChatReactions(!v); }
+				tr::luxury_HideReactionsInPrivateChats(tr::now),
+				[] { return !LuxurySettings::getInstance().showPrivateChatReactions(); },
+				[](bool v) { LuxurySettings::getInstance().setShowPrivateChatReactions(!v); }
 			}
 		},
 		.toggledWhenAll = false,
 	});
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 }
 
-void BuildGroupsAndChannels(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	auto *settings = &AyuSettings::getInstance();
+void BuildGroupsAndChannels(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	auto *settings = &LuxurySettings::getInstance();
 
 	builder.addSubsectionTitle(tr::lng_premium_double_limits_subtitle_channels());
 
-	ayu.addChooseButton({
+	luxury.addChooseButton({
 		.id = u"ayu/channelBottomButton"_q,
 		.altIds = { u"ayu/bottomButton"_q },
-		.title = tr::ayu_ChannelBottomButton(),
-		.boxTitle = tr::ayu_ChannelBottomButton(),
+		.title = tr::luxury_ChannelBottomButton(),
+		.boxTitle = tr::luxury_ChannelBottomButton(),
 		.initialSelection = static_cast<int>(settings->channelBottomButton()),
 		.options = {
-			tr::ayu_ChannelBottomButtonHide(tr::now),
-			tr::ayu_ChannelBottomButtonMute(tr::now),
-			tr::ayu_ChannelBottomButtonDiscuss(tr::now),
+			tr::luxury_ChannelBottomButtonHide(tr::now),
+			tr::luxury_ChannelBottomButtonMute(tr::now),
+			tr::luxury_ChannelBottomButtonDiscuss(tr::now),
 		},
 		.setter = [](int index) {
-			AyuSettings::getInstance().setChannelBottomButton(
+			LuxurySettings::getInstance().setChannelBottomButton(
 				static_cast<ChannelBottomButton>(index));
 		},
 	});
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/quickAdminShortcuts"_q,
-		.title = tr::ayu_QuickAdminShortcuts(),
-		.getter = &AyuSettings::quickAdminShortcuts,
-		.setter = &AyuSettings::setQuickAdminShortcuts,
+		.title = tr::luxury_QuickAdminShortcuts(),
+		.getter = &LuxurySettings::quickAdminShortcuts,
+		.setter = &LuxurySettings::setQuickAdminShortcuts,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/disableGreetingSticker"_q,
-		.title = tr::ayu_DisableGreetingSticker(),
-		.getter = &AyuSettings::disableGreetingSticker,
-		.setter = &AyuSettings::setDisableGreetingSticker,
+		.title = tr::luxury_DisableGreetingSticker(),
+		.getter = &LuxurySettings::disableGreetingSticker,
+		.setter = &LuxurySettings::setDisableGreetingSticker,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showMessageShot"_q,
-		.title = tr::ayu_SettingsShowMessageShot(),
-		.getter = &AyuSettings::showMessageShot,
-		.setter = &AyuSettings::setShowMessageShot,
+		.title = tr::luxury_SettingsShowMessageShot(),
+		.getter = &LuxurySettings::showMessageShot,
+		.setter = &LuxurySettings::setShowMessageShot,
 	});
 
 	builder.addSkip();
-	builder.addDividerText(tr::ayu_SettingsShowMessageShotDescription());
+	builder.addDividerText(tr::luxury_SettingsShowMessageShotDescription());
 	builder.addSkip();
 }
 
 void BuildMarks(
 		SectionBuilder &builder,
-		AyuSectionBuilder &ayu,
+		LuxurySectionBuilder &luxury,
 		std::shared_ptr<PreviewState> previewState) {
-	auto *settings = &AyuSettings::getInstance();
+	auto *settings = &LuxurySettings::getInstance();
 	const auto controller = builder.controller();
 
 	builder.addSubsectionTitle(tr::lng_settings_messages());
@@ -146,27 +146,27 @@ void BuildMarks(
 		};
 	});
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/replaceBottomInfoWithIcons"_q,
 		.altIds = { u"ayu/replaceEditedWithIcon"_q },
-		.title = tr::ayu_ReplaceMarksWithIcons(),
-		.getter = &AyuSettings::replaceBottomInfoWithIcons,
-		.setter = &AyuSettings::setReplaceBottomInfoWithIcons,
+		.title = tr::luxury_ReplaceMarksWithIcons(),
+		.getter = &LuxurySettings::replaceBottomInfoWithIcons,
+		.setter = &LuxurySettings::setReplaceBottomInfoWithIcons,
 	});
 
 	builder.scope([&] {
 		builder.addButton({
 			.id = u"ayu/deletedMark"_q,
-			.title = tr::ayu_DeletedMarkText(),
+			.title = tr::luxury_DeletedMarkText(),
 			.st = &st::settingsButtonNoIcon,
-			.label = AyuSettings::getInstance().deletedMarkValue(),
+			.label = LuxurySettings::getInstance().deletedMarkValue(),
 			.onClick = [=] {
 				auto box = Box<EditMarkBox>(
-					tr::ayu_DeletedMarkText(),
+					tr::luxury_DeletedMarkText(),
 					settings->deletedMark(),
 					QString("🧹"),
 					[=](const QString &value) {
-						AyuSettings::getInstance().setDeletedMark(value);
+						LuxurySettings::getInstance().setDeletedMark(value);
 					});
 				Ui::show(std::move(box));
 			},
@@ -174,64 +174,64 @@ void BuildMarks(
 
 		builder.addButton({
 			.id = u"ayu/editedMark"_q,
-			.title = tr::ayu_EditedMarkText(),
+			.title = tr::luxury_EditedMarkText(),
 			.st = &st::settingsButtonNoIcon,
-			.label = AyuSettings::getInstance().editedMarkValue(),
+			.label = LuxurySettings::getInstance().editedMarkValue(),
 			.onClick = [=] {
 				auto box = Box<EditMarkBox>(
-					tr::ayu_EditedMarkText(),
+					tr::luxury_EditedMarkText(),
 					settings->editedMark(),
 					tr::lng_edited(tr::now),
 					[=](const QString &value) {
-						AyuSettings::getInstance().setEditedMark(value);
+						LuxurySettings::getInstance().setEditedMark(value);
 					});
 				Ui::show(std::move(box));
 			},
 		});
-	}, AyuSettings::getInstance().replaceBottomInfoWithIconsValue()
+	}, LuxurySettings::getInstance().replaceBottomInfoWithIconsValue()
 		| rpl::map([](bool v) { return !v; }));
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/removeMessageTail"_q,
-		.title = tr::ayu_RemoveMessageTail(),
-		.getter = &AyuSettings::removeMessageTail,
-		.setter = &AyuSettings::setRemoveMessageTail,
+		.title = tr::luxury_RemoveMessageTail(),
+		.getter = &LuxurySettings::removeMessageTail,
+		.setter = &LuxurySettings::setRemoveMessageTail,
 	});
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/hideFastShare"_q,
 		.altIds = { u"ayu/hideShareButton"_q },
-		.title = tr::ayu_HideShareButton(),
-		.getter = &AyuSettings::hideFastShare,
-		.setter = &AyuSettings::setHideFastShare,
+		.title = tr::luxury_HideShareButton(),
+		.getter = &LuxurySettings::hideFastShare,
+		.setter = &LuxurySettings::setHideFastShare,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/simpleQuotesAndReplies"_q,
 		.altIds = { u"ayu/disableColorfulReplies"_q, u"ayu/replyElements"_q },
-		.title = tr::ayu_SimpleQuotesAndReplies(),
-		.getter = &AyuSettings::simpleQuotesAndReplies,
-		.setter = &AyuSettings::setSimpleQuotesAndReplies,
+		.title = tr::luxury_SimpleQuotesAndReplies(),
+		.getter = &LuxurySettings::simpleQuotesAndReplies,
+		.setter = &LuxurySettings::setSimpleQuotesAndReplies,
 	});
 
-	const auto semiTransparent = ayu.addSettingToggle({
+	const auto semiTransparent = luxury.addSettingToggle({
 		.id = u"ayu/semiTransparentDeletedMessages"_q,
 		.altIds = { u"ayu/translucentDeletedMessages"_q },
-		.title = tr::ayu_SemiTransparentDeletedMessages(),
-		.getter = &AyuSettings::semiTransparentDeletedMessages,
-		.setter = &AyuSettings::setSemiTransparentDeletedMessages,
+		.title = tr::luxury_SemiTransparentDeletedMessages(),
+		.getter = &LuxurySettings::semiTransparentDeletedMessages,
+		.setter = &LuxurySettings::setSemiTransparentDeletedMessages,
 	});
 	if (semiTransparent) {
-		ayu.addBetaBadge(semiTransparent);
+		luxury.addBetaBadge(semiTransparent);
 	}
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 }
 
 void BuildWideMessagesMultiplier(
 		SectionBuilder &builder,
-		AyuSectionBuilder &ayu,
+		LuxurySectionBuilder &luxury,
 		std::shared_ptr<PreviewState> previewState) {
-	auto *settings = &AyuSettings::getInstance();
+	auto *settings = &LuxurySettings::getInstance();
 
 	constexpr auto kMinSize = 1.00;
 	constexpr auto kStep = 0.05;
@@ -241,9 +241,9 @@ void BuildWideMessagesMultiplier(
 	};
 
 	const auto controller = builder.controller();
-	ayu.addSlider({
+	luxury.addSlider({
 		.id = u"ayu/messageBubbleRadius"_q,
-		.title = tr::ayu_MessageBubbleRadius(),
+		.title = tr::luxury_MessageBubbleRadius(),
 		.steps = 17,
 		.current = settings->messageBubbleRadius(),
 		.indexToValue = [](int index) { return index; },
@@ -256,7 +256,7 @@ void BuildWideMessagesMultiplier(
 			if (previewState->widget) {
 				previewState->widget->setBubbleRadius(index);
 			}
-			AyuSettings::getInstance().setMessageBubbleRadius(index);
+			LuxurySettings::getInstance().setMessageBubbleRadius(index);
 			ShowRestartPrompt(controller);
 		},
 		.formatLabel = [](int index) {
@@ -264,17 +264,17 @@ void BuildWideMessagesMultiplier(
 		},
 	});
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 
-	ayu.addSlider({
+	luxury.addSlider({
 		.id = u"ayu/wideMultiplier"_q,
-		.title = tr::ayu_SettingsWideMultiplier(),
+		.title = tr::luxury_SettingsWideMultiplier(),
 		.steps = 61, // (4.00 - 1.00) / 0.05 + 1
 		.current = valueToIndex(settings->wideMultiplier()),
 		.indexToValue = [](int index) { return index; },
 		.onChanged = nullptr,
 		.onFinalChanged = [=](int index) {
-			AyuSettings::getInstance().setWideMultiplier(
+			LuxurySettings::getInstance().setWideMultiplier(
 				kMinSize + index * kStep);
 			ShowRestartPrompt(controller);
 		},
@@ -284,208 +284,208 @@ void BuildWideMessagesMultiplier(
 	});
 
 	builder.addSkip();
-	builder.addDividerText(tr::ayu_SettingsWideMultiplierDescription());
+	builder.addDividerText(tr::luxury_SettingsWideMultiplierDescription());
 	builder.addSkip();
 }
 
-void BuildContextMenuElements(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	auto *settings = &AyuSettings::getInstance();
+void BuildContextMenuElements(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	auto *settings = &LuxurySettings::getInstance();
 
-	builder.addSubsectionTitle(tr::ayu_ContextMenuElementsHeader());
+	builder.addSubsectionTitle(tr::luxury_ContextMenuElementsHeader());
 
 	const auto options = std::vector{
-		tr::ayu_SettingsContextMenuItemHidden(tr::now),
-		tr::ayu_SettingsContextMenuItemShown(tr::now),
-		tr::ayu_SettingsContextMenuItemExtended(tr::now),
+		tr::luxury_SettingsContextMenuItemHidden(tr::now),
+		tr::luxury_SettingsContextMenuItemShown(tr::now),
+		tr::luxury_SettingsContextMenuItemExtended(tr::now),
 	};
 
-	ayu.addChooseButton({
+	luxury.addChooseButton({
 		.id = u"ayu/showReactionsPanelInContextMenu"_q,
-		.title = tr::ayu_SettingsContextMenuReactionsPanel(),
-		.boxTitle = tr::ayu_SettingsContextMenuTitle(),
+		.title = tr::luxury_SettingsContextMenuReactionsPanel(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
 		.initialSelection = static_cast<int>(settings->showReactionsPanelInContextMenu()),
 		.options = options,
-		.setter = [](int i) { AyuSettings::getInstance().setShowReactionsPanelInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.setter = [](int i) { LuxurySettings::getInstance().setShowReactionsPanelInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 		.icon = { &st::menuIconReactions },
 	});
-	ayu.addChooseButton({
+	luxury.addChooseButton({
 		.id = u"ayu/showViewsPanelInContextMenu"_q,
-		.title = tr::ayu_SettingsContextMenuViewsPanel(),
-		.boxTitle = tr::ayu_SettingsContextMenuTitle(),
+		.title = tr::luxury_SettingsContextMenuViewsPanel(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
 		.initialSelection = static_cast<int>(settings->showViewsPanelInContextMenu()),
 		.options = options,
-		.setter = [](int i) { AyuSettings::getInstance().setShowViewsPanelInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.setter = [](int i) { LuxurySettings::getInstance().setShowViewsPanelInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 		.icon = { &st::menuIconShowInChat },
 	});
-	ayu.addChooseButton({
+	luxury.addChooseButton({
 		.id = u"ayu/showHideMessageInContextMenu"_q,
-		.title = tr::ayu_ContextHideMessage(),
-		.boxTitle = tr::ayu_SettingsContextMenuTitle(),
+		.title = tr::luxury_ContextHideMessage(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
 		.initialSelection = static_cast<int>(settings->showHideMessageInContextMenu()),
 		.options = options,
-		.setter = [](int i) { AyuSettings::getInstance().setShowHideMessageInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.setter = [](int i) { LuxurySettings::getInstance().setShowHideMessageInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 		.icon = { &st::menuIconClear },
 	});
-	ayu.addChooseButton({
+	luxury.addChooseButton({
 		.id = u"ayu/showUserMessagesInContextMenu"_q,
-		.title = tr::ayu_UserMessagesMenuText(),
-		.boxTitle = tr::ayu_SettingsContextMenuTitle(),
+		.title = tr::luxury_UserMessagesMenuText(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
 		.initialSelection = static_cast<int>(settings->showUserMessagesInContextMenu()),
 		.options = options,
-		.setter = [](int i) { AyuSettings::getInstance().setShowUserMessagesInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.setter = [](int i) { LuxurySettings::getInstance().setShowUserMessagesInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 		.icon = { &st::menuIconTTL },
 	});
-	ayu.addChooseButton({
+	luxury.addChooseButton({
 		.id = u"ayu/showMessageDetailsInContextMenu"_q,
-		.title = tr::ayu_MessageDetailsPC(),
-		.boxTitle = tr::ayu_SettingsContextMenuTitle(),
+		.title = tr::luxury_MessageDetailsPC(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
 		.initialSelection = static_cast<int>(settings->showMessageDetailsInContextMenu()),
 		.options = options,
-		.setter = [](int i) { AyuSettings::getInstance().setShowMessageDetailsInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.setter = [](int i) { LuxurySettings::getInstance().setShowMessageDetailsInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 		.icon = { &st::menuIconInfo },
 	});
-	ayu.addChooseButton({
+	luxury.addChooseButton({
 		.id = u"ayu/showRepeatMessageInContextMenu"_q,
-		.title = tr::ayu_RepeatMessage(),
-		.boxTitle = tr::ayu_SettingsContextMenuTitle(),
+		.title = tr::luxury_RepeatMessage(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
 		.initialSelection = static_cast<int>(settings->showRepeatMessageInContextMenu()),
 		.options = options,
-		.setter = [](int i) { AyuSettings::getInstance().setShowRepeatMessageInContextMenu(static_cast<ContextMenuVisibility>(i)); },
-		.icon = { &st::ayuRepeatMenuIcon },
+		.setter = [](int i) { LuxurySettings::getInstance().setShowRepeatMessageInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.icon = { &st::luxuryRepeatMenuIcon },
 	});
 	if (settings->filtersEnabled()) {
-		ayu.addChooseButton({
+		luxury.addChooseButton({
 			.id = u"ayu/showAddFilterInContextMenu"_q,
-			.title = tr::ayu_RegexFilterQuickAdd(),
-			.boxTitle = tr::ayu_SettingsContextMenuTitle(),
+			.title = tr::luxury_RegexFilterQuickAdd(),
+			.boxTitle = tr::luxury_SettingsContextMenuTitle(),
 			.initialSelection = static_cast<int>(settings->showAddFilterInContextMenu()),
 			.options = options,
-			.setter = [](int i) { AyuSettings::getInstance().setShowAddFilterInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+			.setter = [](int i) { LuxurySettings::getInstance().setShowAddFilterInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 			.icon = { &st::menuIconAddToFolder },
 		});
 	}
 
 	builder.addSkip();
-	builder.addDividerText(tr::ayu_SettingsContextMenuDescription());
+	builder.addDividerText(tr::luxury_SettingsContextMenuDescription());
 	builder.addSkip();
 }
 
-void BuildMessageFieldElements(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	builder.addSubsectionTitle(tr::ayu_MessageFieldElementsHeader());
+void BuildMessageFieldElements(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_MessageFieldElementsHeader());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showAttachButtonInMessageField"_q,
-		.title = tr::ayu_MessageFieldElementAttach(),
-		.getter = &AyuSettings::showAttachButtonInMessageField,
-		.setter = &AyuSettings::setShowAttachButtonInMessageField,
+		.title = tr::luxury_MessageFieldElementAttach(),
+		.getter = &LuxurySettings::showAttachButtonInMessageField,
+		.setter = &LuxurySettings::setShowAttachButtonInMessageField,
 		.icon = { &st::messageFieldAttachIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showCommandsButtonInMessageField"_q,
-		.title = tr::ayu_MessageFieldElementCommands(),
-		.getter = &AyuSettings::showCommandsButtonInMessageField,
-		.setter = &AyuSettings::setShowCommandsButtonInMessageField,
+		.title = tr::luxury_MessageFieldElementCommands(),
+		.getter = &LuxurySettings::showCommandsButtonInMessageField,
+		.setter = &LuxurySettings::setShowCommandsButtonInMessageField,
 		.icon = { &st::messageFieldCommandsIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showAutoDeleteButtonInMessageField"_q,
-		.title = tr::ayu_MessageFieldElementTTL(),
-		.getter = &AyuSettings::showAutoDeleteButtonInMessageField,
-		.setter = &AyuSettings::setShowAutoDeleteButtonInMessageField,
+		.title = tr::luxury_MessageFieldElementTTL(),
+		.getter = &LuxurySettings::showAutoDeleteButtonInMessageField,
+		.setter = &LuxurySettings::setShowAutoDeleteButtonInMessageField,
 		.icon = { &st::messageFieldTTLIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showEmojiButtonInMessageField"_q,
-		.title = tr::ayu_MessageFieldElementEmoji(),
-		.getter = &AyuSettings::showEmojiButtonInMessageField,
-		.setter = &AyuSettings::setShowEmojiButtonInMessageField,
+		.title = tr::luxury_MessageFieldElementEmoji(),
+		.getter = &LuxurySettings::showEmojiButtonInMessageField,
+		.setter = &LuxurySettings::setShowEmojiButtonInMessageField,
 		.icon = { &st::messageFieldEmojiIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showMicrophoneButtonInMessageField"_q,
-		.title = tr::ayu_MessageFieldElementVoice(),
-		.getter = &AyuSettings::showMicrophoneButtonInMessageField,
-		.setter = &AyuSettings::setShowMicrophoneButtonInMessageField,
+		.title = tr::luxury_MessageFieldElementVoice(),
+		.getter = &LuxurySettings::showMicrophoneButtonInMessageField,
+		.setter = &LuxurySettings::setShowMicrophoneButtonInMessageField,
 		.icon = { &st::messageFieldVoiceIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showGiftButtonInMessageField"_q,
 		.title = tr::lng_profile_action_short_gift(),
-		.getter = &AyuSettings::showGiftButtonInMessageField,
-		.setter = &AyuSettings::setShowGiftButtonInMessageField,
+		.getter = &LuxurySettings::showGiftButtonInMessageField,
+		.setter = &LuxurySettings::setShowGiftButtonInMessageField,
 		.icon = { &st::settingsButtonIconGift },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showAiEditorButtonInMessageField"_q,
 		.title = tr::lng_ai_compose_title(),
-		.getter = &AyuSettings::showAiEditorButtonInMessageField,
-		.setter = &AyuSettings::setShowAiEditorButtonInMessageField,
+		.getter = &LuxurySettings::showAiEditorButtonInMessageField,
+		.setter = &LuxurySettings::setShowAiEditorButtonInMessageField,
 		.icon = { &st::messageFieldCocoonAiIcon },
 	});
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 }
 
-void BuildMessageFieldPopups(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	builder.addSubsectionTitle(tr::ayu_MessageFieldPopupsHeader());
+void BuildMessageFieldPopups(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_MessageFieldPopupsHeader());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showAttachPopup"_q,
-		.title = tr::ayu_MessageFieldElementAttach(),
-		.getter = &AyuSettings::showAttachPopup,
-		.setter = &AyuSettings::setShowAttachPopup,
+		.title = tr::luxury_MessageFieldElementAttach(),
+		.getter = &LuxurySettings::showAttachPopup,
+		.setter = &LuxurySettings::setShowAttachPopup,
 		.icon = { &st::messageFieldAttachIcon },
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/showEmojiPopup"_q,
-		.title = tr::ayu_MessageFieldElementEmoji(),
-		.getter = &AyuSettings::showEmojiPopup,
-		.setter = &AyuSettings::setShowEmojiPopup,
+		.title = tr::luxury_MessageFieldElementEmoji(),
+		.getter = &LuxurySettings::showEmojiPopup,
+		.setter = &LuxurySettings::setShowEmojiPopup,
 		.icon = { &st::messageFieldEmojiIcon },
 	});
 }
 
 const auto kMeta = BuildHelper({
-	.id = AyuChats::Id(),
-	.parentId = AyuMain::Id(),
-	.title = &tr::ayu_CategoryChats,
+	.id = LuxuryChats::Id(),
+	.parentId = LuxuryMain::Id(),
+	.title = &tr::luxury_CategoryChats,
 	.icon = &st::menuIconChatBubble,
 }, [](SectionBuilder &builder) {
-	auto ayu = AyuSectionBuilder(builder);
+	auto luxury = LuxurySectionBuilder(builder);
 	const auto previewState = std::make_shared<PreviewState>();
 
 	builder.addSkip();
-	BuildStickersAndEmoji(builder, ayu);
-	BuildGroupsAndChannels(builder, ayu);
-	BuildMarks(builder, ayu, previewState);
-	BuildWideMessagesMultiplier(builder, ayu, previewState);
-	BuildContextMenuElements(builder, ayu);
-	BuildMessageFieldElements(builder, ayu);
-	BuildMessageFieldPopups(builder, ayu);
+	BuildStickersAndEmoji(builder, luxury);
+	BuildGroupsAndChannels(builder, luxury);
+	BuildMarks(builder, luxury, previewState);
+	BuildWideMessagesMultiplier(builder, luxury, previewState);
+	BuildContextMenuElements(builder, luxury);
+	BuildMessageFieldElements(builder, luxury);
+	BuildMessageFieldPopups(builder, luxury);
 	builder.addSkip();
 });
 
 } // namespace
 
-rpl::producer<QString> AyuChats::title() {
-	return tr::ayu_CategoryChats();
+rpl::producer<QString> LuxuryChats::title() {
+	return tr::luxury_CategoryChats();
 }
 
-AyuChats::AyuChats(
+LuxuryChats::LuxuryChats(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 : Section(parent, controller) {
 	setupContent();
 }
 
-void AyuChats::setupContent() {
+void LuxuryChats::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
 }
 
-Type AyuChatsId() {
-	return AyuChats::Id();
+Type LuxuryChatsId() {
+	return LuxuryChats::Id();
 }
 
 } // namespace Settings

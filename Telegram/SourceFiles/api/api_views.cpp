@@ -87,7 +87,7 @@ void ViewsManager::pollExtendedMedia(
 }
 
 void ViewsManager::viewsIncrement() {
-	const auto &ghost = AyuSettings::ghost(_session);
+	const auto &ghost = LuxurySettings::ghost(_session);
 
 	for (auto i = _toIncrement.begin(); i != _toIncrement.cend();) {
 		if (_incrementRequests.contains(i->first)) {

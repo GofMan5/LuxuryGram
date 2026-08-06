@@ -42,7 +42,7 @@
 namespace Settings {
 
 using namespace Builder;
-using namespace AyuBuilder;
+using namespace LuxuryBuilder;
 
 namespace {
 
@@ -91,7 +91,7 @@ void PaintAccountOutline(Painter &p, QRect outer) {
 	pen.setWidthF(line);
 	p.setPen(pen);
 	p.setBrush(Qt::NoBrush);
-	AyuUserpic::PaintShape(p, rect);
+	LuxuryUserpic::PaintShape(p, rect);
 }
 
 class AccountAction final : public Ui::Menu::ItemBase {
@@ -236,13 +236,13 @@ private:
 			});
 			p.setPen(Qt::NoPen);
 			p.setBrush(gradient);
-			AyuUserpic::PaintShape(p, rect);
+			LuxuryUserpic::PaintShape(p, rect);
 		}
 		{
 			auto hq = PainterHighQualityEnabler(p);
 			p.drawImage(
 				userpic.inner,
-				st::ayuGhostModeGlobalIcon.instance(st::historyPeerUserpicFg->c));
+				st::luxuryGhostModeGlobalIcon.instance(st::historyPeerUserpicFg->c));
 		}
 		if (_active) {
 			PaintAccountOutline(p, userpic.outer);
@@ -276,7 +276,7 @@ QString GetAccountName(uint64 userId) {
 
 QString PickerLabel(uint64 userId) {
 	return (userId == 0)
-		? tr::ayu_GhostModeGlobalSettings(tr::now)
+		? tr::luxury_GhostModeGlobalSettings(tr::now)
 		: GetAccountName(userId);
 }
 
@@ -288,7 +288,7 @@ void selectGhostProfile(GhostPickerState *state, uint64 userId) {
 	auto wasGlobal = (state->selectedUserId.current() == 0);
 	auto nowGlobal = (userId == 0);
 
-	AyuSettings::getInstance().setUseGlobalGhostMode(nowGlobal);
+	LuxurySettings::getInstance().setUseGlobalGhostMode(nowGlobal);
 
 	state->selectedUserId = userId;
 
@@ -298,8 +298,8 @@ void selectGhostProfile(GhostPickerState *state, uint64 userId) {
 
 	if (wasGlobal != nowGlobal) {
 		Ui::Toast::Show(nowGlobal
-			? tr::ayu_GhostModeSwitchedToGlobalSettings(tr::now)
-			: tr::ayu_GhostModeSwitchedToIndividualSettings(tr::now));
+			? tr::luxury_GhostModeSwitchedToGlobalSettings(tr::now)
+			: tr::luxury_GhostModeSwitchedToIndividualSettings(tr::now));
 	}
 }
 
@@ -316,10 +316,10 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 				}
 			}
 
-			if (activeCount <= 1 && !AyuSettings::getInstance().useGlobalGhostMode()) {
+			if (activeCount <= 1 && !LuxurySettings::getInstance().useGlobalGhostMode()) {
 				auto userId = controller->session().userId().bare;
-				auto &src = AyuSettings::ghost(userId);
-				auto &dst = AyuSettings::ghost(0);
+				auto &src = LuxurySettings::ghost(userId);
+				auto &dst = LuxurySettings::ghost(0);
 				dst.setSendReadMessages(src.sendReadMessages());
 				dst.setSendReadStories(src.sendReadStories());
 				dst.setSendOnlinePackets(src.sendOnlinePackets());
@@ -334,10 +334,10 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 				dst.setSendOnlinePacketsLocked(src.sendOnlinePacketsLocked());
 				dst.setSendUploadProgressLocked(src.sendUploadProgressLocked());
 				dst.setSendOfflinePacketAfterOnlineLocked(src.sendOfflinePacketAfterOnlineLocked());
-				AyuSettings::getInstance().setUseGlobalGhostMode(true);
+				LuxurySettings::getInstance().setUseGlobalGhostMode(true);
 			}
 
-			const auto isGlobal = AyuSettings::getInstance().useGlobalGhostMode();
+			const auto isGlobal = LuxurySettings::getInstance().useGlobalGhostMode();
 			auto initialUserId = isGlobal
 				? uint64(0)
 				: controller->session().userId().bare;
@@ -345,7 +345,7 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 			const auto state = container->lifetime().make_state<GhostPickerState>();
 			state->selectedUserId = initialUserId;
 
-			const auto title = AddSubsectionTitle(container, tr::ayu_GhostEssentialsHeader());
+			const auto title = AddSubsectionTitle(container, tr::luxury_GhostEssentialsHeader());
 
 			const auto pickerButton = Ui::CreateChild<Ui::LinkButton>(
 				container.get(),
@@ -386,48 +386,48 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 
 			std::vector checkboxes{
 				NestedEntry{
-					tr::ayu_DontReadMessages(tr::now),
-					[state] { return !AyuSettings::ghost(state->selectedUserId.current()).sendReadMessages(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendReadMessages(!v); },
-					[state] { return AyuSettings::ghost(state->selectedUserId.current()).sendReadMessagesLocked(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendReadMessagesLocked(v); }
+					tr::luxury_DontReadMessages(tr::now),
+					[state] { return !LuxurySettings::ghost(state->selectedUserId.current()).sendReadMessages(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendReadMessages(!v); },
+					[state] { return LuxurySettings::ghost(state->selectedUserId.current()).sendReadMessagesLocked(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendReadMessagesLocked(v); }
 				},
 				NestedEntry{
-					tr::ayu_DontReadStories(tr::now),
-					[state] { return !AyuSettings::ghost(state->selectedUserId.current()).sendReadStories(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendReadStories(!v); },
-					[state] { return AyuSettings::ghost(state->selectedUserId.current()).sendReadStoriesLocked(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendReadStoriesLocked(v); }
+					tr::luxury_DontReadStories(tr::now),
+					[state] { return !LuxurySettings::ghost(state->selectedUserId.current()).sendReadStories(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendReadStories(!v); },
+					[state] { return LuxurySettings::ghost(state->selectedUserId.current()).sendReadStoriesLocked(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendReadStoriesLocked(v); }
 				},
 				NestedEntry{
-					tr::ayu_DontSendOnlinePackets(tr::now),
-					[state] { return !AyuSettings::ghost(state->selectedUserId.current()).sendOnlinePackets(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendOnlinePackets(!v); },
-					[state] { return AyuSettings::ghost(state->selectedUserId.current()).sendOnlinePacketsLocked(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendOnlinePacketsLocked(v); }
+					tr::luxury_DontSendOnlinePackets(tr::now),
+					[state] { return !LuxurySettings::ghost(state->selectedUserId.current()).sendOnlinePackets(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendOnlinePackets(!v); },
+					[state] { return LuxurySettings::ghost(state->selectedUserId.current()).sendOnlinePacketsLocked(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendOnlinePacketsLocked(v); }
 				},
 				NestedEntry{
-					tr::ayu_DontSendUploadProgress(tr::now),
-					[state] { return !AyuSettings::ghost(state->selectedUserId.current()).sendUploadProgress(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendUploadProgress(!v); },
-					[state] { return AyuSettings::ghost(state->selectedUserId.current()).sendUploadProgressLocked(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendUploadProgressLocked(v); }
+					tr::luxury_DontSendUploadProgress(tr::now),
+					[state] { return !LuxurySettings::ghost(state->selectedUserId.current()).sendUploadProgress(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendUploadProgress(!v); },
+					[state] { return LuxurySettings::ghost(state->selectedUserId.current()).sendUploadProgressLocked(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendUploadProgressLocked(v); }
 				},
 				NestedEntry{
-					tr::ayu_SendOfflinePacketAfterOnline(tr::now),
-					[state] { return AyuSettings::ghost(state->selectedUserId.current()).sendOfflinePacketAfterOnline(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendOfflinePacketAfterOnline(v); },
-					[state] { return AyuSettings::ghost(state->selectedUserId.current()).sendOfflinePacketAfterOnlineLocked(); },
-					[state](bool v) { AyuSettings::ghost(state->selectedUserId.current()).setSendOfflinePacketAfterOnlineLocked(v); }
+					tr::luxury_SendOfflinePacketAfterOnline(tr::now),
+					[state] { return LuxurySettings::ghost(state->selectedUserId.current()).sendOfflinePacketAfterOnline(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendOfflinePacketAfterOnline(v); },
+					[state] { return LuxurySettings::ghost(state->selectedUserId.current()).sendOfflinePacketAfterOnlineLocked(); },
+					[state](bool v) { LuxurySettings::ghost(state->selectedUserId.current()).setSendOfflinePacketAfterOnlineLocked(v); }
 				},
 			};
 
 			auto collapsible = AddCollapsibleToggle(
 				container,
-				tr::ayu_GhostModeToggle(),
+				tr::luxury_GhostModeToggle(),
 				std::move(checkboxes),
 				true,
-				tr::ayu_GhostModeOptionShiftDescription(tr::now));
+				tr::luxury_GhostModeOptionShiftDescription(tr::now));
 			state->refreshCheckboxes = std::move(collapsible.refresh);
 			if (wctx.highlights && collapsible.widget) {
 				wctx.highlights->push_back(std::make_pair(
@@ -437,7 +437,7 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 
 			const auto markReadButton = AddButtonWithIcon(
 				container,
-				tr::ayu_MarkReadAfterAction(),
+				tr::luxury_MarkReadAfterAction(),
 				st::settingsButtonNoIcon
 			);
 			if (wctx.highlights) {
@@ -448,16 +448,16 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 			markReadButton->toggleOn(
 				state->selectedUserId.value()
 				| rpl::map([](uint64 id) {
-					return AyuSettings::ghost(id).markReadAfterActionValue();
+					return LuxurySettings::ghost(id).markReadAfterActionValue();
 				}) | rpl::flatten_latest()
 			)->toggledValue(
 			) | rpl::filter(
 				[=](bool enabled) {
-					return enabled != AyuSettings::ghost(state->selectedUserId.current()).markReadAfterAction();
+					return enabled != LuxurySettings::ghost(state->selectedUserId.current()).markReadAfterAction();
 				}
 			) | on_next(
 				[=](bool enabled) {
-					auto &ghost = AyuSettings::ghost(state->selectedUserId.current());
+					auto &ghost = LuxurySettings::ghost(state->selectedUserId.current());
 					ghost.setMarkReadAfterAction(enabled);
 					if (enabled) {
 						ghost.setUseScheduledMessages(false);
@@ -465,12 +465,12 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 				},
 				container->lifetime());
 			AddSkip(container);
-			AddDividerText(container, tr::ayu_MarkReadAfterActionDescription());
+			AddDividerText(container, tr::luxury_MarkReadAfterActionDescription());
 
 			AddSkip(container);
 			const auto scheduleButton = AddButtonWithIcon(
 				container,
-				tr::ayu_UseScheduledMessages(),
+				tr::luxury_UseScheduledMessages(),
 				st::settingsButtonNoIcon
 			);
 			if (wctx.highlights) {
@@ -481,16 +481,16 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 			scheduleButton->toggleOn(
 				state->selectedUserId.value()
 				| rpl::map([](uint64 id) {
-					return AyuSettings::ghost(id).useScheduledMessagesValue();
+					return LuxurySettings::ghost(id).useScheduledMessagesValue();
 				}) | rpl::flatten_latest()
 			)->toggledValue(
 			) | rpl::filter(
 				[=](bool enabled) {
-					return enabled != AyuSettings::ghost(state->selectedUserId.current()).useScheduledMessages();
+					return enabled != LuxurySettings::ghost(state->selectedUserId.current()).useScheduledMessages();
 				}
 			) | on_next(
 				[=](bool enabled) {
-					auto &ghost = AyuSettings::ghost(state->selectedUserId.current());
+					auto &ghost = LuxurySettings::ghost(state->selectedUserId.current());
 					ghost.setUseScheduledMessages(enabled);
 					if (enabled) {
 						ghost.setMarkReadAfterAction(false);
@@ -498,24 +498,24 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 				},
 				container->lifetime());
 			AddSkip(container);
-			AddDividerText(container, tr::ayu_UseScheduledMessagesDescription());
+			AddDividerText(container, tr::luxury_UseScheduledMessagesDescription());
 
 			AddSkip(container);
 			const auto silentOptions = std::vector<QString>{
-				tr::ayu_SendWithoutSoundByDefaultNever(tr::now),
-				tr::ayu_SendWithoutSoundByDefaultInGhostMode(tr::now),
-				tr::ayu_SendWithoutSoundByDefaultAlways(tr::now),
+				tr::luxury_SendWithoutSoundByDefaultNever(tr::now),
+				tr::luxury_SendWithoutSoundByDefaultInGhostMode(tr::now),
+				tr::luxury_SendWithoutSoundByDefaultAlways(tr::now),
 			};
 			const auto silentOptionText = state->selectedUserId.value(
 			) | rpl::map([=](uint64 id) {
-				return AyuSettings::ghost(id).sendWithoutSoundValue(
+				return LuxurySettings::ghost(id).sendWithoutSoundValue(
 				) | rpl::map([=](SendWithoutSoundOption value) {
 					return silentOptions[static_cast<int>(value)];
 				});
 			}) | rpl::flatten_latest();
 			const auto silentButton = AddButtonWithLabel(
 				container,
-				tr::ayu_SendWithoutSoundByDefault(),
+				tr::luxury_SendWithoutSoundByDefault(),
 				std::move(silentOptionText),
 				st::settingsButtonNoIcon);
 			if (wctx.highlights) {
@@ -526,27 +526,27 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 			silentButton->addClickHandler([=] {
 				controller->show(Box([=](not_null<Ui::GenericBox*> box) {
 					const auto save = [=](int index) {
-						AyuSettings::ghost(state->selectedUserId.current()
+						LuxurySettings::ghost(state->selectedUserId.current()
 						).setSendWithoutSound(
 							static_cast<SendWithoutSoundOption>(index));
 					};
 					SingleChoiceBox(box, {
-						.title = tr::ayu_SendWithoutSoundByDefault(),
+						.title = tr::luxury_SendWithoutSoundByDefault(),
 						.options = silentOptions,
 						.initialSelection = static_cast<int>(
-							AyuSettings::ghost(state->selectedUserId.current()
+							LuxurySettings::ghost(state->selectedUserId.current()
 							).sendWithoutSound()),
 						.callback = save,
 					});
 				}));
 			});
 			AddSkip(container);
-			AddDividerText(container, tr::ayu_SendWithoutSoundByDefaultDescription());
+			AddDividerText(container, tr::luxury_SendWithoutSoundByDefaultDescription());
 
 			AddSkip(container);
 			const auto suggestGhostModeButton = AddButtonWithIcon(
 				container,
-				tr::ayu_SuggestGhostModeBeforeViewingStory(),
+				tr::luxury_SuggestGhostModeBeforeViewingStory(),
 				st::settingsButtonNoIcon);
 			if (wctx.highlights) {
 				wctx.highlights->push_back(std::make_pair(
@@ -556,20 +556,20 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 			suggestGhostModeButton->toggleOn(
 				state->selectedUserId.value()
 				| rpl::map([](uint64 id) {
-					return AyuSettings::ghost(id).suggestGhostModeBeforeViewingStoryValue();
+					return LuxurySettings::ghost(id).suggestGhostModeBeforeViewingStoryValue();
 				}) | rpl::flatten_latest()
 			)->toggledValue(
 			) | rpl::filter(
 				[=](bool enabled) {
-					return enabled != AyuSettings::ghost(state->selectedUserId.current()).suggestGhostModeBeforeViewingStory();
+					return enabled != LuxurySettings::ghost(state->selectedUserId.current()).suggestGhostModeBeforeViewingStory();
 				}
 			) | on_next(
 				[=](bool enabled) {
-					AyuSettings::ghost(state->selectedUserId.current()).setSuggestGhostModeBeforeViewingStory(enabled);
+					LuxurySettings::ghost(state->selectedUserId.current()).setSuggestGhostModeBeforeViewingStory(enabled);
 				},
 				container->lifetime());
 			AddSkip(container);
-			AddDividerText(container, tr::ayu_SuggestGhostModeBeforeViewingStoryDescription());
+			AddDividerText(container, tr::luxury_SuggestGhostModeBeforeViewingStoryDescription());
 
 			auto showMenu = [=] {
 				state->menu = base::make_unique_q<Ui::PopupMenu>(
@@ -580,7 +580,7 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 					base::make_unique_q<GlobalAction>(
 						state->menu->menu(),
 						st::defaultPopupMenu.menu,
-						tr::ayu_GhostModeGlobalSettings(tr::now),
+						tr::luxury_GhostModeGlobalSettings(tr::now),
 						state->selectedUserId.current() == 0,
 						[=] { selectGhostProfile(state, 0); }));
 
@@ -608,102 +608,102 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 		}, [&](const SearchContext &sctx) {
 			sctx.entries->push_back({
 				.id = u"ayu/ghostModeToggle"_q,
-				.title = tr::ayu_GhostModeToggle(tr::now),
+				.title = tr::luxury_GhostModeToggle(tr::now),
 				.section = sctx.sectionId,
 			});
 			sctx.entries->push_back({
 				.id = u"ayu/markReadAfterAction"_q,
-				.title = tr::ayu_MarkReadAfterAction(tr::now),
+				.title = tr::luxury_MarkReadAfterAction(tr::now),
 				.section = sctx.sectionId,
 			});
 			sctx.entries->push_back({
 				.id = u"ayu/useScheduledMessages"_q,
-				.title = tr::ayu_UseScheduledMessages(tr::now),
+				.title = tr::luxury_UseScheduledMessages(tr::now),
 				.section = sctx.sectionId,
 			});
 			sctx.entries->push_back({
 				.id = u"ayu/sendWithoutSound"_q,
-				.title = tr::ayu_SendWithoutSoundByDefault(tr::now),
+				.title = tr::luxury_SendWithoutSoundByDefault(tr::now),
 				.section = sctx.sectionId,
 			});
 			sctx.entries->push_back({
 				.id = u"ayu/suggestGhostModeBeforeViewingStory"_q,
-				.title = tr::ayu_SuggestGhostModeBeforeViewingStory(tr::now),
+				.title = tr::luxury_SuggestGhostModeBeforeViewingStory(tr::now),
 				.section = sctx.sectionId,
 			});
 		});
 	});
 }
 
-void BuildSpyEssentials(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	builder.addSubsectionTitle(tr::ayu_SpyEssentialsHeader());
+void BuildSpyEssentials(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_SpyEssentialsHeader());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/saveDeletedMessages"_q,
-		.title = tr::ayu_SaveDeletedMessages(),
-		.getter = &AyuSettings::saveDeletedMessages,
-		.setter = &AyuSettings::setSaveDeletedMessages,
+		.title = tr::luxury_SaveDeletedMessages(),
+		.getter = &LuxurySettings::saveDeletedMessages,
+		.setter = &LuxurySettings::setSaveDeletedMessages,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/saveMessagesHistory"_q,
-		.title = tr::ayu_SaveMessagesHistory(),
-		.getter = &AyuSettings::saveMessagesHistory,
-		.setter = &AyuSettings::setSaveMessagesHistory,
+		.title = tr::luxury_SaveMessagesHistory(),
+		.getter = &LuxurySettings::saveMessagesHistory,
+		.setter = &LuxurySettings::setSaveMessagesHistory,
 	});
 
-	ayu.addSectionDivider();
+	luxury.addSectionDivider();
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/saveForBots"_q,
-		.title = tr::ayu_MessageSavingSaveForBots(),
-		.getter = &AyuSettings::saveForBots,
-		.setter = &AyuSettings::setSaveForBots,
+		.title = tr::luxury_MessageSavingSaveForBots(),
+		.getter = &LuxurySettings::saveForBots,
+		.setter = &LuxurySettings::setSaveForBots,
 	});
 }
 
-void BuildOther(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-	builder.addSubsectionTitle(tr::ayu_MessageSavingOtherHeader());
+void BuildOther(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_MessageSavingOtherHeader());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/localPremium"_q,
-		.title = tr::ayu_LocalPremium(),
-		.getter = &AyuSettings::localPremium,
-		.setter = &AyuSettings::setLocalPremium,
+		.title = tr::luxury_LocalPremium(),
+		.getter = &LuxurySettings::localPremium,
+		.setter = &LuxurySettings::setLocalPremium,
 	});
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/disableAds"_q,
-		.title = tr::ayu_DisableAds(),
-		.getter = &AyuSettings::disableAds,
-		.setter = &AyuSettings::setDisableAds,
+		.title = tr::luxury_DisableAds(),
+		.getter = &LuxurySettings::disableAds,
+		.setter = &LuxurySettings::setDisableAds,
 	});
 }
 
 const auto kMeta = BuildHelper({
-	.id = AyuGhost::Id(),
-	.parentId = AyuMain::Id(),
+	.id = LuxuryGhost::Id(),
+	.parentId = LuxuryMain::Id(),
 	.title = u"AyuGram"_q,
 	.icon = &st::menuIconGroupReactions,
 }, [](SectionBuilder &builder) {
-	auto ayu = AyuSectionBuilder(builder);
+	auto luxury = LuxurySectionBuilder(builder);
 
 	builder.addSkip();
 	BuildGhostEssentials(builder);
 
 	builder.addSkip();
-	BuildSpyEssentials(builder, ayu);
+	BuildSpyEssentials(builder, luxury);
 
-	ayu.addSectionDivider();
-	BuildOther(builder, ayu);
+	luxury.addSectionDivider();
+	BuildOther(builder, luxury);
 	builder.addSkip();
 });
 
 } // namespace
 
-rpl::producer<QString> AyuGhost::title() {
+rpl::producer<QString> LuxuryGhost::title() {
 	return rpl::single(QString("AyuGram"));
 }
 
-AyuGhost::AyuGhost(
+LuxuryGhost::LuxuryGhost(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 : Section(parent, controller)
@@ -711,14 +711,14 @@ AyuGhost::AyuGhost(
 	setupContent();
 }
 
-void AyuGhost::setupContent() {
+void LuxuryGhost::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
 }
 
-Type AyuGhostId() {
-	return AyuGhost::Id();
+Type LuxuryGhostId() {
+	return LuxuryGhost::Id();
 }
 
 } // namespace Settings

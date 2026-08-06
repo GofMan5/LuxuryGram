@@ -303,7 +303,7 @@ void Application::run() {
 	_translator = std::make_unique<Lang::Translator>();
 	QCoreApplication::instance()->installTranslator(_translator.get());
 
-	AyuInfra::init();
+	LuxuryInfra::init();
 	style::StartManager(cScale());
 	Ui::Accessible::Init();
 	Ui::InitTextOptions();
@@ -547,8 +547,8 @@ void Application::processCreatedWindow(
 	window->openInMediaViewRequests(
 	) | rpl::start_to_stream(_openInMediaViewRequests, window->lifetime());
 
-	if (AyuSettings::getInstance().streamerMode()) {
-		AyuFeatures::StreamerMode::hideWidgetWindow(window->widget());
+	if (LuxurySettings::getInstance().streamerMode()) {
+		LuxuryFeatures::StreamerMode::hideWidgetWindow(window->widget());
 	}
 }
 

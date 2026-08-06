@@ -90,7 +90,7 @@ enum class ChannelDataFlag : uint64 {
 	Community = (1ULL << 46),
 	CommunityCollapsed = (1ULL << 47),
 
-	AyuNoForwards = (1ULL << 63),
+	LuxuryNoForwards = (1ULL << 63),
 };
 inline constexpr bool is_flag_type(ChannelDataFlag) { return true; };
 using ChannelDataFlags = base::flags<ChannelDataFlag>;
@@ -412,7 +412,7 @@ public:
 
 	// Like in ChatData.
 	[[nodiscard]] bool allowsForwarding() const;
-	[[nodiscard]] bool isAyuNoForwards() const;
+	[[nodiscard]] bool isLuxuryNoForwards() const;
 	[[nodiscard]] bool canEditInformation() const;
 	[[nodiscard]] bool canEditPermissions() const;
 	[[nodiscard]] bool canEditUsername() const;

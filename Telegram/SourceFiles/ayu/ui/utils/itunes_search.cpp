@@ -20,7 +20,7 @@
 
 #include <mutex>
 
-namespace Ayu::Ui::Itunes {
+namespace Luxury::Ui::Itunes {
 namespace {
 
 constexpr auto kMaxResponseBytes = 8 * 1024 * 1024;

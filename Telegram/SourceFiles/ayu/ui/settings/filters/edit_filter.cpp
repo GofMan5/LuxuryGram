@@ -134,10 +134,10 @@ void RegexEditBuilder(
 	RegexFilter data;
 
 	if (filter) {
-		box->setTitle(showToast ? tr::ayu_RegexFiltersAdd() : tr::ayu_RegexFiltersEdit());
+		box->setTitle(showToast ? tr::luxury_RegexFiltersAdd() : tr::luxury_RegexFiltersEdit());
 		data = *filter;
 	} else {
-		box->setTitle(tr::ayu_RegexFiltersAdd());
+		box->setTitle(tr::luxury_RegexFiltersAdd());
 		data.enabled = true;
 		data.caseInsensitive = true;
 		data.reversed = false;
@@ -148,28 +148,28 @@ void RegexEditBuilder(
 			box->verticalLayout(),
 			st::windowFilterNameInput,
 			Ui::InputField::Mode::MultiLine,
-			tr::ayu_RegexFiltersPlaceholder()),
+			tr::luxury_RegexFiltersPlaceholder()),
 		st::markdownLinkFieldPadding);
 	const auto errorText = AddError(box->verticalLayout(), regexValue);
 	regexValue->setMaxLength(FiltersCacheController::kMaxPatternLength);
 	const auto enabled = box->addRow(
 		object_ptr<Ui::Checkbox>(
 			box,
-			tr::ayu_EnableExpression(tr::now),
+			tr::luxury_EnableExpression(tr::now),
 			data.enabled,
 			st::defaultBoxCheckbox),
 		st::settingsCheckboxPadding);
 	const auto caseInsensitive = box->addRow(
 		object_ptr<Ui::Checkbox>(
 			box,
-			tr::ayu_CaseInsensitiveExpression(tr::now),
+			tr::luxury_CaseInsensitiveExpression(tr::now),
 			data.caseInsensitive,
 			st::defaultBoxCheckbox),
 		st::settingsCheckboxPadding);
 	const auto reversed = box->addRow(
 		object_ptr<Ui::Checkbox>(
 			box,
-			tr::ayu_ReversedExpression(tr::now),
+			tr::luxury_ReversedExpression(tr::now),
 			data.reversed,
 			st::defaultBoxCheckbox),
 		st::settingsCheckboxPadding);
@@ -210,7 +210,7 @@ void RegexEditBuilder(
 
 		crl::async([=]
 		{
-			AyuDatabase::addRegexFilter(newFilter);
+			LuxuryDatabase::addRegexFilter(newFilter);
 			FiltersCacheController::rebuildCache();
 
 			crl::on_main([=]
@@ -222,19 +222,19 @@ void RegexEditBuilder(
 
 				if (showToast) {
 					auto config = Ui::Toast::Config{
-						.text = tr::ayu_RegexFilterBulletinText(
+						.text = tr::luxury_RegexFilterBulletinText(
 							tr::now,
 							tr::rich),
 						.adaptive = true,
 					};
 					if (dialogId.has_value()) {
-						Ayu::Ui::ShowToastWithAction(
+						Luxury::Ui::ShowToastWithAction(
 							std::move(config),
-							tr::ayu_RegexFilterBulletinAction(tr::now),
+							tr::luxury_RegexFilterBulletinAction(tr::now),
 							[=]() mutable {
 								newFilter.dialogId = dialogId;
 
-								AyuDatabase::updateRegexFilter(newFilter);
+								LuxuryDatabase::updateRegexFilter(newFilter);
 								FiltersCacheController::rebuildCache();
 								FiltersCacheController::fireUpdate();
 							});

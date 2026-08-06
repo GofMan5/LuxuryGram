@@ -11,7 +11,7 @@
 #include <QPixmap>
 #include <vector>
 
-namespace Ayu::Ui {
+namespace Luxury::Ui {
 
 class Swatch
 {
@@ -181,4 +181,4 @@ private:
 	static Filter DEFAULT_FILTER;
 };
 
-} // namespace Ayu::Ui
+} // namespace Luxury::Ui

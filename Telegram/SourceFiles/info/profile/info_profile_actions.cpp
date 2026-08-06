@@ -1844,7 +1844,7 @@ Section DetailsFiller::makeInfo() {
 			auto idInfo = addInfoOneLine(
 				rpl::single(idLabel),
 				std::move(idDrawableText),
-				tr::ayu_ContextCopyID(tr::now)
+				tr::luxury_ContextCopyID(tr::now)
 			);
 
 			idInfo.text->setClickHandlerFilter([=](auto &&...)
@@ -1852,7 +1852,7 @@ Section DetailsFiller::makeInfo() {
 				const auto idText = IDString(user);
 				if (!idText.isEmpty()) {
 					QGuiApplication::clipboard()->setText(idText);
-					controller->showToast(tr::ayu_IDCopiedToast(tr::now));
+					controller->showToast(tr::luxury_IDCopiedToast(tr::now));
 				}
 				return false;
 			});
@@ -1960,7 +1960,7 @@ Section DetailsFiller::makeInfo() {
 			auto idInfo = addInfoOneLine(
 				idLabel,
 				std::move(idDrawableText),
-				tr::ayu_ContextCopyID(tr::now)
+				tr::luxury_ContextCopyID(tr::now)
 			);
 
 			idInfo.text->setClickHandlerFilter([=, peer = _peer](auto &&...)
@@ -1968,7 +1968,7 @@ Section DetailsFiller::makeInfo() {
 				const auto idText = IDString(peer);
 				if (!idText.isEmpty()) {
 					QGuiApplication::clipboard()->setText(idText);
-					controller->showToast(tr::ayu_IDCopiedToast(tr::now));
+					controller->showToast(tr::luxury_IDCopiedToast(tr::now));
 				}
 				return false;
 			});
@@ -1985,7 +1985,7 @@ Section DetailsFiller::makeInfo() {
 			auto idInfo = addInfoOneLine(
 				rpl::single(u"ID"_q),
 				std::move(idDrawableText),
-				tr::ayu_ContextCopyID(tr::now)
+				tr::luxury_ContextCopyID(tr::now)
 			);
 
 			idInfo.text->setClickHandlerFilter([=, peer = _peer](auto &&...)
@@ -1993,7 +1993,7 @@ Section DetailsFiller::makeInfo() {
 				const auto idText = IDString(peer->forumTopicFor(topicRootId)->topicRootId());
 				if (!idText.isEmpty()) {
 					QGuiApplication::clipboard()->setText(idText);
-					controller->showToast(tr::ayu_IDCopiedToast(tr::now));
+					controller->showToast(tr::luxury_IDCopiedToast(tr::now));
 				}
 				return false;
 			});

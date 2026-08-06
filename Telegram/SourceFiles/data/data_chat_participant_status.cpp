@@ -233,7 +233,7 @@ bool CanSendAnyOf(
 		not_null<const PeerData*> peer,
 		ChatRestrictions rights,
 		bool forbidInForums) {
-	if (AyuForward::isForwarding(peer->id)) {
+	if (LuxuryForward::isForwarding(peer->id)) {
 		return false;
 	}
 	if (peer->session().frozen()
@@ -297,9 +297,9 @@ bool CanSendAnyOf(
 SendError RestrictionError(
 		not_null<PeerData*> peer,
 		ChatRestriction restriction) {
-	if (AyuForward::isForwarding(peer->id)) {
+	if (LuxuryForward::isForwarding(peer->id)) {
 		return SendError({
-			.text = AyuForward::stateName(peer->id).first + "\n" + AyuForward::stateName(peer->id).second,
+			.text = LuxuryForward::stateName(peer->id).first + "\n" + LuxuryForward::stateName(peer->id).second,
 		});
 	}
 	using Flag = ChatRestriction;

@@ -134,7 +134,7 @@ void PromoSuggestions::refreshTopPromotion() {
 					|= _dismissedSuggestions.emplace(qs(suggestion)).second;
 			}
 
-			const auto &settings = AyuSettings::getInstance();
+			const auto &settings = LuxurySettings::getInstance();
 			if (settings.disableAds()) {
 				setTopPromoted(nullptr, QString(), QString());
 				return;

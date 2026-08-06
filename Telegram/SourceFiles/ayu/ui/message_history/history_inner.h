@@ -228,7 +228,7 @@ private:
 	void updateMinMaxIds();
 	void updateEmptyText();
 	void paintEmpty(Painter &p, not_null<const Ui::ChatStyle*> st);
-	void addMessages(Direction direction, const std::vector<AyuMessageBase> &messages);
+	void addMessages(Direction direction, const std::vector<LuxuryMessageBase> &messages);
 	Element *viewForItem(const HistoryItem *item);
 
 	void toggleScrollDateShown();

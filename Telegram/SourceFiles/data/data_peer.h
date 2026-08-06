@@ -322,7 +322,7 @@ public:
 		return _notify;
 	}
 
-	[[nodiscard]] bool isAyuNoForwards() const;
+	[[nodiscard]] bool isLuxuryNoForwards() const;
 	[[nodiscard]] bool allowsForwarding() const;
 	[[nodiscard]] Data::RestrictionCheckResult amRestricted(
 		ChatRestriction right) const;

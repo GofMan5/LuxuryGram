@@ -136,7 +136,7 @@ void UpdateTaskbarRelaunchIcon(HWND hWnd) {
 	setString(AppUserModelId::Key(), AppUserModelId::Id());
 	setString(
 		PKEY_AppUserModel_RelaunchIconResource,
-		QDir::toNativeSeparators(AyuAssets::appIcoPath()).toStdWString()
+		QDir::toNativeSeparators(LuxuryAssets::appIcoPath()).toStdWString()
 			+ L",0");
 	propertyStore->Commit();
 }
@@ -635,7 +635,7 @@ void MainWindow::unreadCounterChangedHook() {
 }
 
 void MainWindow::updateTaskbarAndIconCounters() {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 
 	const auto counter = settings.hideNotificationBadge() ? 0 : Core::App().unreadBadge();
 	const auto muted = settings.hideNotificationBadge() ? 0 : Core::App().unreadBadgeMuted();

@@ -68,8 +68,8 @@ ChatAdminRightsInfo ChatData::defaultAdminRights(not_null<UserData*> user) {
 		| (isCreator ? Flag::AddAdmins : Flag(0)));
 }
 
-bool ChatData::isAyuNoForwards() const {
-	return flags() & Flag::AyuNoForwards;
+bool ChatData::isLuxuryNoForwards() const {
+	return flags() & Flag::LuxuryNoForwards;
 }
 
 bool ChatData::allowsForwarding() const {
@@ -118,7 +118,7 @@ bool ChatData::anyoneCanAddMembers() const {
 
 void ChatData::setName(const QString &newName) {
 	auto filteredName = newName;
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.filterZalgo()) {
 		filteredName = filterZalgo(filteredName);
 	}

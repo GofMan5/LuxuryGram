@@ -17,11 +17,11 @@ namespace HistoryView {
 enum class Context : char;
 }
 
-namespace AyuUi {
+namespace LuxuryUi {
 
 bool needToShowItem(ContextMenuVisibility state);
 
-void AddAyuGramActions(PeerData *peerData,
+void AddLuxuryGramActions(PeerData *peerData,
 							   Data::Thread *thread,
 							   not_null<Window::SessionController*> sessionController,
 							   const Window::PeerMenuCallback &addCallback);

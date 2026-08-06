@@ -376,7 +376,7 @@ void UserData::setName(
 	auto filteredFirstName = newFirstName;
 	auto filteredLastName = newLastName;
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if (settings.filterZalgo()) {
 		filteredFirstName = filterZalgo(filteredFirstName);
 		filteredLastName = filterZalgo(filteredLastName);
@@ -624,7 +624,7 @@ bool UserData::isFake() const {
 
 bool UserData::isPremium() const {
 	if (id) {
-		const auto &settings = AyuSettings::getInstance();
+		const auto &settings = LuxurySettings::getInstance();
 		if (settings.localPremium()) {
 			if (getSession(id.value)) {
 				return true;
@@ -691,7 +691,7 @@ bool UserData::allowsForwarding() const {
 	return true;
 }
 
-bool UserData::isAyuNoForwards() const {
+bool UserData::isLuxuryNoForwards() const {
 	return (flags() & Flag::NoForwardsMyEnabled)
 		|| (flags() & Flag::NoForwardsPeerEnabled);
 }

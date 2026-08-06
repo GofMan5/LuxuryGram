@@ -18,17 +18,17 @@
 
 namespace {
 
-class AyuTranslateProvider final
+class LuxuryTranslateProvider final
 	: public Ui::TranslateProvider
 	, public base::has_weak_ptr {
 public:
-	AyuTranslateProvider(
+	LuxuryTranslateProvider(
 		not_null<Main::Session*> session,
 		TranslationProvider provider)
 	: _session(session)
 	, _provider(provider) {
-		if (!Ayu::Translator::TranslateManager::currentInstance()) {
-			Ayu::Translator::TranslateManager::init();
+		if (!Luxury::Translator::TranslateManager::currentInstance()) {
+			Luxury::Translator::TranslateManager::init();
 		}
 	}
 
@@ -76,7 +76,7 @@ public:
 			}
 			doneAll();
 		};
-		const auto manager = Ayu::Translator::TranslateManager::currentInstance();
+		const auto manager = Luxury::Translator::TranslateManager::currentInstance();
 		if (!manager || to.twoLetterCode().isEmpty()) {
 			failAll();
 			return;
@@ -209,10 +209,10 @@ private:
 
 namespace Ui {
 
-std::unique_ptr<TranslateProvider> CreateAyuTranslateProvider(
+std::unique_ptr<TranslateProvider> CreateLuxuryTranslateProvider(
 		not_null<Main::Session*> session,
 		TranslationProvider provider) {
-	return std::make_unique<AyuTranslateProvider>(session, provider);
+	return std::make_unique<LuxuryTranslateProvider>(session, provider);
 }
 
 } // namespace Ui

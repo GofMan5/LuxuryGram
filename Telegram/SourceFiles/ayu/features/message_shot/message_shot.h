@@ -13,7 +13,7 @@
 
 class HistoryInner;
 
-namespace AyuFeatures::MessageShot {
+namespace LuxuryFeatures::MessageShot {
 
 struct ShotConfig
 {

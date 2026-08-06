@@ -41,8 +41,8 @@ std::unordered_map<long long, std::unordered_map<int64, bool>> filteredMessages;
 std::unordered_set<BareId> dialogsWithHiddenBlockedMessages; // purely for show / hide filtered messages
 
 std::shared_ptr<const Cache> buildCache() {
-	const auto filters = AyuDatabase::getAllRegexFilters();
-	const auto exclusions = AyuDatabase::getAllFiltersExclusions();
+	const auto filters = LuxuryDatabase::getAllRegexFilters();
+	const auto exclusions = LuxuryDatabase::getAllFiltersExclusions();
 
 	std::vector<HashablePattern> shared;
 	std::unordered_map<ID, std::vector<ReversiblePattern>> byDialogId;

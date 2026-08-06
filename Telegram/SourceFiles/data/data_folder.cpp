@@ -273,7 +273,7 @@ void Folder::paintUserpic(
 	p.setBrush(overrideBg ? *overrideBg : st::historyPeerArchiveUserpicBg);
 	{
 		PainterHighQualityEnabler hq(p);
-		AyuUserpic::PaintShape(p, x, y, size);
+		LuxuryUserpic::PaintShape(p, x, y, size);
 	}
 	if (size == st::defaultDialogRow.photoSize) {
 		const auto rect = QRect{ x, y, size, size };

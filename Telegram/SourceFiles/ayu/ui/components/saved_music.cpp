@@ -34,7 +34,7 @@ namespace {
 QColor performerColor(255, 255, 255, 153); // white 60%
 
 QRgb AdjustHsl(QRgb color, float luminance, float saturation = -1.0f) {
-	auto hsl = Ayu::Ui::ColorUtils::colorToHSL(color);
+	auto hsl = Luxury::Ui::ColorUtils::colorToHSL(color);
 
 	if (saturation > 0.0f) {
 		hsl[1] = std::min(hsl[1] * saturation, 1.0f);
@@ -42,7 +42,7 @@ QRgb AdjustHsl(QRgb color, float luminance, float saturation = -1.0f) {
 
 	hsl[2] = std::min(hsl[2] * luminance, 1.0f);
 
-	return Ayu::Ui::ColorUtils::HSLToRGB(hsl);
+	return Luxury::Ui::ColorUtils::HSLToRGB(hsl);
 }
 
 QRgb BlendARGB(QRgb color1, QRgb color2, float ratio) {
@@ -139,7 +139,7 @@ Cover GetCurrentCover(
 }
 
 std::optional<QRgb> ExtractColorFromCover(const QImage &cover) {
-	const auto palette = Ayu::Ui::Palette::from(cover).generate();
+	const auto palette = Luxury::Ui::Palette::from(cover).generate();
 
 	const auto *swatch = palette.darkVibrantSwatch();
 	if (!swatch) {
@@ -159,7 +159,7 @@ std::optional<QRgb> ExtractColorFromCover(const QImage &cover) {
 	const auto extractedColor = swatch->rgb();
 
 	constexpr auto whiteColor = qRgb(255, 255, 255);
-	const auto contrast = Ayu::Ui::ColorUtils::calculateContrast(whiteColor, extractedColor);
+	const auto contrast = Luxury::Ui::ColorUtils::calculateContrast(whiteColor, extractedColor);
 
 	auto adjustedColor = extractedColor;
 	if (contrast > 15.0f) {
@@ -168,14 +168,14 @@ std::optional<QRgb> ExtractColorFromCover(const QImage &cover) {
 		adjustedColor = AdjustHsl(extractedColor, 0.5f);
 	}
 
-	if (Ayu::Ui::ColorUtils::calculateContrast(whiteColor, adjustedColor) < 3.0f) {
+	if (Luxury::Ui::ColorUtils::calculateContrast(whiteColor, adjustedColor) < 3.0f) {
 		adjustedColor = BlendARGB(adjustedColor, qRgb(0, 0, 0), 0.3f);
 	}
 
 	return adjustedColor;
 }
 
-AyuMusicButton::AyuMusicButton(
+LuxuryMusicButton::LuxuryMusicButton(
 	QWidget *parent,
 	MusicButtonData data,
 	std::optional<QColor> overrideBg,
@@ -210,9 +210,9 @@ AyuMusicButton::AyuMusicButton(
 	setClickedCallback(std::move(handler));
 }
 
-AyuMusicButton::~AyuMusicButton() = default;
+LuxuryMusicButton::~LuxuryMusicButton() = default;
 
-void AyuMusicButton::updateData(MusicButtonData data) {
+void LuxuryMusicButton::updateData(MusicButtonData data) {
 	_performer->setText(data.performer);
 	_title->setText(data.title);
 	_performerText = data.performer;
@@ -223,7 +223,7 @@ void AyuMusicButton::updateData(MusicButtonData data) {
 	resizeToWidth(widthNoMargins());
 }
 
-void AyuMusicButton::downloadAndMakeCover(FullMsgId msgId) {
+void LuxuryMusicButton::downloadAndMakeCover(FullMsgId msgId) {
 	_coverDownloadLifetime.destroy();
 	if (_mediaView && _mediaView->owner()->isSongWithCover() && !_mediaView->thumbnail()) {
 		const auto settings = &_mediaView->owner()->session().settings().autoDownload();
@@ -247,13 +247,13 @@ void AyuMusicButton::downloadAndMakeCover(FullMsgId msgId) {
 	makeCover();
 }
 
-void AyuMusicButton::makeCover() {
+void LuxuryMusicButton::makeCover() {
 	const auto weak = base::make_weak(this);
 	const auto generation = ++_coverGeneration;
 	const auto &font = st::infoMusicButtonTitle.style.font;
 	const auto skip = st::normalFont->spacew / 2;
 	const auto size = font->height + skip + font->height;
-	const auto adaptiveColor = AyuSettings::getInstance().adaptiveCoverColor();
+	const auto adaptiveColor = LuxurySettings::getInstance().adaptiveCoverColor();
 	auto cover = GetCurrentCover(_mediaView, QSize(size, size));
 	const auto existingDraw = cover.pixToDraw.toImage();
 	const auto existingBackground = cover.pixToBg.toImage();
@@ -272,7 +272,7 @@ void AyuMusicButton::makeCover() {
 		auto background = existingBackground;
 		auto fetched = false;
 		if (noCover) {
-			background = Ayu::Ui::Itunes::FetchCover(
+			background = Luxury::Ui::Itunes::FetchCover(
 				performerText,
 				titleText,
 				size);
@@ -325,7 +325,7 @@ void AyuMusicButton::makeCover() {
 				.noCover = effectiveNoCover,
 			};
 
-			const auto &settings = AyuSettings::getInstance();
+			const auto &settings = LuxurySettings::getInstance();
 			const auto &current = *strong->_currentCover;
 			if (!current.noCover
 				&& settings.adaptiveCoverColor()
@@ -348,7 +348,7 @@ void AyuMusicButton::makeCover() {
 	});
 }
 
-void AyuMusicButton::paintEvent(QPaintEvent *e) {
+void LuxuryMusicButton::paintEvent(QPaintEvent *e) {
 	if (!_currentCover) {
 		return;
 	}
@@ -359,7 +359,7 @@ void AyuMusicButton::paintEvent(QPaintEvent *e) {
 	const auto skip = st::normalFont->spacew / 2;
 	const auto size = font->height + skip + font->height;
 
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	const auto cover = _currentCover.value();
 	if (cover.noCover || !settings.adaptiveCoverColor()) {
 		p.fillRect(e->rect(), cover.bg);
@@ -378,7 +378,7 @@ void AyuMusicButton::paintEvent(QPaintEvent *e) {
 	}
 }
 
-int AyuMusicButton::resizeGetHeight(int newWidth) {
+int LuxuryMusicButton::resizeGetHeight(int newWidth) {
 	const auto padding = st::infoMusicButtonPadding;
 	const auto &font = st::infoMusicButtonTitle.style.font;
 

@@ -176,7 +176,7 @@ void FillPluginInfoBox(
 			st::boxRowPadding,
 			style::al_justify);
 
-		const auto versionPrefix = tr::ayu_PluginVersion(tr::now)
+		const auto versionPrefix = tr::luxury_PluginVersion(tr::now)
 			+ u" "_q
 			+ metadata.version;
 
@@ -184,7 +184,7 @@ void FillPluginInfoBox(
 			versionLabel->setText(
 				versionPrefix
 				+ u" \u2022 "_q
-				+ tr::ayu_PluginNoAuthor(tr::now));
+				+ tr::luxury_PluginNoAuthor(tr::now));
 		} else {
 			auto text = TextWithEntities{
 				versionPrefix + u" \u2022 "_q,
@@ -231,7 +231,7 @@ void FillPluginInfoBox(
 		const auto hasDescription = !metadata.description.isEmpty();
 		auto descText = hasDescription
 			? TextWithEntities{metadata.description}
-			: TextWithEntities{tr::ayu_PluginNoDescription(tr::now)};
+			: TextWithEntities{tr::luxury_PluginNoDescription(tr::now)};
 		if (hasDescription) {
 			TextUtilities::ParseEntities(
 				descText,
@@ -344,7 +344,7 @@ void FillPluginInfoBox(
 	box->verticalLayout()->add(
 		object_ptr<Ui::FlatLabel>(
 			box->verticalLayout(),
-			tr::ayu_PluginsNotAvailable(),
+			tr::luxury_PluginsNotAvailable(),
 			st::boxDividerLabel),
 		st::boxRowPadding);
 

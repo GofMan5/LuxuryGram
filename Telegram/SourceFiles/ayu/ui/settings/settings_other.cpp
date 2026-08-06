@@ -37,7 +37,7 @@
 namespace Settings {
 
 using namespace Builder;
-using namespace AyuBuilder;
+using namespace LuxuryBuilder;
 
 namespace {
 
@@ -141,7 +141,7 @@ void BuildDonations(SectionBuilder &builder) {
 		v::match(ctx, [&](const WidgetContext &wctx) {
 			const auto container = wctx.container;
 
-			AddSubsectionTitle(container, tr::ayu_SupportHeader());
+			AddSubsectionTitle(container, tr::luxury_SupportHeader());
 			AddDonate(
 				AddButtonWithIcon(
 					container,
@@ -159,37 +159,37 @@ void BuildDonations(SectionBuilder &builder) {
 			AddSkip(container);
 
 			AddDividerText(container,
-				tr::ayu_SupportDescription2(
+				tr::luxury_SupportDescription2(
 					lt_item,
 					rpl::single(
-						Ui::Text::Link(tr::ayu_SupportDescription1(tr::now), QString("tg://support"))
+						Ui::Text::Link(tr::luxury_SupportDescription1(tr::now), QString("tg://support"))
 					),
 					tr::marked));
 		}, [&](const SearchContext &sctx) {
 			sctx.entries->push_back({
 				.id = u"ayu/donate"_q,
-				.title = tr::ayu_SupportHeader(tr::now),
+				.title = tr::luxury_SupportHeader(tr::now),
 				.section = sctx.sectionId,
 			});
 		});
 	});
 }
 
-void BuildCrashReporting(SectionBuilder &builder, AyuSectionBuilder &ayu) {
+void BuildCrashReporting(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 #ifndef TDESKTOP_DISABLE_AUTOUPDATE
 	builder.addSkip();
-	builder.addSubsectionTitle(tr::ayu_CategoryOther());
+	builder.addSubsectionTitle(tr::luxury_CategoryOther());
 
-	ayu.addSettingToggle({
+	luxury.addSettingToggle({
 		.id = u"ayu/crashReporting"_q,
 		.altIds = { u"ayu/crashlytics"_q },
-		.title = tr::ayu_CrashReporting(),
-		.getter = &AyuSettings::crashReporting,
-		.setter = &AyuSettings::setCrashReporting,
+		.title = tr::luxury_CrashReporting(),
+		.getter = &LuxurySettings::crashReporting,
+		.setter = &LuxurySettings::setCrashReporting,
 		.icon = { &st::menuIconReport },
 	});
 	builder.addSkip();
-	builder.addDividerText(tr::ayu_CrashReportingDescription());
+	builder.addDividerText(tr::luxury_CrashReportingDescription());
 #endif
 }
 
@@ -199,7 +199,7 @@ void BuildOtherThings(SectionBuilder &builder) {
 	builder.addSkip();
 	builder.addButton({
 		.id = u"ayu/registerUrlScheme"_q,
-		.title = tr::ayu_RegisterURLScheme(),
+		.title = tr::luxury_RegisterURLScheme(),
 		.icon = { &st::menuIconLink },
 		.onClick = [=] {
 			Core::Application::RegisterUrlScheme();
@@ -208,13 +208,13 @@ void BuildOtherThings(SectionBuilder &builder) {
 	});
 	builder.addButton({
 		.id = u"ayu/resetSettings"_q,
-		.title = tr::ayu_ResetSettings(),
+		.title = tr::luxury_ResetSettings(),
 		.icon = { &st::menuIconRestore },
 		.onClick = [=] {
 			controller->show(Ui::MakeConfirmBox({
-				.text = tr::ayu_ResetSettingsConfirmation(tr::rich),
+				.text = tr::luxury_ResetSettingsConfirmation(tr::rich),
 				.confirmed = [=](Fn<void()> &&close) {
-					AyuSettings::reset();
+					LuxurySettings::reset();
 					controller->showToast(tr::lng_box_done(tr::now));
 					close();
 				},
@@ -226,40 +226,40 @@ void BuildOtherThings(SectionBuilder &builder) {
 }
 
 const auto kMeta = BuildHelper({
-	.id = AyuOther::Id(),
-	.parentId = AyuMain::Id(),
-	.title = &tr::ayu_CategoryOther,
+	.id = LuxuryOther::Id(),
+	.parentId = LuxuryMain::Id(),
+	.title = &tr::luxury_CategoryOther,
 	.icon = &st::menuIconFave,
 }, [](SectionBuilder &builder) {
-	auto ayu = AyuSectionBuilder(builder);
+	auto luxury = LuxurySectionBuilder(builder);
 
 	builder.addSkip();
 	BuildDonations(builder);
-	BuildCrashReporting(builder, ayu);
+	BuildCrashReporting(builder, luxury);
 	BuildOtherThings(builder);
 });
 
 } // namespace
 
-rpl::producer<QString> AyuOther::title() {
-	return tr::ayu_CategoryOther();
+rpl::producer<QString> LuxuryOther::title() {
+	return tr::luxury_CategoryOther();
 }
 
-AyuOther::AyuOther(
+LuxuryOther::LuxuryOther(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 : Section(parent, controller) {
 	setupContent();
 }
 
-void AyuOther::setupContent() {
+void LuxuryOther::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
 }
 
-Type AyuOtherId() {
-	return AyuOther::Id();
+Type LuxuryOtherId() {
+	return LuxuryOther::Id();
 }
 
 } // namespace Settings

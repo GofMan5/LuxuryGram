@@ -16,7 +16,7 @@
 
 #include <cstring>
 
-namespace AyuMapper {
+namespace LuxuryMapper {
 
 constexpr auto kMessageFlagUnread = 0x00000001;
 constexpr auto kMessageFlagOut = 0x00000002;
@@ -61,7 +61,7 @@ template<typename MTPObject>
 MTPObject deserializeObject(const std::vector<char> &serialized) {
 	if (serialized.empty()
 		|| (serialized.size() % sizeof(mtpPrime)) != 0) {
-		LOG(("AyuMapper: Invalid serialized object size"));
+		LOG(("LuxuryMapper: Invalid serialized object size"));
 		return {};
 	}
 	mtpBuffer aligned(serialized.size() / sizeof(mtpPrime));
@@ -72,7 +72,7 @@ MTPObject deserializeObject(const std::vector<char> &serialized) {
 
 	MTPObject data;
 	if (!data.read(from, end) || from != end) {
-		LOG(("AyuMapper: Failed to deserialize object"));
+		LOG(("LuxuryMapper: Failed to deserialize object"));
 		return {};
 	}
 	return data;

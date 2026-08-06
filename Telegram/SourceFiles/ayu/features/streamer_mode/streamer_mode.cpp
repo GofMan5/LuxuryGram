@@ -15,11 +15,11 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QWidget>
 
-namespace AyuFeatures::StreamerMode {
+namespace LuxuryFeatures::StreamerMode {
 
 namespace {
 
-constexpr auto kHiddenProperty = "AyuStreamerModeHidden";
+constexpr auto kHiddenProperty = "LuxuryStreamerModeHidden";
 
 [[nodiscard]] bool IsWindowCaptureExcluded(not_null<QWidget*> widget) {
 	return widget->property(kHiddenProperty).toBool();
@@ -60,4 +60,4 @@ void showWidgetWindow(QWidget *widget) {
 	SetWindowCaptureExcluded(widget, false);
 }
 
-} // namespace AyuFeatures::StreamerMode
+} // namespace LuxuryFeatures::StreamerMode

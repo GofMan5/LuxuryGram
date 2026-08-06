@@ -45,7 +45,7 @@ struct Font
 	QString id;
 };
 
-namespace AyuUi {
+namespace LuxuryUi {
 
 class Rows : public Ui::RpWidget
 {
@@ -657,7 +657,7 @@ void Content::setupContent(
 	const std::vector<Font> &fonts) {
 	using namespace rpl::mappers;
 
-	const auto current = AyuUiSettings::getMonoFont();
+	const auto current = LuxuryUiSettings::getMonoFont();
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	const auto add = [&](const std::vector<Font> &list)
 	{
@@ -846,11 +846,11 @@ Ui::ScrollToRequest Content::jump(int rows) {
 
 } // namespace
 
-AyuUi::FontSelectorBox::FontSelectorBox(QWidget *, Window::SessionController *controller, Fn<void(QString font)> hook)
+LuxuryUi::FontSelectorBox::FontSelectorBox(QWidget *, Window::SessionController *controller, Fn<void(QString font)> hook)
 	: _controller(controller), _hook(hook) {
 }
 
-void AyuUi::FontSelectorBox::prepare() {
+void LuxuryUi::FontSelectorBox::prepare() {
 	addButton(tr::lng_box_ok(),
 			  [=]
 			  {
@@ -868,7 +868,7 @@ void AyuUi::FontSelectorBox::prepare() {
 				  closeBox();
 			  });
 
-	addLeftButton(tr::ayu_BoxActionReset(),
+	addLeftButton(tr::luxury_BoxActionReset(),
 				  [=]
 				  {
 					  _hook(qs(""));
@@ -887,7 +887,7 @@ void AyuUi::FontSelectorBox::prepare() {
 					  closeBox();
 				  });
 
-	setTitle(tr::ayu_CustomizeFontTitle());
+	setTitle(tr::luxury_CustomizeFontTitle());
 
 	const auto topContainer = Ui::CreateChild<Ui::VerticalLayout>(this);
 	setupTop(topContainer);
@@ -900,9 +900,9 @@ void AyuUi::FontSelectorBox::prepare() {
 
 	using namespace rpl::mappers;
 
-	const auto fonts = AyuUi::PrepareFonts();
+	const auto fonts = LuxuryUi::PrepareFonts();
 	const auto inner = setInnerWidget(
-		object_ptr<AyuUi::Content>(this, fonts),
+		object_ptr<LuxuryUi::Content>(this, fonts),
 		st::boxScroll,
 		topContainer->height());
 	inner->resizeToWidth(st::boxWidth);
@@ -958,13 +958,13 @@ void AyuUi::FontSelectorBox::prepare() {
 	};
 }
 
-void AyuUi::FontSelectorBox::setupTop(not_null<Ui::VerticalLayout*> container) {
+void LuxuryUi::FontSelectorBox::setupTop(not_null<Ui::VerticalLayout*> container) {
 	if (!_controller) {
 		return;
 	}
 }
 
-void AyuUi::FontSelectorBox::keyPressEvent(QKeyEvent *e) {
+void LuxuryUi::FontSelectorBox::keyPressEvent(QKeyEvent *e) {
 	const auto key = e->key();
 	if (key == Qt::Key_Escape) {
 		closeBox();
@@ -988,16 +988,16 @@ void AyuUi::FontSelectorBox::keyPressEvent(QKeyEvent *e) {
 	}
 }
 
-int AyuUi::FontSelectorBox::rowsInPage() const {
-	return std::max(height() / AyuUi::Rows::DefaultRowHeight(), 1);
+int LuxuryUi::FontSelectorBox::rowsInPage() const {
+	return std::max(height() / LuxuryUi::Rows::DefaultRowHeight(), 1);
 }
 
-void AyuUi::FontSelectorBox::setInnerFocus() {
+void LuxuryUi::FontSelectorBox::setInnerFocus() {
 	_setInnerFocus();
 }
 
 base::binary_guard
-AyuUi::FontSelectorBox::Show(Window::SessionController *controller, const Fn<void(QString font)> hook) {
+LuxuryUi::FontSelectorBox::Show(Window::SessionController *controller, const Fn<void(QString font)> hook) {
 	auto result = base::binary_guard();
 
 	Ui::show(Box<FontSelectorBox>(controller, hook));

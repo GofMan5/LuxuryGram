@@ -45,7 +45,7 @@ void ThemeSelectorBox::prepare() {
 void ThemeSelectorBox::setupContent() {
 	using namespace Settings;
 
-	setTitle(tr::ayu_MessageShotThemeSelectTitle());
+	setTitle(tr::luxury_MessageShotThemeSelectTitle());
 
 	auto wrap2 = object_ptr<Ui::VerticalLayout>(this);
 	const auto container = wrap2.data();
@@ -123,7 +123,7 @@ void ThemeSelectorBox::setupContent() {
 
 	_controller->session().data().cloudThemes().refresh();
 
-	AyuFeatures::MessageShot::themeChosen(
+	LuxuryFeatures::MessageShot::themeChosen(
 	) | rpl::on_next(
 		[=](Data::CloudTheme theme)
 		{
@@ -168,19 +168,19 @@ void ThemeSelectorBox::setupContent() {
 		},
 		lifetime());
 
-	AyuFeatures::MessageShot::paletteChosen(
+	LuxuryFeatures::MessageShot::paletteChosen(
 	) | rpl::on_next([=](const auto &palette)
 							 {
-								 const auto type = AyuFeatures::MessageShot::getSelectedFromDefault();
+								 const auto type = LuxuryFeatures::MessageShot::getSelectedFromDefault();
 								 const auto name = (type != Window::Theme::EmbeddedType(-1))
-									 ? AyuFeatures::MessageShot::embeddedThemeDisplayName(type)
-									 : tr::ayu_MessageShotThemeDefault(tr::now);
+									 ? LuxuryFeatures::MessageShot::embeddedThemeDisplayName(type)
+									 : tr::luxury_MessageShotThemeDefault(tr::now);
 								 _themeNames.fire(QString(name));
 								 _selectedPalette = palette;
 							 },
 							 lifetime());
 
-	addButton(tr::ayu_MessageShotThemeApply(),
+	addButton(tr::luxury_MessageShotThemeApply(),
 			  [=]
 			  {
 				  _palettes.fire(std::move(_selectedPalette));

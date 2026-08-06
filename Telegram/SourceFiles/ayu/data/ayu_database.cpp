@@ -152,7 +152,7 @@ std::recursive_mutex DatabaseMutex;
 
 } // namespace
 
-namespace AyuMigrations {
+namespace LuxuryMigrations {
 
 void migrateToV1(decltype(storage) &storage) {
 	// drop RegexFilter table as we've added primary_key()
@@ -170,7 +170,7 @@ void runMigrations(decltype(storage) &storage) {
 	constexpr int kLatestVersion = 1;
 
 	const std::map<int, Fn<void(decltype(storage) &)>> migrations = {
-		{1, AyuMigrations::migrateToV1},
+		{1, LuxuryMigrations::migrateToV1},
 	};
 
 	int currentVersion = 0;
@@ -206,7 +206,7 @@ void runMigrations(decltype(storage) &storage) {
 			} catch (...) {
 				storage.rollback();
 				LOG(("Failed to apply migration for version: %1.").arg(v));
-				AyuDatabase::moveCurrentDatabase();
+				LuxuryDatabase::moveCurrentDatabase();
 
 				return;
 			}
@@ -214,7 +214,7 @@ void runMigrations(decltype(storage) &storage) {
 	}
 }
 
-namespace AyuDatabase {
+namespace LuxuryDatabase {
 
 void moveCurrentDatabase() {
 	const auto lock = std::lock_guard(DatabaseMutex);

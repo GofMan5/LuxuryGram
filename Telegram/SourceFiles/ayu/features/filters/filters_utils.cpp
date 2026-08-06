@@ -85,7 +85,7 @@ TextWithEntities ChangeSummaryText(const ApplyChanges &changes) {
 	if (!changes.newFilters.empty()) {
 		AppendChangeSummary(
 			result,
-			tr::ayu_FiltersSheetNewFilters(
+			tr::luxury_FiltersSheetNewFilters(
 				tr::now,
 				lt_count,
 				int(changes.newFilters.size()),
@@ -94,7 +94,7 @@ TextWithEntities ChangeSummaryText(const ApplyChanges &changes) {
 	if (!changes.removeFiltersById.empty()) {
 		AppendChangeSummary(
 			result,
-			tr::ayu_FiltersSheetRemovedFilters(
+			tr::luxury_FiltersSheetRemovedFilters(
 				tr::now,
 				lt_count,
 				int(changes.removeFiltersById.size()),
@@ -103,7 +103,7 @@ TextWithEntities ChangeSummaryText(const ApplyChanges &changes) {
 	if (!changes.filtersOverrides.empty()) {
 		AppendChangeSummary(
 			result,
-			tr::ayu_FiltersSheetUpdatedFilters(
+			tr::luxury_FiltersSheetUpdatedFilters(
 				tr::now,
 				lt_count,
 				int(changes.filtersOverrides.size()),
@@ -112,7 +112,7 @@ TextWithEntities ChangeSummaryText(const ApplyChanges &changes) {
 	if (!changes.newExclusions.empty()) {
 		AppendChangeSummary(
 			result,
-			tr::ayu_FiltersSheetNewExclusions(
+			tr::luxury_FiltersSheetNewExclusions(
 				tr::now,
 				lt_count,
 				int(changes.newExclusions.size()),
@@ -121,7 +121,7 @@ TextWithEntities ChangeSummaryText(const ApplyChanges &changes) {
 	if (!changes.removeExclusions.empty()) {
 		AppendChangeSummary(
 			result,
-			tr::ayu_FiltersSheetRemovedExclusions(
+			tr::luxury_FiltersSheetRemovedExclusions(
 				tr::now,
 				lt_count,
 				int(changes.removeExclusions.size()),
@@ -130,7 +130,7 @@ TextWithEntities ChangeSummaryText(const ApplyChanges &changes) {
 	if (!changes.peersToBeResolved.empty()) {
 		AppendChangeSummary(
 			result,
-			tr::ayu_FiltersSheetDialogsToResolve(
+			tr::luxury_FiltersSheetDialogsToResolve(
 				tr::now,
 				lt_count,
 				int(changes.peersToBeResolved.size()),
@@ -323,7 +323,7 @@ void ResolveFilterBackupPeers(const std::vector<QString> &peerHints) {
 
 void FilterUtils::importFromLink(const QString &link) {
 	if (link.isEmpty()) {
-		Ui::Toast::Show(tr::ayu_FiltersToastFailFetch(tr::now));
+		Ui::Toast::Show(tr::luxury_FiltersToastFailFetch(tr::now));
 		return;
 	}
 
@@ -408,7 +408,7 @@ void FilterUtils::publishFilters() {
 			} else {
 				LOG(("Failed to publish filters to dpaste, error: %1").arg(reply->errorString()));
 
-				Ui::Toast::Show(tr::ayu_FiltersToastFailPublish(tr::now));
+				Ui::Toast::Show(tr::luxury_FiltersToastFailPublish(tr::now));
 			}
 			reply->deleteLater();
 		});
@@ -416,7 +416,7 @@ void FilterUtils::publishFilters() {
 
 void FilterUtils::importFromJson(const QByteArray &json) {
 	if (json.size() > kMaxFilterBackupBytes) {
-		Ui::Toast::Show(tr::ayu_FiltersToastFailImport(tr::now));
+		Ui::Toast::Show(tr::luxury_FiltersToastFailImport(tr::now));
 		LOG(("FilterUtils: backup exceeds size limit."));
 		return;
 	}
@@ -424,20 +424,20 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 	const auto document = QJsonDocument::fromJson(json, &error);
 
 	if (error.error != QJsonParseError::NoError) {
-		Ui::Toast::Show(tr::ayu_FiltersToastFailImport(tr::now));
+		Ui::Toast::Show(tr::luxury_FiltersToastFailImport(tr::now));
 		LOG(("FilterUtils: Failed to parse JSON, error: %1"
 		).arg(error.errorString()));
 		return;
 	}
 	if (!document.isObject()) {
-		Ui::Toast::Show(tr::ayu_FiltersToastFailImport(tr::now));
+		Ui::Toast::Show(tr::luxury_FiltersToastFailImport(tr::now));
 		LOG(("FilterUtils: not an object received in JSON"));
 		return;
 	}
 	const auto changes = prepareChanges(document.object());
 
 	if (!HasChanges(changes)) {
-		Ui::Toast::Show(tr::ayu_FiltersToastFailNoChanges(tr::now));
+		Ui::Toast::Show(tr::luxury_FiltersToastFailNoChanges(tr::now));
 		LOG(("FilterUtils: received empty changes"));
 		return;
 	}
@@ -448,14 +448,14 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 			close();
 			try {
 				applyChanges(changes);
-				Ui::Toast::Show(tr::ayu_FiltersToastSuccess(tr::now));
+				Ui::Toast::Show(tr::luxury_FiltersToastSuccess(tr::now));
 			} catch (...) {
 				LOG(("FilterUtils: Failed to apply import changes"));
-				Ui::Toast::Show(tr::ayu_FiltersToastFailImport(tr::now));
+				Ui::Toast::Show(tr::luxury_FiltersToastFailImport(tr::now));
 			}
 		},
-		.confirmText = tr::ayu_FiltersMenuImport(),
-		.title = tr::ayu_FiltersSheetTitle(),
+		.confirmText = tr::luxury_FiltersMenuImport(),
+		.title = tr::luxury_FiltersSheetTitle(),
 	});
 	Ui::show(std::move(box));
 }
@@ -495,7 +495,7 @@ QString FilterUtils::exportFilters() {
 	QJsonArray filtersArray;
 	QJsonObject jsonObject;
 	jsonObject["version"] = BACKUP_VERSION;
-	const auto filters = AyuDatabase::getAllRegexFilters();
+	const auto filters = LuxuryDatabase::getAllRegexFilters();
 
 	for (const auto &item : filters) {
 		QJsonObject filterJson;
@@ -522,7 +522,7 @@ QString FilterUtils::exportFilters() {
 	}
 	jsonObject["filters"] = filtersArray;
 
-	const auto excl = AyuDatabase::getAllFiltersExclusions();
+	const auto excl = LuxuryDatabase::getAllFiltersExclusions();
 
 
 	std::vector<BackupExclusion> exclusions;
@@ -750,13 +750,13 @@ void FilterUtils::handleResponse(const QByteArray &response) {
 		importFromJson(response);
 	} catch (...) {
 		LOG(("FilterUtils: Failed to apply response"));
-		Ui::Toast::Show(tr::ayu_FiltersToastFailImport(tr::now));
+		Ui::Toast::Show(tr::luxury_FiltersToastFailImport(tr::now));
 	}
 }
 
 void FilterUtils::gotFailure(const QNetworkReply::NetworkError &error) {
 	LOG(("FilterUtils: Error %1").arg(error));
-	Ui::Toast::Show(tr::ayu_FiltersToastFailFetch(tr::now));
+	Ui::Toast::Show(tr::luxury_FiltersToastFailFetch(tr::now));
 }
 
 ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
@@ -767,8 +767,8 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	}
 
 
-	const auto existingFilters = AyuDatabase::getAllRegexFilters();
-	const auto existingExclusions = AyuDatabase::getAllFiltersExclusions();
+	const auto existingFilters = LuxuryDatabase::getAllRegexFilters();
+	const auto existingExclusions = LuxuryDatabase::getAllFiltersExclusions();
 	std::map<std::vector<char>, const RegexFilter*> existingFiltersById;
 	for (const auto &filter : existingFilters) {
 		existingFiltersById.emplace(filter.id, &filter);
@@ -922,32 +922,32 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 void FilterUtils::applyChanges(const ApplyChanges &changes) {
 	if (!changes.newFilters.empty()) {
 		for (const auto &filter : changes.newFilters) {
-			AyuDatabase::addRegexFilter(filter);
+			LuxuryDatabase::addRegexFilter(filter);
 		}
 	}
 
 	if (!changes.removeFiltersById.empty()) {
 		for (const auto &id : changes.removeFiltersById) {
-			AyuDatabase::deleteExclusionsByFilterId(id);
-			AyuDatabase::deleteFilter(id);
+			LuxuryDatabase::deleteExclusionsByFilterId(id);
+			LuxuryDatabase::deleteFilter(id);
 		}
 	}
 
 	if (!changes.filtersOverrides.empty()) {
 		for (const auto &filter : changes.filtersOverrides) {
-			AyuDatabase::updateRegexFilter(filter);
+			LuxuryDatabase::updateRegexFilter(filter);
 		}
 	}
 
 	if (!changes.newExclusions.empty()) {
 		for (const auto &exclusion : changes.newExclusions) {
-			AyuDatabase::addRegexExclusion(exclusion);
+			LuxuryDatabase::addRegexExclusion(exclusion);
 		}
 	}
 
 	if (!changes.removeExclusions.empty()) {
 		for (const auto &exclusion : changes.removeExclusions) {
-			AyuDatabase::deleteExclusion(exclusion.dialogId, exclusion.filterId);
+			LuxuryDatabase::deleteExclusion(exclusion.dialogId, exclusion.filterId);
 		}
 	}
 

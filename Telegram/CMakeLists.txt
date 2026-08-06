@@ -101,7 +101,7 @@ PRIVATE
     ayugram::lib_icu
 )
 
-set(ayugram_files
+set(luxurygram_files
         ayu/ayu_worker.cpp
         ayu/ayu_worker.h
         ayu/ayu_url_handlers.cpp
@@ -257,7 +257,7 @@ target_precompile_headers(Telegram PRIVATE $<$<COMPILE_LANGUAGE:CXX,OBJCXX>:${sr
 nice_target_sources(Telegram ${src_loc}
 PRIVATE
     ${style_files}
-    ${ayugram_files}
+    ${luxurygram_files}
 
     api/api_attached_stickers.cpp
     api/api_attached_stickers.h
@@ -2326,7 +2326,7 @@ elseif (APPLE)
     target_link_frameworks_weak(Telegram PRIVATE UserNotifications)
 
     if (CMAKE_GENERATOR STREQUAL Xcode)
-        set(ayugram_icons
+        set(luxurygram_icons
             Default
             Alt
             Discord
@@ -2342,7 +2342,7 @@ elseif (APPLE)
         )
 
 #        set(ICON_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/IconOutput")
-        foreach (icon ${ayugram_icons})
+        foreach (icon ${luxurygram_icons})
 #            add_custom_command(TARGET Telegram
 #                    PRE_LINK
 #                    COMMAND mkdir -p "${ICON_OUTPUT_DIR}"

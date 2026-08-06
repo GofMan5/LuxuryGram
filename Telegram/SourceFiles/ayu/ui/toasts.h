@@ -2,7 +2,7 @@
 
 #include "ui/toast/toast.h"
 
-namespace Ayu::Ui {
+namespace Luxury::Ui {
 
 void ShowToastWithAction(
 	::Ui::Toast::Config &&config,

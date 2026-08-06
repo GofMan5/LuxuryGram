@@ -17,7 +17,7 @@
 #include <cmath>
 #include <QImage>
 
-namespace Ayu::Ui {
+namespace Luxury::Ui {
 
 Swatch::Swatch(QRgb color, int population)
 	: _red(qRed(color))
@@ -627,4 +627,4 @@ QImage Palette::Builder::scaleBitmapDown(const QImage &image) {
 	return image;
 }
 
-} // namespace Ayu::Ui
+} // namespace Luxury::Ui

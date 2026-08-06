@@ -375,7 +375,7 @@ void PaintFilterChatsTypeIcon(
 	bg.setStops({ { 0., color1->c }, { 1., color2->c } });
 	p.setBrush(bg);
 	p.setPen(Qt::NoPen);
-	AyuUserpic::PaintShape(p, rect);
+	LuxuryUserpic::PaintShape(p, rect);
 	icon.paintInCenter(p, rect);
 }
 

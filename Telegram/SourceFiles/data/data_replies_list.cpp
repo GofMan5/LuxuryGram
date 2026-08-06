@@ -1009,7 +1009,7 @@ void RepliesList::sendReadTillRequest() {
 	const auto api = &_history->session().api();
 	api->request(base::take(_readRequestId)).cancel();
 
-	const auto &ghost = AyuSettings::ghost(&_history->session());
+	const auto &ghost = LuxurySettings::ghost(&_history->session());
 	if (!ghost.sendReadMessages()) {
 		return;
 	}

@@ -71,43 +71,43 @@ GhostModeAccountSettings::GhostModeAccountSettings() {
 void GhostModeAccountSettings::setSendReadMessages(bool val) {
 	if (_sendReadMessages.current() == val) return;
 	_sendReadMessages = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendReadStories(bool val) {
 	if (_sendReadStories.current() == val) return;
 	_sendReadStories = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendOnlinePackets(bool val) {
 	if (_sendOnlinePackets.current() == val) return;
 	_sendOnlinePackets = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendUploadProgress(bool val) {
 	if (_sendUploadProgress.current() == val) return;
 	_sendUploadProgress = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendOfflinePacketAfterOnline(bool val) {
 	if (_sendOfflinePacketAfterOnline.current() == val) return;
 	_sendOfflinePacketAfterOnline = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setMarkReadAfterAction(bool val) {
 	if (_markReadAfterAction.current() == val) return;
 	_markReadAfterAction = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setUseScheduledMessages(bool val) {
 	if (_useScheduledMessages.current() == val) return;
 	_useScheduledMessages = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 bool GhostModeAccountSettings::shouldSendWithoutSound() const {
@@ -126,13 +126,13 @@ void GhostModeAccountSettings::setSendWithoutSound(
 		SendWithoutSoundOption val) {
 	if (_sendWithoutSound.current() == val) return;
 	_sendWithoutSound = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSuggestGhostModeBeforeViewingStory(bool val) {
 	if (_suggestGhostModeBeforeViewingStory.current() == val) return;
 	_suggestGhostModeBeforeViewingStory = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setGhostModeEnabled(bool val) {
@@ -141,12 +141,12 @@ void GhostModeAccountSettings::setGhostModeEnabled(bool val) {
 	if (!_sendOnlinePacketsLocked.current()) _sendOnlinePackets = !val;
 	if (!_sendUploadProgressLocked.current()) _sendUploadProgress = !val;
 	if (!_sendOfflinePacketAfterOnlineLocked.current()) _sendOfflinePacketAfterOnline = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 
 	if (val) {
 		if (const auto window = Core::App().activeWindow()) {
 			if (const auto session = window->maybeSession()) {
-				AyuWorker::markAsOnline(session);
+				LuxuryWorker::markAsOnline(session);
 			}
 		}
 	}
@@ -155,31 +155,31 @@ void GhostModeAccountSettings::setGhostModeEnabled(bool val) {
 void GhostModeAccountSettings::setSendReadMessagesLocked(bool val) {
 	if (_sendReadMessagesLocked.current() == val) return;
 	_sendReadMessagesLocked = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendReadStoriesLocked(bool val) {
 	if (_sendReadStoriesLocked.current() == val) return;
 	_sendReadStoriesLocked = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendOnlinePacketsLocked(bool val) {
 	if (_sendOnlinePacketsLocked.current() == val) return;
 	_sendOnlinePacketsLocked = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendUploadProgressLocked(bool val) {
 	if (_sendUploadProgressLocked.current() == val) return;
 	_sendUploadProgressLocked = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendOfflinePacketAfterOnlineLocked(bool val) {
 	if (_sendOfflinePacketAfterOnlineLocked.current() == val) return;
 	_sendOfflinePacketAfterOnlineLocked = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void to_json(nlohmann::json &j, const GhostModeAccountSettings &s) {
@@ -228,37 +228,37 @@ void from_json(const nlohmann::json &j, GhostModeAccountSettings &s) {
 void MessageShotSettings::setShowBackground(bool val) {
 	if (_showBackground.current() == val) return;
 	_showBackground = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void MessageShotSettings::setShowDate(bool val) {
 	if (_showDate.current() == val) return;
 	_showDate = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void MessageShotSettings::setShowReactions(bool val) {
 	if (_showReactions.current() == val) return;
 	_showReactions = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void MessageShotSettings::setShowHeaderDecorations(bool val) {
 	if (_showHeaderDecorations.current() == val) return;
 	_showHeaderDecorations = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void MessageShotSettings::setShowColorfulReplies(bool val) {
 	if (_showColorfulReplies.current() == val) return;
 	_showColorfulReplies = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void MessageShotSettings::setRevealSpoilers(bool val) {
 	if (_revealSpoilers.current() == val) return;
 	_revealSpoilers = val;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 bool MessageShotSettings::isCloudThemeEmpty() const {
@@ -285,7 +285,7 @@ void MessageShotSettings::setEmbeddedTheme(int type, uint32 accentColor) {
 	_embeddedThemeType = type;
 	_embeddedThemeAccentColor = accentColor;
 	clearCloudThemeData();
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void MessageShotSettings::setCloudTheme(uint64 accountId, uint64 id, uint64 accessHash, uint64 documentId, const QString &title) {
@@ -305,7 +305,7 @@ void MessageShotSettings::setCloudTheme(uint64 accountId, uint64 id, uint64 acce
 	_cloudThemeAccessHash = accessHash;
 	_cloudThemeDocumentId = documentId;
 	_cloudThemeTitle = title;
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void MessageShotSettings::clearTheme() {
@@ -317,7 +317,7 @@ void MessageShotSettings::clearTheme() {
 	_embeddedThemeType = -1;
 	_embeddedThemeAccentColor = uint32(0);
 	clearCloudThemeData();
-	AyuSettings::save();
+	LuxurySettings::save();
 }
 
 void to_json(nlohmann::json &j, const MessageShotSettings &s) {
@@ -354,17 +354,17 @@ void from_json(const nlohmann::json &j, MessageShotSettings &s) {
 	s._cloudThemeAccountId = j.value("cloudThemeAccountId", uint64(0));
 }
 
-AyuSettings::AyuSettings()
-: _appIcon(AyuAssets::DEFAULT_ICON)
+LuxurySettings::LuxurySettings()
+: _appIcon(LuxuryAssets::DEFAULT_ICON)
 , _editedMark(Core::IsAppLaunched() ? tr::lng_edited(tr::now) : QString("edited")) {
 }
 
-AyuSettings &AyuSettings::getInstance() {
-	static AyuSettings instance;
+LuxurySettings &LuxurySettings::getInstance() {
+	static LuxurySettings instance;
 	return instance;
 }
 
-void AyuSettings::load() {
+void LuxurySettings::load() {
 	std::ifstream file(getSettingsPath());
 	if (!file.good()) {
 		return;
@@ -392,20 +392,20 @@ void AyuSettings::load() {
 			});
 			p["useGlobalGhostMode"] = true;
 
-			LOG(("AyuGramSettings: migrated ghost mode settings to per-account format"));
+			LOG(("LuxuryGramSettings: migrated ghost mode settings to per-account format"));
 		}
 
 		try {
 			from_json(p, settings);
 		} catch (...) {
-			LOG(("AyuGramSettings: failed to parse settings file"));
+			LOG(("LuxuryGramSettings: failed to parse settings file"));
 		}
 	} catch (...) {
-		LOG(("AyuGramSettings: failed to read settings file (not json-like)"));
+		LOG(("LuxuryGramSettings: failed to read settings file (not json-like)"));
 	}
 
 	if (cGhost()) {
-		auto &ghost = AyuSettings::ghost();
+		auto &ghost = LuxurySettings::ghost();
 		ghost._sendReadMessages = false;
 		ghost._sendReadStories = false;
 		ghost._sendOnlinePackets = false;
@@ -416,7 +416,7 @@ void AyuSettings::load() {
 	settings.validate();
 }
 
-void AyuSettings::save() {
+void LuxurySettings::save() {
 	auto &settings = getInstance();
 	json p = settings;
 
@@ -426,16 +426,16 @@ void AyuSettings::save() {
 	file.close();
 }
 
-void AyuSettings::reset() {
-	getInstance() = AyuSettings();
+void LuxurySettings::reset() {
+	getInstance() = LuxurySettings();
 	save();
 }
 
-GhostModeAccountSettings &AyuSettings::ghost(not_null<Main::Session*> session) {
+GhostModeAccountSettings &LuxurySettings::ghost(not_null<Main::Session*> session) {
 	return ghost(session->userId().bare);
 }
 
-GhostModeAccountSettings &AyuSettings::ghost(uint64 userId) {
+GhostModeAccountSettings &LuxurySettings::ghost(uint64 userId) {
 	auto &settings = getInstance();
 	auto overriddenId = settings.getOverriddenGhostUserId(userId);
 
@@ -448,7 +448,7 @@ GhostModeAccountSettings &AyuSettings::ghost(uint64 userId) {
 	return *it->second;
 }
 
-GhostModeAccountSettings &AyuSettings::ghost() {
+GhostModeAccountSettings &LuxurySettings::ghost() {
 	if (const auto window = Core::App().activeWindow()) {
 		if (const auto session = window->maybeSession()) {
 			return ghost(session);
@@ -457,13 +457,13 @@ GhostModeAccountSettings &AyuSettings::ghost() {
 	return ghost(0);
 }
 
-void AyuSettings::setUseGlobalGhostMode(bool val) {
+void LuxurySettings::setUseGlobalGhostMode(bool val) {
 	if (_useGlobalGhostMode.current() == val) return;
 	_useGlobalGhostMode = val;
 	save();
 }
 
-void AyuSettings::addShadowBan(int64 id) {
+void LuxurySettings::addShadowBan(int64 id) {
 	if (_shadowBanIds.insert(id).second) {
 		FiltersCacheController::rebuildCache();
 		FiltersCacheController::fireUpdate();
@@ -471,7 +471,7 @@ void AyuSettings::addShadowBan(int64 id) {
 	}
 }
 
-void AyuSettings::removeShadowBan(int64 id) {
+void LuxurySettings::removeShadowBan(int64 id) {
 	if (_shadowBanIds.erase(id) > 0) {
 		FiltersCacheController::rebuildCache();
 		FiltersCacheController::fireUpdate();
@@ -479,8 +479,8 @@ void AyuSettings::removeShadowBan(int64 id) {
 	}
 }
 
-void AyuSettings::validate() {
-	AyuSettings defaults;
+void LuxurySettings::validate() {
+	LuxurySettings defaults;
 	auto modified = false;
 
 	auto validateRange = [&](auto &var, auto min, auto max, const auto &defaultVar) {
@@ -517,7 +517,7 @@ void AyuSettings::validate() {
 
 	validateRange(_messageBubbleRadius, 0, 16, defaults._messageBubbleRadius);
 	validateRange(_wideMultiplier, 0.5, 4.0, defaults._wideMultiplier);
-	validateRange(_avatarCorners, 0, AyuUiSettings::kMaxAvatarCorners, defaults._avatarCorners);
+	validateRange(_avatarCorners, 0, LuxuryUiSettings::kMaxAvatarCorners, defaults._avatarCorners);
 
 	const auto embeddedType = _messageShotSettings._embeddedThemeType.current();
 	auto embeddedTypeValid = (embeddedType == -1) || (embeddedType >= 0 && embeddedType <= 3); // from Window::Theme::EmbeddedType::DayBlue to Window::Theme::EmbeddedType::NightGreen
@@ -532,411 +532,411 @@ void AyuSettings::validate() {
 	}
 }
 
-void AyuSettings::setSaveDeletedMessages(bool val) {
+void LuxurySettings::setSaveDeletedMessages(bool val) {
 	if (_saveDeletedMessages.current() == val) return;
 	_saveDeletedMessages = val;
 	save();
 }
 
-void AyuSettings::setSaveMessagesHistory(bool val) {
+void LuxurySettings::setSaveMessagesHistory(bool val) {
 	if (_saveMessagesHistory.current() == val) return;
 	_saveMessagesHistory = val;
 	save();
 }
 
-void AyuSettings::setSaveForBots(bool val) {
+void LuxurySettings::setSaveForBots(bool val) {
 	if (_saveForBots.current() == val) return;
 	_saveForBots = val;
 	save();
 }
 
-void AyuSettings::setFiltersEnabled(bool val) {
+void LuxurySettings::setFiltersEnabled(bool val) {
 	if (_filtersEnabled.current() == val) return;
 	_filtersEnabled = val;
 	save();
 }
 
-void AyuSettings::setFiltersEnabledInChats(bool val) {
+void LuxurySettings::setFiltersEnabledInChats(bool val) {
 	if (_filtersEnabledInChats.current() == val) return;
 	_filtersEnabledInChats = val;
 	save();
 }
 
-void AyuSettings::setHideFromBlocked(bool val) {
+void LuxurySettings::setHideFromBlocked(bool val) {
 	if (_hideFromBlocked.current() == val) return;
 	_hideFromBlocked = val;
 	save();
 }
 
-void AyuSettings::setSemiTransparentDeletedMessages(bool val) {
+void LuxurySettings::setSemiTransparentDeletedMessages(bool val) {
 	if (_semiTransparentDeletedMessages.current() == val) return;
 	_semiTransparentDeletedMessages = val;
 	save();
 }
 
-void AyuSettings::setDisableAds(bool val) {
+void LuxurySettings::setDisableAds(bool val) {
 	if (_disableAds.current() == val) return;
 	_disableAds = val;
 	save();
 }
 
-void AyuSettings::setDisableStories(bool val) {
+void LuxurySettings::setDisableStories(bool val) {
 	if (_disableStories.current() == val) return;
 	_disableStories = val;
 	save();
 }
 
-void AyuSettings::setDisableCustomBackgrounds(bool val) {
+void LuxurySettings::setDisableCustomBackgrounds(bool val) {
 	if (_disableCustomBackgrounds.current() == val) return;
 	_disableCustomBackgrounds = val;
 	save();
 }
 
-void AyuSettings::setHidePremiumStatuses(bool val) {
+void LuxurySettings::setHidePremiumStatuses(bool val) {
 	if (_hidePremiumStatuses.current() == val) return;
 	_hidePremiumStatuses = val;
 	save();
 }
 
-void AyuSettings::setShowOnlyAddedEmojisAndStickers(bool val) {
+void LuxurySettings::setShowOnlyAddedEmojisAndStickers(bool val) {
 	if (_showOnlyAddedEmojisAndStickers.current() == val) return;
 	_showOnlyAddedEmojisAndStickers = val;
 	save();
 }
 
-void AyuSettings::setCollapseSimilarChannels(bool val) {
+void LuxurySettings::setCollapseSimilarChannels(bool val) {
 	if (_collapseSimilarChannels.current() == val) return;
 	_collapseSimilarChannels = val;
 	save();
 }
 
-void AyuSettings::setHideSimilarChannels(bool val) {
+void LuxurySettings::setHideSimilarChannels(bool val) {
 	if (_hideSimilarChannels.current() == val) return;
 	_hideSimilarChannels = val;
 	save();
 }
 
-void AyuSettings::setMessageBubbleRadius(int val) {
+void LuxurySettings::setMessageBubbleRadius(int val) {
 	if (_messageBubbleRadius.current() == val) return;
 	_messageBubbleRadius = val;
 	save();
 }
 
-void AyuSettings::setWideMultiplier(double val) {
+void LuxurySettings::setWideMultiplier(double val) {
 	if (_wideMultiplier.current() == val) return;
 	_wideMultiplier = val;
 	// doesn't work because it should be set before style::StartManager()
-	// AyuUiSettings::setWideMultiplier(val);
+	// LuxuryUiSettings::setWideMultiplier(val);
 	// repaintApp();
 	save();
 }
 
-void AyuSettings::setSpoofWebviewAsAndroid(bool val) {
+void LuxurySettings::setSpoofWebviewAsAndroid(bool val) {
 	if (_spoofWebviewAsAndroid.current() == val) return;
 	_spoofWebviewAsAndroid = val;
 	save();
 }
 
-void AyuSettings::setDisableOpenLinkWarning(bool val) {
+void LuxurySettings::setDisableOpenLinkWarning(bool val) {
 	if (_disableOpenLinkWarning.current() == val) return;
 	_disableOpenLinkWarning = val;
 	save();
 }
 
-void AyuSettings::setIncreaseWebviewHeight(bool val) {
+void LuxurySettings::setIncreaseWebviewHeight(bool val) {
 	if (_increaseWebviewHeight.current() == val) return;
 	_increaseWebviewHeight = val;
 	save();
 }
 
-void AyuSettings::setIncreaseWebviewWidth(bool val) {
+void LuxurySettings::setIncreaseWebviewWidth(bool val) {
 	if (_increaseWebviewWidth.current() == val) return;
 	_increaseWebviewWidth = val;
 	save();
 }
 
-void AyuSettings::setMaterialSwitches(bool val) {
+void LuxurySettings::setMaterialSwitches(bool val) {
 	if (_materialSwitches.current() == val) return;
 	_materialSwitches = val;
-	AyuUiSettings::setMaterialSwitches(val);
+	LuxuryUiSettings::setMaterialSwitches(val);
 	repaintApp();
 	save();
 }
 
-void AyuSettings::setRemoveMessageTail(bool val) {
+void LuxurySettings::setRemoveMessageTail(bool val) {
 	if (_removeMessageTail.current() == val) return;
 	_removeMessageTail = val;
 	save();
 }
 
-void AyuSettings::setDisableNotificationsDelay(bool val) {
+void LuxurySettings::setDisableNotificationsDelay(bool val) {
 	if (_disableNotificationsDelay.current() == val) return;
 	_disableNotificationsDelay = val;
 	save();
 }
 
-void AyuSettings::setLocalPremium(bool val) {
+void LuxurySettings::setLocalPremium(bool val) {
 	if (_localPremium.current() == val) return;
 	_localPremium = val;
 	save();
 }
 
-void AyuSettings::setShowChannelReactions(bool val) {
+void LuxurySettings::setShowChannelReactions(bool val) {
 	if (_showChannelReactions.current() == val) return;
 	_showChannelReactions = val;
 	save();
 }
 
-void AyuSettings::setShowGroupReactions(bool val) {
+void LuxurySettings::setShowGroupReactions(bool val) {
 	if (_showGroupReactions.current() == val) return;
 	_showGroupReactions = val;
 	save();
 }
 
-void AyuSettings::setShowPrivateChatReactions(bool val) {
+void LuxurySettings::setShowPrivateChatReactions(bool val) {
 	if (_showPrivateChatReactions.current() == val) return;
 	_showPrivateChatReactions = val;
 	save();
 }
 
-void AyuSettings::setAppIcon(const QString &val) {
+void LuxurySettings::setAppIcon(const QString &val) {
 	if (_appIcon.current() == val) return;
 	_appIcon = val;
 	save();
 }
 
-void AyuSettings::setSimpleQuotesAndReplies(bool val) {
+void LuxurySettings::setSimpleQuotesAndReplies(bool val) {
 	if (_simpleQuotesAndReplies.current() == val) return;
 	_simpleQuotesAndReplies = val;
 	save();
 }
 
-void AyuSettings::setHideFastShare(bool val) {
+void LuxurySettings::setHideFastShare(bool val) {
 	if (_hideFastShare.current() == val) return;
 	_hideFastShare = val;
 	save();
 }
 
-void AyuSettings::setReplaceBottomInfoWithIcons(bool val) {
+void LuxurySettings::setReplaceBottomInfoWithIcons(bool val) {
 	if (_replaceBottomInfoWithIcons.current() == val) return;
 	_replaceBottomInfoWithIcons = val;
 	save();
 }
 
-void AyuSettings::setDeletedMark(const QString &val) {
+void LuxurySettings::setDeletedMark(const QString &val) {
 	if (_deletedMark.current() == val) return;
 	_deletedMark = val;
 	save();
 }
 
-void AyuSettings::setEditedMark(const QString &val) {
+void LuxurySettings::setEditedMark(const QString &val) {
 	if (_editedMark.current() == val) return;
 	_editedMark = val;
 	save();
 }
 
-void AyuSettings::setUnlimitedRecentStickers(bool val) {
+void LuxurySettings::setUnlimitedRecentStickers(bool val) {
 	if (_unlimitedRecentStickers.current() == val) return;
 	_unlimitedRecentStickers = val;
 	save();
 }
 
-void AyuSettings::setShowReactionsPanelInContextMenu(ContextMenuVisibility val) {
+void LuxurySettings::setShowReactionsPanelInContextMenu(ContextMenuVisibility val) {
 	if (_showReactionsPanelInContextMenu.current() == val) return;
 	_showReactionsPanelInContextMenu = val;
 	save();
 }
 
-void AyuSettings::setShowViewsPanelInContextMenu(ContextMenuVisibility val) {
+void LuxurySettings::setShowViewsPanelInContextMenu(ContextMenuVisibility val) {
 	if (_showViewsPanelInContextMenu.current() == val) return;
 	_showViewsPanelInContextMenu = val;
 	save();
 }
 
-void AyuSettings::setShowHideMessageInContextMenu(ContextMenuVisibility val) {
+void LuxurySettings::setShowHideMessageInContextMenu(ContextMenuVisibility val) {
 	if (_showHideMessageInContextMenu.current() == val) return;
 	_showHideMessageInContextMenu = val;
 	save();
 }
 
-void AyuSettings::setShowUserMessagesInContextMenu(ContextMenuVisibility val) {
+void LuxurySettings::setShowUserMessagesInContextMenu(ContextMenuVisibility val) {
 	if (_showUserMessagesInContextMenu.current() == val) return;
 	_showUserMessagesInContextMenu = val;
 	save();
 }
 
-void AyuSettings::setShowMessageDetailsInContextMenu(ContextMenuVisibility val) {
+void LuxurySettings::setShowMessageDetailsInContextMenu(ContextMenuVisibility val) {
 	if (_showMessageDetailsInContextMenu.current() == val) return;
 	_showMessageDetailsInContextMenu = val;
 	save();
 }
 
-void AyuSettings::setShowRepeatMessageInContextMenu(ContextMenuVisibility val) {
+void LuxurySettings::setShowRepeatMessageInContextMenu(ContextMenuVisibility val) {
 	if (_showRepeatMessageInContextMenu.current() == val) return;
 	_showRepeatMessageInContextMenu = val;
 	save();
 }
 
-void AyuSettings::setShowAddFilterInContextMenu(ContextMenuVisibility val) {
+void LuxurySettings::setShowAddFilterInContextMenu(ContextMenuVisibility val) {
 	if (_showAddFilterInContextMenu.current() == val) return;
 	_showAddFilterInContextMenu = val;
 	save();
 }
 
-void AyuSettings::setShowAttachButtonInMessageField(bool val) {
+void LuxurySettings::setShowAttachButtonInMessageField(bool val) {
 	if (_showAttachButtonInMessageField.current() == val) return;
 	_showAttachButtonInMessageField = val;
 	save();
 }
 
-void AyuSettings::setShowCommandsButtonInMessageField(bool val) {
+void LuxurySettings::setShowCommandsButtonInMessageField(bool val) {
 	if (_showCommandsButtonInMessageField.current() == val) return;
 	_showCommandsButtonInMessageField = val;
 	save();
 }
 
-void AyuSettings::setShowEmojiButtonInMessageField(bool val) {
+void LuxurySettings::setShowEmojiButtonInMessageField(bool val) {
 	if (_showEmojiButtonInMessageField.current() == val) return;
 	_showEmojiButtonInMessageField = val;
 	save();
 }
 
-void AyuSettings::setShowMicrophoneButtonInMessageField(bool val) {
+void LuxurySettings::setShowMicrophoneButtonInMessageField(bool val) {
 	if (_showMicrophoneButtonInMessageField.current() == val) return;
 	_showMicrophoneButtonInMessageField = val;
 	save();
 }
 
-void AyuSettings::setShowAutoDeleteButtonInMessageField(bool val) {
+void LuxurySettings::setShowAutoDeleteButtonInMessageField(bool val) {
 	if (_showAutoDeleteButtonInMessageField.current() == val) return;
 	_showAutoDeleteButtonInMessageField = val;
 	save();
 }
 
-void AyuSettings::setShowGiftButtonInMessageField(bool val) {
+void LuxurySettings::setShowGiftButtonInMessageField(bool val) {
 	if (_showGiftButtonInMessageField.current() == val) return;
 	_showGiftButtonInMessageField = val;
 	save();
 }
 
-void AyuSettings::setShowAiEditorButtonInMessageField(bool val) {
+void LuxurySettings::setShowAiEditorButtonInMessageField(bool val) {
 	if (_showAiEditorButtonInMessageField.current() == val) return;
 	_showAiEditorButtonInMessageField = val;
 	save();
 }
 
-void AyuSettings::setShowAttachPopup(bool val) {
+void LuxurySettings::setShowAttachPopup(bool val) {
 	if (_showAttachPopup.current() == val) return;
 	_showAttachPopup = val;
 	save();
 }
 
-void AyuSettings::setShowEmojiPopup(bool val) {
+void LuxurySettings::setShowEmojiPopup(bool val) {
 	if (_showEmojiPopup.current() == val) return;
 	_showEmojiPopup = val;
 	save();
 }
 
-void AyuSettings::setShowMyProfileInDrawer(bool val) {
+void LuxurySettings::setShowMyProfileInDrawer(bool val) {
 	if (_showMyProfileInDrawer.current() == val) return;
 	_showMyProfileInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowBotsInDrawer(bool val) {
+void LuxurySettings::setShowBotsInDrawer(bool val) {
 	if (_showBotsInDrawer.current() == val) return;
 	_showBotsInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowNewGroupInDrawer(bool val) {
+void LuxurySettings::setShowNewGroupInDrawer(bool val) {
 	if (_showNewGroupInDrawer.current() == val) return;
 	_showNewGroupInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowNewChannelInDrawer(bool val) {
+void LuxurySettings::setShowNewChannelInDrawer(bool val) {
 	if (_showNewChannelInDrawer.current() == val) return;
 	_showNewChannelInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowContactsInDrawer(bool val) {
+void LuxurySettings::setShowContactsInDrawer(bool val) {
 	if (_showContactsInDrawer.current() == val) return;
 	_showContactsInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowCallsInDrawer(bool val) {
+void LuxurySettings::setShowCallsInDrawer(bool val) {
 	if (_showCallsInDrawer.current() == val) return;
 	_showCallsInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowSavedMessagesInDrawer(bool val) {
+void LuxurySettings::setShowSavedMessagesInDrawer(bool val) {
 	if (_showSavedMessagesInDrawer.current() == val) return;
 	_showSavedMessagesInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowLReadToggleInDrawer(bool val) {
+void LuxurySettings::setShowLReadToggleInDrawer(bool val) {
 	if (_showLReadToggleInDrawer.current() == val) return;
 	_showLReadToggleInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowSReadToggleInDrawer(bool val) {
+void LuxurySettings::setShowSReadToggleInDrawer(bool val) {
 	if (_showSReadToggleInDrawer.current() == val) return;
 	_showSReadToggleInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowNightModeToggleInDrawer(bool val) {
+void LuxurySettings::setShowNightModeToggleInDrawer(bool val) {
 	if (_showNightModeToggleInDrawer.current() == val) return;
 	_showNightModeToggleInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowGhostToggleInDrawer(bool val) {
+void LuxurySettings::setShowGhostToggleInDrawer(bool val) {
 	if (_showGhostToggleInDrawer.current() == val) return;
 	_showGhostToggleInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowStreamerToggleInDrawer(bool val) {
+void LuxurySettings::setShowStreamerToggleInDrawer(bool val) {
 	if (_showStreamerToggleInDrawer.current() == val) return;
 	_showStreamerToggleInDrawer = val;
 	save();
 }
 
-void AyuSettings::setShowGhostToggleInTray(bool val) {
+void LuxurySettings::setShowGhostToggleInTray(bool val) {
 	if (_showGhostToggleInTray.current() == val) return;
 	_showGhostToggleInTray = val;
 	save();
 }
 
-void AyuSettings::setShowStreamerToggleInTray(bool val) {
+void LuxurySettings::setShowStreamerToggleInTray(bool val) {
 	if (_showStreamerToggleInTray.current() == val) return;
 	_showStreamerToggleInTray = val;
 	save();
 }
 
-void AyuSettings::setMonoFont(const QString &val) {
+void LuxurySettings::setMonoFont(const QString &val) {
 	if (_monoFont.current() == val) return;
 	_monoFont = val;
 	// doesn't work because `static const auto family = ...`
-	// AyuUiSettings::setMonoFont(val);
+	// LuxuryUiSettings::setMonoFont(val);
 	// repaintApp();
 	save();
 }
 
-void AyuSettings::setHideNotificationCounters(bool val) {
+void LuxurySettings::setHideNotificationCounters(bool val) {
 	if (_hideNotificationCounters.current() == val) return;
 	_hideNotificationCounters = val;
 	save();
 }
 
-void AyuSettings::setHideNotificationBadge(bool val) {
+void LuxurySettings::setHideNotificationBadge(bool val) {
 	if (_hideNotificationBadge.current() == val) return;
 	_hideNotificationBadge = val;
 	Core::App().refreshApplicationIcon();
@@ -945,131 +945,131 @@ void AyuSettings::setHideNotificationBadge(bool val) {
 	save();
 }
 
-void AyuSettings::setHideAllChatsFolder(bool val) {
+void LuxurySettings::setHideAllChatsFolder(bool val) {
 	if (_hideAllChatsFolder.current() == val) return;
 	_hideAllChatsFolder = val;
 	save();
 }
 
-void AyuSettings::setChannelBottomButton(ChannelBottomButton val) {
+void LuxurySettings::setChannelBottomButton(ChannelBottomButton val) {
 	if (_channelBottomButton.current() == val) return;
 	_channelBottomButton = val;
 	save();
 }
 
-void AyuSettings::setQuickAdminShortcuts(bool val) {
+void LuxurySettings::setQuickAdminShortcuts(bool val) {
 	if (_quickAdminShortcuts.current() == val) return;
 	_quickAdminShortcuts = val;
 	save();
 }
 
-void AyuSettings::setDisableGreetingSticker(bool val) {
+void LuxurySettings::setDisableGreetingSticker(bool val) {
 	if (_disableGreetingSticker.current() == val) return;
 	_disableGreetingSticker = val;
 	save();
 }
 
-void AyuSettings::setShowPeerId(PeerIdDisplay val) {
+void LuxurySettings::setShowPeerId(PeerIdDisplay val) {
 	if (_showPeerId.current() == val) return;
 	_showPeerId = val;
 	save();
 }
 
-void AyuSettings::setShowMessageSeconds(bool val) {
+void LuxurySettings::setShowMessageSeconds(bool val) {
 	if (_showMessageSeconds.current() == val) return;
 	_showMessageSeconds = val;
 	save();
 }
 
-void AyuSettings::setShowMessageShot(bool val) {
+void LuxurySettings::setShowMessageShot(bool val) {
 	if (_showMessageShot.current() == val) return;
 	_showMessageShot = val;
 	save();
 }
 
-void AyuSettings::setFilterZalgo(bool val) {
+void LuxurySettings::setFilterZalgo(bool val) {
 	if (_filterZalgo.current() == val) return;
 	_filterZalgo = val;
 	save();
 }
 
-void AyuSettings::setStickerConfirmation(bool val) {
+void LuxurySettings::setStickerConfirmation(bool val) {
 	if (_stickerConfirmation.current() == val) return;
 	_stickerConfirmation = val;
 	save();
 }
 
-void AyuSettings::setGifConfirmation(bool val) {
+void LuxurySettings::setGifConfirmation(bool val) {
 	if (_gifConfirmation.current() == val) return;
 	_gifConfirmation = val;
 	save();
 }
 
-void AyuSettings::setVoiceConfirmation(bool val) {
+void LuxurySettings::setVoiceConfirmation(bool val) {
 	if (_voiceConfirmation.current() == val) return;
 	_voiceConfirmation = val;
 	save();
 }
 
-void AyuSettings::setRoundConfirmation(bool val) {
+void LuxurySettings::setRoundConfirmation(bool val) {
 	if (_roundConfirmation.current() == val) return;
 	_roundConfirmation = val;
 	save();
 }
 
-void AyuSettings::setTranslationProvider(TranslationProvider val) {
+void LuxurySettings::setTranslationProvider(TranslationProvider val) {
 	if ((val == TranslationProvider::Native)
 		&& !Platform::IsTranslateProviderAvailable()) {
 		val = TranslationProvider::Telegram;
 	}
 	if (_translationProvider.current() == val) return;
 	_translationProvider = val;
-	if (const auto manager = Ayu::Translator::TranslateManager::currentInstance()) {
+	if (const auto manager = Luxury::Translator::TranslateManager::currentInstance()) {
 		manager->resetCache();
 	}
 	save();
 }
 
-void AyuSettings::setAdaptiveCoverColor(bool val) {
+void LuxurySettings::setAdaptiveCoverColor(bool val) {
 	if (_adaptiveCoverColor.current() == val) return;
 	_adaptiveCoverColor = val;
 	save();
 }
 
-void AyuSettings::setImproveLinkPreviews(bool val) {
+void LuxurySettings::setImproveLinkPreviews(bool val) {
 	if (_improveLinkPreviews.current() == val) return;
 	_improveLinkPreviews = val;
 	save();
 }
 
-void AyuSettings::setCrashReporting(bool val) {
+void LuxurySettings::setCrashReporting(bool val) {
 	if (_crashReporting.current() == val) return;
 	_crashReporting = val;
 	save();
 }
 
-void AyuSettings::setAvatarCorners(int val) {
+void LuxurySettings::setAvatarCorners(int val) {
 	if (_avatarCorners.current() == val) return;
 	_avatarCorners = val;
-	AyuUiSettings::setAvatarCorners(val);
+	LuxuryUiSettings::setAvatarCorners(val);
 	save();
 }
 
-void AyuSettings::setSingleCornerRadius(bool val) {
+void LuxurySettings::setSingleCornerRadius(bool val) {
 	if (_singleCornerRadius.current() == val) return;
 	_singleCornerRadius = val;
 	repaintApp();
 	save();
 }
 
-void AyuSettings::setStreamerMode(bool val) {
+void LuxurySettings::setStreamerMode(bool val) {
 	if (_streamerMode.current() == val) return;
 	_streamerMode = val;
-	AyuFeatures::StreamerMode::apply(val);
+	LuxuryFeatures::StreamerMode::apply(val);
 	save();
 }
 
-void to_json(nlohmann::json &j, const AyuSettings &s) {
+void to_json(nlohmann::json &j, const LuxurySettings &s) {
 	auto ghostAccounts = nlohmann::json::object();
 	for (const auto &[key, value] : s._ghostAccounts) {
 		ghostAccounts[std::to_string(key)] = *value;
@@ -1169,8 +1169,8 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 	};
 }
 
-void from_json(const nlohmann::json &j, AyuSettings &s) {
-	AyuSettings defaults;
+void from_json(const nlohmann::json &j, LuxurySettings &s) {
+	LuxurySettings defaults;
 
 	if (j.contains("ghostModeSettings") && j["ghostModeSettings"].is_object()) {
 		s._ghostAccounts.clear();

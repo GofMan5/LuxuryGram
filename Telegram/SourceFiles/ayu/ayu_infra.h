@@ -6,7 +6,7 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-namespace AyuInfra {
+namespace LuxuryInfra {
 
 void init();
 

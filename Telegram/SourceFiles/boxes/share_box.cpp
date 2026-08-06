@@ -1865,10 +1865,10 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 			}
 		};
 
-		if (AyuForward::isFullAyuForwardNeeded(items.front())) {
+		if (LuxuryForward::isFullLuxuryForwardNeeded(items.front())) {
 			crl::async([=]{
 				for (const auto thread : result) {
-					AyuForward::forwardMessages(
+					LuxuryForward::forwardMessages(
 					&history->owner().session(),
 					Api::SendAction(thread, options),
 					false,
@@ -1878,11 +1878,11 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 
 			dismiss();
 			return;
-		} else if (AyuForward::isAyuForwardNeeded(items)) {
+		} else if (LuxuryForward::isLuxuryForwardNeeded(items)) {
 			crl::async([=]
 			{
 				for (const auto thread : result) {
-					AyuForward::intelligentForward(
+					LuxuryForward::intelligentForward(
 						&history->owner().session(),
 						Api::SendAction(thread, options),
 						Data::ResolvedForwardDraft(items, forwardOptions));

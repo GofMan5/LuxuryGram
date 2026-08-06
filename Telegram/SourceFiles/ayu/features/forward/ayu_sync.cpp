@@ -22,7 +22,7 @@
 #include "storage/file_download_mtproto.h"
 #include "storage/localimageloader.h"
 
-namespace AyuSync {
+namespace LuxurySync {
 
 QString pathForSave(not_null<Main::Session*> session) {
 	auto path = Core::App().settings().downloadPath();
@@ -325,4 +325,4 @@ void sendVoiceSync(not_null<Main::Session*> session,
 	waitForMsgSync(session, action);
 }
 
-} // namespace AyuSync
+} // namespace LuxurySync

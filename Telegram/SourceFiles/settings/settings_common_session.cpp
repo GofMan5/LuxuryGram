@@ -23,7 +23,7 @@ bool HasMenu(Type type) {
 		|| (type == MainId())
 		|| (type == ChatId())
 		|| (type == Experimental::Id())
-		|| (type == AyuFiltersId());
+		|| (type == LuxuryFiltersId());
 }
 
 } // namespace Settings

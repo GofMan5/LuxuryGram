@@ -625,7 +625,7 @@ QString NewMessagePostAuthor(const Api::SendAction &action) {
 bool ShouldSendSilent(
 		not_null<PeerData*> peer,
 		const Api::SendOptions &options) {
-	const auto &ghost = AyuSettings::ghost(&peer->session());
+	const auto &ghost = LuxurySettings::ghost(&peer->session());
 	if (ghost.shouldSendWithoutSound()) {
 		return !options.silent;
 	}
@@ -929,7 +929,7 @@ MessageFlags FlagsFromMTP(
 		| ((flags & MTP::f_views) ? Flag::HasViews : Flag())
 		// AyuGram: removed
 		// | ((flags & MTP::f_noforwards) ? Flag::NoForwards : Flag())
-		| (flags & MTP::f_noforwards ? Flag::AyuNoForwards : Flag())
+		| (flags & MTP::f_noforwards ? Flag::LuxuryNoForwards : Flag())
 		| ((flags & MTP::f_invert_media) ? Flag::InvertMedia : Flag())
 		| ((flags & MTP::f_video_processing_pending)
 			? Flag::EstimatedDate
@@ -1275,7 +1275,7 @@ void CheckReactionNotificationSchedule(
 		return;
 	}
 	const auto peer = item->history()->peer;
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
 	if ((peer->isChannel() && !peer->isMegagroup() && !settings.showChannelReactions())
 		|| (peer->isMegagroup() && !settings.showGroupReactions())
 		|| (peer->isUser() && !settings.showPrivateChatReactions())) {

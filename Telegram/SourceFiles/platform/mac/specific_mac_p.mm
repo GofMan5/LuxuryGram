@@ -192,7 +192,7 @@ ApplicationDelegate *_sharedDelegate = nil;
 namespace Platform {
 
 void SetApplicationIcon(const QIcon &icon) {
-	const auto &settings = AyuSettings::getInstance();
+	const auto &settings = LuxurySettings::getInstance();
     if (settings.appIcon().isEmpty()) {
         return;
     }

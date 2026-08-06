@@ -1127,11 +1127,11 @@ void AddMessageActions(
 		not_null<ListWidget*> list) {
 	if (request.item) {
 		const auto context = request.view ? request.view->context() : Context::History;
-		AyuUi::AddHistoryAction(menu, request.item);
-		AyuUi::AddHideMessageAction(menu, request.item);
-		AyuUi::AddUserMessagesAction(menu, request.item);
-		AyuUi::AddRepeatMessageAction(menu, request.item, context);
-		AyuUi::AddMessageDetailsAction(menu, request.item);
+		LuxuryUi::AddHistoryAction(menu, request.item);
+		LuxuryUi::AddHideMessageAction(menu, request.item);
+		LuxuryUi::AddUserMessagesAction(menu, request.item);
+		LuxuryUi::AddRepeatMessageAction(menu, request.item, context);
+		LuxuryUi::AddMessageDetailsAction(menu, request.item);
 	}
 
 	AddPostLinkAction(menu, request);
@@ -1154,8 +1154,8 @@ void AddMessageActions(
 	AddRescheduleAction(menu, request, list);
 
 	if (request.item) {
-		AyuUi::AddReadUntilAction(menu, request.item);
-		AyuUi::AddBurnAction(menu, request.item);
+		LuxuryUi::AddReadUntilAction(menu, request.item);
+		LuxuryUi::AddBurnAction(menu, request.item);
 	}
 }
 
@@ -1614,7 +1614,7 @@ void FillContextMenuItems(
 					.append(item->originalText()))
 				: item->originalText();
 			if (!translate.text.isEmpty()) {
-				AyuUi::AddTranslateMessageAction(
+				LuxuryUi::AddTranslateMessageAction(
 					result,
 					list->controller(),
 					item,
@@ -1626,7 +1626,7 @@ void FillContextMenuItems(
 
 	AddCopyLinkAction(result, link);
 	if (item && !hasSelection && !request.overSelection) {
-		AyuUi::AddTranslateMessageAction(
+		LuxuryUi::AddTranslateMessageAction(
 			result,
 			list->controller(),
 			item,
@@ -2040,7 +2040,7 @@ void AddPollActions(
 		for (const auto &answer : poll->answers) {
 			text.append('\n').append(radio).append(answer.text);
 		}
-		AyuUi::AddTranslateMessageAction(
+		LuxuryUi::AddTranslateMessageAction(
 			menu,
 			controller,
 			item,
@@ -2179,8 +2179,8 @@ void AddWhoReactedAction(
 		not_null<QWidget*> context,
 		not_null<HistoryItem*> item,
 		not_null<Window::SessionController*> controller) {
-	const auto &settings = AyuSettings::getInstance();
-	if (!AyuUi::needToShowItem(settings.showViewsPanelInContextMenu())) {
+	const auto &settings = LuxurySettings::getInstance();
+	if (!LuxuryUi::needToShowItem(settings.showViewsPanelInContextMenu())) {
 		return;
 	}
 
@@ -2655,7 +2655,7 @@ void AddSelectRestrictionAction(
 		not_null<HistoryItem*> item,
 		bool addIcon) {
 	const auto peer = item->history()->peer;
-	if ((!peer->isAyuNoForwards() && !AyuForward::isAyuForwardNeeded(item))
+	if ((!peer->isLuxuryNoForwards() && !LuxuryForward::isLuxuryForwardNeeded(item))
 		|| item->isSponsored()) {
 		return;
 	}
@@ -2670,7 +2670,7 @@ void AddSelectRestrictionAction(
 		((addIcon && !user)
 			? st::historySponsoredAboutMenuLabelPosition
 			: st::historyHasCustomEmojiPosition),
-		tr::ayu_UnforwardableContextMenuText(
+		tr::luxury_UnforwardableContextMenuText(
 			tr::now,
 			tr::rich),
 		(addIcon && !user) ? &st::menuIconCopyright : nullptr);

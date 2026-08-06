@@ -67,10 +67,10 @@ QImage VideoUserpicPlayer::frame(QSize size, not_null<PeerData*> peer) {
 		: peer->isForum()
 		? Ui::PeerUserpicShape::Forum
 		: Ui::PeerUserpicShape::Circle;
-	const auto ayuOverride = AyuUserpic::ShouldOverrideShape(peerShape);
+	const auto luxuryOverride = LuxuryUserpic::ShouldOverrideShape(peerShape);
 
-	if (ayuOverride) {
-		AyuUserpic::ApplyFrameRounding(
+	if (luxuryOverride) {
+		LuxuryUserpic::ApplyFrameRounding(
 			request,
 			_roundingCorners,
 			_ellipseMask,
@@ -94,7 +94,7 @@ QImage VideoUserpicPlayer::frame(QSize size, not_null<PeerData*> peer) {
 	}
 
 	auto result = _streamed->frame(request);
-	if (!ayuOverride && broadcast) {
+	if (!luxuryOverride && broadcast) {
 		constexpr auto kFormat = QImage::Format_ARGB32_Premultiplied;
 		if (result.format() != kFormat) {
 			result = std::move(result).convertToFormat(kFormat);

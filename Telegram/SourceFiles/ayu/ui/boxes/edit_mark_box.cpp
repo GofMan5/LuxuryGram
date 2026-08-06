@@ -42,7 +42,7 @@ void EditMarkBox::prepare() {
 	newHeight += st::boxPadding.bottom() + st::contactPadding.bottom();
 	setDimensions(st::boxWidth, newHeight);
 
-	addLeftButton(tr::ayu_BoxActionReset(),
+	addLeftButton(tr::luxury_BoxActionReset(),
 				  [=]
 				  {
 					  _text->setText(_defaultValue);

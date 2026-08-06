@@ -594,7 +594,7 @@ Window::Adaptive &Controller::adaptive() const {
 void Controller::openInMediaView(Media::View::OpenRequest &&request) {
 	if (request.story()) {
 		const auto story = not_null{ request.story() };
-		auto &ghost = AyuSettings::ghost(&story->session());
+		auto &ghost = LuxurySettings::ghost(&story->session());
 		const auto suggestGhostMode = ghost.suggestGhostModeBeforeViewingStory()
 			&& ghost.sendReadStories()
 			&& !ghost.sendReadStoriesLocked()
@@ -603,11 +603,11 @@ void Controller::openInMediaView(Media::View::OpenRequest &&request) {
 			const auto controller = request.controller();
 			const auto context = request.storiesContext();
 			show(Ui::MakeConfirmBox({
-				.text = tr::ayu_SuggestGhostModeStoryText(tr::now, tr::rich),
+				.text = tr::luxury_SuggestGhostModeStoryText(tr::now, tr::rich),
 				.confirmed = [=](Fn<void()> close) {
 					close();
-					AyuSettings::ghost(&story->session()).setGhostModeEnabled(true);
-					AyuState::setDisableGhostModeOnStoryClose(&story->session());
+					LuxurySettings::ghost(&story->session()).setGhostModeEnabled(true);
+					LuxuryState::setDisableGhostModeOnStoryClose(&story->session());
 					_openInMediaViewRequests.fire(
 						Media::View::OpenRequest(controller, story, context));
 				},
@@ -616,9 +616,9 @@ void Controller::openInMediaView(Media::View::OpenRequest &&request) {
 					_openInMediaViewRequests.fire(
 						Media::View::OpenRequest(controller, story, context));
 				},
-				.confirmText = tr::ayu_SuggestGhostModeStoryActionTextYes(),
-				.cancelText = tr::ayu_SuggestGhostModeStoryActionTextNo(),
-				.title = tr::ayu_SuggestGhostModeTitle(),
+				.confirmText = tr::luxury_SuggestGhostModeStoryActionTextYes(),
+				.cancelText = tr::luxury_SuggestGhostModeStoryActionTextNo(),
+				.title = tr::luxury_SuggestGhostModeTitle(),
 				.strictCancel = true,
 			}));
 			return;

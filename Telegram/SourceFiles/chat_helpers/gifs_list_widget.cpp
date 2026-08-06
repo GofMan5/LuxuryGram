@@ -539,10 +539,10 @@ void GifsListWidget::selectInlineResult(
 					});
 				});
 
-			const auto &settings = AyuSettings::getInstance();
+			const auto &settings = LuxurySettings::getInstance();
 			if (settings.gifConfirmation() && !needsCaption) {
 				_show->showBox(Ui::MakeConfirmBox({
-					.text = tr::ayu_ConfirmationGIF(),
+					.text = tr::luxury_ConfirmationGIF(),
 					.confirmed = sendGIFCallback,
 					.confirmText = tr::lng_send_button()
 				}));
