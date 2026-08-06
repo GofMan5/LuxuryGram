@@ -15,6 +15,7 @@ namespace {
 constexpr auto kPrimaryUrl = "https://update.ayugram.one/rc/current/desktop2";
 constexpr auto kExteraUrl = "https://api.exteragram.app/api/v1/profiles/compact";
 constexpr auto kFetchTimeout = 15 * 1000;
+constexpr auto kMaxResponseBytes = 4 * 1024 * 1024;
 
 }
 
@@ -31,6 +32,9 @@ std::unordered_set<ID> default_channels = {
 };
 
 void RCManager::start() {
+	if (_manager) {
+		return;
+	}
 	DEBUG_LOG(("RCManager: starting"));
 	_manager = std::make_unique<QNetworkAccessManager>();
 
@@ -42,6 +46,7 @@ void RCManager::start() {
 }
 
 void RCManager::makeRequest() {
+	_useExteraFallback = false;
 	_retryAttempted = false;
 	sendRequest();
 }
@@ -60,17 +65,33 @@ void RCManager::sendRequest() {
 	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 	request.setTransferTimeout(kFetchTimeout);
 	_reply = _manager->get(request);
-	connect(_reply,
+	const auto reply = _reply;
+	connect(reply,
 			&QNetworkReply::finished,
+			this,
 			[=]
 			{
-				gotResponse();
+				if (_reply == reply) {
+					gotResponse();
+				}
 			});
-	connect(_reply,
+	connect(reply,
 			&QNetworkReply::errorOccurred,
+			this,
 			[=](auto e)
 			{
-				gotFailure(e);
+				if (_reply == reply) {
+					gotFailure(e);
+				}
+			});
+	connect(reply,
+			&QNetworkReply::downloadProgress,
+			this,
+			[=](qint64 received, qint64)
+			{
+				if ((_reply == reply) && (received > kMaxResponseBytes)) {
+					reply->abort();
+				}
 			});
 }
 
@@ -87,6 +108,11 @@ bool RCManager::tryRetryWithExteraFallback() {
 
 void RCManager::gotResponse() {
 	if (!_reply) {
+		return;
+	}
+	if (_reply->bytesAvailable() > kMaxResponseBytes) {
+		clearSentRequest();
+		gotFailure(QNetworkReply::UnknownContentError);
 		return;
 	}
 

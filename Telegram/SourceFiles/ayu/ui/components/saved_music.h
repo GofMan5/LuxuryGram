@@ -51,6 +51,8 @@ private:
 	std::shared_ptr<Data::DocumentMedia> _mediaView;
 	std::optional<ResultCover> _currentCover;
 	rpl::event_stream<> _onReady;
+	rpl::lifetime _coverDownloadLifetime;
+	int _coverGeneration = 0;
 
 	QString _performerText;
 	QString _titleText;

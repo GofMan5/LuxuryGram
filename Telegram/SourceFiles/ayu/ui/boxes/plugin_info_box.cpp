@@ -42,10 +42,10 @@
 namespace Ui {
 namespace {
 
-QString ExtractField(const QByteArray &data, const QString &key) {
+QString ExtractField(const QString &data, const QString &key) {
 	const auto re = QRegularExpression(
 		u"__%1__\\s*=\\s*(?:\"((?:\\\\.|[^\"\\\\])*)\"|'((?:\\\\.|[^'\\\\])*)')"_q.arg(key));
-	const auto match = re.match(QString::fromUtf8(data));
+	const auto match = re.match(data);
 	if (!match.hasMatch()) {
 		return {};
 	}
@@ -369,16 +369,17 @@ void FillPluginInfoBox(
 
 PluginMetadata ParsePluginMetadata(const QByteArray &data) {
 	auto metadata = PluginMetadata();
+	const auto text = QString::fromUtf8(data);
 
-	metadata.id = ExtractField(data, u"id"_q);
-	metadata.name = ExtractField(data, u"name"_q).left(100);
-	metadata.description = ExtractField(data, u"description"_q).left(8000);
-	metadata.author = ExtractField(data, u"author"_q).left(200);
-	metadata.version = ExtractField(data, u"version"_q).left(32);
-	metadata.icon = ExtractField(data, u"icon"_q);
-	metadata.minVersion = ExtractField(data, u"min_version"_q);
+	metadata.id = ExtractField(text, u"id"_q);
+	metadata.name = ExtractField(text, u"name"_q).left(100);
+	metadata.description = ExtractField(text, u"description"_q).left(8000);
+	metadata.author = ExtractField(text, u"author"_q).left(200);
+	metadata.version = ExtractField(text, u"version"_q).left(32);
+	metadata.icon = ExtractField(text, u"icon"_q);
+	metadata.minVersion = ExtractField(text, u"min_version"_q);
 
-	const auto reqString = ExtractField(data, u"requirements"_q);
+	const auto reqString = ExtractField(text, u"requirements"_q);
 	if (!reqString.isEmpty()) {
 		for (const auto &part : reqString.split(',')) {
 			const auto trimmed = part.trimmed();

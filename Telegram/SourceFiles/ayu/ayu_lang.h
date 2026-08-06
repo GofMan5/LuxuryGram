@@ -28,8 +28,9 @@ public Q_SLOTS:
 
 private:
 	AyuLanguage();
-	~AyuLanguage() override = default;
+	~AyuLanguage() override;
 
+	void clearReply();
 	void loadCachedLanguage();
 	void saveCachedLanguage(const QByteArray &json, const QString &langId);
 	[[nodiscard]] QString getCacheDir() const;

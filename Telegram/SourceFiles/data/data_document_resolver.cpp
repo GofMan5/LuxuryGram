@@ -46,6 +46,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Data {
 namespace {
 
+constexpr auto kPluginMetadataReadLimit = 1024 * 1024;
+
 void ConfirmDontWarnBox(
 		not_null<Ui::GenericBox*> box,
 		rpl::producer<TextWithEntities> &&text,
@@ -257,10 +259,6 @@ void ResolveDocument(
 
 	const auto media = document->createMediaView();
 	const auto openPluginInfo = [&] {
-		// image size limit is fine too ig (64MB)
-		if (document->size >= Images::kReadBytesLimit) {
-			return false;
-		}
 		if (controller
 			&& document->filename().endsWith(
 				u".plugin"_q,
@@ -269,8 +267,7 @@ void ResolveDocument(
 			const auto path = document->location(true).name();
 			auto file = QFile(path);
 			if (file.open(QIODevice::ReadOnly)) {
-				const auto data = file.readAll();
-				file.close();
+				const auto data = file.read(kPluginMetadataReadLimit);
 				auto metadata = Ui::ParsePluginMetadata(data);
 				if (!metadata.id.isEmpty()
 					&& !metadata.name.isEmpty()) {

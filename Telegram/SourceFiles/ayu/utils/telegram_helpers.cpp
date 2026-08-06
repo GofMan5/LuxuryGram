@@ -20,6 +20,7 @@
 #include "ayu/utils/rc_manager.h"
 #include "core/core_settings.h"
 #include "core/application.h"
+#include "base/call_delayed.h"
 #include "base/unixtime.h"
 #include "core/mime_type.h"
 #include "data/data_channel.h"
@@ -56,7 +57,6 @@
 #include <atomic>
 #include <functional>
 #include <latch>
-#include <QTimer>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 
@@ -148,17 +148,11 @@ Main::Session *getSession(ID userId) {
 }
 
 void dispatchToMainThread(const std::function<void()> &callback, int delay) {
-	auto timer = new QTimer();
-	timer->moveToThread(qApp->thread());
-	timer->setSingleShot(true);
-	QObject::connect(timer,
-					 &QTimer::timeout,
-					 [=]()
-					 {
-						 callback();
-						 timer->deleteLater();
-					 });
-	QMetaObject::invokeMethod(timer, "start", Qt::QueuedConnection, Q_ARG(int, delay));
+	if (delay > 0) {
+		base::call_delayed(crl::time(delay), qApp, callback);
+	} else {
+		crl::on_main(callback);
+	}
 }
 
 ID getDialogIdFromPeer(not_null<PeerData*> peer) {

@@ -6,11 +6,11 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-#include <QtGui/QPixmap>
+#include <QtGui/QImage>
 
 namespace Ayu::Ui::Itunes {
 
-QPixmap FetchCover(const QString &performer,
+QImage FetchCover(const QString &performer,
                    const QString &title,
                    int sizeHintPx = 300,
                    int timeoutMs = 5000);

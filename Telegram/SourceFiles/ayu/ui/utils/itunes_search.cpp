@@ -15,21 +15,29 @@
 #include <QtCore/QTimer>
 #include <QtCore/QUrlQuery>
 #include <QtGui/QImage>
-#include <QtGui/QPixmap>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
+
+#include <mutex>
 
 namespace Ayu::Ui::Itunes {
 namespace {
 
+constexpr auto kMaxResponseBytes = 8 * 1024 * 1024;
+
 struct CacheEntry
 {
-	QPixmap pix;
+	QImage image;
 };
 
-QCache<QString, CacheEntry> &cache() {
-	static QCache<QString, CacheEntry> c(50);
-	return c;
+struct Cache {
+	QCache<QString, CacheEntry> entries{ 50 };
+	std::mutex mutex;
+};
+
+Cache &cache() {
+	static auto result = Cache();
+	return result;
 }
 
 QString translitSafe(const QString &s) {
@@ -629,6 +637,14 @@ std::unique_ptr<QNetworkReply, void(*)(QNetworkReply *)> execWithTimeout(
 	timer.setSingleShot(true);
 	QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
 	QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+	QObject::connect(
+		reply,
+		&QNetworkReply::downloadProgress,
+		[=](qint64 received, qint64) {
+			if (received > kMaxResponseBytes) {
+				reply->abort();
+			}
+		});
 	timer.start(timeoutMs);
 	loop.exec();
 	if (timer.isActive()) {
@@ -650,7 +666,8 @@ QByteArray getBytesWithTimeout(const QUrl &url, int timeoutMs, QByteArray *conte
 	if (contentTypeOut) {
 		*contentTypeOut = reply->header(QNetworkRequest::ContentTypeHeader).toByteArray();
 	}
-	return reply->readAll();
+	const auto result = reply->read(kMaxResponseBytes + 1);
+	return (result.size() <= kMaxResponseBytes) ? result : QByteArray();
 }
 
 struct ItunesTrack
@@ -713,14 +730,18 @@ QString upgradeArtworkSize(QString url, int sizeHint) {
 
 } // namespace
 
-QPixmap FetchCover(const QString &performer, const QString &title, int sizeHintPx, int timeoutMs) {
+QImage FetchCover(const QString &performer, const QString &title, int sizeHintPx, int timeoutMs) {
 	const auto perf = performer.trimmed();
 	const auto titl = title.trimmed();
 	if (perf.isEmpty() && titl.isEmpty()) return {};
 
 	const auto key = perf + QString::fromUtf8(" - ") + titl;
-	if (auto *entry = cache().object(key)) {
-		return entry->pix;
+	{
+		auto &state = cache();
+		const auto lock = std::lock_guard(state.mutex);
+		if (const auto entry = state.entries.object(key)) {
+			return entry->image;
+		}
 	}
 
 	const auto url = buildItunesUrl(perf, titl);
@@ -738,13 +759,15 @@ QPixmap FetchCover(const QString &performer, const QString &title, int sizeHintP
 	const auto imgBytes = getBytesWithTimeout(QUrl(artwork), timeoutMs, &contentType);
 	if (imgBytes.isEmpty()) return {};
 
-	QImage img;
-	if (!img.loadFromData(imgBytes)) return {};
-	QPixmap pix = QPixmap::fromImage(img);
+	QImage image;
+	if (!image.loadFromData(imgBytes)) return {};
 
-	auto *stored = new CacheEntry{pix};
-	cache().insert(key, stored);
-	return pix;
+	{
+		auto &state = cache();
+		const auto lock = std::lock_guard(state.mutex);
+		state.entries.insert(key, new CacheEntry{ image });
+	}
+	return image;
 }
 
 }
