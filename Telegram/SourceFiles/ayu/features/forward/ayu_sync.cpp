@@ -152,7 +152,9 @@ void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_
 		}
 	}
 
-	base::take(lifetime)->destroy();
+	crl::on_main([lifetime = std::move(lifetime)] {
+		lifetime->destroy();
+	});
 }
 
 void forwardMessagesSync(not_null<Main::Session*> session,
@@ -226,7 +228,9 @@ void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<Ph
 									  *lifetime);
 		});
 		latch->await(std::chrono::minutes(5));
-		base::take(lifetime)->destroy();
+		crl::on_main([lifetime = std::move(lifetime)] {
+			lifetime->destroy();
+		});
 	}
 }
 
@@ -263,7 +267,9 @@ void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &act
 	});
 
 	latch->await(std::chrono::minutes(5));
-	base::take(lifetime)->destroy();
+	crl::on_main([lifetime = std::move(lifetime)] {
+		lifetime->destroy();
+	});
 }
 
 void sendDocumentSync(not_null<Main::Session*> session,
