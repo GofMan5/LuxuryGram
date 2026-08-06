@@ -22,7 +22,6 @@ namespace AyuSync {
 QString pathForSave(not_null<Main::Session*> session);
 QString filePath(not_null<Main::Session*> session, const Data::Media *media);
 void loadDocuments(not_null<Main::Session*> session, const std::vector<not_null<HistoryItem*>> &items);
-bool isMediaDownloadable(Data::Media *media);
 void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&message);
 
 void sendDocumentSync(not_null<Main::Session*> session,

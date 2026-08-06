@@ -9,6 +9,8 @@
 #include "history/history.h"
 #include "main/main_session.h"
 
+#include <mutex>
+
 namespace AyuForward {
 bool isForwarding(const PeerId &id);
 void cancelForward(const PeerId &id, const Main::Session &session);
@@ -24,16 +26,31 @@ public:
 		Sending,
 		Finished
 	};
-	void updateBottomBar(const Main::Session &session, const PeerId *peer, const State &st);
+	struct Snapshot {
+		int totalChunks = 0;
+		int currentChunk = 0;
+		int totalMessages = 0;
+		int sentMessages = 0;
+		State state = State::Preparing;
+		bool stopRequested = false;
+	};
 
-	int totalChunks;
-	int currentChunk;
-	int totalMessages;
-	int sentMessages;
+	explicit ForwardState(int totalChunks);
 
-	State state = State::Preparing;
-	bool stopRequested = false;
+	[[nodiscard]] Snapshot snapshot() const;
+	[[nodiscard]] bool stopRequested() const;
+	void requestStop();
+	void setMessages(int total, int sent);
+	void setSentMessages(int sent);
+	void advanceChunk();
+	void updateBottomBar(
+		const Main::Session &session,
+		PeerId peer,
+		State state);
 
+private:
+	mutable std::mutex _mutex;
+	Snapshot _data;
 };
 
 bool isAyuForwardNeeded(const std::vector<not_null<HistoryItem*>> &items);
@@ -46,7 +63,7 @@ void intelligentForward(
 void forwardMessages(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,
-	bool forwardState,
+	bool reuseState,
 	const Data::ResolvedForwardDraft &draft);
 
 }

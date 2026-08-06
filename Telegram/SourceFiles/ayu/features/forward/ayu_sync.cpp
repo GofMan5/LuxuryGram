@@ -39,34 +39,41 @@ QString filePath(not_null<Main::Session*> session, const Data::Media *media) {
 	if (!media) {
 		return {};
 	}
+	const auto directory = QDir(pathForSave(session));
 
 	if (const auto document = media->document()) {
-		if (!document->filename().isEmpty()) {
-			return pathForSave(session) + media->document()->filename();
-		}
 		if (const auto name = document->filepath(true); !name.isEmpty()) {
 			return name;
 		}
+		if (!document->filename().isEmpty()) {
+			return directory.filePath(document->filename());
+		}
 		if (document->isVoiceMessage()) {
-			return pathForSave(session) + "audio_" + QString::number(document->getDC()) + "_" +
-				QString::number(document->id) + ".ogg";
+			return directory.filePath(
+				"audio_" + QString::number(document->getDC()) + "_"
+				+ QString::number(document->id) + ".ogg");
 		}
 		if (document->isVideoMessage()) {
-			return pathForSave(session) + "round_" + QString::number(document->getDC()) + "_" +
-				QString::number(document->id) + ".mp4";
+			return directory.filePath(
+				"round_" + QString::number(document->getDC()) + "_"
+				+ QString::number(document->id) + ".mp4");
 		}
 
 		// media without any file name
 		if (document->isGifv()) {
-			return pathForSave(session) + "gif_" + QString::number(document->getDC()) + "_" +
-				QString::number(document->id) + ".gif";
+			return directory.filePath(
+				"gif_" + QString::number(document->getDC()) + "_"
+				+ QString::number(document->id) + ".gif");
 		}
 		if (document->isVideoFile()) {
-			return pathForSave(session) + "video_" + QString::number(document->getDC()) + "_" +
-				QString::number(document->id) + ".mp4";
+			return directory.filePath(
+				"video_" + QString::number(document->getDC()) + "_"
+				+ QString::number(document->id) + ".mp4");
 		}
 	} else if (const auto photo = media->photo()) {
-		return pathForSave(session) + QString::number(photo->getDC()) + "_" + QString::number(photo->id) + ".jpg";
+		return directory.filePath(
+			QString::number(photo->getDC()) + "_"
+			+ QString::number(photo->id) + ".jpg");
 	}
 
 	return {};
@@ -167,14 +174,7 @@ void forwardMessagesSync(not_null<Main::Session*> session,
 }
 
 void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<PhotoData*>, FullMsgId> &photo) {
-	const auto folderPath = pathForSave(session);
-	const auto downloadPath = folderPath.isEmpty() ? Core::App().settings().downloadPath() : folderPath;
-
-	const auto path = downloadPath.isEmpty()
-						  ? File::DefaultDownloadPath(session)
-						  : downloadPath == FileDialog::Tmp()
-								? session->local().tempDirectory()
-								: downloadPath;
+	const auto path = pathForSave(session);
 	if (path.isEmpty()) {
 		return;
 	}

@@ -10,9 +10,6 @@
 #include "lang_auto.h"
 #include "ayu/features/forward/ayu_sync.h"
 #include "ayu/utils/telegram_helpers.h"
-#include "base/random.h"
-#include "base/unixtime.h"
-#include "core/application.h"
 #include "data/data_changes.h"
 #include "data/data_document.h"
 #include "data/data_peer.h"
@@ -28,64 +25,95 @@
 
 namespace AyuForward {
 
-std::unordered_map<PeerId, std::shared_ptr<ForwardState>> forwardStates;
+namespace {
+
+std::mutex ForwardStatesMutex;
+std::unordered_map<PeerId, std::shared_ptr<ForwardState>> ForwardStates;
+constexpr auto kMaxVoiceBytes = 64 * 1024 * 1024;
+
+std::shared_ptr<ForwardState> FindForwardState(PeerId id) {
+	const auto lock = std::lock_guard(ForwardStatesMutex);
+	const auto i = ForwardStates.find(id);
+	return (i != end(ForwardStates)) ? i->second : nullptr;
+}
+
+void SetForwardState(PeerId id, std::shared_ptr<ForwardState> state) {
+	const auto lock = std::lock_guard(ForwardStatesMutex);
+	ForwardStates[id] = std::move(state);
+}
+
+void RemoveForwardState(
+		PeerId id,
+		const std::shared_ptr<ForwardState> &state) {
+	const auto lock = std::lock_guard(ForwardStatesMutex);
+	const auto i = ForwardStates.find(id);
+	if (i != end(ForwardStates) && i->second == state) {
+		ForwardStates.erase(i);
+	}
+}
+
+void FinishForward(
+		PeerId id,
+		const std::shared_ptr<ForwardState> &state,
+		const Main::Session &session) {
+	state->updateBottomBar(session, id, ForwardState::State::Finished);
+	RemoveForwardState(id, state);
+}
+
+} // namespace
 
 bool isForwarding(const PeerId &id) {
-	const auto fwState = forwardStates.find(id);
-	if (id.value && fwState != forwardStates.end()) {
-		const auto state = *fwState->second;
-
-		return state.state != ForwardState::State::Finished
-			&& state.currentChunk < state.totalChunks
-			&& !state.stopRequested
-			&& ((state.totalChunks && state.totalMessages) || state.state == ForwardState::State::Downloading);
+	const auto state = id.value ? FindForwardState(id) : nullptr;
+	if (!state) {
+		return false;
 	}
-	return false;
+	const auto snapshot = state->snapshot();
+	return snapshot.state != ForwardState::State::Finished
+		&& snapshot.currentChunk < snapshot.totalChunks
+		&& !snapshot.stopRequested;
 }
 
 void cancelForward(const PeerId &id, const Main::Session &session) {
-	const auto fwState = forwardStates.find(id);
-	if (fwState != forwardStates.end()) {
-		fwState->second->stopRequested = true;
-		fwState->second->updateBottomBar(session, &id, ForwardState::State::Finished);
+	if (const auto state = FindForwardState(id)) {
+		state->requestStop();
+		FinishForward(id, state, session);
 	}
 }
 
 std::pair<QString, QString> stateName(const PeerId &id) {
-	const auto fwState = forwardStates.find(id);
-
-
-	if (fwState == forwardStates.end()) {
+	const auto state = FindForwardState(id);
+	if (!state) {
 		return std::make_pair(QString(), QString());
 	}
-
-	const auto state = fwState->second;
+	const auto snapshot = state->snapshot();
 
 	QString messagesString = tr::ayu_AyuForwardStatusSentCount(tr::now,
-															   lt_count1,
-															   QString::number(state->sentMessages),
-															   lt_count2,
-															   QString::number(state->totalMessages)
+														   lt_count1,
+														   QString::number(snapshot.sentMessages),
+														   lt_count2,
+														   QString::number(snapshot.totalMessages)
 
 	);
 
 	QString chunkString = tr::ayu_AyuForwardStatusChunkCount(tr::now,
-															 lt_count1,
-															 QString::number(state->currentChunk + 1),
-															 lt_count2,
-															 QString::number(state->totalChunks)
+													 lt_count1,
+													 QString::number(snapshot.currentChunk + 1),
+													 lt_count2,
+													 QString::number(snapshot.totalChunks)
 
 	);
 
-	const auto partString = state->totalChunks <= 1 ? messagesString : (messagesString + " • " + chunkString);
+	const auto partString = snapshot.totalChunks <= 1
+		? messagesString
+		: (messagesString + " • " + chunkString);
 
 	QString status;
 
-	if (state->state == ForwardState::State::Preparing) {
+	if (snapshot.state == ForwardState::State::Preparing) {
 		status = tr::ayu_AyuForwardStatusPreparing(tr::now);
-	} else if (state->state == ForwardState::State::Downloading) {
+	} else if (snapshot.state == ForwardState::State::Downloading) {
 		return std::make_pair(tr::ayu_AyuForwardStatusLoadingMedia(tr::now), "");
-	} else if (state->state == ForwardState::State::Sending) {
+	} else if (snapshot.state == ForwardState::State::Sending) {
 		status = tr::ayu_AyuForwardStatusForwarding(tr::now);
 	} else {
 		// ForwardState::State::Finished
@@ -96,12 +124,54 @@ std::pair<QString, QString> stateName(const PeerId &id) {
 	return std::make_pair(status, partString);
 }
 
-void ForwardState::updateBottomBar(const Main::Session &session, const PeerId *peer, const State &st) {
-	state = st;
-	auto peerCopy = *peer;
-	crl::on_main([&, peerCopy]
+ForwardState::ForwardState(int totalChunks) {
+	_data.totalChunks = totalChunks;
+}
+
+ForwardState::Snapshot ForwardState::snapshot() const {
+	const auto lock = std::lock_guard(_mutex);
+	return _data;
+}
+
+bool ForwardState::stopRequested() const {
+	const auto lock = std::lock_guard(_mutex);
+	return _data.stopRequested;
+}
+
+void ForwardState::requestStop() {
+	const auto lock = std::lock_guard(_mutex);
+	_data.stopRequested = true;
+}
+
+void ForwardState::setMessages(int total, int sent) {
+	const auto lock = std::lock_guard(_mutex);
+	_data.totalMessages = total;
+	_data.sentMessages = sent;
+}
+
+void ForwardState::setSentMessages(int sent) {
+	const auto lock = std::lock_guard(_mutex);
+	_data.sentMessages = sent;
+}
+
+void ForwardState::advanceChunk() {
+	const auto lock = std::lock_guard(_mutex);
+	++_data.currentChunk;
+}
+
+void ForwardState::updateBottomBar(
+		const Main::Session &session,
+		PeerId peer,
+		State state) {
 	{
-		session.changes().peerUpdated(session.data().peer(peerCopy), Data::PeerUpdate::Flag::Rights);
+		const auto lock = std::lock_guard(_mutex);
+		_data.state = state;
+	}
+	const auto sessionPtr = &session;
+	crl::on_main(sessionPtr, [sessionPtr, peer] {
+		sessionPtr->changes().peerUpdated(
+			sessionPtr->data().peer(peer),
+			Data::PeerUpdate::Flag::Rights);
 	});
 }
 
@@ -111,13 +181,13 @@ static Ui::PreparedList prepareMedia(not_null<Main::Session*> session,
 									 std::vector<not_null<Data::Media*>> &groupMedia) {
 	const auto prepare = [&](not_null<Data::Media*> media)
 	{
-		groupMedia.emplace_back(media);
 		auto prepared = Ui::PreparedFile(AyuSync::filePath(session, media));
 		if (prepared.path.isEmpty()) {
 			// otherwise will fail assertion in PrepareDetails
 			return prepared;
 		}
 		Storage::PrepareDetails(prepared, st::sendMediaPreviewSize, PhotoSideLimit());
+		groupMedia.emplace_back(media);
 		return prepared;
 	};
 
@@ -181,23 +251,24 @@ void sendMedia(
 		const auto path = bundle->groups.front().list.files.front().path;
 
 		QFile file(path);
-		auto failed = false;
 		if (!file.open(QIODevice::ReadOnly)) {
 			LOG(("failed to open file for forward with reason: %1").arg(file.errorString()));
-			failed = true;
+		} else if (file.size() > 0 && file.size() <= kMaxVoiceBytes) {
+			const auto data = file.read(kMaxVoiceBytes + 1);
+			if (!data.isEmpty() && data.size() <= kMaxVoiceBytes) {
+				AyuSync::sendVoiceSync(
+					session,
+					data,
+					primaryMedia->document()->duration(),
+					mediaType == SendMediaType::Round,
+					std::move(message));
+				return;
+			}
 		}
-		auto data = file.readAll();
-
-		if (!failed && data.size()) {
-			file.close();
-			AyuSync::sendVoiceSync(session,
-								   data,
-								   primaryMedia->document()->duration(),
-								   mediaType == SendMediaType::Round,
-								   std::move(message));
-			return;
-		}
-		// at least try to send it as squared-video
+		// Keep large round videos and voice messages off the heap.
+		mediaType = (mediaType == SendMediaType::Round)
+			? SendMediaType::Photo
+			: SendMediaType::File;
 	}
 
 	// workaround for media albums consisting of video and photos
@@ -285,33 +356,33 @@ void intelligentForward(
 	chunks.push_back(currentChunk);
 
 	auto state = std::make_shared<ForwardState>(chunks.size());
-	forwardStates[peer->id] = state;
+	SetForwardState(peer->id, state);
 
 
 	for (const auto &chunk : chunks) {
+		if (state->stopRequested()) {
+			break;
+		}
 		if (chunk.isAyuForwardNeeded) {
 			forwardMessages(session, action, true, Data::ResolvedForwardDraft(chunk.items));
 		} else {
-			state->totalMessages = chunk.items.size();
-			state->sentMessages = 0;
-			state->updateBottomBar(*session, &peer->id, ForwardState::State::Sending);
+			state->setMessages(chunk.items.size(), 0);
+			state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
 
 			AyuSync::forwardMessagesSync(session, chunk.items, action, draft.options);
 
-			state->sentMessages = state->totalMessages;
-
-			state->updateBottomBar(*session, &peer->id, ForwardState::State::Finished);
+			state->setSentMessages(chunk.items.size());
 		}
-		state->currentChunk++;
+		state->advanceChunk();
 	}
 
-	state->updateBottomBar(*session, &peer->id, ForwardState::State::Finished);
+	FinishForward(peer->id, state, *session);
 }
 
 void forwardMessages(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,
-	bool forwardState,
+	bool reuseState,
 	const Data::ResolvedForwardDraft &draft) {
 	const auto items = draft.items;
 	const auto history = action.history;
@@ -324,17 +395,15 @@ void forwardMessages(
 		history->setForwardDraft(topicRootId, monoforumPeerId, {});
 	});
 
-	std::shared_ptr<ForwardState> state;
-
-	if (forwardState) {
-		state = std::make_shared<ForwardState>(*forwardStates[peer->id]);
-	} else {
-		state = std::make_shared<ForwardState>(1);
+	auto state = reuseState
+		? FindForwardState(peer->id)
+		: std::make_shared<ForwardState>(1);
+	if (!state) {
+		return;
 	}
-
-	forwardStates[peer->id] = state;
-
-	std::unordered_map<uint64, uint64> groupIds;
+	if (!reuseState) {
+		SetForwardState(peer->id, state);
+	}
 
 	std::vector<not_null<HistoryItem*>> toBeDownloaded;
 
@@ -343,31 +412,23 @@ void forwardMessages(
 		if (mediaDownloadable(item->media())) {
 			toBeDownloaded.push_back(item);
 		}
-
-		if (item->groupId()) {
-			const auto currentId = groupIds.find(item->groupId().value);
-
-			if (currentId == groupIds.end()) {
-				groupIds[item->groupId().value] = base::RandomValue<uint64>();
-			}
-		}
 	}
-	state->totalMessages = items.size();
+	state->setMessages(items.size(), 0);
 	if (!toBeDownloaded.empty()) {
-		state->state = ForwardState::State::Downloading;
-		state->updateBottomBar(*session, &peer->id, ForwardState::State::Downloading);
+		state->updateBottomBar(*session, peer->id, ForwardState::State::Downloading);
 		AyuSync::loadDocuments(session, toBeDownloaded);
 	}
 
 
-	state->sentMessages = 0;
-	state->updateBottomBar(*session, &peer->id, ForwardState::State::Sending);
+	state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
 
 	for (int i = 0; i < items.size(); i++) {
 		const auto item = items[i];
 
-		if (state->stopRequested) {
-			state->updateBottomBar(*session, &peer->id, ForwardState::State::Finished);
+		if (state->stopRequested()) {
+			if (!reuseState) {
+				FinishForward(peer->id, state, *session);
+			}
 			return;
 		}
 
@@ -395,16 +456,6 @@ void forwardMessages(
 			std::vector<not_null<Data::Media*>> groupMedia;
 			auto preparedMedia = prepareMedia(session, items, i, groupMedia);
 
-			Ui::SendFilesWay way;
-			way.setGroupFiles(true);
-			way.setSendImagesAsPhotos(false);
-			for (const auto &media2 : groupMedia) {
-				if (media2->photo()) {
-					way.setSendImagesAsPhotos(true);
-					break;
-				}
-			}
-
 			// remove not finished files
 			for (int j = preparedMedia.files.size() - 1; j >= 0; j--) {
 				auto &file = preparedMedia.files[j];
@@ -415,11 +466,21 @@ void forwardMessages(
 					(groupMedia[j]->document() && f.size() < groupMedia[j]->document()->size)
 				) {
 					preparedMedia.files.erase(preparedMedia.files.begin() + j);
+					groupMedia.erase(groupMedia.begin() + j);
 				}
 			}
 
 			if (preparedMedia.files.empty()) {
 				continue;
+			}
+			Ui::SendFilesWay way;
+			way.setGroupFiles(true);
+			way.setSendImagesAsPhotos(false);
+			for (const auto &media : groupMedia) {
+				if (media->photo()) {
+					way.setSendImagesAsPhotos(true);
+					break;
+				}
 			}
 
 			auto groups = Ui::DivideByGroups(
@@ -431,15 +492,22 @@ void forwardMessages(
 				std::move(groups),
 				way,
 				false);
-			sendMedia(session, bundle, media, std::move(message), way.sendImagesAsPhotos());
+			sendMedia(
+				session,
+				bundle,
+				groupMedia.front(),
+				std::move(message),
+				way.sendImagesAsPhotos());
 		}
 		// if there are grouped messages
 		// "i" is incremented in prepareMedia
 
-		state->sentMessages = i + 1;
-		state->updateBottomBar(*session, &peer->id, ForwardState::State::Sending);
+		state->setSentMessages(i + 1);
+		state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
 	}
-	state->updateBottomBar(*session, &peer->id, ForwardState::State::Finished);
+	if (!reuseState) {
+		FinishForward(peer->id, state, *session);
+	}
 }
 
 } // namespace AyuFeatures::AyuForward
