@@ -17,7 +17,7 @@
           "blend-mode" : "normal",
           "fill" : "automatic",
           "glass" : false,
-          "image-name" : "app.svg",
+          "image-name" : "app.png",
           "name" : "app",
           "opacity" : 1,
           "position" : {
