@@ -14,6 +14,8 @@
 #include "mtproto/connection_abstract.h"
 #include "mtproto/details/mtproto_dump_to_text.h"
 
+#include <cstring>
+
 namespace AyuMapper {
 
 constexpr auto kMessageFlagUnread = 0x00000001;
@@ -56,15 +58,22 @@ std::vector<char> serializeObject(MTPObject object) {
 }
 
 template<typename MTPObject>
-MTPObject deserializeObject(std::vector<char> serialized) {
-	gsl::span<char> span(serialized.data(), serialized.size());
-
-	auto from = reinterpret_cast<const mtpPrime*>(span.data());
-	const auto end = from + span.size() / sizeof(mtpPrime);
+MTPObject deserializeObject(const std::vector<char> &serialized) {
+	if (serialized.empty()
+		|| (serialized.size() % sizeof(mtpPrime)) != 0) {
+		LOG(("AyuMapper: Invalid serialized object size"));
+		return {};
+	}
+	mtpBuffer aligned(serialized.size() / sizeof(mtpPrime));
+	std::memcpy(aligned.data(), serialized.data(), serialized.size());
+	const auto fromStart = aligned.constData();
+	auto from = fromStart;
+	const auto end = from + aligned.size();
 
 	MTPObject data;
-	if (!data.read(from, end)) {
+	if (!data.read(from, end) || from != end) {
 		LOG(("AyuMapper: Failed to deserialize object"));
+		return {};
 	}
 	return data;
 }
@@ -89,7 +98,8 @@ std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<His
 	return std::make_pair(textWithEntities.text.toStdString(), entities);
 }
 
-MTPVector<MTPMessageEntity> deserializeTextWithEntities(std::vector<char> serialized) {
+MTPVector<MTPMessageEntity> deserializeTextWithEntities(
+		const std::vector<char> &serialized) {
 	return deserializeObject<MTPVector<MTPMessageEntity>>(serialized);
 }
 

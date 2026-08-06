@@ -9,13 +9,15 @@
 namespace AyuMapper {
 
 template<typename MTPObject>
-[[nodiscard]] MTPObject deserializeObject(std::vector<char> serialized);
+[[nodiscard]] MTPObject deserializeObject(
+	const std::vector<char> &serialized);
 
 template<typename MTPObject>
 [[nodiscard]] std::vector<char> serializeObject(MTPObject object);
 
 std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<HistoryItem*> item);
-[[nodiscard]] MTPVector<MTPMessageEntity> deserializeTextWithEntities(std::vector<char> serialized);
+[[nodiscard]] MTPVector<MTPMessageEntity> deserializeTextWithEntities(
+	const std::vector<char> &serialized);
 int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item);
 
 } // namespace AyuMapper

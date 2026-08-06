@@ -7,11 +7,12 @@
 #include "ayu/ayu_state.h"
 
 #include "ayu/ayu_settings.h"
+#include "main/main_session.h"
 
 namespace AyuState {
 
 std::unordered_map<PeerId, std::unordered_set<MsgId>> hiddenMessages;
-Main::Session *disableGhostModeOnStoryCloseSession = nullptr;
+base::weak_ptr<Main::Session> disableGhostModeOnStoryCloseSession;
 
 void hide(PeerId peerId, MsgId messageId) {
 	hiddenMessages[peerId].insert(messageId);
@@ -34,16 +35,19 @@ bool isHidden(not_null<HistoryItem*> item) {
 }
 
 void setDisableGhostModeOnStoryClose(Main::Session *session) {
-	disableGhostModeOnStoryCloseSession = session;
+	disableGhostModeOnStoryCloseSession = session
+		? base::make_weak(session)
+		: base::weak_ptr<Main::Session>();
 }
 
 void disableGhostModeOnStoryClose(Main::Session *session) {
-	if (disableGhostModeOnStoryCloseSession != session) {
+	const auto current = disableGhostModeOnStoryCloseSession.get();
+	if (current != session) {
 		return;
 	}
-	disableGhostModeOnStoryCloseSession = nullptr;
-	if (session) {
-		AyuSettings::ghost(session).setGhostModeEnabled(false);
+	disableGhostModeOnStoryCloseSession = {};
+	if (current) {
+		AyuSettings::ghost(current).setGhostModeEnabled(false);
 	}
 }
 

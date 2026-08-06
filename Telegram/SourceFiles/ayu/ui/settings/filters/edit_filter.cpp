@@ -151,6 +151,7 @@ void RegexEditBuilder(
 			tr::ayu_RegexFiltersPlaceholder()),
 		st::markdownLinkFieldPadding);
 	const auto errorText = AddError(box->verticalLayout(), regexValue);
+	regexValue->setMaxLength(FiltersCacheController::kMaxPatternLength);
 	const auto enabled = box->addRow(
 		object_ptr<Ui::Checkbox>(
 			box,

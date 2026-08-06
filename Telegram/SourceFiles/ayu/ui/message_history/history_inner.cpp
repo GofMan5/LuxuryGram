@@ -749,15 +749,32 @@ void InnerWidget::preloadMore(Direction direction) {
 	const auto peer = _peer;
 	const auto topicId = _topicId;
 	const auto searchQuery = _searchQuery;
+	const auto editing = (item != nullptr);
+	const auto userId = peer->session().userId().bare & PeerId::kChatTypeMask;
+	const auto dialogId = getDialogIdFromPeer(peer);
+	const auto messageId = editing ? item->id.bare : ID();
 
 	const auto weak = base::make_weak(this);
 
 	crl::async([=] {
 		std::vector<AyuMessageBase> messages;
-		if (item) { // viewing edited history
-			messages = AyuMessages::getEditedMessages(item, minId, maxId, perPage);
+		if (editing) { // viewing edited history
+			messages = AyuMessages::getEditedMessages(
+				userId,
+				dialogId,
+				messageId,
+				minId,
+				maxId,
+				perPage);
 		} else { // viewing deleted messages
-			messages = AyuMessages::getDeletedMessages(peer, topicId, minId, maxId, perPage, searchQuery);
+			messages = AyuMessages::getDeletedMessages(
+				userId,
+				dialogId,
+				topicId,
+				minId,
+				maxId,
+				perPage,
+				searchQuery);
 		}
 
 		crl::on_main([=, messages = std::move(messages)]() mutable

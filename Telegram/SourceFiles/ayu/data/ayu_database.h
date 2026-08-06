@@ -48,7 +48,7 @@ void updateRegexFilter(const RegexFilter &filter);
 
 void deleteFilter(const std::vector<char> &id);
 void deleteExclusionsByFilterId(const std::vector<char> &id);
-void deleteExclusion(ID dialogId, std::vector<char> filterId);
+void deleteExclusion(ID dialogId, const std::vector<char> &filterId);
 
 void deleteAllFilters();
 void deleteAllExclusions();

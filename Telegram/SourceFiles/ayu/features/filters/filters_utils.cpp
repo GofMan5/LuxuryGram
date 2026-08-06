@@ -12,6 +12,7 @@
 #include "ayu/data/ayu_database.h"
 #include "ayu/features/filters/filters_cache_controller.h"
 #include "ayu/utils/telegram_helpers.h"
+#include "base/call_delayed.h"
 #include "base/qthelp_url.h"
 #include "boxes/abstract_box.h"
 #include "core/local_url_handlers.h"
@@ -31,23 +32,24 @@
 #include "ui/boxes/confirm_box.h"
 #include "ui/toast/toast.h"
 
-#include <atomic>
-#include <chrono>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <QByteArray>
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <qjsondocument.h>
 #include <QString>
-#include <thread>
 #include <vector>
 #include <QtNetwork/QHttpPart>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 
 constexpr auto BACKUP_VERSION = 2;
+constexpr auto kMaxFilterBackupBytes = 4 * 1024 * 1024;
+constexpr auto kFilterNetworkTimeout = 15 * 1000;
 
 enum class PeerResolveHintType {
 	Username,
@@ -227,67 +229,96 @@ PeerData *LoadedPeerFromDialogId(not_null<Data::Session*> data, ID dialogId) {
 	return data->chatLoaded(ChatId(bare));
 }
 
-void ResolveFilterBackupPeers(const std::vector<QString> &peerHints) {
-	auto session = currentSession();
-	auto hintsCopy = peerHints;
+class FilterBackupPeerResolver final
+	: public std::enable_shared_from_this<FilterBackupPeerResolver> {
+public:
+	FilterBackupPeerResolver(
+			not_null<Main::Session*> session,
+			std::vector<QString> hints)
+	: _session(base::make_weak(session))
+	, _hints(std::move(hints)) {
+	}
 
-	crl::async([=]
-	{
-		for (const auto &entry : hintsCopy) {
-			const auto hint = ParsePeerResolveHint(entry);
+	void start() {
+		resolveNext();
+	}
+
+private:
+	void resolveNext() {
+		const auto session = _session.get();
+		if (!session) {
+			return;
+		}
+		while (_index < _hints.size()) {
+			const auto hint = ParsePeerResolveHint(_hints[_index++]);
 			if (!hint || hint->value.isEmpty()) {
 				continue;
 			}
-			auto latch = std::make_shared<TimedCountDownLatch>(1);
-			auto floodWait = std::make_shared<std::atomic_bool>(false);
 
-			auto onFail = [=](const MTP::Error &error)
-			{
-				if (MTP::IsFloodError(error.type())) {
-					floodWait->store(true);
-				}
-				latch->countDown();
-			};
-
-			crl::on_main([=]
-			{
-				if (hint->type == PeerResolveHintType::Username) {
-					session->api().request(MTPcontacts_ResolveUsername(
-						MTP_flags(0),
-						MTP_string(hint->value),
-						MTP_string()
-					)).done([=](const MTPcontacts_ResolvedPeer &result)
-					{
+			const auto self = shared_from_this();
+			if (hint->type == PeerResolveHintType::Username) {
+				session->api().request(MTPcontacts_ResolveUsername(
+					MTP_flags(0),
+					MTP_string(hint->value),
+					MTP_string()
+				)).done([self](const MTPcontacts_ResolvedPeer &result) {
+					if (const auto session = self->_session.get()) {
 						const auto &data = result.data();
 						session->data().processUsers(data.vusers());
 						session->data().processChats(data.vchats());
-						latch->countDown();
-					}).fail(onFail).send();
-				} else {
-					session->api().checkChatInvite(
-						hint->value,
-						[=](const MTPChatInvite &invite)
-						{
-							invite.match([=](const MTPDchatInvite &data)
-							{
-							}, [=](const MTPDchatInviteAlready &data)
-							{
+						self->resolveNext();
+					}
+				}).fail([self](const MTP::Error &error) {
+					self->failed(error);
+				}).handleFloodErrors().send();
+			} else {
+				session->api().checkChatInvite(
+					hint->value,
+					[self](const MTPChatInvite &invite) {
+						if (const auto session = self->_session.get()) {
+							invite.match([](const MTPDchatInvite &) {
+							}, [=](const MTPDchatInviteAlready &data) {
 								session->data().processChat(data.vchat());
-							}, [=](const MTPDchatInvitePeek &data)
-							{
+							}, [=](const MTPDchatInvitePeek &data) {
 								session->data().processChat(data.vchat());
 							});
-							latch->countDown();
-						},
-						onFail);
-				}
-			});
-			latch->await(std::chrono::seconds(20));
-			if (floodWait->load()) {
-				std::this_thread::sleep_for(std::chrono::seconds(20));
+							self->resolveNext();
+						}
+					},
+					[self](const MTP::Error &error) {
+						self->failed(error);
+					});
 			}
+			return;
 		}
-	});
+	}
+
+	void failed(const MTP::Error &error) {
+		const auto session = _session.get();
+		if (!session) {
+			return;
+		}
+		const auto self = shared_from_this();
+		if (MTP::IsFloodError(error.type())) {
+			base::call_delayed(
+				20 * crl::time(1000),
+				session,
+				[self] { self->resolveNext(); });
+		} else {
+			resolveNext();
+		}
+	}
+
+	base::weak_ptr<Main::Session> _session;
+	std::vector<QString> _hints;
+	std::size_t _index = 0;
+};
+
+void ResolveFilterBackupPeers(const std::vector<QString> &peerHints) {
+	std::make_shared<FilterBackupPeerResolver>(
+		currentSession(),
+		peerHints
+	)->start();
 }
 
 void FilterUtils::importFromLink(const QString &link) {
@@ -296,9 +327,21 @@ void FilterUtils::importFromLink(const QString &link) {
 		return;
 	}
 
-	const auto request = QNetworkRequest(QUrl(link));
+	auto request = QNetworkRequest(QUrl(link));
+	request.setAttribute(
+		QNetworkRequest::RedirectPolicyAttribute,
+		QNetworkRequest::NoLessSafeRedirectPolicy);
+	request.setTransferTimeout(kFilterNetworkTimeout);
 	const auto reply = _manager->get(request);
-	const auto failed = std::make_shared<bool>(false);
+	connect(
+		reply,
+		&QNetworkReply::downloadProgress,
+		this,
+		[=](qint64 received, qint64) {
+			if (received > kMaxFilterBackupBytes) {
+				reply->abort();
+			}
+		});
 
 	connect(
 		reply,
@@ -306,39 +349,17 @@ void FilterUtils::importFromLink(const QString &link) {
 		this,
 		[=]
 		{
-			if (*failed) {
-				reply->deleteLater();
-				return;
-			}
-
-			const auto responseData = reply->readAll();
-
-			const auto jsonString = QString::fromUtf8(responseData);
-
-			if (jsonString.isNull()) {
-				LOG(("FilterUtils: Invalid response."));
-				Ui::Toast::Show(tr::ayu_FiltersToastFailImport(tr::now));
-
-				reply->deleteLater();
-				return;
-			}
-
-			handleResponse(jsonString.toUtf8());
 			reply->deleteLater();
-		});
-
-	connect(
-		reply,
-		&QNetworkReply::errorOccurred,
-		this,
-		[=](QNetworkReply::NetworkError e)
-		{
-			if (*failed) {
+			if (reply->error() != QNetworkReply::NoError) {
+				gotFailure(reply->error());
 				return;
 			}
-			*failed = true;
-			gotFailure(e);
-			reply->deleteLater();
+			const auto responseData = reply->read(kMaxFilterBackupBytes + 1);
+			if (responseData.size() > kMaxFilterBackupBytes) {
+				gotFailure(QNetworkReply::UnknownContentError);
+				return;
+			}
+			handleResponse(responseData);
 		});
 }
 
@@ -364,6 +385,7 @@ void FilterUtils::publishFilters() {
 	multiPart->append(titlePart);
 
 	QNetworkRequest request(QUrl("https://dpaste.com/api/v2/"));
+	request.setTransferTimeout(kFilterNetworkTimeout);
 
 	const auto reply = _manager->post(request, multiPart);
 	multiPart->setParent(reply);
@@ -393,6 +415,11 @@ void FilterUtils::publishFilters() {
 }
 
 void FilterUtils::importFromJson(const QByteArray &json) {
+	if (json.size() > kMaxFilterBackupBytes) {
+		Ui::Toast::Show(tr::ayu_FiltersToastFailImport(tr::now));
+		LOG(("FilterUtils: backup exceeds size limit."));
+		return;
+	}
 	auto error = QJsonParseError{0, QJsonParseError::NoError};
 	const auto document = QJsonDocument::fromJson(json, &error);
 
@@ -594,14 +621,14 @@ int typeOfMessage(const HistoryItem *item) {
 				if (document->isAudioFile()) {
 					return 14; // TYPE_MUSIC
 				}
-				if (document->isAnimation()) {
-					return 8; // TYPE_GIF
-				}
 				if (document->sticker()) {
 					if (document->isAnimation()) {
 						return 15; // TYPE_ANIMATED_STICKER
 					}
 					return 13; // TYPE_STICKER
+				}
+				if (document->isAnimation()) {
+					return 8; // TYPE_GIF
 				}
 				return 9; // TYPE_FILE
 			}
@@ -742,6 +769,14 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 
 	const auto existingFilters = AyuDatabase::getAllRegexFilters();
 	const auto existingExclusions = AyuDatabase::getAllFiltersExclusions();
+	std::map<std::vector<char>, const RegexFilter*> existingFiltersById;
+	for (const auto &filter : existingFilters) {
+		existingFiltersById.emplace(filter.id, &filter);
+	}
+	std::set<std::pair<ID, std::vector<char>>> existingExclusionKeys;
+	for (const auto &exclusion : existingExclusions) {
+		existingExclusionKeys.emplace(exclusion.dialogId, exclusion.filterId);
+	}
 
 	std::vector<RegexFilter> filtersOverrides;
 	std::map<std::vector<char>, RegexFilter> newFilters;
@@ -771,16 +806,17 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 				}
 
 				regex.reversed = filter.value("reversed").toBool();
-				regex.text = filter.value("text").toString().toStdString();
+				const auto text = filter.value("text").toString();
+				if (text.isEmpty()
+					|| text.size() > FiltersCacheController::kMaxPatternLength) {
+					continue;
+				}
+				regex.text = text.toStdString();
 
 
-				auto it = std::ranges::find_if(existingFilters,
-											   [&regex](const RegexFilter &f)
-											   {
-												   return f.id == regex.id;
-											   });
-				if (it != existingFilters.end()) {
-					const RegexFilter &existing = *it;
+				const auto it = existingFiltersById.find(regex.id);
+				if (it != existingFiltersById.end()) {
+					const auto &existing = *it->second;
 					if (existing != regex) {
 						filtersOverrides.push_back(std::move(regex));
 					}
@@ -803,14 +839,10 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 					continue;
 				}
 
-				auto it = std::ranges::find_if(
-					existingExclusions,
-					[&regex](const RegexFilterGlobalExclusion &f)
-					{
-						return f.dialogId == regex.dialogId && f.filterId == regex.filterId;
-					});
-
-				if (it == existingExclusions.end()) {
+				if (existingExclusionKeys.emplace(
+					regex.dialogId,
+					regex.filterId
+				).second) {
 					newExclusions.push_back(std::move(regex));
 				}
 			}
@@ -825,13 +857,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 				continue;
 			}
 
-			const auto exists = std::ranges::any_of(
-				existingFilters,
-				[&](const RegexFilter &f)
-				{
-					return f.id == filterId;
-				});
-			if (exists) {
+			if (existingFiltersById.contains(filterId)) {
 				removeFiltersById.push_back(filterId);
 			}
 		}
@@ -847,14 +873,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 				continue;
 			}
 
-			const bool exists = std::ranges::any_of(
-				existingExclusions,
-				[&](const RegexFilterGlobalExclusion &x)
-				{
-					return x.filterId == filterId && x.dialogId == dialogId;
-				});
-
-			if (exists) {
+			if (existingExclusionKeys.contains({ dialogId, filterId })) {
 				RegexFilterGlobalExclusion regex;
 				regex.dialogId = dialogId;
 				regex.filterId = filterId;

@@ -22,10 +22,14 @@
 
 #include <memory>
 #include <unordered_set>
+#include <QElapsedTimer>
 
 namespace FiltersController {
 
 std::unordered_set<long long> showingFilteredMessages;
+
+constexpr auto kRegexEvaluationBudgetMs = 25;
+constexpr auto kRegexStackLimitBytes = 1024 * 1024;
 
 bool filterBlocked(const not_null<HistoryItem*> item) {
 	if (item->from() != item->history()->peer) {
@@ -50,9 +54,15 @@ std::optional<bool> isFiltered(
 	}
 
 	const auto icuStr = icu::UnicodeString(reinterpret_cast<const UChar*>(str.constData()), str.length());
+	auto timer = QElapsedTimer();
+	timer.start();
 
 	const auto matches = [&](const ReversiblePattern &pattern)
 	{
+		const auto remaining = kRegexEvaluationBudgetMs - timer.elapsed();
+		if (remaining <= 0) {
+			return false;
+		}
 		UErrorCode status = U_ZERO_ERROR;
 
 		const auto matcher = std::unique_ptr<icu::RegexMatcher>(pattern.pattern->matcher(icuStr, status));
@@ -60,8 +70,21 @@ std::optional<bool> isFiltered(
 			LOG(("FILTER FAILED: %1").arg(u_errorName(status)));
 			return false;
 		}
+		matcher->setTimeLimit(int32_t(remaining), status);
+		matcher->setStackLimit(kRegexStackLimitBytes, status);
+		if (U_FAILURE(status)) {
+			LOG(("FILTER LIMIT FAILED: %1").arg(u_errorName(status)));
+			return false;
+		}
 
-		const auto match = matcher->find();
+		const auto match = matcher->find(status);
+		if (U_FAILURE(status)) {
+			if (status != U_REGEX_TIME_OUT
+				&& status != U_REGEX_STACK_OVERFLOW) {
+				LOG(("FILTER MATCH FAILED: %1").arg(u_errorName(status)));
+			}
+			return false;
+		}
 		const auto reversed = pattern.reversed;
 
 		if ((!reversed && match) || (reversed && !match)) {
@@ -72,6 +95,9 @@ std::optional<bool> isFiltered(
 
 	if (const auto i = cache->patternsByDialogId.find(dialogId); i != cache->patternsByDialogId.end()) {
 		for (const auto &pattern : i->second) {
+			if (timer.hasExpired(kRegexEvaluationBudgetMs)) {
+				break;
+			}
 			if (matches(pattern)) {
 				return true;
 			}
@@ -81,6 +107,9 @@ std::optional<bool> isFiltered(
 	const auto exclusions = cache->exclusionsByDialogId.find(dialogId);
 	if (!cache->sharedPatterns.empty()) {
 		for (const auto &pattern : cache->sharedPatterns) {
+			if (timer.hasExpired(kRegexEvaluationBudgetMs)) {
+				break;
+			}
 			if (exclusions != cache->exclusionsByDialogId.end() && exclusions->second.contains(pattern)) {
 				continue;
 			}
@@ -209,11 +238,6 @@ void toggleFilteredMessagesShown(not_null<PeerData*> peer) {
 }
 
 void invalidate(not_null<HistoryItem*> item) {
-	const auto &settings = AyuSettings::getInstance();
-	if (!settings.filtersEnabled()) {
-		return;
-	}
-
 	FiltersCacheController::invalidate(item);
 }
 

@@ -48,7 +48,9 @@ std::shared_ptr<const Cache> buildCache() {
 	std::unordered_map<ID, std::vector<ReversiblePattern>> byDialogId;
 
 	for (const auto &filter : filters) {
-		if (!filter.enabled || filter.text.empty()) {
+		if (!filter.enabled
+			|| filter.text.empty()
+			|| filter.text.size() > (kMaxPatternLength * 4)) {
 			continue;
 		}
 
@@ -211,6 +213,9 @@ void invalidateSingle(not_null<HistoryItem*> item) {
 	}
 
 	dialogIt->second.erase(it);
+	if (dialogIt->second.empty()) {
+		filteredMessages.erase(dialogIt);
+	}
 }
 
 void invalidate(not_null<HistoryItem*> item) {

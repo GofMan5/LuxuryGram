@@ -938,6 +938,7 @@ HistoryItem::HistoryItem(
 }
 
 HistoryItem::~HistoryItem() {
+	FiltersController::invalidate(this);
 	_media = nullptr;
 	clearSavedMedia();
 	if (const auto reply = Get<HistoryMessageReply>()) {
