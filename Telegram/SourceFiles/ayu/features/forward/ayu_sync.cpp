@@ -9,6 +9,7 @@
 #include "apiwrap.h"
 #include "api/api_sending.h"
 #include "ayu/utils/telegram_helpers.h"
+#include "base/base_file_utilities.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "core/file_utilities.h"
@@ -21,6 +22,8 @@
 #include "main/main_session.h"
 #include "storage/file_download_mtproto.h"
 #include "storage/localimageloader.h"
+
+#include <QFileInfo>
 
 namespace LuxurySync {
 
@@ -61,6 +64,11 @@ void SendAndWait(
 	});
 }
 
+QString ForwardPhotoName(not_null<PhotoData*> photo) {
+	return "luxury_photo_" + QString::number(photo->getDC()) + "_"
+		+ QString::number(photo->id) + ".jpg";
+}
+
 } // namespace
 
 QString pathForSave(not_null<Main::Session*> session) {
@@ -81,38 +89,57 @@ QString filePath(not_null<Main::Session*> session, const Data::Media *media) {
 	const auto directory = QDir(pathForSave(session));
 
 	if (const auto document = media->document()) {
+		if (const auto loading = document->loadingFilePath(); !loading.isEmpty()) {
+			return loading;
+		}
 		if (const auto name = document->filepath(true); !name.isEmpty()) {
 			return name;
 		}
-		if (!document->filename().isEmpty()) {
-			return directory.filePath(document->filename());
+		const auto generatedName = QString("luxury_document_%1_%2")
+			.arg(document->getDC())
+			.arg(document->id);
+		const auto displayName = base::FileNameFromUserString(
+			document->filename());
+		if (!displayName.isEmpty()) {
+			auto name = generatedName;
+			auto suffix = QFileInfo(displayName).suffix();
+#ifdef Q_OS_WIN
+			if (suffix.compare(u"lnk"_q, Qt::CaseInsensitive) == 0
+				|| suffix.compare(u"scf"_q, Qt::CaseInsensitive) == 0) {
+				suffix += u".download"_q;
+			}
+#endif // Q_OS_WIN
+			if (!suffix.isEmpty()) {
+				name += u'.';
+				name += suffix;
+			}
+			return directory.filePath(name);
 		}
 		if (document->isVoiceMessage()) {
 			return directory.filePath(
-				"audio_" + QString::number(document->getDC()) + "_"
+				"luxury_audio_" + QString::number(document->getDC()) + "_"
 				+ QString::number(document->id) + ".ogg");
 		}
 		if (document->isVideoMessage()) {
 			return directory.filePath(
-				"round_" + QString::number(document->getDC()) + "_"
+				"luxury_round_" + QString::number(document->getDC()) + "_"
 				+ QString::number(document->id) + ".mp4");
 		}
 
 		// media without any file name
 		if (document->isGifv()) {
 			return directory.filePath(
-				"gif_" + QString::number(document->getDC()) + "_"
+				"luxury_gif_" + QString::number(document->getDC()) + "_"
 				+ QString::number(document->id) + ".gif");
 		}
 		if (document->isVideoFile()) {
 			return directory.filePath(
-				"video_" + QString::number(document->getDC()) + "_"
+				"luxury_video_" + QString::number(document->getDC()) + "_"
 				+ QString::number(document->id) + ".mp4");
 		}
+		return directory.filePath(generatedName);
 	} else if (const auto photo = media->photo()) {
-		return directory.filePath(
-			QString::number(photo->getDC()) + "_"
-			+ QString::number(photo->id) + ".jpg");
+		return directory.filePath(ForwardPhotoName(photo));
 	}
 
 	return {};
@@ -137,11 +164,6 @@ void loadDocuments(not_null<Main::Session*> session, const std::vector<not_null<
 			if (size == data->size) {
 				continue;
 			}
-			if (size && size < data->size) {
-				// in case there some unfinished file
-				QFile file(filePath(session, item->media()));
-				file.remove();
-			}
 
 			loadDocumentSync(session, data, item);
 		} else if (auto photo = item->media()->photo()) {
@@ -162,7 +184,7 @@ void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_
 	if (path.isEmpty()) {
 		return;
 	}
-	crl::on_main([=]
+	crl::on_main(session, [=]
 	{
 		data->save(Data::FileOriginMessage(item->fullId()), path);
 
@@ -202,7 +224,7 @@ void forwardMessagesSync(not_null<Main::Session*> session,
 						 Data::ForwardOptions options) {
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 
-	crl::on_main([=]
+	crl::on_main(session, [=]
 	{
 		session->api().forwardMessages(Data::ResolvedForwardDraft(items, options),
 									   action,
@@ -238,11 +260,8 @@ void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<Ph
 
 	const auto saveToFiles = [=]
 	{
-		QDir directory(path);
-		const auto dir = directory.absolutePath();
-		const auto nameBase = dir.endsWith('/') ? dir : dir + '/';
-		const auto fullPath = nameBase + QString::number(photo.first->getDC()) + "_" + QString::number(photo.first->id)
-			+ ".jpg";
+		const auto fullPath = QDir(path).filePath(
+			ForwardPhotoName(photo.first));
 		view->saveToFile(fullPath);
 	};
 
@@ -252,7 +271,7 @@ void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<Ph
 	if (finalCheck()) {
 		saveToFiles();
 	} else {
-		crl::on_main([=]
+		crl::on_main(session, [=]
 		{
 			rpl::single() | rpl::then(
 				session->downloaderTaskFinished()

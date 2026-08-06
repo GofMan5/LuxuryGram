@@ -10,6 +10,7 @@
 #include "lang_auto.h"
 #include "ayu/features/forward/ayu_sync.h"
 #include "ayu/utils/telegram_helpers.h"
+#include "base/base_file_utilities.h"
 #include "data/data_changes.h"
 #include "data/data_document.h"
 #include "data/data_peer.h"
@@ -215,6 +216,10 @@ static Ui::PreparedList prepareMedia(not_null<Main::Session*> session,
 			// otherwise will fail assertion in PrepareDetails
 			return prepared;
 		}
+		if (const auto document = media->document()) {
+			prepared.displayName = base::FileNameFromUserString(
+				document->filename());
+		}
 		Storage::PrepareDetails(prepared, st::sendMediaPreviewSize, PhotoSideLimit());
 		groupMedia.emplace_back(media);
 		return prepared;
@@ -347,7 +352,7 @@ void intelligentForward(
 	const auto history = action.history;
 	const auto topicRootId = action.replyTo.topicRootId;
 	const auto monoforumPeerId = action.replyTo.monoforumPeerId;
-	crl::on_main([=]
+	crl::on_main(session, [=]
 	{
 		history->setForwardDraft(topicRootId, monoforumPeerId, {});
 	});
@@ -419,7 +424,7 @@ void forwardMessages(
 
 	const auto topicRootId = action.replyTo.topicRootId;
 	const auto monoforumPeerId = action.replyTo.monoforumPeerId;
-	crl::on_main([=]
+	crl::on_main(session, [=]
 	{
 		history->setForwardDraft(topicRootId, monoforumPeerId, {});
 	});
@@ -486,7 +491,8 @@ void forwardMessages(
 			auto preparedMedia = prepareMedia(session, items, i, groupMedia);
 
 			// remove not finished files
-			for (int j = preparedMedia.files.size() - 1; j >= 0; j--) {
+			for (auto j = int(preparedMedia.files.size()); j > 0;) {
+				--j;
 				auto &file = preparedMedia.files[j];
 
 				QFile f(file.path);
