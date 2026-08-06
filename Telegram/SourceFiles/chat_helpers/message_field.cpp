@@ -1393,7 +1393,7 @@ std::unique_ptr<Ui::AbstractButton> LuxuryForwardWriteRestriction(
 	using namespace Ui;
 
 	// status and part
-	const auto pair = LuxuryForward::stateName(peer);
+	const auto pair = LuxuryForward::stateName(peer, session);
 
 	auto result = std::make_unique<FlatButton>(
 		parent,
@@ -1442,8 +1442,8 @@ std::unique_ptr<Ui::AbstractButton> LuxuryForwardWriteRestriction(
 
 	}, title->lifetime());
 
-	raw->setClickedCallback([&] {
-		LuxuryForward::cancelForward(peer, session);
+	raw->setClickedCallback([peer, session = &session] {
+		LuxuryForward::cancelForward(peer, *session);
 	});
 
 	return result;

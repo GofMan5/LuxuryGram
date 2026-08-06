@@ -4695,7 +4695,7 @@ void ApiWrap::sendMessage(
 	const auto ephemeral = _session->ephemeralMessages().wouldSend(message);
 	if (!ephemeral
 		&& !canSendTexts
-		&& !LuxuryForward::isForwarding(peer->id)) {
+		&& !LuxuryForward::isForwarding(peer->id, *_session)) {
 		return;
 	} else if (_session->ephemeralMessages().trySend(message)) {
 		if (clearCloudDraft) {

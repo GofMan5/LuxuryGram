@@ -8321,7 +8321,7 @@ void HistoryWidget::updateSendRestriction() {
 		return;
 	}
 	_sendRestrictionKey = restriction.text;
-	if (LuxuryForward::isForwarding(_peer->id)) {
+	if (LuxuryForward::isForwarding(_peer->id, session())) {
 		_sendRestriction = LuxuryForwardWriteRestriction(this, _peer->id, session());
 	} else if (!restriction) {
 		_sendRestriction = nullptr;

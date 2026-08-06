@@ -261,7 +261,7 @@ void MessageShotBox::setupContent() {
 					const auto embedded = LuxuryFeatures::MessageShot::getSelectedFromDefault();
 					const auto cloud = LuxuryFeatures::MessageShot::getSelectedFromCustom();
 					if (cloud.has_value()) {
-						const auto accountId = _config.controller->session().userId().bare;
+						const auto accountId = _config.controller->session().uniqueId();
 						shot.setCloudTheme(accountId, cloud->id, cloud->accessHash, cloud->documentId, cloud->title);
 					} else if (embedded != Window::Theme::EmbeddedType(-1)) {
 						const auto color = LuxuryFeatures::MessageShot::getSelectedColorFromDefault();

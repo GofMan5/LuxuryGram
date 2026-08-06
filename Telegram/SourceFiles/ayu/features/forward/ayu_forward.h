@@ -12,9 +12,11 @@
 #include <mutex>
 
 namespace LuxuryForward {
-bool isForwarding(const PeerId &id);
+bool isForwarding(const PeerId &id, const Main::Session &session);
 void cancelForward(const PeerId &id, const Main::Session &session);
-std::pair<QString, QString> stateName(const PeerId &id);
+std::pair<QString, QString> stateName(
+	const PeerId &id,
+	const Main::Session &session);
 
 class ForwardState
 {

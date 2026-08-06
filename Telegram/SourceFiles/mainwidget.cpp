@@ -597,7 +597,9 @@ bool MainWidget::setForwardDraft(
 		});
 	// allow opening chat that
 	// already have some forward task
-	if (error && !LuxuryForward::isForwarding(history->peer->id)) {
+	if (error && !LuxuryForward::isForwarding(
+			history->peer->id,
+			history->peer->session())) {
 		Data::ShowSendErrorToast(_controller, history->peer, error);
 		return false;
 	}

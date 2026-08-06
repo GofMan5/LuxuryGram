@@ -233,7 +233,7 @@ bool CanSendAnyOf(
 		not_null<const PeerData*> peer,
 		ChatRestrictions rights,
 		bool forbidInForums) {
-	if (LuxuryForward::isForwarding(peer->id)) {
+	if (LuxuryForward::isForwarding(peer->id, peer->session())) {
 		return false;
 	}
 	if (peer->session().frozen()
@@ -297,9 +297,12 @@ bool CanSendAnyOf(
 SendError RestrictionError(
 		not_null<PeerData*> peer,
 		ChatRestriction restriction) {
-	if (LuxuryForward::isForwarding(peer->id)) {
+	if (LuxuryForward::isForwarding(peer->id, peer->session())) {
+		const auto state = LuxuryForward::stateName(
+			peer->id,
+			peer->session());
 		return SendError({
-			.text = LuxuryForward::stateName(peer->id).first + "\n" + LuxuryForward::stateName(peer->id).second,
+			.text = state.first + "\n" + state.second,
 		});
 	}
 	using Flag = ChatRestriction;

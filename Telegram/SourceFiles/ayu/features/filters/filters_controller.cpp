@@ -18,15 +18,17 @@
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
+#include "main/main_session.h"
 #include "unicode/regex.h"
 
-#include <memory>
-#include <unordered_set>
 #include <QElapsedTimer>
+#include <memory>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace FiltersController {
 
-std::unordered_set<long long> showingFilteredMessages;
+std::unordered_map<uint64, std::unordered_set<long long>> showingFilteredMessages;
 
 constexpr auto kRegexEvaluationBudgetMs = 25;
 constexpr auto kRegexStackLimitBytes = 1024 * 1024;
@@ -179,7 +181,10 @@ bool isBlocked(const not_null<PeerData*> peer) {
 }
 
 bool filtered(const not_null<HistoryItem*> item) {
-	if (showingFilteredMessages.contains(item->history()->peer->id.value)) {
+	const auto sessionId = item->history()->session().uniqueId();
+	const auto shown = showingFilteredMessages.find(sessionId);
+	if (shown != end(showingFilteredMessages)
+		&& shown->second.contains(item->history()->peer->id.value)) {
 		return false;
 	}
 
@@ -221,18 +226,27 @@ bool filtered(const not_null<HistoryItem*> item) {
 }
 
 std::optional<bool> filteredMessagesShown(not_null<PeerData*> peer) {
-	if (!showingFilteredMessages.contains(peer->id.value)
+	const auto sessionId = peer->session().uniqueId();
+	const auto shown = showingFilteredMessages.find(sessionId);
+	const auto showing = shown != end(showingFilteredMessages)
+		&& shown->second.contains(peer->id.value);
+	if (!showing
 		&& !FiltersCacheController::hasFilteredMessages(peer)) {
 		return std::nullopt;
 	}
-	return showingFilteredMessages.contains(peer->id.value);
+	return showing;
 }
 
 void toggleFilteredMessagesShown(not_null<PeerData*> peer) {
-	if (showingFilteredMessages.contains(peer->id.value)) {
-		showingFilteredMessages.erase(peer->id.value);
+	const auto sessionId = peer->session().uniqueId();
+	auto &shown = showingFilteredMessages[sessionId];
+	if (shown.contains(peer->id.value)) {
+		shown.erase(peer->id.value);
+		if (shown.empty()) {
+			showingFilteredMessages.erase(sessionId);
+		}
 	} else {
-		showingFilteredMessages.insert(peer->id.value);
+		shown.insert(peer->id.value);
 	}
 	FiltersCacheController::fireUpdate();
 }

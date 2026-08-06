@@ -9,47 +9,69 @@
 #include "ayu/ayu_settings.h"
 #include "main/main_session.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 namespace LuxuryState {
 
-std::unordered_map<PeerId, std::unordered_set<MsgId>> hiddenMessages;
+std::unordered_map<
+	uint64,
+	std::unordered_map<PeerId, std::unordered_set<MsgId>>> hiddenMessages;
 std::size_t hiddenMessagesCount = 0;
 base::weak_ptr<Main::Session> disableGhostModeOnStoryCloseSession;
 
-void hide(PeerId peerId, MsgId messageId) {
-	const auto existing = hiddenMessages.find(peerId);
-	if (existing != end(hiddenMessages)
-		&& existing->second.contains(messageId)) {
-		return;
+void hide(uint64 sessionId, PeerId peerId, MsgId messageId) {
+	const auto session = hiddenMessages.find(sessionId);
+	if (session != end(hiddenMessages)) {
+		const auto existing = session->second.find(peerId);
+		if (existing != end(session->second)
+			&& existing->second.contains(messageId)) {
+			return;
+		}
 	}
 
 	// ponytail: bounded session cache; persist IDs if 65K hides per launch becomes real.
 	constexpr auto kMaxHiddenMessages = std::size_t(65'536);
 	if (hiddenMessagesCount >= kMaxHiddenMessages) {
-		const auto peer = begin(hiddenMessages);
+		const auto firstSession = begin(hiddenMessages);
+		const auto peer = begin(firstSession->second);
 		peer->second.erase(begin(peer->second));
 		if (peer->second.empty()) {
-			hiddenMessages.erase(peer);
+			firstSession->second.erase(peer);
+			if (firstSession->second.empty()) {
+				hiddenMessages.erase(firstSession);
+			}
 		}
 		--hiddenMessagesCount;
 	}
-	hiddenMessages[peerId].insert(messageId);
+	hiddenMessages[sessionId][peerId].insert(messageId);
 	++hiddenMessagesCount;
 }
 
 void hide(not_null<HistoryItem*> item) {
-	hide(item->history()->peer->id, item->id);
+	hide(
+		item->history()->session().uniqueId(),
+		item->history()->peer->id,
+		item->id);
 }
 
-bool isHidden(PeerId peerId, MsgId messageId) {
-	const auto it = hiddenMessages.find(peerId);
-	if (it != hiddenMessages.end()) {
-		return it->second.contains(messageId);
+bool isHidden(uint64 sessionId, PeerId peerId, MsgId messageId) {
+	const auto session = hiddenMessages.find(sessionId);
+	if (session == end(hiddenMessages)) {
+		return false;
+	}
+	const auto peer = session->second.find(peerId);
+	if (peer != end(session->second)) {
+		return peer->second.contains(messageId);
 	}
 	return false;
 }
 
 bool isHidden(not_null<HistoryItem*> item) {
-	return isHidden(item->history()->peer->id, item->id);
+	return isHidden(
+		item->history()->session().uniqueId(),
+		item->history()->peer->id,
+		item->id);
 }
 
 void setDisableGhostModeOnStoryClose(Main::Session *session) {

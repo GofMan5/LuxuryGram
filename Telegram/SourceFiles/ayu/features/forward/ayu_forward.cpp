@@ -23,36 +23,59 @@
 #include "ui/chat/attach/attach_prepare.h"
 #include "ui/text/text_utilities.h"
 
+#include <unordered_map>
+
 namespace LuxuryForward {
 
 namespace {
 
 std::mutex ForwardStatesMutex;
-std::unordered_map<PeerId, std::shared_ptr<ForwardState>> ForwardStates;
+std::unordered_map<
+	const Main::Session*,
+	std::unordered_map<PeerId, std::shared_ptr<ForwardState>>> ForwardStates;
 constexpr auto kMaxVoiceBytes = 64 * 1024 * 1024;
 
-std::shared_ptr<ForwardState> FindForwardState(PeerId id) {
+std::shared_ptr<ForwardState> FindForwardState(
+		PeerId id,
+		const Main::Session *session) {
 	const auto lock = std::lock_guard(ForwardStatesMutex);
-	const auto i = ForwardStates.find(id);
-	return (i != end(ForwardStates)) ? i->second : nullptr;
+	const auto sessionIt = ForwardStates.find(session);
+	if (sessionIt == end(ForwardStates)) {
+		return nullptr;
+	}
+	const auto i = sessionIt->second.find(id);
+	return (i != end(sessionIt->second)) ? i->second : nullptr;
 }
 
-void SetForwardState(PeerId id, std::shared_ptr<ForwardState> state) {
+void SetForwardState(
+		PeerId id,
+		const Main::Session *session,
+		std::shared_ptr<ForwardState> state) {
 	const auto lock = std::lock_guard(ForwardStatesMutex);
-	if (const auto i = ForwardStates.find(id);
-		i != end(ForwardStates) && i->second != state) {
+	auto &states = ForwardStates[session];
+	if (const auto i = states.find(id);
+		i != end(states) && i->second != state) {
 		i->second->requestStop();
 	}
-	ForwardStates[id] = std::move(state);
+	states[id] = std::move(state);
 }
 
 void RemoveForwardState(
 		PeerId id,
+		const Main::Session *session,
 		const std::shared_ptr<ForwardState> &state) {
 	const auto lock = std::lock_guard(ForwardStatesMutex);
-	const auto i = ForwardStates.find(id);
-	if (i != end(ForwardStates) && i->second == state) {
-		ForwardStates.erase(i);
+	const auto sessionIt = ForwardStates.find(session);
+	if (sessionIt == end(ForwardStates)) {
+		return;
+	}
+	auto &states = sessionIt->second;
+	const auto i = states.find(id);
+	if (i != end(states) && i->second == state) {
+		states.erase(i);
+		if (states.empty()) {
+			ForwardStates.erase(sessionIt);
+		}
 	}
 }
 
@@ -61,13 +84,13 @@ void FinishForward(
 		const std::shared_ptr<ForwardState> &state,
 		const Main::Session &session) {
 	state->updateBottomBar(session, id, ForwardState::State::Finished);
-	RemoveForwardState(id, state);
+	RemoveForwardState(id, &session, state);
 }
 
 } // namespace
 
-bool isForwarding(const PeerId &id) {
-	const auto state = id.value ? FindForwardState(id) : nullptr;
+bool isForwarding(const PeerId &id, const Main::Session &session) {
+	const auto state = id.value ? FindForwardState(id, &session) : nullptr;
 	if (!state) {
 		return false;
 	}
@@ -78,14 +101,16 @@ bool isForwarding(const PeerId &id) {
 }
 
 void cancelForward(const PeerId &id, const Main::Session &session) {
-	if (const auto state = FindForwardState(id)) {
+	if (const auto state = FindForwardState(id, &session)) {
 		state->requestStop();
 		FinishForward(id, state, session);
 	}
 }
 
-std::pair<QString, QString> stateName(const PeerId &id) {
-	const auto state = FindForwardState(id);
+std::pair<QString, QString> stateName(
+		const PeerId &id,
+		const Main::Session &session) {
+	const auto state = FindForwardState(id, &session);
 	if (!state) {
 		return std::make_pair(QString(), QString());
 	}
@@ -311,7 +336,7 @@ bool isFullLuxuryForwardNeeded(not_null<HistoryItem*> item) {
 
 struct ForwardChunk
 {
-	bool isLuxuryForwardNeeded;
+	bool isLuxuryForwardNeeded = false;
 	std::vector<not_null<HistoryItem*>> items;
 };
 
@@ -360,7 +385,7 @@ void intelligentForward(
 	chunks.push_back(currentChunk);
 
 	auto state = std::make_shared<ForwardState>(chunks.size());
-	SetForwardState(peer->id, state);
+	SetForwardState(peer->id, session, state);
 
 
 	for (const auto &chunk : chunks) {
@@ -400,13 +425,13 @@ void forwardMessages(
 	});
 
 	auto state = reuseState
-		? FindForwardState(peer->id)
+		? FindForwardState(peer->id, session)
 		: std::make_shared<ForwardState>(1);
 	if (!state) {
 		return;
 	}
 	if (!reuseState) {
-		SetForwardState(peer->id, state);
+		SetForwardState(peer->id, session, state);
 	}
 
 	std::vector<not_null<HistoryItem*>> toBeDownloaded;

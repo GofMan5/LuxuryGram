@@ -17,11 +17,14 @@
 #include "main/main_domain.h"
 #include "main/main_session.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 namespace LuxuryWorker {
 
 void runOnce();
 
-std::unordered_map<ID, bool> state;
+std::unordered_map<uint64, bool> state;
 
 base::Timer &workerTimer() {
 	static base::Timer timer([] {
@@ -31,18 +34,9 @@ base::Timer &workerTimer() {
 }
 
 void markAsOnline(not_null<Main::Session*> session) {
-	state[session->userId().bare] = true;
+	state[session->uniqueId()] = true;
 	workerTimer().cancel();
 	workerTimer().callEach(3000);
-}
-
-void lateInit() {
-	for (const auto &[index, account] : Core::App().domain().accounts()) {
-		if (const auto session = account->maybeSession()) {
-			const auto id = session->userId().bare;
-			state[id] = true;
-		}
-	}
 }
 
 void runOnce() {
@@ -50,16 +44,14 @@ void runOnce() {
 		return;
 	}
 
-	if (state.empty()) {
-		lateInit();
-	}
-
 	const auto t = base::unixtime::now();
+	auto active = std::unordered_set<uint64>();
 
 	for (const auto &[index, account] : Core::App().domain().accounts()) {
 		if (account) {
 			if (const auto session = account->maybeSession()) {
-				const auto id = session->userId().bare;
+				const auto id = session->uniqueId();
+				active.insert(id);
 				if (!state.contains(id)) {
 					state[id] = true;
 				}
@@ -78,6 +70,13 @@ void runOnce() {
 					DEBUG_LOG(("[LuxuryGram] Sent offline for account with id %1").arg(id));
 				}
 			}
+		}
+	}
+	for (auto i = begin(state); i != end(state);) {
+		if (active.contains(i->first)) {
+			++i;
+		} else {
+			i = state.erase(i);
 		}
 	}
 }

@@ -19,6 +19,14 @@
 
 namespace LuxuryMessages {
 
+namespace {
+
+ID DatabaseUserId(const Main::Session &session) {
+	return static_cast<ID>(session.uniqueId());
+}
+
+} // namespace
+
 template<typename DerivedMessage>
 std::vector<LuxuryMessageBase> convertToBase(const std::vector<DerivedMessage> &messages) {
 	std::vector<LuxuryMessageBase> based;
@@ -30,7 +38,7 @@ std::vector<LuxuryMessageBase> convertToBase(const std::vector<DerivedMessage> &
 }
 
 void map(not_null<HistoryItem*> item, LuxuryMessageBase &message) {
-	const ID userId = item->history()->owner().session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = DatabaseUserId(item->history()->session());
 
 	message.userId = userId;
 	message.dialogId = getDialogIdFromPeer(item->history()->peer);
@@ -96,7 +104,7 @@ void addEditedMessage(not_null<HistoryItem *> item) {
 }
 
 std::vector<LuxuryMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit) {
-	const ID userId = item->history()->owner().session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = DatabaseUserId(item->history()->session());
 	const auto dialogId = getDialogIdFromPeer(item->history()->peer);
 	const auto msgId = item->id.bare;
 
@@ -120,7 +128,7 @@ std::vector<LuxuryMessageBase> getEditedMessages(
 }
 
 bool hasRevisions(not_null<HistoryItem*> item) {
-	const ID userId = item->history()->owner().session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = DatabaseUserId(item->history()->session());
 	const auto dialogId = getDialogIdFromPeer(item->history()->peer);
 	const auto msgId = item->id.bare;
 
@@ -140,7 +148,7 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 
 std::vector<LuxuryMessageBase>
 getDeletedMessages(not_null<PeerData*> peer, ID topicId, ID minId, ID maxId, int totalLimit, const QString &searchQuery) {
-	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = DatabaseUserId(peer->session());
 	return getDeletedMessages(
 		userId,
 		getDialogIdFromPeer(peer),
@@ -170,18 +178,18 @@ std::vector<LuxuryMessageBase> getDeletedMessages(
 }
 
 bool hasDeletedMessages(not_null<PeerData*> peer, ID topicId) {
-	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = DatabaseUserId(peer->session());
 	return LuxuryDatabase::hasDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
 }
 
 void removeDeletedMessage(not_null<HistoryItem*> item) {
 	const auto peer = item->history()->peer;
-	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = DatabaseUserId(peer->session());
 	LuxuryDatabase::removeDeletedMessage(userId, getDialogIdFromPeer(peer), item->id.bare);
 }
 
 void clearDeletedMessages(not_null<PeerData*> peer, ID topicId) {
-	const ID userId = peer->session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = DatabaseUserId(peer->session());
 	LuxuryDatabase::clearDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
 }
 

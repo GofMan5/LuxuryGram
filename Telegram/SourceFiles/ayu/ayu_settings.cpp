@@ -432,7 +432,7 @@ void LuxurySettings::reset() {
 }
 
 GhostModeAccountSettings &LuxurySettings::ghost(not_null<Main::Session*> session) {
-	return ghost(session->userId().bare);
+	return ghost(session->uniqueId());
 }
 
 GhostModeAccountSettings &LuxurySettings::ghost(uint64 userId) {

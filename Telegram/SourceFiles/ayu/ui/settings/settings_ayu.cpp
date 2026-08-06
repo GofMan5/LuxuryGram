@@ -267,7 +267,7 @@ private:
 QString GetAccountName(uint64 userId) {
 	for (const auto &account : Core::App().domain().orderedAccounts()) {
 		if (account->sessionExists()
-			&& account->session().userId().bare == userId) {
+			&& account->session().uniqueId() == userId) {
 			return account->session().user()->name();
 		}
 	}
@@ -317,7 +317,7 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 			}
 
 			if (activeCount <= 1 && !LuxurySettings::getInstance().useGlobalGhostMode()) {
-				auto userId = controller->session().userId().bare;
+				auto userId = controller->session().uniqueId();
 				auto &src = LuxurySettings::ghost(userId);
 				auto &dst = LuxurySettings::ghost(0);
 				dst.setSendReadMessages(src.sendReadMessages());
@@ -340,7 +340,7 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 			const auto isGlobal = LuxurySettings::getInstance().useGlobalGhostMode();
 			auto initialUserId = isGlobal
 				? uint64(0)
-				: controller->session().userId().bare;
+				: controller->session().uniqueId();
 
 			const auto state = container->lifetime().make_state<GhostPickerState>();
 			state->selectedUserId = initialUserId;
@@ -589,7 +589,7 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 						continue;
 					}
 					auto user = account->session().user();
-					auto id = account->session().userId().bare;
+					auto id = account->session().uniqueId();
 					state->menu->addAction(
 						base::make_unique_q<AccountAction>(
 							state->menu->menu(),

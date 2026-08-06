@@ -13,10 +13,12 @@
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "main/main_session.h"
 #include "rpl/event_stream.h"
 
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace FiltersCacheController {
@@ -37,8 +39,10 @@ rpl::producer<> updates() {
 
 std::shared_ptr<const Cache> cache;
 
-std::unordered_map<long long, std::unordered_map<int64, bool>> filteredMessages;
-std::unordered_set<BareId> dialogsWithHiddenBlockedMessages; // purely for show / hide filtered messages
+std::unordered_map<
+	uint64,
+	std::unordered_map<long long, std::unordered_map<int64, bool>>> filteredMessages;
+std::unordered_map<uint64, std::unordered_set<BareId>> dialogsWithHiddenBlockedMessages;
 
 std::shared_ptr<const Cache> buildCache() {
 	const auto filters = LuxuryDatabase::getAllRegexFilters();
@@ -145,9 +149,15 @@ std::shared_ptr<const Cache> snapshot() {
 
 std::optional<bool> isFiltered(not_null<HistoryItem*> item) {
 	std::lock_guard lock(filteredMessagesMutex);
-	auto dialogIt = filteredMessages.find(item->history()->peer->id.value);
+	const auto sessionIt = filteredMessages.find(
+		item->history()->session().uniqueId());
+	if (sessionIt == end(filteredMessages)) {
+		return std::nullopt;
+	}
+	const auto dialogIt = sessionIt->second.find(
+		item->history()->peer->id.value);
 
-	if (dialogIt == filteredMessages.end()) {
+	if (dialogIt == end(sessionIt->second)) {
 		return std::nullopt;
 	}
 
@@ -161,11 +171,18 @@ std::optional<bool> isFiltered(not_null<HistoryItem*> item) {
 
 bool hasFilteredMessages(not_null<PeerData*> peer) {
 	std::lock_guard lock(filteredMessagesMutex);
-	if (dialogsWithHiddenBlockedMessages.contains(peer->id.value)) {
+	const auto sessionId = peer->session().uniqueId();
+	const auto hidden = dialogsWithHiddenBlockedMessages.find(sessionId);
+	if (hidden != end(dialogsWithHiddenBlockedMessages)
+		&& hidden->second.contains(peer->id.value)) {
 		return true;
 	}
-	const auto dialogIt = filteredMessages.find(peer->id.value);
-	if (dialogIt == filteredMessages.end()) {
+	const auto sessionIt = filteredMessages.find(sessionId);
+	if (sessionIt == end(filteredMessages)) {
+		return false;
+	}
+	const auto dialogIt = sessionIt->second.find(peer->id.value);
+	if (dialogIt == end(sessionIt->second)) {
 		return false;
 	}
 	for (const auto &entry : dialogIt->second) {
@@ -178,7 +195,9 @@ bool hasFilteredMessages(not_null<PeerData*> peer) {
 
 void putHiddenBlockedMessage(not_null<HistoryItem*> item) {
 	std::lock_guard lock(filteredMessagesMutex);
-	dialogsWithHiddenBlockedMessages.insert(item->history()->peer->id.value);
+	const auto sessionId = item->history()->session().uniqueId();
+	dialogsWithHiddenBlockedMessages[sessionId].insert(
+		item->history()->peer->id.value);
 }
 
 void putFiltered(
@@ -192,18 +211,26 @@ void putFiltered(
 	}
 
 	std::lock_guard filteredLock(filteredMessagesMutex);
-	filteredMessages[item->history()->peer->id.value][item->id.bare] = res;
+	const auto sessionId = item->history()->session().uniqueId();
+	auto &dialog = filteredMessages[sessionId][item->history()->peer->id.value];
+	dialog[item->id.bare] = res;
 	if (group && res) {
 		for (const auto& groupItem : group->items) {
-			filteredMessages[item->history()->peer->id.value][groupItem->id.bare] = true;
+			dialog[groupItem->id.bare] = true;
 		}
 	}
 }
 
 void invalidateSingle(not_null<HistoryItem*> item) {
-	const auto dialogIt = filteredMessages.find(item->history()->peer->id.value);
+	const auto sessionIt = filteredMessages.find(
+		item->history()->session().uniqueId());
+	if (sessionIt == end(filteredMessages)) {
+		return;
+	}
+	const auto dialogIt = sessionIt->second.find(
+		item->history()->peer->id.value);
 
-	if (dialogIt == filteredMessages.end()) {
+	if (dialogIt == end(sessionIt->second)) {
 		return;
 	}
 
@@ -214,7 +241,10 @@ void invalidateSingle(not_null<HistoryItem*> item) {
 
 	dialogIt->second.erase(it);
 	if (dialogIt->second.empty()) {
-		filteredMessages.erase(dialogIt);
+		sessionIt->second.erase(dialogIt);
+		if (sessionIt->second.empty()) {
+			filteredMessages.erase(sessionIt);
+		}
 	}
 }
 

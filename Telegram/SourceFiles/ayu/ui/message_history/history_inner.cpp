@@ -750,7 +750,7 @@ void InnerWidget::preloadMore(Direction direction) {
 	const auto topicId = _topicId;
 	const auto searchQuery = _searchQuery;
 	const auto editing = (item != nullptr);
-	const auto userId = peer->session().userId().bare & PeerId::kChatTypeMask;
+	const auto userId = static_cast<ID>(peer->session().uniqueId());
 	const auto dialogId = getDialogIdFromPeer(peer);
 	const auto messageId = editing ? item->id.bare : ID();
 

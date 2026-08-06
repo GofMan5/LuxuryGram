@@ -138,7 +138,8 @@ Main::Session *getSession(ID userId) {
 	}
 	for (const auto &[index, account] : Core::App().domain().accounts()) {
 		if (const auto session = account->maybeSession()) {
-			if (session->userId().bare == userId) {
+			if (session->uniqueId() == static_cast<uint64>(userId)
+				|| session->userId().bare == static_cast<uint64>(userId)) {
 				return session;
 			}
 		}
