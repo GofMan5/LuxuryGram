@@ -1,154 +1,134 @@
-# AyuGram
+<div align="center">
+  <img src=".github/assets/luxurygram-logo.png" width="220" alt="Логотип LuxuryGram">
+  <h1>LuxuryGram</h1>
+  <p><strong>Продуманный Telegram-клиент для компьютера с акцентом на приватность и контроль.</strong></p>
+  <p>Открытый исходный код · На базе AyuGram · Основан на Telegram Desktop</p>
 
-![AyuGram Лого](.github/AyuGram.png) ![AyuChan](.github/AyuChan.png)
+  <p>
+    <a href="README.md">English</a>
+    ·
+    <a href="README-RU.md"><strong>Русский</strong></a>
+  </p>
 
-[ [English](README.md)  | Русский ]
+  <p>
+    <img alt="Лицензия" src="https://img.shields.io/github/license/GofMan5/LuxuryGram?style=for-the-badge&labelColor=0B0E16&color=D8A43A">
+    <img alt="C++ и Qt" src="https://img.shields.io/badge/C%2B%2B-Qt_6-D8A43A?style=for-the-badge&logo=cplusplus&logoColor=white&labelColor=0B0E16">
+    <img alt="Статус проекта" src="https://img.shields.io/badge/status-source_preview-D8A43A?style=for-the-badge&labelColor=0B0E16">
+  </p>
 
-## Функции и Фишки
+  <p>
+    <a href="#возможности">Возможности</a> ·
+    <a href="#как-получить-luxurygram">Скачать</a> ·
+    <a href="#сборка-из-исходников">Сборка</a> ·
+    <a href="CONTRIBUTING.md">Участие</a> ·
+    <a href="SECURITY.md">Безопасность</a>
+  </p>
+</div>
 
-- Полный режим призрака (настраиваемый)
-- История удалений и изменений сообщений
-- Кастомизация шрифта
-- Режим Стримера
-- Локальный телеграм премиум
-- Переводчик
-- Превью медиа и быстрая реакция при сильном нажатии на тачпад (macOS)
-- Улучшенный вид
+> [!IMPORTANT]
+> Сейчас LuxuryGram доступен как **предварительная версия исходного кода**. Официальные бинарные сборки ещё не опубликованы. После первого релиза единственным официальным источником загрузок станет раздел [Releases](https://github.com/GofMan5/LuxuryGram/releases) этого репозитория.
 
-И многое другое. Посмотрите нашу [Документацию](https://docs.ayugram.one/desktop/) для более подробной информации.
+> [!NOTE]
+> LuxuryGram — независимый неофициальный клиент. Проект не связан с Telegram, не поддерживается и не одобряется им.
 
-<h3>
-  <details>
-    <summary>Превью</summary>
-    <table>
-      <tr>
-        <td><img src='.github/demos/demo1.png' width='268' alt='Preferences'></td>
-        <td><img src='.github/demos/demo2.png' width='268' alt='AyuGram Options'></td>
-        <td><img src='.github/demos/demo3.png' width='268' alt='Message Filters'></td>
-      </tr>
-      <tr>
-        <td><img src='.github/demos/demo4.png' width='268' alt='Appearance'></td>
-        <td><img src='.github/demos/demo5.png' width='268' alt='Chats'></td>
-      </tr>
-    </table>
-  </details>
-</h3>
+## Возможности
 
-## Установка
+LuxuryGram сохраняет привычную основу Telegram Desktop и даёт больше контроля там, где это особенно полезно на компьютере.
 
-### Windows
+| Направление | Что доступно |
+| --- | --- |
+| **Приватность** | Гибкий режим невидимки и детальные настройки присутствия и активности. |
+| **Контекст сообщений** | Локальная история изменений и удалений, а также инструменты anti-recall для поддерживаемых чатов. |
+| **Концентрация** | Режим стримера, помогающий скрыть чувствительную информацию при демонстрации экрана. |
+| **Персонализация** | Настройка шрифтов, внешнего вида и поведения интерфейса. |
+| **Продуктивность** | Перевод, расширенные предпросмотры медиа и быстрые действия. |
+| **Надёжная основа** | Зрелая архитектура C++/Qt и платформенная интеграция Telegram Desktop. |
 
-#### Официальная версия
+Часть возможностей работает только локально и не меняет поведение серверов Telegram. Доступность функций может зависеть от платформы и текущего состояния ветки разработки.
 
-Вы можете скачать готовый бинарный файл со вкладки [Releases](https://github.com/AyuGram/AyuGramDesktop/releases) или из
-[Телеграм канала](https://t.me/AyuGramReleases).
+## Статус проекта
 
-#### Winget
+| Компонент | Статус |
+| --- | --- |
+| Исходный код | Открыт в ветке [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) |
+| Windows | Есть инструкция по сборке; первый проверенный пакет готовится |
+| macOS | Есть инструкция по сборке; первый проверенный пакет готовится |
+| Linux | Есть инструкция по сборке; первый проверенный пакет готовится |
+| Официальные пакетные менеджеры | Пакеты ещё не опубликованы |
 
-```bash
-winget install RadolynLabs.AyuGramDesktop
-```
+В проекте продолжается замена пользовательского брендинга AyuGram. Совместимые внутренние идентификаторы могут временно сохраняться, если их немедленная замена сломает обновления, профили или интеграцию с системой.
 
-#### Scoop
+## Как получить LuxuryGram
 
-```bash
-scoop bucket add extras
-scoop install ayugram
-```
+### Релизы
 
-#### Сборка вручную
+Официальных бинарных релизов пока нет. Не доверяйте установщикам и архивам, которые выдают себя за LuxuryGram, если они не опубликованы в разделе [Releases](https://github.com/GofMan5/LuxuryGram/releases) этого репозитория.
 
-Следуйте [официальному руководству](https://github.com/AyuGram/AyuGramDesktop/blob/dev/docs/building-win-x64.md), если
-вы хотите собрать AyuGram сами.
+### Исходный код
 
-### macOS
-
-#### Официальная версия
-
-Вы можете скачать подписанный пакет со вкладки [Releases](https://github.com/AyuGram/AyuGramDesktop/releases).
-
-#### Homebrew
-
-```bash
-brew install --cask ayugram
-```
-
-### Arch Linux
-
-#### Из исходников (рекомендованный способ)
-
-Установите `ayugram-desktop` из [AUR](https://aur.archlinux.org/packages/ayugram-desktop).
-
-#### Готовые бинарники
-
-Установите `ayugram-desktop-bin` из [AUR](https://aur.archlinux.org/packages/ayugram-desktop-bin).
-
-Примечание: данный пакет собирается не нами.
-
-### NixOS
-
-#### Флейк (рекомендуется)
-
-Установите `ayugram-desktop` из [ndfined-crp/ayugram-desktop](https://github.com/ndfined-crp/ayugram-desktop)
-
-#### Nixpkgs
-
-Установите `ayugram-desktop` из [nixpkgs](https://search.nixos.org/packages?channel=unstable&show=ayugram-desktop)
-
-### ALT Linux
-
-[Sisyphus](https://packages.altlinux.org/en/sisyphus/srpms/ayugram-desktop/)
-
-### Gentoo Linux
-
-Инструкцию по установке можно найти в [этом репозитории](https://codeberg.org/OverLessArtem/ayugram-ebuild-gentoo).
-
-### Void Linux
-Инструкцию по установке можно найти в [этом репозитории](https://codeberg.org/OverLessArtem/ayugram-template-void)
-
-### EPM
-
-`epm play ayugram`
-
-### Fedora
-
-Из репозитория [RPM Fusion](https://admin.rpmfusion.org/pkgdb/package/free/ayugram-desktop/).
+Клонируйте репозиторий вместе с подмодулями:
 
 ```bash
-dnf install ayugram-desktop
+git clone --recursive https://github.com/GofMan5/LuxuryGram.git
+cd LuxuryGram
 ```
 
-### Любой другой Линукс дистрибутив
+Если репозиторий уже клонирован без `--recursive`:
 
-Flatpak: https://github.com/0FL01/AyuGramDesktop-flatpak
+```bash
+git submodule update --init --recursive
+```
 
-Или следуйте [официальному руководству](https://github.com/AyuGram/AyuGramDesktop/blob/dev/docs/building-linux.md).
+## Сборка из исходников
 
-## Пожертвования
+Выберите инструкцию для своей платформы:
 
-Вам нравится использовать **AyuGram**? Оставьте нам чаевые!
+- [Windows](docs/building-win.md)
+- [macOS](docs/building-mac.md)
+- [Linux с Docker](docs/building-linux.md)
+- [Получение Telegram API credentials](docs/api_credentials.md)
 
-[Здесь доступные варианты.](https://docs.ayugram.one/donate/)
+Для собственной сборки нужны личные Telegram API credentials. Не публикуйте и не добавляйте их в Git.
 
-## Использованные материалы
+## Открытый проект
 
-### Телеграм клиенты
+| Документ | Назначение |
+| --- | --- |
+| [Руководство для участников](CONTRIBUTING.md) | Ветка, сборка, проверка и отправка небольших изменений |
+| [Кодекс поведения](CODE_OF_CONDUCT.md) | Правила общения в сообществе |
+| [Политика безопасности](SECURITY.md) | Приватная отправка уязвимостей и поддерживаемые версии |
+| [Поддержка](SUPPORT.md) | Получение помощи без раскрытия личных данных |
+| [История изменений](CHANGELOG.md) | Изменения, относящиеся непосредственно к LuxuryGram |
+| [Лицензия](LICENSE) | GNU GPL v3 или более поздняя версия и исключение для линковки с OpenSSL |
+| [Правовая информация](LEGAL) | Авторские права, атрибуция и отказ от гарантий |
+| [Сторонние компоненты](NOTICE.md) | Исходные проекты и лицензии зависимостей |
 
-- [Telegram Desktop](https://github.com/telegramdesktop/tdesktop)
-- [Kotatogram](https://github.com/kotatogram/kotatogram-desktop)
-- [64Gram](https://github.com/TDesktop-x64/tdesktop)
-- [Forkgram](https://github.com/forkgram/tdesktop)
+## Безопасность и приватность
 
-### Использованные библиотеки
+- После появления сборок загружайте их только со страницы релизов этого репозитория.
+- Не публикуйте API hash, номер телефона, коды подтверждения, данные сессии и неочищенные логи.
+- Сообщайте об уязвимостях приватно по инструкции из [`SECURITY.md`](SECURITY.md).
+- Если ваша модель угроз требует независимой проверки, изучите код и соберите приложение самостоятельно.
 
-- [JSON for Modern C++](https://github.com/nlohmann/json)
-- [SQLite](https://github.com/sqlite/sqlite)
-- [sqlite_orm](https://github.com/fnc12/sqlite_orm)
+Ни один сторонний Telegram-клиент не устраняет риски ограничений аккаунта, изменений протокола, заражённого устройства или небезопасных сборок и плагинов.
 
-### Иконки
+## Основа и благодарности
 
-- [Solar Icon Set](https://www.figma.com/community/file/1166831539721848736)
+LuxuryGram существует благодаря работе над следующими проектами:
 
-### Боты
+- [AyuGram Desktop](https://github.com/AyuGram/AyuGramDesktop) — функциональная кодовая база, использованная как отправная точка;
+- [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) — исходный десктопный клиент и fork network;
+- участники и сторонние проекты, указанные в исходниках, подмодулях и [`NOTICE.md`](NOTICE.md).
 
-- [TelegramDB](https://t.me/tgdatabase) для получения юзернейма по ID (до закрытия бесплатной версии 2 апреля 2026)
+Telegram является товарным знаком соответствующего правообладателя. LuxuryGram не претендует на права на название или сервис Telegram.
+
+## Лицензия
+
+LuxuryGram распространяется на условиях GNU General Public License версии 3 или, по вашему выбору, любой более поздней версии с исключением для линковки с OpenSSL, приведённым в [`LICENSE`](LICENSE). Отдельные встроенные компоненты и подмодули могут использовать собственные совместимые лицензии; их уведомления имеют приоритет для соответствующего кода.
+
+---
+
+<div align="center">
+  <strong>LuxuryGram</strong><br>
+  Открытая разработка с уважением к пользователям и исходным проектам.
+</div>

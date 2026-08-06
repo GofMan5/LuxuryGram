@@ -1,21 +1,25 @@
-This file is part of Telegram Desktop,
-the official desktop application for the Telegram messaging service.
+LuxuryGram is an independent desktop client derived from AyuGram Desktop
+and Telegram Desktop.
 
-Copyright (c) 2014-2026 The Telegram Desktop Authors.
+Copyright (c) 2026 LuxuryGram contributors for their original changes.
+Copyright (c) AyuGram Desktop contributors for inherited modifications.
+Copyright (c) 2014-2026 The Telegram Desktop Authors for upstream work.
 
-Telegram Desktop is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+LuxuryGram is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 or (at your option) any later version, subject to
+the OpenSSL linking exception reproduced in the LICENSE file.
 
-It is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
+LuxuryGram is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for details.
 
-In addition, as a special exception, the copyright holders give permission
-to link the code of portions of this program with the OpenSSL library.
+The project includes third-party components and Git submodules whose own
+copyright and license notices remain applicable. See NOTICE.md, .gitmodules,
+component directories, and packaged license files.
 
-More information about the Telegram project: https://telegram.org
+LuxuryGram is not affiliated with, maintained by, or endorsed by Telegram.
+Telegram and the Telegram logo are trademarks of their respective owner.
 
-Full license: https://github.com/telegramdesktop/tdesktop/blob/master/LICENSE
+Full license: https://github.com/GofMan5/LuxuryGram/blob/dev/LICENSE
+Notices: https://github.com/GofMan5/LuxuryGram/blob/dev/NOTICE.md

@@ -1,29 +1,51 @@
----
-name: 💡 Feature request
-description: Suggest an idea.
+name: Feature request
+description: Propose a focused improvement to LuxuryGram.
+title: "[Feature]: "
 labels: [enhancement]
 body:
-  - type: textarea
+  - type: checkboxes
+    id: checklist
     attributes:
-      label: Is your feature request related to a problem?
-      placeholder: A clear and concise description of what the problem is.
+      label: Checklist
+      options:
+        - label: I searched existing issues and did not find the same request.
+          required: true
+        - label: The request is specific to a desktop client and does not require a Telegram server change.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user problem before proposing implementation details.
+      placeholder: When I ..., I need ..., because ...
     validations:
       required: true
+
   - type: textarea
+    id: proposal
     attributes:
-      label: Describe the solution you'd like
-      placeholder: A clear and concise description of what you want to happen.
+      label: Proposed experience
+      description: Explain the smallest useful behavior and where it belongs in the interface.
     validations:
       required: true
+
   - type: textarea
+    id: alternatives
     attributes:
-      label: Describe alternatives you've considered
-      placeholder: A clear and concise description of any alternative solutions or features you've considered.
+      label: Alternatives considered
+      description: Note existing settings, workarounds, or upstream behavior you evaluated.
     validations:
       required: true
+
   - type: textarea
+    id: references
+    attributes:
+      label: Visual references
+      description: Optional mockups or examples. Remove private chat and account data before attaching images.
+
+  - type: textarea
+    id: context
     attributes:
       label: Additional context
-      placeholder: Add any other context or screenshots about the feature request here.
-    validations:
-      required: false
+      description: Platform constraints, accessibility needs, or compatibility considerations.

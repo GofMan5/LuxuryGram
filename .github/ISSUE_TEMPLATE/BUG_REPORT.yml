@@ -1,72 +1,106 @@
 name: Bug report
-description: Report errors or unexpected behavior.
+description: Report a reproducible LuxuryGram defect.
+title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting issues of AyuGram Desktop!
+        Thanks for helping improve LuxuryGram. Search existing issues first and remove private data from screenshots and logs.
 
-        To make it easier for us to help you please enter detailed information below.
+        Security vulnerabilities must be reported privately through the Security tab, not this form.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I removed phone numbers, login codes, API credentials, session data, private messages, and other sensitive information.
+          required: true
+        - label: This is not an undisclosed security vulnerability.
+          required: true
+
   - type: textarea
+    id: steps
     attributes:
       label: Steps to reproduce
+      description: Use the smallest reliable sequence.
       placeholder: |
-        1. 
-        2. 
-        3. 
+        1. Open ...
+        2. Select ...
+        3. Observe ...
     validations:
       required: true
+
   - type: textarea
+    id: expected
     attributes:
-      label: Expected behaviour
-      placeholder: Tell us what should happen
+      label: Expected behavior
+      placeholder: What should happen?
     validations:
       required: true
+
   - type: textarea
+    id: actual
     attributes:
-      label: Actual behaviour
-      placeholder: Tell us what happens instead
+      label: Actual behavior
+      placeholder: What happens instead?
     validations:
       required: true
+
   - type: input
+    id: version
+    attributes:
+      label: LuxuryGram commit or version
+      description: Use the full commit SHA for self-built snapshots; do not write "latest".
+      placeholder: 0123456789abcdef...
+    validations:
+      required: true
+
+  - type: input
+    id: operating-system
     attributes:
       label: Operating system
-      description: >
-        Your operating system name, version and desktop environment.
-        **Don't use kernel version (uname), it's useless.**
+      description: Include OS version, architecture, and desktop environment where relevant.
+      placeholder: Windows 11 24H2 x64 / macOS 15 arm64 / Fedora 42 KDE
     validations:
       required: true
-  - type: input
-    attributes:
-      label: Version of AyuGram Desktop
-      description: >
-        **Don't use 'latest'**, specify actual version.
-    validations:
-      required: true
+
   - type: dropdown
+    id: installation-source
     attributes:
       label: Installation source
-      multiple: false
       options:
-        - Binary from GitHub / @AyuGramReleases channel
-        - Arch Linux (ayugram-desktop / ayugram-desktop-git)
-        - Arch Linux (ayugram-desktop-bin)
-        - flatpak by 0FL01
-        - Other (unofficial) source
+        - Self-built from GofMan5/LuxuryGram
+        - Official LuxuryGram release
+        - Unofficial downstream package or build
     validations:
       required: true
-  - type: input
+
+  - type: dropdown
+    id: upstream
     attributes:
-      label: Crash ID
-      description: >
-        If you're reporting a crash, please enter the crash ID from the crash reporter
-        opening on the next launch after crash.
+      label: Does it reproduce upstream?
+      description: Test only when practical.
+      options:
+        - Not tested
+        - LuxuryGram only
+        - AyuGram Desktop too
+        - Telegram Desktop too
+    validations:
+      required: true
+
   - type: textarea
+    id: logs
     attributes:
-      label: Logs
-      description: >
-        You can find log.txt using the `viewlogs`
-        [cheat code](https://github.com/telegramdesktop/tdesktop/wiki/Cheat-Codes).
-      placeholder: Insert log.txt here (if necessary)
+      label: Sanitized logs
+      description: Paste only the minimal relevant excerpt after removing private data.
       render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add anything else that materially helps reproduce the problem, including sanitized screenshots.

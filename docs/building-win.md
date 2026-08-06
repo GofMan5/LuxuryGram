@@ -1,4 +1,4 @@
-# Build instructions for Windows 64-bit
+# Build LuxuryGram for Windows 64-bit
 
 - [Prepare folder](#prepare-folder)
 - [Install third party software](#install-third-party-software)
@@ -28,7 +28,7 @@ Choose an empty folder for the future build, for example **D:\\TBuild**. It will
 ## Initialize terminal
 
 Before preparing libraries and running build commands, initialize the Visual Studio environment for your target architecture.
-The default modern toolset from Visual Studio 2026 (`v145`) does not support Windows 7, so for AyuGram Desktop you must use `-vcvars_ver=14.44` (`v144.4`, based on `v143` with Windows 7 support).
+The default modern toolset from Visual Studio 2026 (`v145`) does not support Windows 7, so this source line uses `-vcvars_ver=14.44` (`v144.4`, based on `v143` with Windows 7 support).
 
 For Visual Studio installation:
 
@@ -44,18 +44,20 @@ Run both `Clone source code and prepare libraries` and `Build the project` secti
 
 In the initialized terminal, go to ***BuildPath*** and run
 
-    git clone --recursive https://github.com/AyuGram/AyuGramDesktop.git tdesktop
+    git clone --recursive https://github.com/GofMan5/LuxuryGram.git tdesktop
     tdesktop\Telegram\build\prepare\win.bat
 
 ## Build the project
 
 Go to ***BuildPath*\\tdesktop\\Telegram** and run
 
-    configure.bat x64 -D TDESKTOP_API_ID=2040 -D TDESKTOP_API_HASH=b18441a1ff607e10a989891a5462e627
+    configure.bat x64 -D TDESKTOP_API_ID=YOUR_API_ID -D TDESKTOP_API_HASH=YOUR_API_HASH
 
-* Open ***BuildPath*\\tdesktop\\out\\Telegram.slnx** in Visual Studio 2026
-* Select Telegram project and press Build > Build Telegram (Debug and Release configurations)
-* The result AyuGram.exe will be located in **D:\TBuild\tdesktop\out\Debug** (and **Release**)
+Create your own credentials first; see [Telegram API credentials](api_credentials.md).
+
+* Open ***BuildPath*\\tdesktop\\out\\Telegram.slnx** in Visual Studio 2026.
+* Select the Telegram target and choose **Build > Build Telegram** using the **Debug** configuration first.
+* Build outputs will be placed in the `out/Debug` directory.
 
 ## Troubleshooting
 

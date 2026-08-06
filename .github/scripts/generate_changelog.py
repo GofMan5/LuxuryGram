@@ -255,9 +255,9 @@ footer a:hover {{ text-decoration: underline; }}
 
 <footer>
   Auto-generated from
-  <a href="https://github.com/telegramdesktop/tdesktop/blob/dev/changelog.txt">changelog.txt</a>.
+  <a href="https://github.com/GofMan5/LuxuryGram/blob/dev/changelog.txt">changelog.txt</a>.
   Source code is published under
-  <a href="https://github.com/telegramdesktop/tdesktop">GPL v3</a>.
+  <a href="https://github.com/GofMan5/LuxuryGram/blob/dev/LICENSE">GPL v3</a>.
 </footer>
 
 <script>

@@ -1,156 +1,134 @@
-# AyuGram
+<div align="center">
+  <img src=".github/assets/luxurygram-logo.png" width="220" alt="LuxuryGram logo">
+  <h1>LuxuryGram</h1>
+  <p><strong>A refined, privacy-minded Telegram experience for desktop.</strong></p>
+  <p>Open-source · Built from AyuGram · Based on Telegram Desktop</p>
 
-![AyuGram Logo](.github/AyuGram.png) ![AyuChan](.github/AyuChan.png)
+  <p>
+    <a href="README.md"><strong>English</strong></a>
+    ·
+    <a href="README-RU.md">Русский</a>
+  </p>
 
-[ English  |   [Русский](README-RU.md) ]
+  <p>
+    <img alt="License" src="https://img.shields.io/github/license/GofMan5/LuxuryGram?style=for-the-badge&labelColor=0B0E16&color=D8A43A">
+    <img alt="C++ and Qt" src="https://img.shields.io/badge/C%2B%2B-Qt_6-D8A43A?style=for-the-badge&logo=cplusplus&logoColor=white&labelColor=0B0E16">
+    <img alt="Project status" src="https://img.shields.io/badge/status-source_preview-D8A43A?style=for-the-badge&labelColor=0B0E16">
+  </p>
 
-## Features
+  <p>
+    <a href="#highlights">Highlights</a> ·
+    <a href="#get-luxurygram">Get LuxuryGram</a> ·
+    <a href="#build-from-source">Build</a> ·
+    <a href="CONTRIBUTING.md">Contribute</a> ·
+    <a href="SECURITY.md">Security</a>
+  </p>
+</div>
 
-- Full ghost mode (flexible)
-- Messages history
-- Anti-recall
-- Font customization
-- Streamer mode
-- Local Telegram Premium
-- Translator
-- Media preview & quick reaction on force click (macOS)
-- Enhanced appearance
+> [!IMPORTANT]
+> LuxuryGram is currently a **source preview**. Official LuxuryGram binaries have not been published yet. When releases begin, this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page will be the canonical download source.
 
-And many more. Check out our [Documentation](https://docs.ayugram.one/desktop/).
+> [!NOTE]
+> LuxuryGram is an independent, unofficial client. It is not affiliated with, maintained by, or endorsed by Telegram.
 
-<h3>
-  <details>
-    <summary>Preview</summary>
-    <table>
-      <tr>
-        <td><img src='.github/demos/demo1.png' width='268' alt='Preferences'></td>
-        <td><img src='.github/demos/demo2.png' width='268' alt='AyuGram Options'></td>
-        <td><img src='.github/demos/demo3.png' width='268' alt='Message Filters'></td>
-      </tr>
-      <tr>
-        <td><img src='.github/demos/demo4.png' width='268' alt='Appearance'></td>
-        <td><img src='.github/demos/demo5.png' width='268' alt='Chats'></td>
-      </tr>
-    </table>
-  </details>
-</h3>
+## Highlights
 
-## Downloads
+LuxuryGram keeps the familiar Telegram Desktop foundation and adds more control where a desktop client benefits from it.
 
-### Windows
+| Area | What it offers |
+| --- | --- |
+| **Privacy controls** | Flexible ghost mode and granular presence/activity options. |
+| **Message context** | Local edit/delete history and anti-recall tools for supported conversations. |
+| **Focus** | Streamer-friendly controls that help hide sensitive information while sharing a screen. |
+| **Personalization** | Font controls, appearance options, and a more configurable desktop experience. |
+| **Productivity** | Translation, richer media previews, and faster interaction shortcuts. |
+| **Desktop foundation** | The mature C++/Qt architecture and platform integration inherited from Telegram Desktop. |
 
-#### Official
+Some features operate locally and cannot change Telegram server-side behavior. Availability may vary by platform and by the current development snapshot.
 
-You can download prebuilt Windows binary from [Releases tab](https://github.com/AyuGram/AyuGramDesktop/releases) or from
-the [Telegram channel](https://t.me/AyuGramReleases).
+## Project status
 
-#### Winget
+| Surface | Status |
+| --- | --- |
+| Source code | Public on the [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) branch |
+| Windows | Build guide available; first verified package pending |
+| macOS | Build guide available; first verified package pending |
+| Linux | Build guide available; first verified package pending |
+| Official package managers | Not published |
 
-```bash
-winget install RadolynLabs.AyuGramDesktop
-```
+The project is actively replacing inherited AyuGram-facing branding. Compatibility-critical internal identifiers may remain until they can be migrated without breaking updates, profiles, or platform integration.
 
-#### Scoop
+## Get LuxuryGram
 
-```bash
-scoop bucket add extras
-scoop install ayugram
-```
+### Releases
 
-#### Self-built
+There is no official binary release yet. Do not trust installers or archives claiming to be official LuxuryGram builds when they are not attached to this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page.
 
-Follow [official guide](https://github.com/AyuGram/AyuGramDesktop/blob/dev/docs/building-win-x64.md) if you want to
-build by yourself.
+### Source
 
-### macOS
-
-#### Official
-
-You can download prebuilt macOS package from [Releases tab](https://github.com/AyuGram/AyuGramDesktop/releases).
-
-#### Homebrew
+Clone the repository together with its submodules:
 
 ```bash
-brew install --cask ayugram
+git clone --recursive https://github.com/GofMan5/LuxuryGram.git
+cd LuxuryGram
 ```
 
-### Arch Linux
-
-#### From source (recommended)
-
-Install `ayugram-desktop` from [AUR](https://aur.archlinux.org/packages/ayugram-desktop).
-
-#### Prebuilt binaries
-
-Install `ayugram-desktop-bin` from [AUR](https://aur.archlinux.org/packages/ayugram-desktop-bin).
-
-Note: these binaries aren't officially maintained by us.
-
-### NixOS
-
-#### Flake (recommended)
-
-Install `ayugram-desktop` from [ndfined-crp/ayugram-desktop](https://github.com/ndfined-crp/ayugram-desktop)
-
-#### Nixpkgs
-
-Install `ayugram-desktop` from [nixpkgs](https://search.nixos.org/packages?channel=unstable&show=ayugram-desktop)
-
-### ALT Linux
-
-[Sisyphus](https://packages.altlinux.org/en/sisyphus/srpms/ayugram-desktop/)
-
-### Gentoo Linux
-
-See [this repository](https://codeberg.org/OverLessArtem/ayugram-ebuild-gentoo) for installation manual.
-
-### Void Linux
-See [this repository](https://codeberg.org/OverLessArtem/ayugram-template-void) for installation manual.
-
-### EPM
-
-`epm play ayugram`
-
-### Fedora
-
-From [RPM Fusion](https://admin.rpmfusion.org/pkgdb/package/free/ayugram-desktop/) repository.
+If you already cloned without `--recursive`:
 
 ```bash
-dnf install ayugram-desktop
+git submodule update --init --recursive
 ```
 
-### Any other Linux distro
+## Build from source
 
-Flatpak: https://github.com/0FL01/AyuGramDesktop-flatpak
+Choose the guide for your platform:
 
-Or follow the [official guide](https://github.com/AyuGram/AyuGramDesktop/blob/dev/docs/building-linux.md).
+- [Windows](docs/building-win.md)
+- [macOS](docs/building-mac.md)
+- [Linux with Docker](docs/building-linux.md)
+- [Telegram API credentials](docs/api_credentials.md)
 
-## Donation
+Telegram API credentials are required for self-built clients. Use your own credentials and never commit them to a public repository.
 
-Enjoy using **AyuGram**? Consider sending us a tip!
+## Open-source project
 
-[Here's available methods.](https://docs.ayugram.one/donate/)
+| Resource | Purpose |
+| --- | --- |
+| [Contributing guide](CONTRIBUTING.md) | Set up a branch, build, test, and submit a focused change |
+| [Code of Conduct](CODE_OF_CONDUCT.md) | Community standards |
+| [Security policy](SECURITY.md) | Private vulnerability reporting and supported versions |
+| [Support guide](SUPPORT.md) | Get help without exposing private data |
+| [Changelog](CHANGELOG.md) | LuxuryGram-specific project history |
+| [License](LICENSE) | GNU GPL v3 or later and the included OpenSSL linking exception |
+| [Legal notice](LEGAL) | Copyright, attribution, and warranty terms |
+| [Third-party notice](NOTICE.md) | Upstream projects and dependency licensing |
 
-## Credits
+## Security and privacy
 
-### Telegram clients
+- Download only from this repository's release page once binaries are published.
+- Never post API hashes, phone numbers, authentication codes, session data, or unredacted logs in an issue.
+- Report security vulnerabilities privately according to [`SECURITY.md`](SECURITY.md).
+- Review code and build from source when your threat model requires independent verification.
 
-- [Telegram Desktop](https://github.com/telegramdesktop/tdesktop)
-- [Kotatogram](https://github.com/kotatogram/kotatogram-desktop)
-- [64Gram](https://github.com/TDesktop-x64/tdesktop)
-- [Forkgram](https://github.com/forkgram/tdesktop)
+No third-party Telegram client can eliminate the risks of account restrictions, upstream protocol changes, compromised devices, or unsafe plugins and builds.
 
-### Libraries used
+## Upstream and credits
 
-- [JSON for Modern C++](https://github.com/nlohmann/json)
-- [SQLite](https://github.com/sqlite/sqlite)
-- [sqlite_orm](https://github.com/fnc12/sqlite_orm)
-- [androidx sources](https://github.com/androidx/androidx)
+LuxuryGram exists thanks to the work of:
 
-### Icons
+- [AyuGram Desktop](https://github.com/AyuGram/AyuGramDesktop) — the feature-rich source line used as the starting point;
+- [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) — the upstream desktop client and fork network;
+- all contributors and third-party projects listed in the source tree, submodules, and [`NOTICE.md`](NOTICE.md).
 
-- [Solar Icon Set](https://www.figma.com/community/file/1166831539721848736)
+Telegram is a trademark of its respective owner. LuxuryGram does not claim ownership of the Telegram name or service.
 
-### Bots
+## License
 
-- [TelegramDB](https://t.me/tgdatabase) for username lookup by ID (until closing free inline mode at 2 April 2026)
+LuxuryGram is distributed under the GNU General Public License version 3 or, at your option, any later version, with the OpenSSL linking exception included in [`LICENSE`](LICENSE). Individual bundled components and submodules may use their own compatible licenses; their notices remain authoritative for those components.
+
+---
+
+<div align="center">
+  <strong>LuxuryGram</strong><br>
+  Built in the open, with respect for its upstream projects and users.
+</div>
