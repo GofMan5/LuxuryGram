@@ -12,10 +12,28 @@
 namespace LuxuryState {
 
 std::unordered_map<PeerId, std::unordered_set<MsgId>> hiddenMessages;
+std::size_t hiddenMessagesCount = 0;
 base::weak_ptr<Main::Session> disableGhostModeOnStoryCloseSession;
 
 void hide(PeerId peerId, MsgId messageId) {
+	const auto existing = hiddenMessages.find(peerId);
+	if (existing != end(hiddenMessages)
+		&& existing->second.contains(messageId)) {
+		return;
+	}
+
+	// ponytail: bounded session cache; persist IDs if 65K hides per launch becomes real.
+	constexpr auto kMaxHiddenMessages = std::size_t(65'536);
+	if (hiddenMessagesCount >= kMaxHiddenMessages) {
+		const auto peer = begin(hiddenMessages);
+		peer->second.erase(begin(peer->second));
+		if (peer->second.empty()) {
+			hiddenMessages.erase(peer);
+		}
+		--hiddenMessagesCount;
+	}
 	hiddenMessages[peerId].insert(messageId);
+	++hiddenMessagesCount;
 }
 
 void hide(not_null<HistoryItem*> item) {

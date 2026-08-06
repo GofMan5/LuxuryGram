@@ -91,27 +91,52 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 		}
 	}
 
-	auto collected = std::make_shared<std::vector<MsgId>>();
+	struct State {
+		base::weak_ptr<Main::Session> session;
+		PeerId peerId;
+		std::vector<MsgId> collected;
+		Fn<void(int)> removeNext;
+		Fn<void(MsgId)> requestNext;
+	};
+	const auto state = std::make_shared<State>();
+	state->session = base::make_weak(session);
+	state->peerId = peer->id;
+	const auto weak = std::weak_ptr<State>(state);
 
-	const auto removeNext = std::make_shared<Fn<void(int)>>();
-	const auto requestNext = std::make_shared<Fn<void(MsgId)>>();
-
-	*removeNext = [=](int index)
-	{
-		if (index >= int(collected->size())) {
-			DEBUG_LOG(("Deleted all %1 my messages in this chat").arg(collected->size()));
+	state->removeNext = [weak](int index) {
+		const auto state = weak.lock();
+		if (!state) {
+			return;
+		}
+		const auto session = state->session.get();
+		const auto peer = session
+			? session->data().peerLoaded(state->peerId)
+			: nullptr;
+		if (!peer) {
+			return;
+		}
+		if (index >= int(state->collected.size())) {
+			DEBUG_LOG(("Deleted all %1 my messages in this chat").arg(
+				state->collected.size()));
 			return;
 		}
 
-		QVector<MTPint> ids;
-		ids.reserve(std::min<int>(100, collected->size() - index));
-		for (auto i = 0; i < 100 && (index + i) < int(collected->size()); ++i) {
-			ids.push_back(MTP_int((*collected)[index + i].bare));
+		auto ids = QVector<MTPint>();
+		ids.reserve(std::min<int>(100, state->collected.size() - index));
+		for (auto i = 0; i < 100 && (index + i) < int(state->collected.size()); ++i) {
+			ids.push_back(MTP_int(state->collected[index + i].bare));
 		}
 
 		const auto batch = index / 100 + 1;
-		const auto done = [=](const MTPmessages_AffectedMessages &result)
-		{
+		const auto done = [state, ids, index, batch](
+				const MTPmessages_AffectedMessages &result) {
+			const auto session = state->session.get();
+			const auto peer = session
+				? session->data().peerLoaded(state->peerId)
+				: nullptr;
+			if (!peer) {
+				return;
+			}
 			session->api().applyAffectedMessages(peer, result);
 			if (peer->isChannel()) {
 				session->data().processMessagesDeleted(peer->id, ids);
@@ -119,12 +144,17 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 				session->data().processNonChannelMessagesDeleted(ids);
 			}
 			const auto deleted = index + ids.size();
-			DEBUG_LOG(("Deleted batch %1, total deleted %2/%3").arg(batch).arg(deleted).arg(collected->size()));
-			const auto delay = crl::time(500 + base::RandomValue<int>() % 500);
-			base::call_delayed(delay, [=] { (*removeNext)(deleted); });
+			DEBUG_LOG(("Deleted batch %1, total deleted %2/%3")
+				.arg(batch)
+				.arg(deleted)
+				.arg(state->collected.size()));
+			const auto delay = crl::time(
+				500 + base::RandomValue<int>() % 500);
+			base::call_delayed(delay, [state, deleted] {
+				state->removeNext(deleted);
+			});
 		};
-		const auto fail = [=](const MTP::Error &error)
-		{
+		const auto fail = [state, ids, index, batch](const MTP::Error &error) {
 			const auto type = error.type();
 			DEBUG_LOG(("Delete batch %1 failed: %2").arg(batch).arg(type));
 
@@ -135,16 +165,23 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 					? type.mid(underscore + 1).toInt()
 					: 0;
 				const auto delay = crl::time(std::max(seconds, 1) * 1000);
-				base::call_delayed(delay, [=] { (*removeNext)(index); });
+				base::call_delayed(delay, [state, index] {
+					state->removeNext(index);
+				});
 				return;
 			}
 
 			if (type == u"MESSAGE_DELETE_FORBIDDEN"_q
 				|| type == u"MSG_ID_INVALID"_q
 				|| type == u"MESSAGE_ID_INVALID"_q) {
-				DEBUG_LOG(("Skipping batch %1 (%2 ids)").arg(batch).arg(ids.size()));
-				const auto delay = crl::time(500 + base::RandomValue<int>() % 500);
-				base::call_delayed(delay, [=] { (*removeNext)(index + ids.size()); });
+				DEBUG_LOG(("Skipping batch %1 (%2 ids)")
+					.arg(batch)
+					.arg(ids.size()));
+				const auto delay = crl::time(
+					500 + base::RandomValue<int>() % 500);
+				base::call_delayed(delay, [state, next = index + ids.size()] {
+					state->removeNext(next);
+				});
 				return;
 			}
 
@@ -153,7 +190,9 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 
 		if (const auto channel = peer->asChannel()) {
 			session->api()
-				.request(MTPchannels_DeleteMessages(channel->inputChannel(), MTP_vector<MTPint>(ids)))
+				.request(MTPchannels_DeleteMessages(
+					channel->inputChannel(),
+					MTP_vector<MTPint>(ids)))
 				.done(done)
 				.fail(fail)
 				.handleFloodErrors()
@@ -161,7 +200,9 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 		} else {
 			using Flag = MTPmessages_DeleteMessages::Flag;
 			session->api()
-				.request(MTPmessages_DeleteMessages(MTP_flags(Flag::f_revoke), MTP_vector<MTPint>(ids)))
+				.request(MTPmessages_DeleteMessages(
+					MTP_flags(Flag::f_revoke),
+					MTP_vector<MTPint>(ids)))
 				.done(done)
 				.fail(fail)
 				.handleFloodErrors()
@@ -169,8 +210,19 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 		}
 	};
 
-	*requestNext = [=](MsgId from)
-	{
+	state->requestNext = [weak](MsgId from) {
+		const auto state = weak.lock();
+		if (!state) {
+			return;
+		}
+		const auto session = state->session.get();
+		const auto peer = session
+			? session->data().peerLoaded(state->peerId)
+			: nullptr;
+		if (!peer) {
+			return;
+		}
+
 		using Flag = MTPmessages_Search::Flag;
 		auto request = MTPmessages_Search(
 			MTP_flags(Flag::f_from_id),
@@ -180,47 +232,56 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 			MTPInputPeer(),
 			MTPVector<MTPReaction>(),
 			MTP_int(0),
-			// top_msg_id
 			MTP_inputMessagesFilterEmpty(),
 			MTP_int(0),
-			// min_date
 			MTP_int(0),
-			// max_date
 			MTP_int(from.bare),
 			MTP_int(0),
-			// add_offset
 			MTP_int(100),
 			MTP_int(0),
-			// max_id
 			MTP_int(0),
-			// min_id
-			MTP_long(0)); // hash
+			MTP_long(0));
 
 		session->api()
 			.request(std::move(request))
-			.done([=](const Api::HistoryRequestResult &result)
-			{
-				auto parsed = Api::ParseHistoryResult(peer, from, Data::LoadDirection::Before, result);
-				MsgId minId;
-				int batchCount = 0;
-				for (const auto &id : parsed.messageIds) {
-					if (!minId || id < minId) minId = id;
-					collected->push_back(id);
-					++batchCount;
+			.done([state, from](const Api::HistoryRequestResult &result) {
+				const auto session = state->session.get();
+				const auto peer = session
+					? session->data().peerLoaded(state->peerId)
+					: nullptr;
+				if (!peer) {
+					return;
 				}
-				DEBUG_LOG(("Batch found %1 my messages, total %2").arg(batchCount).arg(collected->size()));
+				auto parsed = Api::ParseHistoryResult(
+					peer,
+					from,
+					Data::LoadDirection::Before,
+					result);
+				auto minId = MsgId();
+				for (const auto &id : parsed.messageIds) {
+					if (!minId || id < minId) {
+						minId = id;
+					}
+					state->collected.push_back(id);
+				}
+				DEBUG_LOG(("Batch found %1 my messages, total %2")
+					.arg(parsed.messageIds.size())
+					.arg(state->collected.size()));
 				if (parsed.messageIds.size() == 100 && minId) {
-					(*requestNext)(minId - MsgId(1));
+					state->requestNext(minId - MsgId(1));
 				} else {
-					DEBUG_LOG(("Found %1 my messages in this chat (SEARCH)").arg(collected->size()));
-					(*removeNext)(0);
+					DEBUG_LOG(("Found %1 my messages in this chat (SEARCH)")
+						.arg(state->collected.size()));
+					state->removeNext(0);
 				}
 			})
-			.fail([=](const MTP::Error &error) { DEBUG_LOG(("History fetch failed: %1").arg(error.type())); })
+			.fail([state](const MTP::Error &error) {
+				DEBUG_LOG(("History fetch failed: %1").arg(error.type()));
+			})
 			.send();
 	};
 
-	(*requestNext)(MsgId(0));
+	state->requestNext(MsgId(0));
 }
 
 Fn<void()> DeleteMyMessagesHandler(not_null<Window::SessionController*> controller, not_null<PeerData*> peer) {
@@ -569,8 +630,8 @@ void AddHideMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 			const auto ids = owner->itemOrItsGroup(item);
 			for (const auto &fullId : ids) {
 				if (const auto current = owner->message(fullId)) {
-					current->destroy();
 					LuxuryState::hide(current);
+					current->destroy();
 				}
 			}
 			history->requestChatListMessage();
