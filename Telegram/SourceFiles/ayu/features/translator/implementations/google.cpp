@@ -28,6 +28,7 @@ namespace {
 constexpr auto kGoogleTranslateUrl = "https://translate-pa.googleapis.com/v1/translateHtml";
 constexpr auto kGoogleContentType = "application/json+protobuf";
 constexpr auto kGoogleDefaultApiKey = "AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520";
+constexpr auto kMaxTranslationResponseBytes = 4 * 1024 * 1024;
 
 QString decodeHtmlEntities(const QString &text) {
 	QTextDocument doc;
@@ -81,7 +82,6 @@ QPointer<QNetworkReply> GoogleTranslator::startSingleTranslation(
 	const auto onFail = args.onFail;
 
 	if (text.empty() || toLang.isEmpty()) {
-		if (onFail) onFail();
 		return nullptr;
 	}
 
@@ -111,6 +111,15 @@ QPointer<QNetworkReply> GoogleTranslator::startSingleTranslation(
 	req.setRawHeader(QByteArrayLiteral("X-Goog-Api-Key"), QByteArray(kGoogleDefaultApiKey));
 
 	QPointer<QNetworkReply> reply = _nam.post(req, body);
+	QObject::connect(
+		reply,
+		&QNetworkReply::downloadProgress,
+		reply,
+		[reply](qint64 received, qint64) {
+			if (reply && received > kMaxTranslationResponseBytes) {
+				reply->abort();
+			}
+		});
 
 	auto timer = new QTimer(reply);
 	timer->setSingleShot(true);
@@ -139,7 +148,12 @@ QPointer<QNetworkReply> GoogleTranslator::startSingleTranslation(
 							 if (onFail) onFail();
 							 return;
 						 }
-						 const auto body = reply->readAll();
+						 const auto body = reply->read(
+							 kMaxTranslationResponseBytes + 1);
+						 if (body.size() > kMaxTranslationResponseBytes) {
+							 if (onFail) onFail();
+							 return;
+						 }
 						 QJsonParseError parseError{};
 						 const auto doc = QJsonDocument::fromJson(body, &parseError);
 						 if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {

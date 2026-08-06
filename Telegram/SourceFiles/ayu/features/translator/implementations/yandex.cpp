@@ -19,6 +19,12 @@
 
 namespace Ayu::Translator {
 
+namespace {
+
+constexpr auto kMaxTranslationResponseBytes = 4 * 1024 * 1024;
+
+} // namespace
+
 YandexTranslator &YandexTranslator::instance() {
 	static YandexTranslator inst;
 	return inst;
@@ -69,7 +75,6 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 	const auto onFail = args.onFail;
 
 	if (text.empty() || toLang.isEmpty()) {
-		if (onFail) onFail();
 		return nullptr;
 	}
 
@@ -93,6 +98,15 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 	const auto postDataEncoded = postData.toString(QUrl::FullyEncoded).toUtf8();
 
 	QPointer<QNetworkReply> reply = _nam.post(req, postDataEncoded);
+	QObject::connect(
+		reply,
+		&QNetworkReply::downloadProgress,
+		reply,
+		[reply](qint64 received, qint64) {
+			if (reply && received > kMaxTranslationResponseBytes) {
+				reply->abort();
+			}
+		});
 
 	auto timer = new QTimer(reply);
 	timer->setSingleShot(true);
@@ -122,7 +136,12 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 							 return;
 						 }
 
-						 const auto body = reply->readAll();
+							 const auto body = reply->read(
+								 kMaxTranslationResponseBytes + 1);
+							 if (body.size() > kMaxTranslationResponseBytes) {
+								 if (onFail) onFail();
+								 return;
+							 }
 						 bool ok = false;
 						 const auto translatedText = parseJsonPath(body, QStringLiteral("text"), &ok);
 						 if (!ok) {

@@ -178,10 +178,16 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 		return id;
 	}
 
+	const auto weakSession = base::make_weak(req.session());
 	CallbackSuccess onSuccess = [this, id, resultTexts = std::move(resultTexts), cacheKeys = std::move(cacheKeys),
 			uncachedIndices = std::move(uncachedIndices), texts = std::move(texts),
-			fromLang, toLang, session = req.session()](const std::vector<TextWithEntities> &translated) mutable
+			fromLang, toLang, weakSession](const std::vector<TextWithEntities> &translated) mutable
 	{
+		const auto session = weakSession.get();
+		if (!session) {
+			_pending.erase(id);
+			return;
+		}
 		for (size_t i = 0; i < translated.size() && i < uncachedIndices.size(); ++i) {
 			const auto index = uncachedIndices[i];
 			resultTexts[index] = translated[i];
@@ -210,13 +216,16 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 		triggerDone(id, result);
 	};
 
-	CallbackFail onFail = [this, id]
+	CallbackFail onFail = [this, id, weakSession]
 	{
-		triggerFail(id);
+		if (weakSession.get()) {
+			triggerFail(id);
+		} else {
+			_pending.erase(id);
+		}
 	};
 
 	const auto args = StartTranslationArgs{
-		.session = req.session(),
 		.requestData = {
 			.flags = req.flags(),
 			.peer = req.peer(),

@@ -15,10 +15,6 @@
 #include <QtCore/QString>
 #include <QtNetwork/QNetworkReply>
 
-namespace Main {
-class Session;
-}
-
 namespace Ayu::Translator {
 
 using CallbackSuccess = std::function<void(const std::vector<TextWithEntities> &)>;
@@ -50,8 +46,6 @@ struct ParsedData
 
 struct StartTranslationArgs
 {
-	Main::Session *session;
-
 	PassedData requestData;
 	ParsedData parsedData;
 

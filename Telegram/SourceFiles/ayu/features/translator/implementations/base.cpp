@@ -182,6 +182,7 @@ void MultiThreadTranslator::startTranslation(const StartTranslationArgs &args) {
 			for (auto &timer : retryTimers) {
 				if (timer) {
 					timer->stop();
+					timer->deleteLater();
 				}
 			}
 		}
@@ -204,23 +205,30 @@ void MultiThreadTranslator::startTranslation(const StartTranslationArgs &args) {
 	const auto maxRetries = getMaxRetries();
 	const auto baseWaitTime = getBaseWaitTimeMs();
 
-	auto finishFail = [state]()
+	const auto weak = std::weak_ptr<BatchState>(state);
+	auto finishFail = [weak]()
 	{
+		const auto state = weak.lock();
+		if (!state) return;
 		if (state->finished) return;
 		state->finished = true;
 		state->cancelAll();
 		if (state->onFail) state->onFail();
 	};
 
-	auto finishSuccess = [state]()
+	auto finishSuccess = [weak]()
 	{
+		const auto state = weak.lock();
+		if (!state) return;
 		if (state->finished) return;
 		state->finished = true;
 		if (state->onSuccess) state->onSuccess(state->results);
 	};
 
-	state->tryTranslateIndex = [state, finishFail, finishSuccess, maxRetries, baseWaitTime](int i) mutable
+	state->tryTranslateIndex = [weak, finishFail, finishSuccess, maxRetries, baseWaitTime](int i) mutable
 	{
+		const auto state = weak.lock();
+		if (!state) return;
 		if (state->finished) return;
 
 		MultiThreadArgs singleArgs;
@@ -263,9 +271,9 @@ void MultiThreadTranslator::startTranslation(const StartTranslationArgs &args) {
 							 &QTimer::timeout,
 							 [state, i, timer]() mutable
 							 {
-								 if (state->finished) return;
 								 timer->deleteLater();
 								 state->retryTimers[i] = nullptr;
+								 if (state->finished) return;
 								 state->tryTranslateIndex(i);
 							 });
 
@@ -279,8 +287,10 @@ void MultiThreadTranslator::startTranslation(const StartTranslationArgs &args) {
 		}
 	};
 
-	state->pump = [state, maxConcurrent]() mutable
+	state->pump = [weak, maxConcurrent]() mutable
 	{
+		const auto state = weak.lock();
+		if (!state) return;
 		if (state->finished) return;
 		while (!state->finished && state->inProgress < maxConcurrent && state->nextIndex < state->total) {
 			const int i = state->nextIndex++;
