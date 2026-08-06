@@ -61,7 +61,7 @@ public:
 
     private:
         TranslateManager *_manager = nullptr;
-        Main::Session* _session;
+        Main::Session *_session = nullptr;
 
         MTPflags<MTPmessages_translateText::Flags> _flags;
         MTPInputPeer _peer;
@@ -116,8 +116,11 @@ private:
     std::unordered_map<CacheKey, CacheIterator> _cacheMap;
     static constexpr size_t MAX_CACHE_SIZE = 500;
 
-    QString generateCacheKey(const QString &text, const QString &fromLang, const QString &toLang) const;
-    QString generateMessageCacheKey(PeerId peerId, MsgId msgId, const QString &fromLang, const QString &toLang) const;
+    QString generateCacheKey(
+        const TextWithEntities &text,
+        const QString &fromLang,
+        const QString &toLang,
+        TranslationProvider provider) const;
     void insertToCache(const QString &key, const CacheEntry &entry);
     std::optional<CacheEntry> getFromCache(const QString &key);
     void removeLeastRecentlyUsed();

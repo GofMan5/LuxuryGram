@@ -15,6 +15,7 @@
 #include "main/main_session.h"
 
 #include <QtCore/QCryptographicHash>
+#include <QtCore/QDataStream>
 #include <QtCore/QString>
 #include <QtNetwork/QNetworkReply>
 
@@ -121,8 +122,11 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 			};
 			texts.push_back(textWithEntities);
 
-			// todo: entities are not considered in cache key
-			const auto key = generateCacheKey(text, fromLang, toLang);
+			const auto key = generateCacheKey(
+				textWithEntities,
+				fromLang,
+				toLang,
+				req._provider);
 			cacheKeys.push_back(key);
 
 			if (const auto cached = getFromCache(key)) {
@@ -141,7 +145,11 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 					const auto textWithEntities = message->originalText();
 					texts.push_back(textWithEntities);
 
-					const auto key = generateMessageCacheKey(peerData->id, msgId, fromLang, toLang);
+					const auto key = generateCacheKey(
+						textWithEntities,
+						fromLang,
+						toLang,
+						req._provider);
 					cacheKeys.push_back(key);
 
 					if (const auto cached = getFromCache(key)) {
@@ -289,16 +297,30 @@ void TranslateManager::init() {
 	if (!instance) instance = new TranslateManager;
 }
 
-QString TranslateManager::generateCacheKey(const QString &text, const QString &fromLang, const QString &toLang) const {
-	const auto textHash = QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha1).toHex();
-	return QStringLiteral("%1_%2_%3").arg(QString::fromLatin1(textHash), fromLang, toLang);
-}
-
-QString TranslateManager::generateMessageCacheKey(PeerId peerId,
-												  MsgId msgId,
-												  const QString &fromLang,
-												  const QString &toLang) const {
-	return QStringLiteral("%1_%2_%3_%4").arg(peerId.value).arg(msgId.bare).arg(fromLang, toLang);
+QString TranslateManager::generateCacheKey(
+		const TextWithEntities &text,
+		const QString &fromLang,
+		const QString &toLang,
+		TranslationProvider provider) const {
+	auto data = QByteArray();
+	auto stream = QDataStream(&data, QIODevice::WriteOnly);
+	stream
+		<< text.text
+		<< fromLang
+		<< toLang
+		<< qint32(provider)
+		<< qint32(text.entities.size());
+	for (const auto &entity : text.entities) {
+		stream
+			<< qint32(entity.type())
+			<< qint32(entity.offset())
+			<< qint32(entity.length())
+			<< entity.data()
+			<< entity.isLocal();
+	}
+	return QString::fromLatin1(QCryptographicHash::hash(
+		data,
+		QCryptographicHash::Sha256).toHex());
 }
 
 void TranslateManager::insertToCache(const QString &key, const CacheEntry &entry) {
