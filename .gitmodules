@@ -21,10 +21,10 @@
 	url = https://github.com/desktop-app/lib_base.git
 [submodule "Telegram/codegen"]
 	path = Telegram/codegen
-	url = https://github.com/AyuGram/codegen.git
+	url = https://github.com/GofMan5/LuxuryGram-codegen.git
 [submodule "Telegram/lib_ui"]
 	path = Telegram/lib_ui
-	url = https://github.com/AyuGram/lib_ui.git
+	url = https://github.com/GofMan5/LuxuryGram-lib_ui.git
 [submodule "Telegram/lib_lottie"]
 	path = Telegram/lib_lottie
 	url = https://github.com/desktop-app/lib_lottie.git
@@ -103,3 +103,9 @@
 [submodule "Telegram/ThirdParty/TooManyCooks"]
 	path = Telegram/ThirdParty/TooManyCooks
 	url = https://github.com/tzcnt/TooManyCooks.git
+[submodule "Telegram/ThirdParty/libcbor"]
+	path = Telegram/ThirdParty/libcbor
+	url = https://github.com/PJK/libcbor.git
+[submodule "Telegram/ThirdParty/libfido2"]
+	path = Telegram/ThirdParty/libfido2
+	url = https://github.com/Yubico/libfido2.git
