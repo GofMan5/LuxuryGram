@@ -51,6 +51,10 @@ auto storage = make_storage(
 		make_column("fwdName", &DeletedMessage::fwdName),
 		make_column("fwdDate", &DeletedMessage::fwdDate),
 		make_column("fwdPostAuthor", &DeletedMessage::fwdPostAuthor),
+		make_column(
+			"postAuthor",
+			&DeletedMessage::postAuthor,
+			default_value("")),
 		make_column("replyFlags", &DeletedMessage::replyFlags),
 		make_column("replyMessageId", &DeletedMessage::replyMessageId),
 		make_column("replyPeerId", &DeletedMessage::replyPeerId),
@@ -87,6 +91,10 @@ auto storage = make_storage(
 		make_column("fwdName", &EditedMessage::fwdName),
 		make_column("fwdDate", &EditedMessage::fwdDate),
 		make_column("fwdPostAuthor", &EditedMessage::fwdPostAuthor),
+		make_column(
+			"postAuthor",
+			&EditedMessage::postAuthor,
+			default_value("")),
 		make_column("replyFlags", &EditedMessage::replyFlags),
 		make_column("replyMessageId", &EditedMessage::replyMessageId),
 		make_column("replyPeerId", &EditedMessage::replyPeerId),
