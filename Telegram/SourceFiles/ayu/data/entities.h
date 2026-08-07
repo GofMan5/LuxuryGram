@@ -98,7 +98,7 @@ public:
 		json["reversed"] = reversed;
 		json["caseInsensitive"] = caseInsensitive;
 		if (dialogId.has_value()) {
-			json["dialogId"] = dialogId.value();
+			json["dialogId"] = *dialogId;
 		}
 		return json;
 	}

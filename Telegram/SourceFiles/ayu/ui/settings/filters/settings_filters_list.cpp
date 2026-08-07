@@ -43,7 +43,7 @@ rpl::producer<QString> LuxuryFiltersList::title() {
 		return tr::luxury_RegexFiltersShared();
 	}
 
-	const auto did = abs(dialogId.value());
+	const auto did = abs(*dialogId);
 	const auto from = getPeerFromDialogId(did);
 
 	// todo: shorten based on available space
@@ -68,7 +68,7 @@ LuxuryFiltersList::LuxuryFiltersList(
 	: Section(parent, controller), _controller(controller), _content(Ui::CreateChild<Ui::VerticalLayout>(this)),
 	  shadowBan(_controller->shadowBan) {
 	if (_controller->dialogId.has_value()) {
-		dialogId = _controller->dialogId.value();
+		dialogId = *_controller->dialogId;
 	}
 
 	setupContent(controller);
@@ -155,10 +155,19 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 		 */
 		// controller->showBackFromStack() doesn't work (closes box completely)
 		// so as a workaround, use WrapWidget
-		const auto wrap = dynamic_cast<Info::WrapWidget*>(parent()->parent()->parent()->parent()->parent());
+		Info::WrapWidget *wrap = nullptr;
+		for (auto ancestor = parentWidget(); ancestor; ancestor = ancestor->parentWidget()) {
+			wrap = dynamic_cast<Info::WrapWidget*>(ancestor);
+			if (wrap) {
+				break;
+			}
+		}
+		if (!wrap) {
+			return;
+		}
 
 		const RegexFilterGlobalExclusion newExclusion = {
-			.dialogId = dialogId.value(),
+			.dialogId = *dialogId,
 			.filterId = state->id
 		};
 
@@ -182,7 +191,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 			{
 				Expects(dialogId.has_value());
 
-				LuxuryDatabase::deleteExclusion(dialogId.value(), state->id);
+				LuxuryDatabase::deleteExclusion(*dialogId, state->id);
 				FiltersCacheController::rebuildCache();
 				FiltersCacheController::fireUpdate();
 			},
@@ -193,7 +202,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 
 	if (exclusion) {
 		button->addClickHandler(deleteExclusionsClickHandler);
-	} else if (dialogId.has_value() && _controller->showExclude.has_value() && !_controller->showExclude.value()) {
+	} else if (dialogId && _controller->showExclude && !*_controller->showExclude) {
 		button->addClickHandler(exclusionsClickHandler);
 	} else {
 		button->addClickHandler(defaultClickHandler);
@@ -211,15 +220,15 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 
 void LuxuryFiltersList::initializeSharedFilters(
 	not_null<Ui::VerticalLayout*> container) {
-	if (dialogId.has_value() && _controller->showExclude.has_value() && _controller->showExclude.value()) {
-		filters = LuxuryDatabase::getByDialogId(dialogId.value());
-		exclusions = LuxuryDatabase::getExcludedByDialogId(dialogId.value());
+	if (dialogId && _controller->showExclude && *_controller->showExclude) {
+		filters = LuxuryDatabase::getByDialogId(*dialogId);
+		exclusions = LuxuryDatabase::getExcludedByDialogId(*dialogId);
 	} else {
 		filters = LuxuryDatabase::getShared();
 
 		// remove shared filters that already excluded for that peer exclusion
-		if (dialogId.has_value() && _controller->showExclude.has_value() && !_controller->showExclude.value()) {
-			const auto excludedForDialogId = LuxuryDatabase::getExcludedByDialogId(dialogId.value());
+		if (dialogId && _controller->showExclude && !*_controller->showExclude) {
+			const auto excludedForDialogId = LuxuryDatabase::getExcludedByDialogId(*dialogId);
 
 			auto rangeToRemove = std::ranges::remove_if(
 				filters,

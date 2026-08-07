@@ -69,7 +69,7 @@ std::shared_ptr<const Cache> buildCache() {
 		}
 
 		if (filter.dialogId.has_value()) {
-			byDialogId[filter.dialogId.value()].push_back({
+			byDialogId[*filter.dialogId].push_back({
 				std::shared_ptr<icu::RegexPattern>(pattern),
 				filter.reversed,
 			});

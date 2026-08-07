@@ -360,7 +360,7 @@ void LuxuryMusicButton::paintEvent(QPaintEvent *e) {
 	const auto size = font->height + skip + font->height;
 
 	const auto &settings = LuxurySettings::getInstance();
-	const auto cover = _currentCover.value();
+	const auto cover = *_currentCover;
 	if (cover.noCover || !settings.adaptiveCoverColor()) {
 		p.fillRect(e->rect(), cover.bg);
 		paintRipple(p, QPoint());

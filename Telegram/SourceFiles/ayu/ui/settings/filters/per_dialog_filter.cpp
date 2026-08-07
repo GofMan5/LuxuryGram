@@ -94,7 +94,7 @@ void PerDialogFiltersListController::prepare() {
 
 	for (const auto &filter : filters) {
 		if (filter.dialogId.has_value()) {
-			countsByDialogIds[filter.dialogId.value()].filters++;
+			countsByDialogIds[*filter.dialogId].filters++;
 		}
 	}
 	for (const auto &exclusion : exclusions) {

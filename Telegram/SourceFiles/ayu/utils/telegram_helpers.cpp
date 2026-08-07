@@ -627,7 +627,7 @@ QString getMediaResolution(not_null<HistoryItem*> message) {
 		if (!result.has_value()) {
 			result = photo->size(Data::PhotoSize::Thumbnail);
 		}
-		return result.has_value() ? formatQSize(result.value()) : QString();
+		return result ? formatQSize(*result) : QString();
 	}
 
 	return {};

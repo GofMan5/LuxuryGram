@@ -205,8 +205,8 @@ bool filtered(const not_null<HistoryItem*> item) {
 	if (!isEnabled(item->history()->peer)) return false;
 
 	const auto cached = FiltersCacheController::isFiltered(item);
-	if (cached.has_value()) {
-		return cached.value();
+	if (cached) {
+		return *cached;
 	}
 	const auto group = item->history()->owner().groups().find(item);
 	const auto cache = FiltersCacheController::snapshot();
@@ -218,9 +218,9 @@ bool filtered(const not_null<HistoryItem*> item) {
 	// sometimes item has empty text.
 	// so we cache result only if
 	// processed item is filterable
-	if (res.has_value()) {
-		FiltersCacheController::putFiltered(item, group, res.value(), cache);
-		return res.value();
+	if (res) {
+		FiltersCacheController::putFiltered(item, group, *res, cache);
+		return *res;
 	}
 	return false;
 }

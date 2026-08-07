@@ -506,7 +506,7 @@ QString FilterUtils::exportFilters() {
 		QJsonObject filterJson;
 		filterJson["caseInsensitive"] = item.caseInsensitive;
 		if (item.dialogId.has_value()) {
-			filterJson["dialogId"] = item.dialogId.value();
+			filterJson["dialogId"] = *item.dialogId;
 		} else {
 			filterJson["dialogId"] = QJsonValue();
 		}
@@ -547,9 +547,9 @@ QString FilterUtils::exportFilters() {
 		if (!item.dialogId.has_value()) {
 			continue;
 		}
-		if (const auto peer = LoadedPeerFromDialogId(&session->data(), item.dialogId.value())) {
+		if (const auto peer = LoadedPeerFromDialogId(&session->data(), *item.dialogId)) {
 			if (!peer->username().isEmpty()) {
-				QString key = QString::number(item.dialogId.value());
+				QString key = QString::number(*item.dialogId);
 				peers[key] = peer->username();
 			}
 		}
