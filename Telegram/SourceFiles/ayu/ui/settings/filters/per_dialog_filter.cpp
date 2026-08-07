@@ -25,7 +25,7 @@ namespace Settings {
 PerDialogFiltersListRow::PerDialogFiltersListRow(ID dialogId)
 	: PeerListRow(PeerListRowId(dialogId))
 	  , _dialogId(dialogId)
-	  , peerId(PeerId(PeerIdHelper(abs(dialogId)))) {
+	  , peerId(PeerId(PeerIdHelper(getBareDialogId(dialogId)))) {
 }
 
 ID PerDialogFiltersListRow::dialogId() const {

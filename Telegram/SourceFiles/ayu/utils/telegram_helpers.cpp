@@ -165,6 +165,12 @@ ID getDialogIdFromPeer(not_null<PeerData*> peer) {
 	return peerId;
 }
 
+ID getBareDialogId(ID dialogId) {
+	const auto value = static_cast<uint64>(dialogId);
+	const auto magnitude = (dialogId < 0) ? (uint64(0) - value) : value;
+	return static_cast<ID>(magnitude & PeerId::kChatTypeMask);
+}
+
 ID getBareID(not_null<PeerData*> peer) {
 	return peer->id.value & PeerId::kChatTypeMask;
 }

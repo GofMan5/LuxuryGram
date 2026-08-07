@@ -43,7 +43,7 @@ rpl::producer<QString> LuxuryFiltersList::title() {
 		return tr::luxury_RegexFiltersShared();
 	}
 
-	const auto did = abs(*dialogId);
+	const auto did = getBareDialogId(*dialogId);
 	const auto from = getPeerFromDialogId(did);
 
 	// todo: shorten based on available space

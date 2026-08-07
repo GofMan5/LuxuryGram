@@ -57,6 +57,7 @@ private:
 Main::Session *getSession(ID userId);
 void dispatchToMainThread(const std::function<void()> &callback, int delay = 0);
 ID getDialogIdFromPeer(not_null<PeerData*> peer);
+ID getBareDialogId(ID dialogId);
 
 ID getBareID(not_null<PeerData*> peer);
 
