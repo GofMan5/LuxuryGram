@@ -169,9 +169,9 @@ QPointer<QNetworkReply> GoogleTranslator::startSingleTranslation(
 						 	 return;
 						 }
 						 const auto decodedText = decodeHtmlEntities(textOutCombined);
-						 if (onSuccess) onSuccess(shouldWrapInHtml()
-						 			  ? Html::htmlToEntities(decodedText)
-						 			  : TextWithEntities{decodedText});
+						 if (onSuccess) {
+							 onSuccess(Html::htmlToEntities(decodedText));
+						 }
 					 });
 
 	return reply;

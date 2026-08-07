@@ -20,7 +20,7 @@
 
 namespace Luxury::Translator {
 
-std::vector<QString> desktopUserAgents = {
+const std::vector<QString> desktopUserAgents = {
 	// zen
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0",
 	// cent
@@ -33,11 +33,6 @@ std::vector<QString> desktopUserAgents = {
 
 QString randomDesktopUserAgent() {
 	return desktopUserAgents[base::RandomIndex(static_cast<int>(desktopUserAgents.size()))];
-}
-
-bool shouldWrapInHtml() {
-	// todo: make an option
-	return true;
 }
 
 QString parseJsonPath(const QByteArray &body, const QString &jsonPath, bool *ok) {

@@ -64,7 +64,7 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 
 	QUrlQuery postData;
 	postData.addQueryItem(QStringLiteral("lang"), to);
-	postData.addQueryItem(QStringLiteral("text"), shouldWrapInHtml() ? Html::entitiesToHtml(text) : text.text);
+	postData.addQueryItem(QStringLiteral("text"), Html::entitiesToHtml(text));
 	const auto postDataEncoded = postData.toString(QUrl::FullyEncoded).toUtf8();
 
 	QPointer<QNetworkReply> reply = _nam.post(req, postDataEncoded);
@@ -118,9 +118,9 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 							 if (onFail) onFail();
 							 return;
 						 }
-						 if (onSuccess) onSuccess(shouldWrapInHtml()
-													  ? Html::htmlToEntities(translatedText)
-													  : TextWithEntities{translatedText});
+						 if (onSuccess) {
+							 onSuccess(Html::htmlToEntities(translatedText));
+						 }
 					 });
 
 	return reply;
