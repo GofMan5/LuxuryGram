@@ -114,7 +114,7 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 							 }
 						 bool ok = false;
 						 const auto translatedText = parseJsonPath(body, QStringLiteral("text"), &ok);
-						 if (!ok) {
+						 if (!ok || translatedText.trimmed().isEmpty()) {
 							 if (onFail) onFail();
 							 return;
 						 }
