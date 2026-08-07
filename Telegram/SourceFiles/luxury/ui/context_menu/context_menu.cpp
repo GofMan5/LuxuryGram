@@ -219,26 +219,24 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 		}
 
 		using Flag = MTPmessages_Search::Flag;
-		auto request = MTPmessages_Search(
-			MTP_flags(Flag::f_from_id),
-			peer->input(),
-			MTP_string(),
-			MTP_inputPeerSelf(),
-			MTPInputPeer(),
-			MTPVector<MTPReaction>(),
-			MTP_int(0),
-			MTP_inputMessagesFilterEmpty(),
-			MTP_int(0),
-			MTP_int(0),
-			MTP_int(from.bare),
-			MTP_int(0),
-			MTP_int(100),
-			MTP_int(0),
-			MTP_int(0),
-			MTP_long(0));
-
 		session->api()
-			.request(std::move(request))
+			.request(MTPmessages_Search(
+				MTP_flags(Flag::f_from_id),
+				peer->input(),
+				MTP_string(),
+				MTP_inputPeerSelf(),
+				MTPInputPeer(),
+				MTPVector<MTPReaction>(),
+				MTP_int(0),
+				MTP_inputMessagesFilterEmpty(),
+				MTP_int(0),
+				MTP_int(0),
+				MTP_int(from.bare),
+				MTP_int(0),
+				MTP_int(100),
+				MTP_int(0),
+				MTP_int(0),
+				MTP_long(0)))
 			.done([state, from](const Api::HistoryRequestResult &result) {
 				const auto session = state->session.get();
 				const auto peer = session
