@@ -72,8 +72,12 @@ void SendAndWait(
 		count,
 		latch,
 		lifetime,
+		stopped,
 		callback = std::forward<Callback>(callback)
 	]() mutable {
+		if (stopped()) {
+			return;
+		}
 		const auto strong = session.get();
 		if (!strong) {
 			return;
@@ -194,6 +198,10 @@ void loadDocumentSync(
 		return !session.get() || (cancelled && cancelled());
 	};
 	crl::on_main(session, [=] {
+		if (stopped()) {
+			latch->countDown();
+			return;
+		}
 		const auto strong = session.get();
 		const auto item = strong ? strong->data().message(itemId) : nullptr;
 		const auto media = item ? item->media() : nullptr;
@@ -235,6 +243,10 @@ void forwardMessagesSync(WeakSession session,
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 
 	crl::on_main(session, [=] {
+		if (stopped()) {
+			latch->countDown();
+			return;
+		}
 		const auto strong = session.get();
 		if (!strong) {
 			return;
@@ -277,6 +289,10 @@ void loadPhotoSync(
 		return !session.get() || (cancelled && cancelled());
 	};
 	crl::on_main(session, [=] {
+		if (stopped()) {
+			latch->countDown();
+			return;
+		}
 		const auto strong = session.get();
 		const auto item = strong ? strong->data().message(itemId) : nullptr;
 		const auto media = item ? item->media() : nullptr;
