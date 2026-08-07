@@ -10,7 +10,6 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
-#include <QtCore/QSet>
 #include <QtCore/QString>
 
 namespace Luxury::Translator {
@@ -21,9 +20,6 @@ class GoogleTranslator final : public MultiThreadTranslator
 
 public:
 	static GoogleTranslator &instance();
-
-	// all languages
-	[[nodiscard]] QSet<QString> supportedLanguages() const override { return {}; }
 
 	[[nodiscard]] QPointer<QNetworkReply> startSingleTranslation(
 		const MultiThreadArgs &args

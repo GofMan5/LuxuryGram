@@ -19,8 +19,6 @@
 #include <QtCore/QString>
 #include <QtNetwork/QNetworkReply>
 
-// todo: expose available languages from current translator and use in `ChooseTranslateToBox`
-
 namespace Luxury::Translator {
 namespace {
 

@@ -11,7 +11,6 @@
 #include <functional>
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
-#include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtNetwork/QNetworkReply>
 
@@ -78,8 +77,6 @@ public:
 	}
 
 	~BaseTranslator() override = default;
-
-	[[nodiscard]] virtual QSet<QString> supportedLanguages() const { return {}; }
 
 	virtual void startTranslation(
 		const StartTranslationArgs &args

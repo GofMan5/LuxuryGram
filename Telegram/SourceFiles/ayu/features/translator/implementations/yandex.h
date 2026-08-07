@@ -10,7 +10,6 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
-#include <QtCore/QSet>
 #include <QtCore/QString>
 
 namespace Luxury::Translator {
@@ -21,8 +20,6 @@ class YandexTranslator final : public MultiThreadTranslator
 
 public:
 	static YandexTranslator &instance();
-
-	[[nodiscard]] QSet<QString> supportedLanguages() const override;
 
 	[[nodiscard]] QPointer<QNetworkReply> startSingleTranslation(
 		const MultiThreadArgs &args
