@@ -389,6 +389,9 @@ void AddJumpToBeginningAction(PeerData *peerData,
 							  Data::Thread *thread,
 							  not_null<Window::SessionController*> sessionController,
 							  const Window::PeerMenuCallback &addCallback) {
+	if (!peerData) {
+		return;
+	}
 	const auto user = peerData->asUser();
 	const auto group = peerData->isChat() ? peerData->asChat() : nullptr;
 	const auto chat = peerData->isMegagroup()
@@ -396,7 +399,7 @@ void AddJumpToBeginningAction(PeerData *peerData,
 						  : peerData->isChannel()
 								? peerData->asChannel()
 								: nullptr;
-	const auto topic = peerData->isForum() ? thread->asTopic() : nullptr;
+	const auto topic = peerData->isForum() && thread ? thread->asTopic() : nullptr;
 	if (!user && !group && !chat && !topic) {
 		return;
 	}

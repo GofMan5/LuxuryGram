@@ -217,6 +217,11 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 	if (messages.empty()) {
 		return;
 	}
+	auto messageIds = std::vector<FullMsgId>();
+	messageIds.reserve(messages.size());
+	for (const auto message : messages) {
+		messageIds.push_back(message->fullId());
+	}
 
 	auto createdViews = std::make_shared<std::unordered_map<not_null<HistoryItem*>, std::shared_ptr<HistoryView::Element>>>();
 	createdViews->reserve(messages.size());
@@ -287,6 +292,11 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 	const auto showBackground = LuxurySettings::getInstance().messageShotSettings().showBackground();
 	auto render = [=, messages = std::move(messages), delegate = std::move(delegate)](bool final)
 	{
+		for (auto i = 0; i != int(messages.size()); ++i) {
+			if (controller->session().data().message(messageIds[i]) != messages[i]) {
+				return;
+			}
+		}
 		takingShot = true;
 
 		// calculate the size of the image
@@ -406,9 +416,9 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			}
 		};
 		const auto state = std::make_shared<PreloadState>();
-		state->render = [render = std::move(render)]() mutable {
+		state->render = crl::guard(box, [render = std::move(render)]() mutable {
 			render(true);
-		};
+		});
 		const auto weakState = std::weak_ptr<PreloadState>(state);
 		rpl::single() | rpl::then(
 			config.controller->session().downloaderTaskFinished()
@@ -429,7 +439,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 		}, state->lifetime);
 		base::call_delayed(
 			3 * crl::time(1000),
-			config.controller,
+			box,
 			[state] { state->finish(); });
 	} else {
 		render(true);

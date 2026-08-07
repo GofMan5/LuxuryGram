@@ -56,7 +56,7 @@ std::vector<char> generate_uuid_bytes() {
 
 bool validateRegex(const icu::UnicodeString& pattern, std::string& errorMsg) {
 	UErrorCode status = U_ZERO_ERROR;
-	UParseError parseError;
+	UParseError parseError{};
 
 	icu::RegexPattern* regexPattern = icu::RegexPattern::compile(
 		pattern,
@@ -67,18 +67,25 @@ bool validateRegex(const icu::UnicodeString& pattern, std::string& errorMsg) {
 
 	if (U_FAILURE(status)) {
 		auto errorCodeNormalized = std::string(u_errorName(status));
-		errorCodeNormalized = errorCodeNormalized.substr(8); // skip U_REGEX_
+		const auto prefix = errorCodeNormalized.starts_with("U_REGEX_")
+			? 8
+			: errorCodeNormalized.starts_with("U_")
+			? 2
+			: 0;
+		errorCodeNormalized.erase(0, prefix);
 		std::ranges::transform(
 			errorCodeNormalized,
 			errorCodeNormalized.begin(),
-			[](unsigned char c)
+			[](unsigned char c) -> char
 			{
-				if (c == '_') {
-					return std::tolower(' ');
-				}
-				return std::tolower(c);
+				return (c == '_') ? ' ' : char(std::tolower(c));
 			});
-		errorCodeNormalized[0] = std::toupper(errorCodeNormalized[0]);
+		if (errorCodeNormalized.empty()) {
+			errorCodeNormalized = "Invalid regular expression";
+		} else {
+			errorCodeNormalized[0] = char(std::toupper(
+				static_cast<unsigned char>(errorCodeNormalized[0])));
+		}
 		errorMsg = errorCodeNormalized + " at " + std::to_string(parseError.offset);
 
 		if (parseError.preContext[0] != 0 || parseError.postContext[0] != 0) {
