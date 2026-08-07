@@ -42,6 +42,10 @@
 namespace Ui {
 namespace {
 
+constexpr auto kMaxRequirementsTextLength = 8192;
+constexpr auto kMaxRequirementLength = 128;
+constexpr auto kMaxRequirements = 64;
+
 QString ExtractField(const QString &data, const QString &key) {
 	const auto re = QRegularExpression(
 		u"__%1__\\s*=\\s*(?:\"((?:\\\\.|[^\"\\\\])*)\"|'((?:\\\\.|[^'\\\\])*)')"_q.arg(key));
@@ -371,20 +375,25 @@ PluginMetadata ParsePluginMetadata(const QByteArray &data) {
 	auto metadata = PluginMetadata();
 	const auto text = QString::fromUtf8(data);
 
-	metadata.id = ExtractField(text, u"id"_q);
+	metadata.id = ExtractField(text, u"id"_q).left(64);
 	metadata.name = ExtractField(text, u"name"_q).left(100);
 	metadata.description = ExtractField(text, u"description"_q).left(8000);
 	metadata.author = ExtractField(text, u"author"_q).left(200);
 	metadata.version = ExtractField(text, u"version"_q).left(32);
-	metadata.icon = ExtractField(text, u"icon"_q);
-	metadata.minVersion = ExtractField(text, u"min_version"_q);
+	metadata.icon = ExtractField(text, u"icon"_q).left(128);
+	metadata.minVersion = ExtractField(text, u"min_version"_q).left(32);
 
-	const auto reqString = ExtractField(text, u"requirements"_q);
+	const auto reqString = ExtractField(
+		text,
+		u"requirements"_q).left(kMaxRequirementsTextLength);
 	if (!reqString.isEmpty()) {
 		for (const auto &part : reqString.split(',')) {
-			const auto trimmed = part.trimmed();
+			const auto trimmed = part.trimmed().left(kMaxRequirementLength);
 			if (!trimmed.isEmpty()) {
 				metadata.requirements.append(trimmed);
+				if (metadata.requirements.size() >= kMaxRequirements) {
+					break;
+				}
 			}
 		}
 	}
@@ -411,10 +420,15 @@ void ShowPluginInfoBox(
 	not_null<Window::SessionController*> controller,
 	const QString &pluginPath,
 	PluginMetadata metadata) {
-	const auto showBox = [controller, pluginPath](
+	const auto weakController = base::make_weak(controller);
+	const auto showBox = [weakController, pluginPath](
 		PluginMetadata md,
 		DocumentData *stickerDoc)
 	{
+		const auto controller = weakController.get();
+		if (!controller) {
+			return;
+		}
 		controller->show(Box(
 			FillPluginInfoBox,
 			controller,
@@ -467,19 +481,16 @@ void ShowPluginInfoBox(
 		const auto media = doc->createMediaView();
 		media->checkStickerLarge();
 
-		if (media->loaded()) {
-			showBox(std::move(*shared), doc);
-			return;
-		}
-
+		media->automaticLoad(doc->stickerSetOrigin(), nullptr);
 		rpl::single() | rpl::then(
 			session->downloaderTaskFinished()
 		) | rpl::filter([=] {
-			return media->loaded();
+			return media->loaded() || !doc->loading();
 		}) | rpl::take(1) | rpl::on_next([=] {
-			showBox(std::move(*shared), doc);
+			showBox(
+				std::move(*shared),
+				media->loaded() ? doc : nullptr);
 		}, session->lifetime());
-		media->automaticLoad(doc->stickerSetOrigin(), nullptr);
 	}).fail([=](const MTP::Error &)
 	{
 		showBox(std::move(*shared), nullptr);
