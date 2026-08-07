@@ -90,18 +90,6 @@ public:
 			dialogId == other.dialogId &&
 			enabled == other.enabled;
 	}
-	[[nodiscard]] QJsonObject toJson() const {
-		QJsonObject json;
-		json["id"] = QString::fromUtf8(id.data());
-		json["text"] = QString::fromStdString(text);
-		json["enabled"] = enabled;
-		json["reversed"] = reversed;
-		json["caseInsensitive"] = caseInsensitive;
-		if (dialogId.has_value()) {
-			json["dialogId"] = *dialogId;
-		}
-		return json;
-	}
 };
 
 class RegexFilterGlobalExclusion
