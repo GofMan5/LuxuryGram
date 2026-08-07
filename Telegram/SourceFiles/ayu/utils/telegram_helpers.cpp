@@ -62,10 +62,6 @@
 
 namespace {
 
-constexpr auto usernameResolverBotId = 7424190611L;
-const auto usernameResolverBotUsername = QString("tgdb_search_bot");
-const auto usernameResolverEmpty = QString("Error, username or id invalid/not found.");
-
 constexpr auto regDateBotId = 8083294286L;
 const auto regDateBotUsername = QString("exteraAuthBot");
 
@@ -779,155 +775,11 @@ void resolvePeer(
 	}).send();
 }
 
-void searchPeerInner(const QString &peerId, Main::Session *session, const UsernameResolverCallback &callback) {
-	if (!session) {
-		callback(QString(), nullptr);
-		return;
-	}
-
-	const auto bot = session->data().userLoaded(usernameResolverBotId);
-	if (!bot) {
-		callback(QString(), nullptr);
-		return;
-	}
-
-	session->api().request(MTPmessages_GetInlineBotResults(
-		MTP_flags(0),
-		bot->inputUser(),
-		MTP_inputPeerEmpty(),
-		MTPInputGeoPoint(),
-		MTP_string(peerId),
-		MTP_string("")
-	)).done([=](const MTPmessages_BotResults &result)
-	{
-		if (result.type() != mtpc_messages_botResults) {
-			callback(QString(), nullptr);
-			return;
-		}
-		auto &d = result.c_messages_botResults();
-		session->data().processUsers(d.vusers());
-
-		auto &v = d.vresults().v;
-
-		for (const auto &res : v) {
-			const auto message = res.match(
-				[&](const MTPDbotInlineResult &data)
-				{
-					return &data.vsend_message();
-				},
-				[&](const MTPDbotInlineMediaResult &data)
-				{
-					return &data.vsend_message();
-				});
-
-			const auto text = message->match(
-				[&](const MTPDbotInlineMessageMediaAuto &data)
-				{
-					return QString();
-				},
-				[&](const MTPDbotInlineMessageText &data)
-				{
-					return qs(data.vmessage());
-				},
-				[&](const MTPDbotInlineMessageMediaGeo &data)
-				{
-					return QString();
-				},
-				[&](const MTPDbotInlineMessageMediaVenue &data)
-				{
-					return QString();
-				},
-				[&](const MTPDbotInlineMessageMediaContact &data)
-				{
-					return QString();
-				},
-				[&](const MTPDbotInlineMessageMediaInvoice &data)
-				{
-					return QString();
-				},
-				[&](const MTPDbotInlineMessageMediaWebPage &data)
-				{
-					return QString();
-				},
-				[&](const MTPDbotInlineMessageRichMessage &data)
-				{
-					return QString();
-				});
-
-			if (text.isEmpty() || text.contains(usernameResolverEmpty)) {
-				continue;
-			}
-
-			QString id; // 🆔
-			QString title; // 🏷
-			QString username; // 📧
-
-			for (auto &line : text.split('\n')) {
-				if (line.startsWith("🆔")) {
-					id = line.mid(line.indexOf(": ") + 2).trimmed();
-				} else if (line.startsWith("🏷")) {
-					title = line.mid(line.indexOf(": ") + 2);
-				} else if (line.startsWith("📧")) {
-					username = line.mid(line.indexOf(": ") + 2);
-				}
-			}
-
-			if (id.isEmpty() || id != peerId) {
-				continue;
-			}
-
-			if (id.startsWith("-100")) {
-				id = id.mid(4);
-			}
-
-			if (!username.isEmpty()) {
-				resolvePeer(
-					id,
-					username,
-					session,
-					[=](const QString &titleInner, PeerData *data)
-					{
-						if (data) {
-							callback(titleInner, data);
-						} else {
-							callback(title, nullptr);
-						}
-					});
-				return;
-			}
-
-			if (!title.isEmpty()) {
-				callback(title, nullptr);
-				return;
-			}
-		}
-
-		callback(QString(), nullptr);
-	}).fail([=]
-	{
-		callback(QString(), nullptr);
-	}).handleAllErrors().send();
-}
-
-void searchPeer(const QString &peerId, Main::Session *session, const UsernameResolverCallback &callback) {
+void searchPeer(
+		const QString &,
+		Main::Session *,
+		const UsernameResolverCallback &callback) {
 	callback(QString(), nullptr);
-	/*if (!session) {
-		callback(QString(), nullptr);
-		return;
-	}
-
-	if (session->data().userLoaded(usernameResolverBotId)) {
-		searchPeerInner(peerId, session, callback);
-	} else {
-		resolvePeer(
-			QString::number(usernameResolverBotId),
-			usernameResolverBotUsername,
-			session,
-			[=](const QString &title, PeerData *data)
-			{
-				searchPeerInner(peerId, session, callback);
-			});
-	}*/
 }
 
 void searchUserById(ID userId, Main::Session *session, const UsernameResolverCallback &callback) {
