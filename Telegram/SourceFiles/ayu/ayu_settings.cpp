@@ -404,7 +404,9 @@ void LuxurySettings::load() {
 		}
 
 		try {
-			from_json(p, settings);
+			auto loaded = LuxurySettings();
+			from_json(p, loaded);
+			settings = std::move(loaded);
 		} catch (...) {
 			LOG(("LuxuryGramSettings: failed to parse settings file"));
 		}
