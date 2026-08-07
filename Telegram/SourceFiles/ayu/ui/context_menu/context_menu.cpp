@@ -1078,7 +1078,10 @@ void AddCreateFilterAction(not_null<Ui::PopupMenu*> menu,
 			filter.caseInsensitive = true;
 			filter.reversed = false;
 
-			controller->show(Settings::RegexEditBox(&filter, {}, getDialogIdFromPeer(item->history()->peer), true));
+			controller->show(Settings::RegexEditBox(
+				&filter,
+				getDialogIdFromPeer(item->history()->peer),
+				true));
 		},
 		&st::menuIconAddToFolder);
 }

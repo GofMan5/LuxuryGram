@@ -505,7 +505,9 @@ void WrapWidget::setupTopBarMenuToggle() {
 			} else {
 				button->addClickHandler([=]
 				{
-					show->show(::Settings::RegexEditBox(nullptr, nullptr, controller->dialogId));
+					show->show(::Settings::RegexEditBox(
+						nullptr,
+						controller->dialogId));
 				});
 			}
 

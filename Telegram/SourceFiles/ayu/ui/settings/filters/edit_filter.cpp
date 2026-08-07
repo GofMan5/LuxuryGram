@@ -134,7 +134,6 @@ not_null<Ui::SlideWrap<Ui::FlatLabel>*> AddError(
 void RegexEditBuilder(
 	not_null<Ui::GenericBox*> box,
 	RegexFilter *filter,
-	const Fn<void(RegexFilter)> &onDone,
 	std::optional<long long> dialogId,
 	bool showToast
 ) {
@@ -222,9 +221,6 @@ void RegexEditBuilder(
 
 			crl::on_main([=]
 			{
-				if (onDone) {
-					onDone(newFilter);
-				}
 				FiltersCacheController::fireUpdate();
 
 				if (showToast) {
@@ -269,10 +265,9 @@ void RegexEditBuilder(
 }
 
 object_ptr<Ui::GenericBox> RegexEditBox(RegexFilter *filter,
-										const Fn<void(RegexFilter)> &onDone,
 										std::optional<long long> dialogId,
 										bool showToast) {
-	return Box(RegexEditBuilder, filter, onDone, dialogId, showToast);
+	return Box(RegexEditBuilder, filter, dialogId, showToast);
 }
 
 } // namespace Settings

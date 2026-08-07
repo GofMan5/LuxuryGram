@@ -103,12 +103,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 			tr::lng_theme_edit(tr::now),
 			[=]
 			{
-				_controller->show(
-					RegexEditBox(
-						state,
-						nullptr,
-						dialogId
-						));
+				_controller->show(RegexEditBox(state, dialogId));
 			},
 			&st::menuIconEdit);
 

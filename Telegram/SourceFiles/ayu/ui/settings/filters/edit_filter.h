@@ -22,7 +22,6 @@ class SessionController;
 namespace Settings {
 
 object_ptr<Ui::GenericBox> RegexEditBox(RegexFilter *filter,
-										const Fn<void(RegexFilter)> &onDone,
 										std::optional<long long> dialogId = std::nullopt,
 										bool showToast = false);
 } // namespace Settings
