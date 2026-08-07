@@ -28,9 +28,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "layout/layout_selection.h"
 #include "styles/style_chat.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/message_shot/message_shot.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/message_shot/message_shot.h"
 
 
 namespace HistoryView {
@@ -852,7 +852,7 @@ bool GroupedMedia::applyGroup(const DataMediaRange &medias) {
 	auto modeChosen = false;
 	for (const auto media : medias) {
 		if (!media) {
-			continue; // AyuGram: fix ebe44780-7c8b-4964-ba31-b747c947254f
+			continue; // LuxuryGram: fix ebe44780-7c8b-4964-ba31-b747c947254f
 		}
 
 		const auto mediaMode = DetectMode(media);

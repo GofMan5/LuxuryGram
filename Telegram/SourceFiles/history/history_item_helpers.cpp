@@ -54,9 +54,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/item_text_options.h"
 #include "lang/lang_keys.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/utils/telegram_helpers.h"
 
 #include "styles/style_layers.h"
 
@@ -717,7 +717,7 @@ void ConfirmDeleteSelectedEphemeral(
 TextWithEntities DropDisallowedCustomEmoji(
 		not_null<PeerData*> to,
 		TextWithEntities text) {
-	if (true) { // AyuGram: allow all premium emojis (via tg://emoji?id=...)
+	if (true) { // LuxuryGram: allow all premium emojis (via tg://emoji?id=...)
 		return text;
 	}
 
@@ -927,7 +927,7 @@ MessageFlags FlagsFromMTP(
 			? Flag::IsOrWasScheduled
 			: Flag())
 		| ((flags & MTP::f_views) ? Flag::HasViews : Flag())
-		// AyuGram: removed
+		// LuxuryGram: removed
 		// | ((flags & MTP::f_noforwards) ? Flag::NoForwards : Flag())
 		| (flags & MTP::f_noforwards ? Flag::LuxuryNoForwards : Flag())
 		| ((flags & MTP::f_invert_media) ? Flag::InvertMedia : Flag())

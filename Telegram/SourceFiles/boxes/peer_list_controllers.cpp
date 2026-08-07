@@ -51,7 +51,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_separate_id.h"
 #include "window/window_session_controller.h" // showAddContact()
 #include "base/unixtime.h"
-#include "styles/style_ayu_icons.h"
+#include "styles/style_luxury_icons.h"
 #include "styles/style_boxes.h"
 #include "styles/style_chat_helpers.h"
 #include "styles/style_dialogs.h"

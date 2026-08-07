@@ -14,8 +14,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "menu/menu_send.h"
 #include "ui/ui_utility.h"
 
-// AyuGram includes
-#include "ayu/ui/settings/settings_main.h"
+// LuxuryGram includes
+#include "luxury/ui/settings/settings_main.h"
 
 
 namespace Info {

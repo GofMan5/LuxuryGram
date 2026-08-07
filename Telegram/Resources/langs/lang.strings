@@ -8862,7 +8862,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_IconNothing" = "Nothing";
 "luxury_IconBard" = "Google Bard";
 "luxury_IconYaPlus" = "Yandex Plus";
-"luxury_IconLuxuryTyan" = "AyuTyan";
+"luxury_IconLuxuryTyan" = "LuxuryTyan";
 "luxury_WALMode" = "Enable WAL mode";
 "luxury_PushNotificationCount" = "FCM notifications received";
 "luxury_LuxuryAttachments" = "LuxuryGram Attachments Folder";

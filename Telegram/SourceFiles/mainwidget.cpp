@@ -100,8 +100,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QCoreApplication>
 #include <QtCore/QMimeData>
 
-// AyuGram includes
-#include "ayu/features/forward/ayu_forward.h"
+// LuxuryGram includes
+#include "luxury/features/forward/luxury_forward.h"
 
 
 namespace {

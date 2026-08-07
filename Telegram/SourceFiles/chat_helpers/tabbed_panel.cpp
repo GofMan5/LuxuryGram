@@ -15,7 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "data/data_session.h"
 #include "data/stickers/data_stickers.h"
-#include "ayu/ayu_settings.h"
+#include "luxury/luxury_settings.h"
 #include "core/application.h"
 #include "base/options.h"
 #include "styles/style_chat_helpers.h"

@@ -35,8 +35,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_menu_icons.h"
 #include "styles/style_widgets.h"
 
-// AyuGram includes
-#include "ayu/features/filters/filters_controller.h"
+// LuxuryGram includes
+#include "luxury/features/filters/filters_controller.h"
 
 
 namespace HistoryView::Reactions {

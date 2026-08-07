@@ -43,8 +43,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/toast/toast.h"
 #include "styles/style_chat.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 
 
 namespace HistoryView {

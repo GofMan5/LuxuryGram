@@ -46,9 +46,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <Windowsx.h>
 #include <VersionHelpers.h>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/ui/ayu_logo.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/ui/luxury_logo.h"
 #include "platform/win/windows_app_user_model_id.h"
 #include <QtCore/QDir>
 #include <propkey.h>

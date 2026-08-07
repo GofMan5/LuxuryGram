@@ -66,7 +66,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QClipboard>
 #include <QtWidgets/QApplication>
 
-#include "ayu/features/forward/ayu_forward.h"
+#include "luxury/features/forward/luxury_forward.h"
 
 namespace {
 

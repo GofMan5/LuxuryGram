@@ -43,9 +43,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <xxhash.h> // XXH64.
 #include <QtWidgets/QApplication>
 
-// AyuGram includes
-#include "styles/style_ayu_icons.h"
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "styles/style_luxury_icons.h"
+#include "luxury/ui/luxury_userpic.h"
 
 
 [[nodiscard]] PeerListRowId UniqueRowIdFromString(const QString &d) {

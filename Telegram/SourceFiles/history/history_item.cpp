@@ -77,11 +77,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "spellcheck/spellcheck_highlight_syntax.h"
 #include "styles/style_dialogs.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/filters/filters_controller.h"
-#include "ayu/features/message_shot/message_shot.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/filters/filters_controller.h"
+#include "luxury/features/message_shot/message_shot.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "ui/emoji_config.h"
 
 
@@ -328,7 +328,7 @@ std::unique_ptr<Data::Media> HistoryItem::CreateMedia(
 		});
 	}, [&](const MTPDmessageMediaPhoto &media) -> Result {
 		const auto photo = media.vphoto();
-		if (false) {  // AyuGram: show expiring messages
+		if (false) {  // LuxuryGram: show expiring messages
 			LOG(("App Error: "
 				"Unexpected MTPMessageMediaPhoto "
 				"with ttl_seconds in CreateMedia."));
@@ -349,7 +349,7 @@ std::unique_ptr<Data::Media> HistoryItem::CreateMedia(
 		});
 	}, [&](const MTPDmessageMediaDocument &media) -> Result {
 		const auto document = media.vdocument();
-		if (false) {  // AyuGram: show expiring messages
+		if (false) {  // LuxuryGram: show expiring messages
 			LOG(("App Error: "
 				"Unexpected MTPMessageMediaDocument "
 				"with ttl_seconds in CreateMedia."));

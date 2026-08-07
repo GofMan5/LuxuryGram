@@ -91,11 +91,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/random.h"
 #include "spellcheck/spellcheck_highlight_syntax.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/data/messages_storage.h"
-#include "ayu/features/filters/filters_controller.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/data/messages_storage.h"
+#include "luxury/features/filters/filters_controller.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Data {
@@ -340,7 +340,7 @@ Session::Session(not_null<Main::Session*> session)
 			}
 		}, _lifetime);
 
-		// AyuGram disableStories
+		// LuxuryGram disableStories
 		const auto &settings = LuxurySettings::getInstance();
 		if (!settings.disableStories()) {
 			_stories->loadMore(Data::StorySourcesList::NotHidden);
@@ -2917,7 +2917,7 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 		return;
 	}
 
-	// AyuGram saveMessagesHistory
+	// LuxuryGram saveMessagesHistory
 	const auto &settings = LuxurySettings::getInstance();
 	HistoryMessageEdition edit;
 
@@ -5344,7 +5344,7 @@ void Session::registerItemView(not_null<ViewElement*> view) {
 void Session::unregisterItemView(not_null<ViewElement*> view) {
 	// Expects(!_heavyViewParts.contains(view));
 	if (_heavyViewParts.contains(view)) {
-		view->unloadHeavyPart(); // AyuGram: fix crash when using `saveDeletedMessages`
+		view->unloadHeavyPart(); // LuxuryGram: fix crash when using `saveDeletedMessages`
 	}
 
 	_shownSpoilers.remove(view);

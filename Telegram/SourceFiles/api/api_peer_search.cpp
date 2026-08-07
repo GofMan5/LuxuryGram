@@ -13,8 +13,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/ui/chat_search_in.h" // IsHashOrCashtagSearchQuery
 #include "main/main_session.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 
 
 namespace Api {

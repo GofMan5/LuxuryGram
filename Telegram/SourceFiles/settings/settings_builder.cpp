@@ -10,7 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "lang/lang_keys.h"
 #include "api/api_user_privacy.h"
-#include "ayu/ui/settings/settings_ayu_utils.h"
+#include "luxury/ui/settings/settings_luxury_utils.h"
 #include "boxes/edit_privacy_box.h"
 #include "main/main_session.h"
 #include "settings/settings_common.h"

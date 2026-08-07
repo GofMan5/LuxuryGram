@@ -35,8 +35,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mainwidget.h"
 #include "apiwrap.h"
 
-// AyuGram includes
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Api {

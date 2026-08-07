@@ -18,8 +18,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 #include <QtGui/QPalette>
 
-// AyuGram includes
-#include "ayu/features/message_shot/message_shot.h"
+// LuxuryGram includes
+#include "luxury/features/message_shot/message_shot.h"
 
 
 namespace Window {

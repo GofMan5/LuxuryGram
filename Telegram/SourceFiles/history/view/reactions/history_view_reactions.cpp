@@ -32,11 +32,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat.h"
 #include "styles/style_chat_helpers.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/message_shot/message_shot.h"
-#include "ayu/ui/ayu_userpic.h"
-#include "ayu/features/filters/filters_controller.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/message_shot/message_shot.h"
+#include "luxury/ui/luxury_userpic.h"
+#include "luxury/features/filters/filters_controller.h"
 
 
 namespace HistoryView::Reactions {

@@ -26,8 +26,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/chat/sponsored_message_bar.h"
 #include "ui/text/text_utilities.h" // tr::rich.
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 
 
 namespace Data {

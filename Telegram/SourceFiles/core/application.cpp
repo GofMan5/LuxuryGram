@@ -103,10 +103,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <ksandbox.h>
 
-// AyuGram includes
-#include "ayu/ayu_infra.h"
-#include "ayu/ayu_settings.h"
-#include "ayu/features/streamer_mode/streamer_mode.h"
+// LuxuryGram includes
+#include "luxury/luxury_infra.h"
+#include "luxury/luxury_settings.h"
+#include "luxury/features/streamer_mode/streamer_mode.h"
 
 
 namespace Core {

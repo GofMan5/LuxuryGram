@@ -29,8 +29,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_dialogs.h"
 #include "styles/style_info.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 
 
 namespace Info {
@@ -525,7 +525,7 @@ void TopBar::updateControlsVisibility(anim::type animated) {
 }
 
 void TopBar::setStories(rpl::producer<Dialogs::Stories::Content> content) {
-	// AyuGram disableStories
+	// LuxuryGram disableStories
 	const auto &settings = LuxurySettings::getInstance();
 	if (settings.disableStories()) {
 		return;

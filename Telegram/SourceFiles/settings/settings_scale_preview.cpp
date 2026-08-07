@@ -32,9 +32,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/ui/luxury_userpic.h"
 #include "ui/chat/chat_style_radius.h"
 
 

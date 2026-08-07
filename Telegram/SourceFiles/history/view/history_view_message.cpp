@@ -69,11 +69,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_iv.h"
 #include "styles/style_polls.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/filters/filters_controller.h"
-#include "ayu/features/message_shot/message_shot.h"
-#include "styles/style_ayu_icons.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/filters/filters_controller.h"
+#include "luxury/features/message_shot/message_shot.h"
+#include "styles/style_luxury_icons.h"
 
 
 namespace HistoryView {

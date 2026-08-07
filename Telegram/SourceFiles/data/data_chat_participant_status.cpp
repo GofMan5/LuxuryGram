@@ -26,8 +26,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/toast/toast.h"
 #include "window/window_session_controller.h"
 
-// AyuGram includes
-#include "ayu/features/forward/ayu_forward.h"
+// LuxuryGram includes
+#include "luxury/features/forward/luxury_forward.h"
 
 
 namespace {

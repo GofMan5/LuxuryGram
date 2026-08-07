@@ -89,11 +89,11 @@ public:
 
 		return _peer;
 	}
-	// AyuGram
+	// LuxuryGram
 	void setPeer(not_null<PeerData*> peer) {
 		_peer = peer;
 	}
-	// AyuGram
+	// LuxuryGram
 
 	[[nodiscard]] PeerListRowId id() const {
 		return _id;

@@ -39,10 +39,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QDateTime>
 #include <QtCore/QLocale>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/ayu_url_handlers.h"
-#include "ayu/features/streamer_mode/streamer_mode.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/luxury_url_handlers.h"
+#include "luxury/features/streamer_mode/streamer_mode.h"
 
 
 namespace Core {

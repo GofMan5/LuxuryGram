@@ -23,8 +23,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSStatusItem.h>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 
 
 @interface CommonDelegate : NSObject<NSMenuDelegate> {

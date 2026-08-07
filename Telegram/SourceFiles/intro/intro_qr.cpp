@@ -33,7 +33,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "platform/platform_webauthn.h"
 #include "styles/style_intro.h"
 
-// AyuGram includes
+// LuxuryGram includes
 #include "main/main_domain.h"
 
 

@@ -215,12 +215,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QWindow>
 #include <QtCore/QMimeData>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/filters/filters_cache_controller.h"
-#include "ayu/utils/telegram_helpers.h"
-#include "ayu/features/message_shot/message_shot.h"
-#include "ayu/features/forward/ayu_forward.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/filters/filters_cache_controller.h"
+#include "luxury/utils/telegram_helpers.h"
+#include "luxury/features/message_shot/message_shot.h"
+#include "luxury/features/forward/luxury_forward.h"
 #include "boxes/abstract_box.h"
 
 
@@ -1330,7 +1330,7 @@ void HistoryWidget::refreshGiftToChannelShown() {
 	if (!_giftToChannel || !_peer) {
 		return;
 	}
-	// AyuGram: hide gift button almost everywhere
+	// LuxuryGram: hide gift button almost everywhere
 	// still accessible via the menu in peer window
 	const auto channel = _peer->asChannel();
 	_giftToChannel->setVisible(channel
@@ -4634,7 +4634,7 @@ void HistoryWidget::messagesReceived(
 		int requestId) {
 	// Expects(_history != nullptr);
 	if (!_history || !_peer) {
-		return; // AyuGram: fix crash when using `saveDeletedMessages`
+		return; // LuxuryGram: fix crash when using `saveDeletedMessages`
 	}
 
 	const auto toMigrated = (peer == _peer->migrateFrom());

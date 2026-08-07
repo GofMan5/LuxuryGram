@@ -37,9 +37,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <ada.h>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/streamer_mode/streamer_mode.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/streamer_mode/streamer_mode.h"
 
 
 namespace Iv {

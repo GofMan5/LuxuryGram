@@ -44,9 +44,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QScreen>
 #include <QtWidgets/QApplication>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/streamer_mode/streamer_mode.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/streamer_mode/streamer_mode.h"
 
 
 namespace Media {

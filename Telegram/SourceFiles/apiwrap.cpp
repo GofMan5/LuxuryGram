@@ -105,11 +105,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/file_upload.h"
 #include "storage/storage_account.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/ayu_worker.h"
-#include "ayu/utils/telegram_helpers.h"
-#include "ayu/features/forward/ayu_forward.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/luxury_worker.h"
+#include "luxury/utils/telegram_helpers.h"
+#include "luxury/features/forward/luxury_forward.h"
 
 
 namespace {

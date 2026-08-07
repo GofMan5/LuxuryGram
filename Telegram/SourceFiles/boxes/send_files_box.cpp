@@ -75,11 +75,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtCore/QMimeData>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 #include "base/unixtime.h"
 #include "styles/style_menu_icons.h"
-#include "ayu/utils/telegram_helpers.h"
+#include "luxury/utils/telegram_helpers.h"
 #include <QApplication>
 #include <QBuffer>
 #include <QDrag>
@@ -2573,7 +2573,7 @@ Fn<void(Api::SendOptions)> SendFilesBox::sendCallback() {
 
 SendFilesBox::~SendFilesBox() = default;
 
-// AyuGram files reordering
+// LuxuryGram files reordering
 
 bool SendFilesBox::isFileBlock(int i) const {
 	using Type = Ui::PreparedFile::Type;

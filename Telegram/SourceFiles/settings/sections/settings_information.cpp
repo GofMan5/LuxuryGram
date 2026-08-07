@@ -73,9 +73,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 #include <QtCore/QBuffer>
 
-// AyuGram includes
-#include "ayu/ui/ayu_userpic.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/ui/luxury_userpic.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "styles/style_info.h"
 
 

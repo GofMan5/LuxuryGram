@@ -1,0 +1,36 @@
+<RCC>
+    <qresource prefix="/gui">
+        <file alias="art/luxury/alt/app.svg">../../art/luxury/alt/app.svg</file>
+        <file alias="art/luxury/alt/app_icon.ico">../../art/luxury/alt/app_icon.ico</file>
+        <file alias="art/luxury/bard/app.svg">../../art/luxury/bard/app.svg</file>
+        <file alias="art/luxury/bard/app_icon.ico">../../art/luxury/bard/app_icon.ico</file>
+        <file alias="art/luxury/chibi/app.png">../../art/luxury/chibi/app.png</file>
+        <file alias="art/luxury/chibi/app_icon.ico">../../art/luxury/chibi/app_icon.ico</file>
+        <file alias="art/luxury/chibi2/app.png">../../art/luxury/chibi2/app.png</file>
+        <file alias="art/luxury/chibi2/app_icon.ico">../../art/luxury/chibi2/app_icon.ico</file>
+        <file alias="art/luxury/default/app.png">../../art/luxury/default/app.png</file>
+        <file alias="art/luxury/default/app_icon.ico">../../art/luxury/default/app_icon.ico</file>
+        <file alias="art/luxury/discord/app.svg">../../art/luxury/discord/app.svg</file>
+        <file alias="art/luxury/discord/app_icon.ico">../../art/luxury/discord/app_icon.ico</file>
+        <file alias="art/luxury/extera/app.svg">../../art/luxury/extera/app.svg</file>
+        <file alias="art/luxury/extera/app_icon.ico">../../art/luxury/extera/app_icon.ico</file>
+        <file alias="art/luxury/extera2/app.svg">../../art/luxury/extera2/app.svg</file>
+        <file alias="art/luxury/extera2/app_icon.ico">../../art/luxury/extera2/app_icon.ico</file>
+        <file alias="art/luxury/nothing/app.svg">../../art/luxury/nothing/app.svg</file>
+        <file alias="art/luxury/nothing/app_icon.ico">../../art/luxury/nothing/app_icon.ico</file>
+        <file alias="art/luxury/spotify/app.svg">../../art/luxury/spotify/app.svg</file>
+        <file alias="art/luxury/spotify/app_icon.ico">../../art/luxury/spotify/app_icon.ico</file>
+        <file alias="art/luxury/win95/app.png">../../art/luxury/win95/app.png</file>
+        <file alias="art/luxury/win95/app_icon.ico">../../art/luxury/win95/app_icon.ico</file>
+        <file alias="art/luxury/yaplus/app.svg">../../art/luxury/yaplus/app.svg</file>
+        <file alias="art/luxury/yaplus/app_icon.ico">../../art/luxury/yaplus/app_icon.ico</file>
+        <file alias="icons/luxury/nocover.svg">../../icons/luxury/nocover.svg</file>
+        <file alias="icons/luxury/donates/boosty.svg">../../icons/luxury/donates/boosty.svg</file>
+        <file alias="icons/luxury/donates/ton.svg">../../icons/luxury/donates/ton.svg</file>
+        <file alias="icons/luxury/donates/bitcoin.svg">../../icons/luxury/donates/bitcoin.svg</file>
+        <file alias="icons/luxury/donates/ethereum.svg">../../icons/luxury/donates/ethereum.svg</file>
+        <file alias="icons/luxury/donates/solana.svg">../../icons/luxury/donates/solana.svg</file>
+        <file alias="icons/luxury/donates/tron.svg">../../icons/luxury/donates/tron.svg</file>
+        <file alias="icons/luxury/donates/support_logo.svg">../../icons/luxury/donates/support_logo.svg</file>
+    </qresource>
+</RCC>

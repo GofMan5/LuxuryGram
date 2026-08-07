@@ -24,8 +24,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtWidgets/QApplication>
 
-// AyuGram includes
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "luxury/ui/luxury_userpic.h"
 
 
 namespace Dialogs {

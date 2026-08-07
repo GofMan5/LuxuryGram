@@ -42,9 +42,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_layers.h"
 #include "styles/style_overview.h"
 
-// AyuGram includes
-#include "ayu/ayu_ui_settings.h"
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "luxury/luxury_ui_settings.h"
+#include "luxury/ui/luxury_userpic.h"
 
 
 namespace Info::PeerGifts {

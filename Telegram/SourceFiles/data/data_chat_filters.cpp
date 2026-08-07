@@ -25,8 +25,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_app_config.h"
 #include "apiwrap.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 
 
 namespace Data {
@@ -515,7 +515,7 @@ void ChatFilters::requestToggleTags(bool value, Fn<void()> fail) {
 }
 
 void ChatFilters::received(const QVector<MTPDialogFilter> &list) {
-	// AyuGram hideAllChatsFolder
+	// LuxuryGram hideAllChatsFolder
 	const auto &settings = LuxurySettings::getInstance();
 
 	auto position = 0;
@@ -557,7 +557,7 @@ void ChatFilters::received(const QVector<MTPDialogFilter> &list) {
 }
 
 void ChatFilters::apply(const MTPUpdate &update) {
-	// AyuGram hideAllChatsFolder
+	// LuxuryGram hideAllChatsFolder
 	const auto &settings = LuxurySettings::getInstance();
 
 	update.match([&](const MTPDupdateDialogFilter &data) {
@@ -947,7 +947,7 @@ FilterId ChatFilters::defaultId() const {
 FilterId ChatFilters::lookupId(int index) const {
 	// Expects(index >= 0 && index < _list.size());
 	if (!(index >= 0 && index < _list.size())) {
-		return FilterId(); // AyuGram: fix crash when using `hideAllChatsFolder`
+		return FilterId(); // LuxuryGram: fix crash when using `hideAllChatsFolder`
 	}
 
 	const auto &settings = LuxurySettings::getInstance();

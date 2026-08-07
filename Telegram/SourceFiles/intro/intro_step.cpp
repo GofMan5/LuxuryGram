@@ -39,8 +39,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_intro.h"
 #include "styles/style_window.h"
 
-// AyuGram includes
-#include "ayu/ui/ayu_logo.h"
+// LuxuryGram includes
+#include "luxury/ui/luxury_logo.h"
 
 
 namespace Intro {

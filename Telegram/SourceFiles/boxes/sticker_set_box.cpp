@@ -77,10 +77,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QClipboard>
 #include <QtSvg/QSvgRenderer>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/utils/telegram_helpers.h"
-#include "styles/style_ayu_styles.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/utils/telegram_helpers.h"
+#include "styles/style_luxury_styles.h"
 #include "window/window_session_controller.h"
 #include "data/data_user.h"
 

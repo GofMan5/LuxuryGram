@@ -98,9 +98,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtWidgets/QApplication>
 #include <QtCore/QMimeData>
 
-// AyuGram includes
-#include "ayu/features/filters/filters_cache_controller.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/features/filters/filters_cache_controller.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace HistoryView {

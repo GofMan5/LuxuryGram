@@ -114,10 +114,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/features/forward/ayu_forward.h"
-#include "ayu/ui/context_menu/context_menu.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/features/forward/luxury_forward.h"
+#include "luxury/ui/context_menu/context_menu.h"
 
 
 namespace HistoryView {
@@ -2748,7 +2748,7 @@ TextWithEntities TransribedText(not_null<HistoryItem*> item) {
 }
 
 bool ItemHasTtl(HistoryItem *item) {
-	return false; // AyuGram: allow downloading files with ttl
+	return false; // LuxuryGram: allow downloading files with ttl
 }
 
 } // namespace HistoryView

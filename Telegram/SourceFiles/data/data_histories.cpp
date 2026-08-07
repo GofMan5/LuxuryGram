@@ -32,11 +32,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 #include "apiwrap.h"
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/ayu_worker.h"
-#include "ayu/data/messages_storage.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/luxury_worker.h"
+#include "luxury/data/messages_storage.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Data {
@@ -695,7 +695,7 @@ void Histories::reportPendingDeliveries() {
 void Histories::sendReadRequests() {
 	DEBUG_LOG(("Reading: send requests with count %1.").arg(_states.size()));
 
-	// AyuGram sendReadMessages
+	// LuxuryGram sendReadMessages
 	const auto &ghost = LuxurySettings::ghost(&_owner->session());
 	if (!ghost.sendReadMessages()) {
 		DEBUG_LOG(("[LuxuryGram] Don't read messages"));

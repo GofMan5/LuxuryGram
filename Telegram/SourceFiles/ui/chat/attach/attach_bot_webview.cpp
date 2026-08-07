@@ -55,9 +55,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QScreen>
 #include <QtGui/qpa/qplatformscreen.h>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "styles/style_ayu_styles.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "styles/style_luxury_styles.h"
 
 #include <algorithm>
 #include <memory>

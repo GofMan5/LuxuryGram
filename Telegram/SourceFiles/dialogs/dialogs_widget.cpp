@@ -107,9 +107,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtWidgets/QScrollBar>
 #include <QtWidgets/QTextEdit>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "base/platform/base_platform_haptic.h"
 
 
@@ -1760,7 +1760,7 @@ void Widget::setupMainMenuToggle() {
 }
 
 void Widget::setupStories() {
-	// AyuGram disableStories
+	// LuxuryGram disableStories
 	const auto &settings = LuxurySettings::getInstance();
 	if (settings.disableStories()) {
 		return;

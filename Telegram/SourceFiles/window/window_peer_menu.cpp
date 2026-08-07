@@ -135,11 +135,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QAction>
 #include <QtWidgets/QApplication>
 
-// AyuGram includes
-#include "ayu/utils/telegram_helpers.h"
-#include "styles/style_ayu_icons.h"
-#include "ayu/ui/context_menu/context_menu.h"
-#include "ayu/features/forward/ayu_forward.h"
+// LuxuryGram includes
+#include "luxury/utils/telegram_helpers.h"
+#include "styles/style_luxury_icons.h"
+#include "luxury/ui/context_menu/context_menu.h"
+#include "luxury/features/forward/luxury_forward.h"
 
 
 namespace Window {
@@ -3423,7 +3423,7 @@ base::weak_qptr<Ui::BoxContent> ShowForwardMessagesBox(
 		if ((!state->submit || luxuryForwarding) && successCallback) {
 			successCallback();
 		}
-		// AyuGram-changed
+		// LuxuryGram-changed
 	};
 
 	const auto sendMenuType = [=] {

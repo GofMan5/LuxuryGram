@@ -21,9 +21,9 @@ add_subdirectory(lib_webrtc)
 add_subdirectory(lib_webview)
 add_subdirectory(codegen)
 
-# AyuGram filters
+# LuxuryGram filters
 add_subdirectory(lib_icu)
-# AyuGram filters
+# LuxuryGram filters
 
 get_filename_component(src_loc SourceFiles REALPATH)
 get_filename_component(res_loc Resources REALPATH)
@@ -97,153 +97,153 @@ PRIVATE
     desktop-app::external_openal
     desktop-app::external_xxhash
 
-    # AyuGram filters
-    ayugram::lib_icu
+    # LuxuryGram filters
+    luxurygram::lib_icu
 )
 
 set(luxurygram_files
-        ayu/ayu_worker.cpp
-        ayu/ayu_worker.h
-        ayu/ayu_url_handlers.cpp
-        ayu/ayu_url_handlers.h
-        ayu/ayu_state.cpp
-        ayu/ayu_state.h
-        ayu/ayu_settings.cpp
-        ayu/ayu_settings.h
-        ayu/ayu_lang.cpp
-        ayu/ayu_lang.h
-        ayu/ayu_infra.cpp
-        ayu/ayu_infra.h
-        ayu/utils/ayu_mapper.cpp
-        ayu/utils/ayu_mapper.h
-        ayu/utils/qt_key_modifiers_extended.h
-        ayu/utils/telegram_helpers.cpp
-        ayu/utils/telegram_helpers.h
-        ayu/utils/windows_utils.cpp
-        ayu/utils/windows_utils.h
-        ayu/utils/rc_manager.cpp
-        ayu/utils/rc_manager.h
-        ayu/ui/ayu_logo.cpp
-        ayu/ui/ayu_logo.h
-        ayu/ui/toasts.cpp
-        ayu/ui/toasts.h
-        ayu/ui/ayu_userpic.cpp
-        ayu/ui/ayu_userpic.h
-        ayu/ui/utils/ayu_profile_values.cpp
-        ayu/ui/utils/ayu_profile_values.h
-        ayu/ui/utils/color_cut_quantizer.cpp
-        ayu/ui/utils/color_cut_quantizer.h
-        ayu/ui/utils/color_utils.cpp
-        ayu/ui/utils/color_utils.h
-        ayu/ui/utils/palette.cpp
-        ayu/ui/utils/palette.h
-        ayu/ui/utils/itunes_search.cpp
-        ayu/ui/utils/itunes_search.h
-        ayu/ui/settings/ayu_builder.cpp
-        ayu/ui/settings/ayu_builder.h
-        ayu/ui/settings/settings_appearance.cpp
-        ayu/ui/settings/settings_appearance.h
-        ayu/ui/settings/settings_ayu_utils.cpp
-        ayu/ui/settings/settings_ayu_utils.h
-        ayu/ui/settings/settings_chats.cpp
-        ayu/ui/settings/settings_chats.h
-        ayu/ui/settings/settings_general.cpp
-        ayu/ui/settings/settings_general.h
-        ayu/ui/settings/settings_ayu.cpp
-        ayu/ui/settings/settings_ayu.h
-        ayu/ui/settings/settings_filters.cpp
-        ayu/ui/settings/settings_filters.h
-        ayu/ui/settings/settings_main.cpp
-        ayu/ui/settings/settings_main.h
-        ayu/ui/settings/settings_other.cpp
-        ayu/ui/settings/settings_other.h
-        ayu/ui/settings/filters/settings_filters_list.cpp
-        ayu/ui/settings/filters/settings_filters_list.h
-        ayu/ui/settings/filters/per_dialog_filter.cpp
-        ayu/ui/settings/filters/per_dialog_filter.h
-        ayu/ui/settings/filters/edit_filter.cpp
-        ayu/ui/settings/filters/edit_filter.h
-        ayu/ui/context_menu/context_menu.cpp
-        ayu/ui/context_menu/context_menu.h
-        ayu/ui/context_menu/menu_item_subtext.cpp
-        ayu/ui/context_menu/menu_item_subtext.h
-        ayu/ui/message_history/history_inner.cpp
-        ayu/ui/message_history/history_inner.h
-        ayu/ui/message_history/history_item.cpp
-        ayu/ui/message_history/history_item.h
-        ayu/ui/message_history/history_section.cpp
-        ayu/ui/message_history/history_section.h
-        ayu/ui/boxes/edit_mark_box.cpp
-        ayu/ui/boxes/edit_mark_box.h
-        ayu/ui/boxes/font_selector.cpp
-        ayu/ui/boxes/font_selector.h
-        ayu/ui/boxes/import_filters_box.cpp
-        ayu/ui/boxes/import_filters_box.h
-        ayu/ui/boxes/theme_selector_box.cpp
-        ayu/ui/boxes/theme_selector_box.h
-        ayu/ui/boxes/message_shot_box.cpp
-        ayu/ui/boxes/message_shot_box.h
-        ayu/ui/boxes/donate_qr_box.cpp
-        ayu/ui/boxes/donate_qr_box.h
-        ayu/ui/boxes/donate_info_box.cpp
-        ayu/ui/boxes/donate_info_box.h
-        ayu/ui/boxes/plugin_info_box.cpp
-        ayu/ui/boxes/plugin_info_box.h
-        ayu/ui/components/image_view.cpp
-        ayu/ui/components/image_view.h
-        ayu/ui/components/icon_picker.cpp
-        ayu/ui/components/icon_picker.h
-        ayu/ui/components/avatar_corners_preview.cpp
-        ayu/ui/components/avatar_corners_preview.h
-        ayu/ui/components/message_preview.cpp
-        ayu/ui/components/message_preview.h
-        ayu/ui/components/saved_music.cpp
-        ayu/ui/components/saved_music.h
-        ayu/libs/json.hpp
-        ayu/libs/json_ext.hpp
-        ayu/libs/sqlite/sqlite3.c
-        ayu/libs/sqlite/sqlite3.h
-        ayu/libs/sqlite/sqlite_orm.h
-        ayu/features/streamer_mode/platform/linux/streamer_mode_linux.cpp
-        ayu/features/streamer_mode/platform/linux/streamer_mode_linux.h
-        ayu/features/streamer_mode/platform/mac/streamer_mode_mac.mm
-        ayu/features/streamer_mode/platform/mac/streamer_mode_mac.h
-        ayu/features/streamer_mode/platform/win/streamer_mode_win.cpp
-        ayu/features/streamer_mode/platform/win/streamer_mode_win.h
-        ayu/features/streamer_mode/platform/platform_streamer_mode.h
-        ayu/features/streamer_mode/streamer_mode.cpp
-        ayu/features/streamer_mode/streamer_mode.h
-        ayu/features/message_shot/message_shot.cpp
-        ayu/features/message_shot/message_shot.h
-        ayu/features/message_shot/message_shot_theme_state.cpp
-        ayu/features/message_shot/message_shot_theme_state.h
-        ayu/features/forward/ayu_forward.cpp
-        ayu/features/forward/ayu_forward.h
-        ayu/features/forward/ayu_sync.cpp
-        ayu/features/forward/ayu_sync.h
-        ayu/features/translator/ayu_translator.cpp
-        ayu/features/translator/ayu_translator.h
-        ayu/features/translator/ayu_translate_provider.cpp
-        ayu/features/translator/ayu_translate_provider.h
-        ayu/features/translator/html_parser.cpp
-        ayu/features/translator/html_parser.h
-        ayu/features/translator/implementations/google.cpp
-        ayu/features/translator/implementations/google.h
-        ayu/features/translator/implementations/yandex.cpp
-        ayu/features/translator/implementations/yandex.h
-        ayu/features/translator/implementations/base.cpp
-        ayu/features/translator/implementations/base.h
-        ayu/features/filters/filters_controller.cpp
-        ayu/features/filters/filters_controller.h
-        ayu/features/filters/filters_cache_controller.cpp
-        ayu/features/filters/filters_cache_controller.h
-        ayu/features/filters/filters_utils.cpp
-        ayu/features/filters/filters_utils.h
-        ayu/data/messages_storage.cpp
-        ayu/data/messages_storage.h
-        ayu/data/entities.h
-        ayu/data/ayu_database.cpp
-        ayu/data/ayu_database.h
+        luxury/luxury_worker.cpp
+        luxury/luxury_worker.h
+        luxury/luxury_url_handlers.cpp
+        luxury/luxury_url_handlers.h
+        luxury/luxury_state.cpp
+        luxury/luxury_state.h
+        luxury/luxury_settings.cpp
+        luxury/luxury_settings.h
+        luxury/luxury_lang.cpp
+        luxury/luxury_lang.h
+        luxury/luxury_infra.cpp
+        luxury/luxury_infra.h
+        luxury/utils/luxury_mapper.cpp
+        luxury/utils/luxury_mapper.h
+        luxury/utils/qt_key_modifiers_extended.h
+        luxury/utils/telegram_helpers.cpp
+        luxury/utils/telegram_helpers.h
+        luxury/utils/windows_utils.cpp
+        luxury/utils/windows_utils.h
+        luxury/utils/rc_manager.cpp
+        luxury/utils/rc_manager.h
+        luxury/ui/luxury_logo.cpp
+        luxury/ui/luxury_logo.h
+        luxury/ui/toasts.cpp
+        luxury/ui/toasts.h
+        luxury/ui/luxury_userpic.cpp
+        luxury/ui/luxury_userpic.h
+        luxury/ui/utils/luxury_profile_values.cpp
+        luxury/ui/utils/luxury_profile_values.h
+        luxury/ui/utils/color_cut_quantizer.cpp
+        luxury/ui/utils/color_cut_quantizer.h
+        luxury/ui/utils/color_utils.cpp
+        luxury/ui/utils/color_utils.h
+        luxury/ui/utils/palette.cpp
+        luxury/ui/utils/palette.h
+        luxury/ui/utils/itunes_search.cpp
+        luxury/ui/utils/itunes_search.h
+        luxury/ui/settings/luxury_builder.cpp
+        luxury/ui/settings/luxury_builder.h
+        luxury/ui/settings/settings_appearance.cpp
+        luxury/ui/settings/settings_appearance.h
+        luxury/ui/settings/settings_luxury_utils.cpp
+        luxury/ui/settings/settings_luxury_utils.h
+        luxury/ui/settings/settings_chats.cpp
+        luxury/ui/settings/settings_chats.h
+        luxury/ui/settings/settings_general.cpp
+        luxury/ui/settings/settings_general.h
+        luxury/ui/settings/settings_luxury.cpp
+        luxury/ui/settings/settings_luxury.h
+        luxury/ui/settings/settings_filters.cpp
+        luxury/ui/settings/settings_filters.h
+        luxury/ui/settings/settings_main.cpp
+        luxury/ui/settings/settings_main.h
+        luxury/ui/settings/settings_other.cpp
+        luxury/ui/settings/settings_other.h
+        luxury/ui/settings/filters/settings_filters_list.cpp
+        luxury/ui/settings/filters/settings_filters_list.h
+        luxury/ui/settings/filters/per_dialog_filter.cpp
+        luxury/ui/settings/filters/per_dialog_filter.h
+        luxury/ui/settings/filters/edit_filter.cpp
+        luxury/ui/settings/filters/edit_filter.h
+        luxury/ui/context_menu/context_menu.cpp
+        luxury/ui/context_menu/context_menu.h
+        luxury/ui/context_menu/menu_item_subtext.cpp
+        luxury/ui/context_menu/menu_item_subtext.h
+        luxury/ui/message_history/history_inner.cpp
+        luxury/ui/message_history/history_inner.h
+        luxury/ui/message_history/history_item.cpp
+        luxury/ui/message_history/history_item.h
+        luxury/ui/message_history/history_section.cpp
+        luxury/ui/message_history/history_section.h
+        luxury/ui/boxes/edit_mark_box.cpp
+        luxury/ui/boxes/edit_mark_box.h
+        luxury/ui/boxes/font_selector.cpp
+        luxury/ui/boxes/font_selector.h
+        luxury/ui/boxes/import_filters_box.cpp
+        luxury/ui/boxes/import_filters_box.h
+        luxury/ui/boxes/theme_selector_box.cpp
+        luxury/ui/boxes/theme_selector_box.h
+        luxury/ui/boxes/message_shot_box.cpp
+        luxury/ui/boxes/message_shot_box.h
+        luxury/ui/boxes/donate_qr_box.cpp
+        luxury/ui/boxes/donate_qr_box.h
+        luxury/ui/boxes/donate_info_box.cpp
+        luxury/ui/boxes/donate_info_box.h
+        luxury/ui/boxes/plugin_info_box.cpp
+        luxury/ui/boxes/plugin_info_box.h
+        luxury/ui/components/image_view.cpp
+        luxury/ui/components/image_view.h
+        luxury/ui/components/icon_picker.cpp
+        luxury/ui/components/icon_picker.h
+        luxury/ui/components/avatar_corners_preview.cpp
+        luxury/ui/components/avatar_corners_preview.h
+        luxury/ui/components/message_preview.cpp
+        luxury/ui/components/message_preview.h
+        luxury/ui/components/saved_music.cpp
+        luxury/ui/components/saved_music.h
+        luxury/libs/json.hpp
+        luxury/libs/json_ext.hpp
+        luxury/libs/sqlite/sqlite3.c
+        luxury/libs/sqlite/sqlite3.h
+        luxury/libs/sqlite/sqlite_orm.h
+        luxury/features/streamer_mode/platform/linux/streamer_mode_linux.cpp
+        luxury/features/streamer_mode/platform/linux/streamer_mode_linux.h
+        luxury/features/streamer_mode/platform/mac/streamer_mode_mac.mm
+        luxury/features/streamer_mode/platform/mac/streamer_mode_mac.h
+        luxury/features/streamer_mode/platform/win/streamer_mode_win.cpp
+        luxury/features/streamer_mode/platform/win/streamer_mode_win.h
+        luxury/features/streamer_mode/platform/platform_streamer_mode.h
+        luxury/features/streamer_mode/streamer_mode.cpp
+        luxury/features/streamer_mode/streamer_mode.h
+        luxury/features/message_shot/message_shot.cpp
+        luxury/features/message_shot/message_shot.h
+        luxury/features/message_shot/message_shot_theme_state.cpp
+        luxury/features/message_shot/message_shot_theme_state.h
+        luxury/features/forward/luxury_forward.cpp
+        luxury/features/forward/luxury_forward.h
+        luxury/features/forward/luxury_sync.cpp
+        luxury/features/forward/luxury_sync.h
+        luxury/features/translator/luxury_translator.cpp
+        luxury/features/translator/luxury_translator.h
+        luxury/features/translator/luxury_translate_provider.cpp
+        luxury/features/translator/luxury_translate_provider.h
+        luxury/features/translator/html_parser.cpp
+        luxury/features/translator/html_parser.h
+        luxury/features/translator/implementations/google.cpp
+        luxury/features/translator/implementations/google.h
+        luxury/features/translator/implementations/yandex.cpp
+        luxury/features/translator/implementations/yandex.h
+        luxury/features/translator/implementations/base.cpp
+        luxury/features/translator/implementations/base.h
+        luxury/features/filters/filters_controller.cpp
+        luxury/features/filters/filters_controller.h
+        luxury/features/filters/filters_cache_controller.cpp
+        luxury/features/filters/filters_cache_controller.h
+        luxury/features/filters/filters_utils.cpp
+        luxury/features/filters/filters_utils.h
+        luxury/data/messages_storage.cpp
+        luxury/data/messages_storage.h
+        luxury/data/entities.h
+        luxury/data/luxury_database.cpp
+        luxury/data/luxury_database.h
 
         info/profile/info_profile_music_button.cpp
         info/profile/info_profile_music_button.h
@@ -2264,7 +2264,7 @@ endif()
 
 nice_target_sources(Telegram ${res_loc}
 PRIVATE
-    qrc/ayu/ayu.qrc
+    qrc/luxury/luxury.qrc
 
     qrc/emoji_1.qrc
     qrc/emoji_2.qrc
@@ -2487,7 +2487,7 @@ PRIVATE
     TDESKTOP_API_ID=${TDESKTOP_API_ID}
     TDESKTOP_API_HASH=${TDESKTOP_API_HASH}
     G_LOG_DOMAIN="Telegram"
-    U_STATIC_IMPLEMENTATION=1 # AyuGram: do not use __declspec(dllimport) when including icu headers
+    U_STATIC_IMPLEMENTATION=1 # LuxuryGram: do not use __declspec(dllimport) when including icu headers
 )
 
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)

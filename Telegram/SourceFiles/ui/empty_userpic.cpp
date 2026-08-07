@@ -21,9 +21,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QMutex>
 #include <QtSvg/QSvgRenderer>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/ui/luxury_userpic.h"
 
 
 namespace Ui {

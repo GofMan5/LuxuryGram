@@ -66,8 +66,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QJsonDocument>
 #include <QtGui/QGuiApplication>
 
-// AyuGram includes
-#include "ayu/ui/settings/settings_main.h"
+// LuxuryGram includes
+#include "luxury/ui/settings/settings_main.h"
 #include "settings/settings_builder.h"
 
 
@@ -153,17 +153,17 @@ struct ResolvedReferrer {
 [[nodiscard]] QString OptionReferrer(const base::options::option<bool> &option) {
 	const auto &id = option.id();
 	if (id == u"tabbed-panel-show-on-click"_q) {
-		return u"ayu/showEmojiPopup"_q;
+		return u"luxury/showEmojiPopup"_q;
 	} else if (id == u"show-peer-id-below-about"_q) {
-		return u"ayu/showPeerId"_q;
+		return u"luxury/showPeerId"_q;
 	} else if (id == u"use-small-msg-bubble-radius"_q) {
-		return u"ayu/messageBubbleRadius"_q;
+		return u"luxury/messageBubbleRadius"_q;
 	} else if (id == u"unlimited-recent-stickers"_q) {
-		return u"ayu/unlimitedRecentStickers"_q;
+		return u"luxury/unlimitedRecentStickers"_q;
 	} else if (id == u"hide-ai-button"_q) {
-		return u"ayu/showAiEditorButtonInMessageField"_q;
+		return u"luxury/showAiEditorButtonInMessageField"_q;
 	} else if (id == u"unlimited-message-width"_q) {
-		return u"ayu/wideMultiplier"_q;
+		return u"luxury/wideMultiplier"_q;
 	}
 	return QString();
 }

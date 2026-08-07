@@ -71,13 +71,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtGui/QWindow>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
 #include "boxes/peers/edit_participants_box.h"
 #include "data/data_chat_filters.h"
 #include "history/admin_log/history_admin_log_section.h"
-#include "styles/style_ayu_styles.h"
-#include "styles/style_ayu_icons.h"
+#include "styles/style_luxury_styles.h"
+#include "styles/style_luxury_icons.h"
 
 
 namespace HistoryView {

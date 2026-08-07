@@ -30,7 +30,7 @@
 	url = https://github.com/desktop-app/lib_lottie.git
 [submodule "Telegram/lib_tl"]
 	path = Telegram/lib_tl
-	url = https://github.com/AyuGram/lib_tl.git
+	url = https://github.com/GofMan5/LuxuryGram-lib_tl.git
 [submodule "Telegram/lib_spellcheck"]
 	path = Telegram/lib_spellcheck
 	url = https://github.com/desktop-app/lib_spellcheck
@@ -93,7 +93,7 @@
 	url = https://github.com/desktop-app/lib_translate
 [submodule "Telegram/lib_icu"]
 	path = Telegram/lib_icu
-	url = https://github.com/AyuGram/lib_icu.git
+	url = https://github.com/GofMan5/LuxuryGram-lib_icu.git
 [submodule "Telegram/ThirdParty/cmark-gfm"]
 	path = Telegram/ThirdParty/cmark-gfm
 	url = https://github.com/github/cmark-gfm.git

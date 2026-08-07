@@ -45,9 +45,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/ui_integration.h"
 #include "styles/style_chat.h"
 
-// AyuGram includes
-#include "ayu/features/message_shot/message_shot.h"
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "luxury/features/message_shot/message_shot.h"
+#include "luxury/ui/luxury_userpic.h"
 
 
 namespace HistoryView {

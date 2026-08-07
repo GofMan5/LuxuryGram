@@ -79,13 +79,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
 
-// AyuGram includes
-#include "ayu/ayu_settings.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "boxes/abstract_box.h"
-#include "styles/style_ayu_icons.h"
+#include "styles/style_luxury_icons.h"
 #include "lang_auto.h"
-#include "ayu/ui/settings/settings_main.h"
+#include "luxury/ui/settings/settings_main.h"
 
 namespace Window {
 namespace {

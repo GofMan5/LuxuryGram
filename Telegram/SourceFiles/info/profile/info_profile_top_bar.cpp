@@ -108,9 +108,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 
-// AyuGram includes
-#include "ayu/ui/ayu_userpic.h"
-#include "ayu/utils/telegram_helpers.h"
+// LuxuryGram includes
+#include "luxury/ui/luxury_userpic.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Info::Profile {

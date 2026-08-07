@@ -19,8 +19,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/empty_userpic.h"
 #include "ui/painter.h"
 
-// AyuGram includes
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "luxury/ui/luxury_userpic.h"
 
 
 namespace Ui {

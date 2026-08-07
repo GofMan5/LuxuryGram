@@ -40,10 +40,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat_helpers.h"
 #include "styles/style_chat.h"
 
-// AyuGram includes
-#include "ayu/ui/context_menu/context_menu.h"
-#include "ayu/ayu_settings.h"
-#include "ayu/utils/qt_key_modifiers_extended.h"
+// LuxuryGram includes
+#include "luxury/ui/context_menu/context_menu.h"
+#include "luxury/luxury_settings.h"
+#include "luxury/utils/qt_key_modifiers_extended.h"
 
 
 namespace HistoryView::Reactions {
@@ -858,7 +858,7 @@ void Selector::finishExpand() {
 }
 
 void Selector::paintBubble(QPainter &p, int innerWidth) {
-	// AyuGram: removed
+	// LuxuryGram: removed
 }
 
 void Selector::paintEvent(QPaintEvent *e) {

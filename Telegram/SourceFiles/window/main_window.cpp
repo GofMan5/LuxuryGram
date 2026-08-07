@@ -56,8 +56,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <kurlmimedata.h>
 
-// AyuGram includes
-#include "ayu/ui/ayu_logo.h"
+// LuxuryGram includes
+#include "luxury/ui/luxury_logo.h"
 
 
 namespace Window {

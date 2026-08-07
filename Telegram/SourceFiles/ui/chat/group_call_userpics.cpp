@@ -14,8 +14,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat.h"
 #include "styles/style_chat_helpers.h"
 
-// AyuGram includes
-#include "ayu/ui/ayu_userpic.h"
+// LuxuryGram includes
+#include "luxury/ui/luxury_userpic.h"
 
 
 namespace Ui {

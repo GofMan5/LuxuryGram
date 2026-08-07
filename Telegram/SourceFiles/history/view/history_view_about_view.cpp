@@ -11,7 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_premium.h"
 #include "api/api_sending.h"
 #include "apiwrap.h"
-#include "ayu/ayu_settings.h"
+#include "luxury/luxury_settings.h"
 #include "base/random.h"
 #include "base/unixtime.h"
 #include "ui/effects/premium_stars.h"

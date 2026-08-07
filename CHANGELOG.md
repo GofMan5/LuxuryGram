@@ -13,16 +13,18 @@ The project has not published its first binary release.
 ### Changed
 
 - Synchronized the codebase with Telegram Desktop 7.0.9 while preserving LuxuryGram and AyuGram features.
-- Published LuxuryGram forks for the updated `codegen` and `lib_ui` submodules and restored Linux/Windows CI.
+- Published LuxuryGram forks for the updated `codegen`, `lib_ui`, `lib_tl`, and `lib_icu` submodules and restored Linux/Windows CI.
 - Established the LuxuryGram project identity and public repository profile.
 - Replaced inherited download and support links with verified LuxuryGram resources.
 - Added contributor, conduct, security, support, legal, and pull-request guidance.
 - Completed the LuxuryGram identity across executable names, desktop metadata, installers, bundle identifiers, crash UI, settings, and localization sources.
 - Renamed inherited Ayu-prefixed application, language, codegen, and UI symbols while preserving compatibility-only storage paths, upstream services, and attribution.
+- Renamed all project-owned `ayu` source, resource, QRC, style, and build paths to the canonical `luxury` namespace.
 
 ### Fixed
 
 - Prevented missed media-download completions and main-thread observer teardown races in custom forwarding.
+- Snapshotted forwarding inputs on the main thread and resolved messages by stable IDs so background work no longer retains UI-owned message/media pointers.
 - Prevented fast-send completion races, overlapping album sends, unsafe download filename collisions, and cross-account forward-state collisions.
 - Isolated hidden-message, filter, ghost-mode, message-history, and message-shot state between production, test, and multi-account sessions.
 - Made settings and language-cache writes atomic, contained language cache/CDN paths, and bounded bulk message deletion memory.

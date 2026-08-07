@@ -2154,7 +2154,7 @@ void RegisterSettingsHandlers(Router &router) {
 QString SettingsDeepLink(
 		::Settings::Type section,
 		const QString &controlId) {
-	const auto luxuryPrefix = u"ayu/"_q;
+	const auto luxuryPrefix = u"luxury/"_q;
 	if (controlId.size() > luxuryPrefix.size()
 		&& controlId.startsWith(luxuryPrefix)) {
 		return u"https://t.me/luxurySettings?s="_q

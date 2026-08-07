@@ -96,7 +96,7 @@ void Email::setupContent() {
 	AddSkipInsteadOfField(content);
 
 	const auto send = [=](Fn<void()> close) {
-		// AyuGram: idk weird crash
+		// LuxuryGram: idk weird crash
 		if (_requestLifetime) {
 			_requestLifetime.destroy();
 		}

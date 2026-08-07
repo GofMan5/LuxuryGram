@@ -57,7 +57,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/ui_utility.h"
 #include "styles/style_info.h"
 
-#include "ayu/ayu_settings.h"
+#include "luxury/luxury_settings.h"
 
 namespace Info {
 namespace Profile {

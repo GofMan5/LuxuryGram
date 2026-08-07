@@ -67,8 +67,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
 
-// AyuGram includes
-#include "ayu/features/forward/ayu_forward.h"
+// LuxuryGram includes
+#include "luxury/features/forward/luxury_forward.h"
 
 
 class ShareBox::Inner final : public Ui::RpWidget {
@@ -1857,7 +1857,7 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 			&& result.front()->peer()->isSelf()
 			&& history->session().premium();
 
-		// AyuGram-changed
+		// LuxuryGram-changed
 		const auto dismiss = [=]
 		{
 			if (show->valid()) {
@@ -1886,7 +1886,7 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 			dismiss();
 			return;
 		}
-		// AyuGram-changed
+		// LuxuryGram-changed
 
 		for (const auto &thread : result) {
 			const auto peer = thread->peer();
