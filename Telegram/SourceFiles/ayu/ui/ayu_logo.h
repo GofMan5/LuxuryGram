@@ -23,6 +23,7 @@ ICON(CHIBI, "chibi");
 ICON(CHIBI2, "chibi2");
 ICON(EXTERA2, "extera2");
 
+bool isValidAppIcon(const QString &name);
 void loadAppIco();
 QString appIcoPath();
 

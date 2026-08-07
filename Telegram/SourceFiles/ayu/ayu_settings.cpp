@@ -524,6 +524,10 @@ void LuxurySettings::validate() {
 		_translationProvider = defaults._translationProvider.current();
 		modified = true;
 	}
+	if (!LuxuryAssets::isValidAppIcon(_appIcon.current())) {
+		_appIcon = defaults._appIcon.current();
+		modified = true;
+	}
 
 	validateRange(_messageBubbleRadius, 0, 16, defaults._messageBubbleRadius);
 	validateRange(_wideMultiplier, 0.5, 4.0, defaults._wideMultiplier);
@@ -710,8 +714,11 @@ void LuxurySettings::setShowPrivateChatReactions(bool val) {
 }
 
 void LuxurySettings::setAppIcon(const QString &val) {
-	if (_appIcon.current() == val) return;
-	_appIcon = val;
+	const auto validated = LuxuryAssets::isValidAppIcon(val)
+		? val
+		: LuxuryAssets::DEFAULT_ICON;
+	if (_appIcon.current() == validated) return;
+	_appIcon = validated;
 	save();
 }
 

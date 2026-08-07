@@ -18,16 +18,29 @@ static QImage LAST_LOADED_PAD;
 
 namespace LuxuryAssets {
 
+bool isValidAppIcon(const QString &name) {
+	return !name.isEmpty()
+		&& name.size() <= 64
+		&& !name.contains(u'/')
+		&& !name.contains(u'\\')
+		&& !name.contains(u':')
+		&& QFile::exists(qsl(":/gui/art/ayu/%1/app_icon.ico").arg(name));
+}
+
+QString safeAppIconName() {
+	const auto &name = LuxurySettings::getInstance().appIcon();
+	return isValidAppIcon(name) ? name : DEFAULT_ICON;
+}
+
 QString appIcoPath() {
-	const auto &settings = LuxurySettings::getInstance();
 	return cWorkingDir()
 		+ u"tdata/LuxuryGram-"_q
-		+ settings.appIcon()
+		+ safeAppIconName()
 		+ u".ico"_q;
 }
 
 void loadAppIco() {
-	const auto &settings = LuxurySettings::getInstance();
+	const auto iconName = safeAppIconName();
 	const auto iconPath = appIcoPath();
 
 	auto f = QFile(iconPath);
@@ -40,7 +53,7 @@ void loadAppIco() {
 		}
 	}
 	if (!QFile::copy(
-			qsl(":/gui/art/ayu/%1/app_icon.ico").arg(settings.appIcon()),
+			qsl(":/gui/art/ayu/%1/app_icon.ico").arg(iconName),
 			iconPath)) {
 		LOG(("Failed to write LuxuryGram application icon: %1").arg(iconPath));
 	}
@@ -99,11 +112,11 @@ QImage CreateImage(const QString &name, const QSize resultImageSize, const int p
 }
 
 void loadIcons() {
-	const auto &settings = LuxurySettings::getInstance();
-	if (LAST_LOADED_NAME != settings.appIcon()) {
-		LAST_LOADED_NAME = settings.appIcon();
-		LAST_LOADED = CreateImage(settings.appIcon(), Size(256));
-		LAST_LOADED_PAD = CreateImage(settings.appIcon(), Size(256), 12);
+	const auto iconName = safeAppIconName();
+	if (LAST_LOADED_NAME != iconName) {
+		LAST_LOADED_NAME = iconName;
+		LAST_LOADED = CreateImage(iconName, Size(256));
+		LAST_LOADED_PAD = CreateImage(iconName, Size(256), 12);
 	}
 }
 
@@ -112,6 +125,9 @@ QImage loadPreview(const QString &name) {
 }
 
 QString currentAppLogoName() {
+	if (LAST_LOADED_NAME.isEmpty()) {
+		loadIcons();
+	}
 	return LAST_LOADED_NAME;
 }
 
