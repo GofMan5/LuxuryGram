@@ -8,6 +8,7 @@
 
 #include "apiwrap.h"
 #include "api/api_text_entities.h"
+#include "data/data_forum_topic.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
@@ -18,6 +19,7 @@
 
 namespace LuxuryMapper {
 
+constexpr auto kMaxSerializedObjectBytes = std::size_t(4 * 1024 * 1024);
 constexpr auto kMessageFlagUnread = 0x00000001;
 constexpr auto kMessageFlagOut = 0x00000002;
 constexpr auto kMessageFlagForwarded = 0x00000004;
@@ -60,6 +62,7 @@ std::vector<char> serializeObject(MTPObject object) {
 template<typename MTPObject>
 MTPObject deserializeObject(const std::vector<char> &serialized) {
 	if (serialized.empty()
+		|| serialized.size() > kMaxSerializedObjectBytes
 		|| (serialized.size() % sizeof(mtpPrime)) != 0) {
 		LOG(("LuxuryMapper: Invalid serialized object size"));
 		return {};
@@ -107,7 +110,7 @@ int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item) {
 	int flags = 0;
 
 	const auto thread = item->topic()
-							? reinterpret_cast<Data::Thread*>(item->topic())
+							? static_cast<Data::Thread*>(item->topic())
 							: item->history();
 	if (item->unread(thread)) {
 		flags |= kMessageFlagUnread;

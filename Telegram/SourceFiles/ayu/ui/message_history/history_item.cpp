@@ -15,6 +15,7 @@
 #include "core/application.h"
 #include "core/click_handler_types.h"
 #include "data/data_channel.h"
+#include "data/data_chat.h"
 #include "data/data_file_origin.h"
 #include "data/data_forum_topic.h"
 #include "data/data_session.h"
@@ -71,7 +72,7 @@ void GenerateItems(
 		from = history->owner().channelLoaded(message.fromId);
 	}
 	if (!from) {
-		from = reinterpret_cast<PeerData*>(history->owner().chatLoaded(message.fromId));
+		from = history->owner().chatLoaded(message.fromId);
 	}
 	const auto date = message.entityCreateDate;
 	const auto addPart = [&](

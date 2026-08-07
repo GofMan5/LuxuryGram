@@ -1239,7 +1239,7 @@ PeerData *getPeerFromDialogId(T id) {
 				from = session->data().channelLoaded(id);
 			}
 			if (!from) {
-				from = reinterpret_cast<PeerData*>(session->data().chatLoaded(id));
+				from = session->data().chatLoaded(id);
 			}
 
 			if (from) {
