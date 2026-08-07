@@ -26,7 +26,7 @@ std::vector<EditedMessage> getEditedMessages(ID userId, ID dialogId, ID messageI
 bool hasRevisions(ID userId, ID dialogId, ID messageId);
 
 void addDeletedMessage(DeletedMessage message);
-void addDeletedMessages(std::vector<DeletedMessage> messages);
+void addDeletedMessages(std::vector<DeletedMessage> &&messages);
 std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicId, ID minId, ID maxId, int totalLimit, const std::string &searchQuery = "");
 bool hasDeletedMessages(ID userId, ID dialogId, ID topicId);
 void removeDeletedMessage(ID userId, ID dialogId, ID messageId);
@@ -41,6 +41,12 @@ std::vector<RegexFilter> getExcludedByDialogId(ID dialogId);
 
 int getCount();
 
+bool applyFilterChanges(
+	const std::vector<RegexFilter> &newFilters,
+	const std::vector<std::vector<char>> &removeFiltersById,
+	const std::vector<RegexFilter> &filterOverrides,
+	const std::vector<RegexFilterGlobalExclusion> &newExclusions,
+	const std::vector<RegexFilterGlobalExclusion> &removeExclusions);
 
 void addRegexFilter(const RegexFilter &filter);
 void addRegexExclusion(const RegexFilterGlobalExclusion &exclusion);

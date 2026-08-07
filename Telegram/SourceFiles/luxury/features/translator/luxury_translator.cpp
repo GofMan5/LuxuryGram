@@ -101,7 +101,6 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 		}
 	);
 
-	std::vector<TextWithEntities> texts;
 	std::vector<QString> cacheKeys;
 	std::vector<TextWithEntities> resultTexts;
 	std::vector<int> uncachedIndices;
@@ -118,8 +117,6 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 				.text = text,
 				.entities = entities
 			};
-			texts.push_back(textWithEntities);
-
 			const auto key = generateCacheKey(
 				textWithEntities,
 				fromLang,
@@ -128,7 +125,7 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 			cacheKeys.push_back(key);
 
 			if (const auto cached = getFromCache(key)) {
-				resultTexts.push_back(cached->translatedText);
+				resultTexts.push_back(*cached);
 			} else {
 				resultTexts.push_back({});
 				uncachedIndices.push_back(i);
@@ -141,8 +138,6 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 				const auto msgId = req.ids().v[i].v;
 				if (const auto message = req.session()->data().message(peerData->id, msgId)) {
 					const auto textWithEntities = message->originalText();
-					texts.push_back(textWithEntities);
-
 					const auto key = generateCacheKey(
 						textWithEntities,
 						fromLang,
@@ -151,7 +146,7 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 					cacheKeys.push_back(key);
 
 					if (const auto cached = getFromCache(key)) {
-						resultTexts.push_back(cached->translatedText);
+						resultTexts.push_back(*cached);
 					} else {
 						resultTexts.push_back({});
 						uncachedIndices.push_back(i);
@@ -159,7 +154,6 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 					}
 				} else {
 					// todo: ??
-					texts.push_back({});
 					cacheKeys.push_back(QString());
 					resultTexts.push_back({});
 				}
@@ -167,7 +161,7 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 		}
 	}
 
-	if (texts.empty() || toLang.isEmpty()) {
+	if (resultTexts.empty() || toLang.isEmpty()) {
 		triggerFail(id);
 		return id;
 	}
@@ -185,10 +179,14 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 	}
 
 	const auto weakSession = base::make_weak(req.session());
-	CallbackSuccess onSuccess = [this, id, resultTexts = std::move(resultTexts), cacheKeys = std::move(cacheKeys),
-			uncachedIndices = std::move(uncachedIndices), texts = std::move(texts),
-			fromLang, toLang, weakSession](const std::vector<TextWithEntities> &translated) mutable
-	{
+	CallbackSuccess onSuccess = [
+		this,
+		id,
+		resultTexts = std::move(resultTexts),
+		cacheKeys = std::move(cacheKeys),
+		uncachedIndices = std::move(uncachedIndices),
+		weakSession
+	](const std::vector<TextWithEntities> &translated) mutable {
 		const auto session = weakSession.get();
 		if (!session) {
 			_pending.erase(id);
@@ -200,15 +198,7 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 
 			const auto &key = cacheKeys[index];
 			if (!key.isEmpty()) {
-				insertToCache(
-					key,
-					CacheEntry{
-						.originalText = texts[index],
-						.translatedText = translated[i],
-						.fromLang = fromLang,
-						.toLang = toLang
-					}
-				);
+				insertToCache(key, translated[i]);
 			}
 		}
 
@@ -330,8 +320,9 @@ QString TranslateManager::generateCacheKey(
 
 void TranslateManager::insertToCache(const QString &key, const CacheEntry &entry) {
 	if (const auto it = _cacheMap.find(key); it != _cacheMap.end()) {
-		_cacheList.erase(it->second);
-		_cacheMap.erase(it);
+		it->second->second = entry;
+		_cacheList.splice(_cacheList.begin(), _cacheList, it->second);
+		return;
 	}
 
 	_cacheList.emplace_front(key, entry);
@@ -348,12 +339,8 @@ std::optional<TranslateManager::CacheEntry> TranslateManager::getFromCache(const
 		return std::nullopt;
 	}
 
-	auto entry = it->second->second;
-	_cacheList.erase(it->second);
-	_cacheList.emplace_front(key, entry);
-	_cacheMap[key] = _cacheList.begin();
-
-	return entry;
+	_cacheList.splice(_cacheList.begin(), _cacheList, it->second);
+	return it->second->second;
 }
 
 void TranslateManager::removeLeastRecentlyUsed() {

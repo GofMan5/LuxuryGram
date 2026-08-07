@@ -27,8 +27,10 @@ The project has not published its first binary release.
 - Discarded stale delayed message-shot previews and avoided expensive pixel-diff buffers for images larger than four megapixels.
 - Preserved protected polls, contacts, locations, dice, stories, and other non-file media as rich text during custom forwarding instead of treating them as missing files.
 - Bounded decoded cover art and screenshot memory, reduced cover downloads to the requested resolution, and capped the cover cache by bytes instead of item count.
-- Moved large filter imports off the UI thread, replaced the handwritten UUID generator with Qt, and bounded remote profile collections and text.
+- Moved large filter imports off the UI thread into one rollback-safe transaction, replaced the handwritten UUID generator with Qt, and bounded remote profile collections and text.
 - Preserved media-only deleted and edited history entries as localized text and retained sender peer types instead of silently dropping or misidentifying them.
+- Bounded per-message filter memoization so long browsing sessions cannot grow the hidden-message cache indefinitely.
+- Removed duplicate source text from the translation LRU and promoted cache hits in place instead of copying list nodes.
 - Prevented missed media-download completions and main-thread observer teardown races in custom forwarding.
 - Snapshotted forwarding inputs on the main thread and resolved messages by stable IDs so background work no longer retains UI-owned message/media pointers.
 - Prevented fast-send completion races, overlapping album sends, unsafe download filename collisions, and cross-account forward-state collisions.

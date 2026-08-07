@@ -43,6 +43,9 @@ std::unordered_map<
 	uint64,
 	std::unordered_map<long long, std::unordered_map<int64, bool>>> filteredMessages;
 std::unordered_map<uint64, std::unordered_set<BareId>> dialogsWithHiddenBlockedMessages;
+std::size_t filteredMessagesCount = 0;
+std::size_t hiddenBlockedDialogsCount = 0;
+constexpr auto kMaxCachedFilterResults = std::size_t(65'536);
 
 std::shared_ptr<const Cache> buildCache() {
 	const auto filters = LuxuryDatabase::getAllRegexFilters();
@@ -102,6 +105,8 @@ void rebuildCache() {
 		cache = std::move(next);
 		filteredMessages.clear();
 		dialogsWithHiddenBlockedMessages.clear();
+		filteredMessagesCount = 0;
+		hiddenBlockedDialogsCount = 0;
 	}
 }
 
@@ -196,8 +201,19 @@ bool hasFilteredMessages(not_null<PeerData*> peer) {
 void putHiddenBlockedMessage(not_null<HistoryItem*> item) {
 	std::lock_guard lock(filteredMessagesMutex);
 	const auto sessionId = item->history()->session().uniqueId();
-	dialogsWithHiddenBlockedMessages[sessionId].insert(
-		item->history()->peer->id.value);
+	const auto peerId = item->history()->peer->id.value;
+	const auto session = dialogsWithHiddenBlockedMessages.find(sessionId);
+	if (session != end(dialogsWithHiddenBlockedMessages)
+		&& session->second.contains(peerId)) {
+		return;
+	}
+	// ponytail: bounded memoization; replace with LRU only if rescans are measurable.
+	if (hiddenBlockedDialogsCount >= kMaxCachedFilterResults) {
+		dialogsWithHiddenBlockedMessages.clear();
+		hiddenBlockedDialogsCount = 0;
+	}
+	dialogsWithHiddenBlockedMessages[sessionId].insert(peerId);
+	++hiddenBlockedDialogsCount;
 }
 
 void putFiltered(
@@ -211,12 +227,19 @@ void putFiltered(
 	}
 
 	std::lock_guard filteredLock(filteredMessagesMutex);
+	// ponytail: bounded memoization; replace with LRU only if rescans are measurable.
+	if (filteredMessagesCount >= kMaxCachedFilterResults) {
+		filteredMessages.clear();
+		filteredMessagesCount = 0;
+	}
 	const auto sessionId = item->history()->session().uniqueId();
 	auto &dialog = filteredMessages[sessionId][item->history()->peer->id.value];
-	dialog[item->id.bare] = res;
+	filteredMessagesCount += dialog.insert_or_assign(item->id.bare, res).second;
 	if (group && res) {
 		for (const auto& groupItem : group->items) {
-			dialog[groupItem->id.bare] = true;
+			filteredMessagesCount += dialog.insert_or_assign(
+				groupItem->id.bare,
+				true).second;
 		}
 	}
 }
@@ -240,6 +263,7 @@ void invalidateSingle(not_null<HistoryItem*> item) {
 	}
 
 	dialogIt->second.erase(it);
+	--filteredMessagesCount;
 	if (dialogIt->second.empty()) {
 		sessionIt->second.erase(dialogIt);
 		if (sessionIt->second.empty()) {

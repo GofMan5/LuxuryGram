@@ -101,13 +101,7 @@ public:
     static TranslateManager *instance;
 
 private:
-    struct CacheEntry
-    {
-        TextWithEntities originalText;
-        TextWithEntities translatedText;
-        QString fromLang;
-        QString toLang;
-    };
+    using CacheEntry = TextWithEntities;
 
     using CacheKey = QString;
     using CacheIterator = std::list<std::pair<CacheKey, CacheEntry>>::iterator;

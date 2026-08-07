@@ -341,7 +341,7 @@ void addDeletedMessage(DeletedMessage message) {
 	addDeletedMessages(std::move(messages));
 }
 
-void addDeletedMessages(std::vector<DeletedMessage> messages) {
+void addDeletedMessages(std::vector<DeletedMessage> &&messages) {
 	if (messages.empty()) {
 		return;
 	}
@@ -531,6 +531,60 @@ std::vector<RegexFilter> getByDialogId(ID dialogId) {
 	} catch (std::exception &ex) {
 		LOG(("Failed to get filters by dialog id: %1").arg(ex.what()));
 		return {};
+	}
+}
+
+bool applyFilterChanges(
+		const std::vector<RegexFilter> &newFilters,
+		const std::vector<std::vector<char>> &removeFiltersById,
+		const std::vector<RegexFilter> &filterOverrides,
+		const std::vector<RegexFilterGlobalExclusion> &newExclusions,
+		const std::vector<RegexFilterGlobalExclusion> &removeExclusions) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		storage.begin_transaction();
+		for (const auto &filter : newFilters) {
+			storage.replace(filter);
+		}
+		for (const auto &id : removeFiltersById) {
+			storage.remove_all<RegexFilterGlobalExclusion>(
+				where(column<RegexFilterGlobalExclusion>(
+					&RegexFilterGlobalExclusion::filterId) == id));
+			storage.remove_all<RegexFilter>(
+				where(column<RegexFilter>(&RegexFilter::id) == id));
+		}
+		for (const auto &filter : filterOverrides) {
+			storage.update_all(
+				set(
+					c(&RegexFilter::text) = filter.text,
+					c(&RegexFilter::enabled) = filter.enabled,
+					c(&RegexFilter::reversed) = filter.reversed,
+					c(&RegexFilter::caseInsensitive) = filter.caseInsensitive,
+					c(&RegexFilter::dialogId) = filter.dialogId),
+				where(c(&RegexFilter::id) == filter.id));
+		}
+		for (const auto &exclusion : newExclusions) {
+			storage.insert(exclusion);
+		}
+		for (const auto &exclusion : removeExclusions) {
+			storage.remove_all<RegexFilterGlobalExclusion>(
+				where(
+					column<RegexFilterGlobalExclusion>(
+						&RegexFilterGlobalExclusion::filterId)
+						== exclusion.filterId
+					&& column<RegexFilterGlobalExclusion>(
+						&RegexFilterGlobalExclusion::dialogId)
+						== exclusion.dialogId));
+		}
+		storage.commit();
+		return true;
+	} catch (const std::exception &ex) {
+		try {
+			storage.rollback();
+		} catch (...) {
+		}
+		LOG(("Failed to apply regex filter changes: %1").arg(ex.what()));
+		return false;
 	}
 }
 

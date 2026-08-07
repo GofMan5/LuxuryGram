@@ -399,6 +399,15 @@ void FilterUtils::publishFilters() {
 
 	const auto reply = _manager->post(request, multiPart);
 	multiPart->setParent(reply);
+	connect(
+		reply,
+		&QNetworkReply::downloadProgress,
+		this,
+		[=](qint64 received, qint64) {
+			if (received > kMaxFilterBackupBytes) {
+				reply->abort();
+			}
+		});
 
 	connect(
 		reply,
@@ -467,10 +476,15 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 			}
 			crl::async([changes = std::move(changes)]() mutable {
 				try {
-					applyChanges(std::move(changes));
+					if (!applyChanges(std::move(changes))) {
+						crl::on_main([] {
+							Ui::Toast::Show(
+								tr::luxury_FiltersToastFailImport(tr::now));
+						});
+						return;
+					}
 					crl::on_main([] {
-						Ui::Toast::Show(
-							tr::luxury_FiltersToastSuccess(tr::now));
+						Ui::Toast::Show(tr::luxury_FiltersToastSuccess(tr::now));
 					});
 				} catch (...) {
 					LOG(("FilterUtils: Failed to apply import changes"));
@@ -959,40 +973,18 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	return changes;
 }
 
-void FilterUtils::applyChanges(ApplyChanges changes) {
-	if (!changes.newFilters.empty()) {
-		for (const auto &filter : changes.newFilters) {
-			LuxuryDatabase::addRegexFilter(filter);
-		}
+bool FilterUtils::applyChanges(ApplyChanges changes) {
+	if (!LuxuryDatabase::applyFilterChanges(
+		changes.newFilters,
+		changes.removeFiltersById,
+		changes.filtersOverrides,
+		changes.newExclusions,
+		changes.removeExclusions)) {
+		return false;
 	}
-
-	if (!changes.removeFiltersById.empty()) {
-		for (const auto &id : changes.removeFiltersById) {
-			LuxuryDatabase::deleteExclusionsByFilterId(id);
-			LuxuryDatabase::deleteFilter(id);
-		}
-	}
-
-	if (!changes.filtersOverrides.empty()) {
-		for (const auto &filter : changes.filtersOverrides) {
-			LuxuryDatabase::updateRegexFilter(filter);
-		}
-	}
-
-	if (!changes.newExclusions.empty()) {
-		for (const auto &exclusion : changes.newExclusions) {
-			LuxuryDatabase::addRegexExclusion(exclusion);
-		}
-	}
-
-	if (!changes.removeExclusions.empty()) {
-		for (const auto &exclusion : changes.removeExclusions) {
-			LuxuryDatabase::deleteExclusion(exclusion.dialogId, exclusion.filterId);
-		}
-	}
-
 	FiltersCacheController::rebuildCache();
 	crl::on_main([] {
 		FiltersCacheController::fireUpdate();
 	});
+	return true;
 }

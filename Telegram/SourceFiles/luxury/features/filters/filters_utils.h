@@ -61,7 +61,7 @@ private:
 	void gotFailure(const QNetworkReply::NetworkError &error);
 
 	ApplyChanges prepareChanges(const QJsonObject &response);
-	static void applyChanges(ApplyChanges changes);
+	static bool applyChanges(ApplyChanges changes);
 
 	std::unique_ptr<QNetworkAccessManager> _manager = nullptr;
 };
