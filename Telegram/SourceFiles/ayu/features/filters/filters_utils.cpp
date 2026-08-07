@@ -49,6 +49,7 @@
 
 constexpr auto BACKUP_VERSION = 2;
 constexpr auto kMaxFilterBackupBytes = 4 * 1024 * 1024;
+constexpr auto kMaxFilterBackupEntries = 4096;
 constexpr auto kFilterNetworkTimeout = 15 * 1000;
 
 enum class PeerResolveHintType {
@@ -770,6 +771,20 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	if (version.toInt() > BACKUP_VERSION) {
 		return {};
 	}
+	const auto filters = root.value("filters").toArray();
+	const auto exclusions = root.value("exclusions").toArray();
+	const auto removeFilters = root.value("removeFiltersById").toArray();
+	const auto removeExclusionsJson = root.value("removeExclusions").toArray();
+	const auto peers = root.value("peers").toObject();
+	// ponytail: bound imported collections; raise only if real backups exceed 4096 entries.
+	if (filters.size() > kMaxFilterBackupEntries
+		|| exclusions.size() > kMaxFilterBackupEntries
+		|| removeFilters.size() > kMaxFilterBackupEntries
+		|| removeExclusionsJson.size() > kMaxFilterBackupEntries
+		|| peers.size() > kMaxFilterBackupEntries) {
+		LOG(("FilterUtils: backup contains too many entries."));
+		return {};
+	}
 
 
 	const auto existingFilters = LuxuryDatabase::getAllRegexFilters();
@@ -791,7 +806,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	std::vector<QString> peersToBeResolved;
 
 
-	if (const auto &filters = root.value("filters").toArray(); !filters.isEmpty()) {
+	if (!filters.isEmpty()) {
 		for (const auto &filterRef : filters) {
 			if (const auto filter = filterRef.toObject(); !filter.isEmpty()) {
 				RegexFilter regex;
@@ -832,7 +847,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 		}
 	}
 
-	if (const auto exclusions = root.value("exclusions").toArray(); !exclusions.isEmpty()) {
+	if (!exclusions.isEmpty()) {
 		for (const auto &exclusionRef : exclusions) {
 			if (const auto exclusion = exclusionRef.toObject(); !exclusion.isEmpty()) {
 				RegexFilterGlobalExclusion regex;
@@ -854,9 +869,8 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 		}
 	}
 
-	if (const auto removeFiltersByIdJson = root.value("removeFiltersById").toArray(); !removeFiltersByIdJson.
-		isEmpty()) {
-		for (const auto &filterRef : removeFiltersByIdJson) {
+	if (!removeFilters.isEmpty()) {
+		for (const auto &filterRef : removeFilters) {
 			const auto filterId = ParseFilterId(filterRef.toString());
 			if (filterId.empty()) {
 				continue;
@@ -868,7 +882,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 		}
 	}
 
-	if (const auto removeExclusionsJson = root.value("removeExclusions").toArray(); !removeExclusionsJson.isEmpty()) {
+	if (!removeExclusionsJson.isEmpty()) {
 		for (const auto &exclusionRef : removeExclusionsJson) {
 			const auto exclusionObj = exclusionRef.toObject();
 			const qint64 dialogId = exclusionObj.value("dialogId").toVariant().toLongLong();
@@ -887,8 +901,8 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 		}
 	}
 
-	if (const auto peersJson = root.value("peers").toObject(); !peersJson.isEmpty()) {
-		for (const auto &dialogIdStr : peersJson.keys()) {
+	if (!peers.isEmpty()) {
+		for (const auto &dialogIdStr : peers.keys()) {
 			bool parsed;
 			const auto dialogId = dialogIdStr.toLongLong(&parsed);
 
@@ -905,7 +919,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 			}
 
 			if (!peerMaybe) {
-				const auto resolverHint = peersJson.value(dialogIdStr).toString();
+				const auto resolverHint = peers.value(dialogIdStr).toString();
 				peersToBeResolved.push_back(resolverHint);
 			}
 		}
