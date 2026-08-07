@@ -23,5 +23,11 @@ The project has not published its first binary release.
 ### Fixed
 
 - Prevented missed media-download completions and main-thread observer teardown races in custom forwarding.
+- Prevented fast-send completion races, overlapping album sends, unsafe download filename collisions, and cross-account forward-state collisions.
+- Isolated hidden-message, filter, ghost-mode, message-history, and message-shot state between production, test, and multi-account sessions.
+- Made settings and language-cache writes atomic, contained language cache/CDN paths, and bounded bulk message deletion memory.
+- Made SQLite recovery preserve the database, WAL, and SHM as one rollback-safe set and stopped failed migrations from being marked successful.
+- Keyed translation results by the complete text, entities, languages, and provider so edits and provider changes cannot reuse stale output.
+- Removed dangling delayed UI/config callbacks and initialized inherited data/UI state deterministically.
 - Bounded translator responses and batches, serialized message-history storage, and hardened network/media lifetimes.
 - Removed dead UI overloads that broke warning-as-error Linux builds and eliminated redundant settings option copies.
