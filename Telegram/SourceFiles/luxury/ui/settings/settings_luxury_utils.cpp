@@ -41,14 +41,12 @@ class PainterHighQualityEnabler;
 namespace Settings {
 
 void ShowRestartPrompt(not_null<Window::SessionController*> controller) {
-	crl::on_main([=] {
-		controller->show(Ui::MakeConfirmBox({
-			.text = tr::lng_settings_need_restart(),
-			.confirmed = [] { Core::Restart(); },
-			.confirmText = tr::lng_settings_restart_now(),
-			.cancelText = tr::lng_settings_restart_later(),
-		}));
-	});
+	controller->show(Ui::MakeConfirmBox({
+		.text = tr::lng_settings_need_restart(),
+		.confirmed = [] { Core::Restart(); },
+		.confirmText = tr::lng_settings_restart_now(),
+		.cancelText = tr::lng_settings_restart_later(),
+	}));
 }
 
 void AddBetaBadge(not_null<Button*> parent) {

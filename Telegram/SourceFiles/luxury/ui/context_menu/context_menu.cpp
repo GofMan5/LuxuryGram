@@ -596,11 +596,15 @@ void AddTranslateMessageAction(
 			return;
 		}
 	}
-	const auto owner = &item->history()->owner();
+	const auto weak = base::make_weak(controller);
 	const auto itemId = item->fullId();
 	menu->addAction(title, [=, text = std::move(text)]() mutable {
-		if (const auto item = owner->message(itemId)) {
-			controller->show(Box(
+		if (const auto strong = weak.get()) {
+			const auto item = strong->session().data().message(itemId);
+			if (!item) {
+				return;
+			}
+			strong->show(Box(
 				Ui::TranslateBoxTo,
 				item->history()->peer,
 				MsgId(),
