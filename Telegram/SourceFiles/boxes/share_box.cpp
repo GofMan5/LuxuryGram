@@ -1861,16 +1861,30 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 			|| LuxuryForward::isLuxuryForwardNeeded(items)) {
 			const auto requestsLeft = std::make_shared<int>(int(result.size()));
 			for (const auto thread : result) {
+				const auto peer = thread->peer();
+				const auto forum = thread->owningHistory()->asForum();
+				const auto needNewTopic = forum
+					&& forum->bot()
+					&& Data::IsBotUserCreatesTopics(peer)
+					&& !thread->asTopic();
+				const auto effectiveThread = [&]() -> not_null<Data::Thread*> {
+					if (needNewTopic) {
+						const auto topic = forum->reserveNewBotTopic();
+						Assert(topic != nullptr);
+						return topic;
+					}
+					return thread;
+				}();
 				if (!comment.text.isEmpty()) {
 					auto message = Api::MessageToSend(
-						Api::SendAction(thread, options));
+						Api::SendAction(effectiveThread, options));
 					message.textWithTags = comment;
 					message.action.clearDraft = false;
 					api.sendMessage(std::move(message));
 				}
 				api.forwardMessages(
 					Data::ResolvedForwardDraft(items, forwardOptions),
-					Api::SendAction(thread, options),
+					Api::SendAction(effectiveThread, options),
 					[=] {
 						if (!--*requestsLeft && show->valid()) {
 							ShowForwardedMessageToast(

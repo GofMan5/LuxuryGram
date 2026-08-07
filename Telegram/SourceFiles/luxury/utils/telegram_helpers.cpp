@@ -816,11 +816,10 @@ void searchUserById(ID userId, Main::Session *session, const UsernameResolverCal
 		session,
 		[=](const QString &title, PeerData *data)
 		{
-			if (data) {
-				if (const auto user = data->asUser(); user->accessHash()) {
-					callback(title, user);
-					return;
-				}
+			const auto user = data ? data->asUser() : nullptr;
+			if (user && user->accessHash()) {
+				callback(title, user);
+				return;
 			}
 			callback(QString(), nullptr);
 		});
@@ -868,35 +867,30 @@ ID getUserIdFromPackId(uint64 id) {
 	return ownerId;
 }
 
-TextWithTags extractText(not_null<HistoryItem*> item) {
-	TextWithTags result;
+bool mediaDownloadable(const Data::Media *media) {
+	return media
+		&& !media->webpage()
+		&& (media->photo() || media->document());
+}
 
-	QString text;
+TextWithTags extractText(not_null<HistoryItem*> item) {
+	auto text = item->originalText();
 	if (const auto media = item->media()) {
 		if (const auto poll = media->poll()) {
-			text.append("\xF0\x9F\x93\x8A ") // 📊
-				.append(poll->question.text).append("\n");
+			text = TextWithEntities();
+			text.append(u"📊 "_q).append(poll->question).append(u'\n');
 			for (const auto &answer : poll->answers) {
-				text.append("• ").append(answer.text.text).append("\n");
+				text.append(u"• "_q).append(answer.text).append(u'\n');
 			}
+		} else if (text.text.isEmpty() && !mediaDownloadable(media)) {
+			text = media->clipboardText().rich;
 		}
 	}
 
-	result.tags = TextUtilities::ConvertEntitiesToTextTags(item->originalText().entities);
-	result.text = text.isEmpty() ? item->originalText().text : text;
-	return result;
-}
-
-bool mediaDownloadable(const Data::Media *media) {
-	if (!media
-		|| media->webpage() || media->poll() || media->game()
-		|| media->invoice() || media->location() || media->paper()
-		|| media->giveawayStart() || media->giveawayResults()
-		|| media->sharedContact() || media->call()
-	) {
-		return false;
-	}
-	return true;
+	return {
+		.text = std::move(text.text),
+		.tags = TextUtilities::ConvertEntitiesToTextTags(text.entities),
+	};
 }
 
 static bool prependPseudoReplyImpl(

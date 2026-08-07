@@ -183,7 +183,7 @@ void FinishForward(
 		FnMut<void()> &&successCallback) {
 	state->updateBottomBar(session, id, ForwardState::State::Finished);
 	RemoveForwardState(id, sessionKey, state);
-	if (success && successCallback) {
+	if (success && !state->stopRequested() && successCallback) {
 		crl::on_main(session, [callback = std::move(successCallback)]() mutable {
 			callback();
 		});
@@ -538,7 +538,8 @@ bool ForwardItems(
 
 		auto message = Api::MessageToSend(job.action);
 		message.action.options.invertCaption = item.invertCaption;
-		if (job.options != Data::ForwardOptions::NoNamesAndCaptions) {
+		if (!item.downloadable
+			|| job.options != Data::ForwardOptions::NoNamesAndCaptions) {
 			message.textWithTags = item.text;
 		}
 
