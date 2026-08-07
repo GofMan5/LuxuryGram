@@ -22,15 +22,17 @@
 #include "window/window_controller.h"
 
 #include <QApplication>
+#include <QFile>
 #include <QSaveFile>
-#include <fstream>
 
 using json = nlohmann::json;
 
 namespace {
 
-std::string getSettingsPath() {
-	return (cWorkingDir() + u"tdata/ayu_settings.json"_q).toStdString();
+constexpr auto kMaxSettingsBytes = 4 * 1024 * 1024;
+
+QString getSettingsPath() {
+	return cWorkingDir() + u"tdata/ayu_settings.json"_q;
 }
 
 void repaintApp() {
@@ -364,17 +366,24 @@ LuxurySettings &LuxurySettings::getInstance() {
 }
 
 void LuxurySettings::load() {
-	std::ifstream file(getSettingsPath());
-	if (!file.good()) {
+	QFile file(getSettingsPath());
+	if (!file.open(QIODevice::ReadOnly)) {
+		return;
+	}
+	if (file.size() > kMaxSettingsBytes) {
+		LOG(("LuxuryGramSettings: settings file exceeds size limit"));
+		return;
+	}
+	const auto data = file.read(kMaxSettingsBytes + 1);
+	if (data.size() > kMaxSettingsBytes) {
+		LOG(("LuxuryGramSettings: settings file exceeds size limit"));
 		return;
 	}
 
 	auto &settings = getInstance();
 
 	try {
-		json p;
-		file >> p;
-		file.close();
+		auto p = json::parse(data.constData(), data.constData() + data.size());
 
 		if (!p.contains("ghostModeSettings")) {
 			p["ghostModeSettings"] = nlohmann::json::object({
@@ -419,7 +428,7 @@ void LuxurySettings::save() {
 	auto &settings = getInstance();
 	json p = settings;
 	const auto data = QByteArray::fromStdString(p.dump(4));
-	QSaveFile file(QString::fromStdString(getSettingsPath()));
+	QSaveFile file(getSettingsPath());
 	if (!file.open(QIODevice::WriteOnly)
 		|| file.write(data) != data.size()
 		|| !file.commit()) {

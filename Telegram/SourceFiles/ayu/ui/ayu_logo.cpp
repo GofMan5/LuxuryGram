@@ -31,12 +31,19 @@ void loadAppIco() {
 	const auto iconPath = appIcoPath();
 
 	auto f = QFile(iconPath);
-	if (f.exists()) {
-		f.setPermissions(QFile::WriteOther);
-		f.remove();
+	if (f.exists() && !f.remove()) {
+		f.setPermissions(f.permissions() | QFile::WriteOwner);
+		if (!f.remove()) {
+			LOG(("Failed to replace LuxuryGram application icon: %1"
+			).arg(f.errorString()));
+			return;
+		}
 	}
-	f.close();
-	QFile::copy(qsl(":/gui/art/ayu/%1/app_icon.ico").arg(settings.appIcon()), iconPath);
+	if (!QFile::copy(
+			qsl(":/gui/art/ayu/%1/app_icon.ico").arg(settings.appIcon()),
+			iconPath)) {
+		LOG(("Failed to write LuxuryGram application icon: %1").arg(iconPath));
+	}
 }
 
 QImage CreateImage(const QString &name, const QSize resultImageSize, const int padding = 0) {
