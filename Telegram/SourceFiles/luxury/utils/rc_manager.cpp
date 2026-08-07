@@ -17,6 +17,8 @@ constexpr auto kExteraUrl = "https://api.exteragram.app/api/v1/profiles/compact"
 constexpr auto kFetchTimeout = 15 * 1000;
 constexpr auto kMaxResponseBytes = 4 * 1024 * 1024;
 constexpr auto kMaxBadgeTextLength = 4096;
+constexpr auto kMaxProfileEntries = 65'536;
+constexpr auto kMaxProfileTextLength = 256;
 
 }
 
@@ -159,6 +161,15 @@ bool RCManager::applyResponse(const QByteArray &response) {
 	const auto supporters = root.value("supporters").toArray();
 	const auto supporterChannels = root.value("supporterChannels").toArray();
 	const auto customBadges = root.value("customBadges").toArray();
+	// ponytail: reject oversized profiles; raise only if the service exceeds 65K entries.
+	if (developers.size() > kMaxProfileEntries
+		|| officialChannels.size() > kMaxProfileEntries
+		|| supporters.size() > kMaxProfileEntries
+		|| supporterChannels.size() > kMaxProfileEntries
+		|| customBadges.size() > kMaxProfileEntries) {
+		LOG(("RCManager: profile contains too many entries"));
+		return false;
+	}
 
 	_developers.clear();
 	_officialChannels.clear();
@@ -218,22 +229,22 @@ bool RCManager::applyResponse(const QByteArray &response) {
 
 	if (const auto donateUsername = root.value("donateUsername"); donateUsername.isString()) {
 		if (const auto value = donateUsername.toString(); !value.isEmpty()) {
-			_donateUsername = value;
+			_donateUsername = value.left(kMaxProfileTextLength);
 		}
 	}
 	if (const auto donateAmountUsd = root.value("donateAmountUsd"); donateAmountUsd.isString()) {
 		if (const auto value = donateAmountUsd.toString(); !value.isEmpty()) {
-			_donateAmountUsd = value;
+			_donateAmountUsd = value.left(kMaxProfileTextLength);
 		}
 	}
 	if (const auto donateAmountTon = root.value("donateAmountTon"); donateAmountTon.isString()) {
 		if (const auto value = donateAmountTon.toString(); !value.isEmpty()) {
-			_donateAmountTon = value;
+			_donateAmountTon = value.left(kMaxProfileTextLength);
 		}
 	}
 	if (const auto donateAmountRub = root.value("donateAmountRub"); donateAmountRub.isString()) {
 		if (const auto value = donateAmountRub.toString(); !value.isEmpty()) {
-			_donateAmountRub = value;
+			_donateAmountRub = value.left(kMaxProfileTextLength);
 		}
 	}
 

@@ -32,38 +32,22 @@
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 
+#include <QtCore/QUuid>
+
+#include <memory>
+
 namespace Settings {
-
-std::vector<char> generate_uuid_bytes() {
-	// stolen somewhere from Internet
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<uint32_t> dist;
-
-	std::vector<uint8_t> bytes(16);
-	for (int i = 0; i < 16; i += 4) {
-		uint32_t random_chunk = dist(gen);
-		bytes[i] = random_chunk & 0xFF;
-		bytes[i + 1] = (random_chunk >> 8) & 0xFF;
-		bytes[i + 2] = (random_chunk >> 16) & 0xFF;
-		bytes[i + 3] = (random_chunk >> 24) & 0xFF;
-	}
-	bytes[6] = (bytes[6] & 0x0F) | 0x40;
-	bytes[8] = (bytes[8] & 0x3F) | 0x80;
-
-	return std::vector<char>(bytes.begin(), bytes.end());
-}
 
 bool validateRegex(const icu::UnicodeString& pattern, std::string& errorMsg) {
 	UErrorCode status = U_ZERO_ERROR;
 	UParseError parseError{};
 
-	icu::RegexPattern* regexPattern = icu::RegexPattern::compile(
-		pattern,
-		0, // flags
-		parseError,
-		status
-	);
+	const auto regexPattern = std::unique_ptr<icu::RegexPattern>(
+		icu::RegexPattern::compile(
+			pattern,
+			0,
+			parseError,
+			status));
 
 	if (U_FAILURE(status)) {
 		auto errorCodeNormalized = std::string(u_errorName(status));
@@ -97,11 +81,9 @@ bool validateRegex(const icu::UnicodeString& pattern, std::string& errorMsg) {
 			errorMsg += " (near: '" + preStr + "' -> '" + postStr + "')";
 		}
 
-		delete regexPattern;
 		return false;
 	}
 
-	delete regexPattern;
 	return true;
 }
 
@@ -209,7 +191,8 @@ void RegexEditBuilder(
 		if (!id.empty()) {
 			newFilter.id = id;
 		} else {
-			newFilter.id = generate_uuid_bytes();
+			const auto bytes = QUuid::createUuid().toRfc4122();
+			newFilter.id.assign(bytes.cbegin(), bytes.cend());
 		}
 
 		box->closeBox();

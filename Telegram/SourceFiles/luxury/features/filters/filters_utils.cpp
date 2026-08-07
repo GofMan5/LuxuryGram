@@ -16,6 +16,7 @@
 #include "base/qthelp_url.h"
 #include "boxes/abstract_box.h"
 #include "core/local_url_handlers.h"
+#include "crl/crl_async.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_document.h"
@@ -32,6 +33,7 @@
 #include "ui/boxes/confirm_box.h"
 #include "ui/toast/toast.h"
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -217,7 +219,7 @@ std::vector<char> ParseFilterId(QString id) {
 }
 
 PeerData *LoadedPeerFromDialogId(not_null<Data::Session*> data, ID dialogId) {
-	if (!dialogId) {
+	if (!dialogId || dialogId == std::numeric_limits<ID>::min()) {
 		return nullptr;
 	}
 	const auto bare = (dialogId < 0) ? -dialogId : dialogId;
@@ -315,9 +317,11 @@ private:
 	std::size_t _index = 0;
 };
 
-void ResolveFilterBackupPeers(const std::vector<QString> &peerHints) {
+void ResolveFilterBackupPeers(
+		not_null<Main::Session*> session,
+		const std::vector<QString> &peerHints) {
 	std::make_shared<FilterBackupPeerResolver>(
-		currentSession(),
+		session,
 		peerHints
 	)->start();
 }
@@ -440,7 +444,7 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 		LOG(("FilterUtils: not an object received in JSON"));
 		return;
 	}
-	const auto changes = prepareChanges(document.object());
+	auto changes = prepareChanges(document.object());
 
 	if (!HasChanges(changes)) {
 		Ui::Toast::Show(tr::luxury_FiltersToastFailNoChanges(tr::now));
@@ -448,17 +452,34 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 		return;
 	}
 
+	const auto session = base::make_weak(currentSession().get());
 	auto box = Ui::MakeConfirmBox({
 		.text = ChangeSummaryText(changes),
-		.confirmed = [=](Fn<void()> close) {
+		.confirmed = [
+			changes = std::move(changes),
+			session
+		](Fn<void()> close) mutable {
 			close();
-			try {
-				applyChanges(changes);
-				Ui::Toast::Show(tr::luxury_FiltersToastSuccess(tr::now));
-			} catch (...) {
-				LOG(("FilterUtils: Failed to apply import changes"));
-				Ui::Toast::Show(tr::luxury_FiltersToastFailImport(tr::now));
+			auto peers = std::move(changes.peersToBeResolved);
+			const auto strong = session.get();
+			if (strong && !peers.empty()) {
+				ResolveFilterBackupPeers(strong, peers);
 			}
+			crl::async([changes = std::move(changes)]() mutable {
+				try {
+					applyChanges(std::move(changes));
+					crl::on_main([] {
+						Ui::Toast::Show(
+							tr::luxury_FiltersToastSuccess(tr::now));
+					});
+				} catch (...) {
+					LOG(("FilterUtils: Failed to apply import changes"));
+					crl::on_main([] {
+						Ui::Toast::Show(
+							tr::luxury_FiltersToastFailImport(tr::now));
+					});
+				}
+			});
 		},
 		.confirmText = tr::luxury_FiltersMenuImport(),
 		.title = tr::luxury_FiltersSheetTitle(),
@@ -938,7 +959,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	return changes;
 }
 
-void FilterUtils::applyChanges(const ApplyChanges &changes) {
+void FilterUtils::applyChanges(ApplyChanges changes) {
 	if (!changes.newFilters.empty()) {
 		for (const auto &filter : changes.newFilters) {
 			LuxuryDatabase::addRegexFilter(filter);
@@ -970,13 +991,8 @@ void FilterUtils::applyChanges(const ApplyChanges &changes) {
 		}
 	}
 
-	if (!changes.peersToBeResolved.empty()) {
-		ResolveFilterBackupPeers(changes.peersToBeResolved);
-	}
-
 	FiltersCacheController::rebuildCache();
-	crl::on_main([]
-	{
+	crl::on_main([] {
 		FiltersCacheController::fireUpdate();
 	});
 }

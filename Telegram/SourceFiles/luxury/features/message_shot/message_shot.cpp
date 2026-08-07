@@ -7,6 +7,7 @@
 #include "luxury/features/message_shot/message_shot.h"
 
 #include "qguiapplication.h"
+#include "lang_auto.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/ui/boxes/message_shot_box.h"
 #include "base/call_delayed.h"
@@ -34,12 +35,14 @@
 #include "ui/chat/chat_theme.h"
 #include "ui/effects/path_shift_gradient.h"
 #include "ui/layers/box_content.h"
+#include "ui/toast/toast.h"
 #include "window/themes/window_theme.h"
 
 namespace LuxuryFeatures::MessageShot {
 
 bool takingShot = false;
 bool choosingTheme = false;
+constexpr auto kMaxMessageShotPixels = 16 * 1024 * 1024;
 
 bool ignoreRender(RenderPart part) {
 	const auto &s = LuxurySettings::getInstance().messageShotSettings();
@@ -137,9 +140,11 @@ QImage removeEmptySpaceAround(const QImage &original) {
 	int maxX = 0;
 	int maxY = 0;
 
-	for (int x = 0; x < original.width(); ++x) {
-		for (int y = 0; y < original.height(); ++y) {
-			if (qAlpha(original.pixel(x, y)) != 0) {
+	for (auto y = 0; y != original.height(); ++y) {
+		const auto line = reinterpret_cast<const QRgb*>(
+			original.constScanLine(y));
+		for (auto x = 0; x != original.width(); ++x) {
+			if (qAlpha(line[x]) != 0) {
 				minX = std::min(minX, x);
 				minY = std::min(minY, y);
 				maxX = std::max(maxX, x);
@@ -290,18 +295,29 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 	}
 
 	const auto showBackground = LuxurySettings::getInstance().messageShotSettings().showBackground();
-	auto render = [=, messages = std::move(messages), delegate = std::move(delegate)](bool final)
+	auto render = [
+		=,
+		messages = std::move(messages),
+		delegate = std::move(delegate),
+		sizeRejected = false
+	](bool final) mutable
 	{
+		if (sizeRejected) {
+			return;
+		}
 		for (auto i = 0; i != int(messages.size()); ++i) {
 			if (controller->session().data().message(messageIds[i]) != messages[i]) {
 				return;
 			}
 		}
 		takingShot = true;
+		const auto takingShotGuard = gsl::finally([] {
+			takingShot = false;
+		});
 
 		// calculate the size of the image
 		int width = st::msgMaxWidth + (st::boxPadding.left() + st::boxPadding.right());
-		int height = 0;
+		auto height = qint64(0);
 
 		for (int i = 0; i < messages.size(); i++) {
 			const auto &message = messages[i];
@@ -314,11 +330,25 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			}
 		}
 
-		width *= style::DevicePixelRatio();
-		height *= style::DevicePixelRatio();
+		const auto pixelWidth = qint64(width) * style::DevicePixelRatio();
+		const auto pixelHeight = qint64(height) * style::DevicePixelRatio();
+		if (pixelWidth <= 0
+			|| pixelHeight <= 0
+			|| pixelWidth > (kMaxMessageShotPixels / pixelHeight)) {
+			sizeRejected = true;
+			Ui::Toast::Show(tr::lng_passport_error_too_large(tr::now));
+			return;
+		}
+		width = int(pixelWidth);
+		height = int(pixelHeight);
 
 		// create the image
 		QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
+		if (image.isNull()) {
+			sizeRejected = true;
+			Ui::Toast::Show(tr::lng_passport_error_too_large(tr::now));
+			return;
+		}
 		image.setDevicePixelRatio(style::DevicePixelRatio());
 		image.fill(Qt::transparent);
 
@@ -379,8 +409,6 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 
 			y += view->height();
 		}
-
-		takingShot = false;
 
 		auto result = addPadding(removeEmptySpaceAround(image));
 		if (!showBackground) {

@@ -6,6 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/utils/itunes_search.h"
 
+#include <QtCore/QBuffer>
 #include <QtCore/QCache>
 #include <QtCore/QEventLoop>
 #include <QtCore/QJsonArray>
@@ -15,15 +16,19 @@
 #include <QtCore/QTimer>
 #include <QtCore/QUrlQuery>
 #include <QtGui/QImage>
+#include <QtGui/QImageReader>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
 
+#include <algorithm>
 #include <mutex>
 
 namespace Luxury::Ui::Itunes {
 namespace {
 
 constexpr auto kMaxResponseBytes = 8 * 1024 * 1024;
+constexpr auto kMaxArtworkPixels = 4 * 1024 * 1024;
+constexpr auto kArtworkCacheKiB = 16 * 1024;
 
 struct CacheEntry
 {
@@ -31,7 +36,7 @@ struct CacheEntry
 };
 
 struct Cache {
-	QCache<QString, CacheEntry> entries{ 50 };
+	QCache<QString, CacheEntry> entries{ kArtworkCacheKiB };
 	std::mutex mutex;
 };
 
@@ -655,7 +660,7 @@ std::unique_ptr<QNetworkReply, void(*)(QNetworkReply *)> execWithTimeout(
 	return {reply, [](QNetworkReply *r) { if (r) r->deleteLater(); }};
 }
 
-QByteArray getBytesWithTimeout(const QUrl &url, int timeoutMs, QByteArray *contentTypeOut = nullptr) {
+QByteArray getBytesWithTimeout(const QUrl &url, int timeoutMs) {
 	QNetworkAccessManager nam;
 	QNetworkRequest req(url);
 	req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -663,9 +668,6 @@ QByteArray getBytesWithTimeout(const QUrl &url, int timeoutMs, QByteArray *conte
 	QNetworkReply *reply = replyPtr.get();
 	if (!reply) return {};
 	if (reply->error() != QNetworkReply::NoError) return {};
-	if (contentTypeOut) {
-		*contentTypeOut = reply->header(QNetworkRequest::ContentTypeHeader).toByteArray();
-	}
 	const auto result = reply->read(kMaxResponseBytes + 1);
 	return (result.size() <= kMaxResponseBytes) ? result : QByteArray();
 }
@@ -692,9 +694,7 @@ QList<ItunesTrack> parseTracks(const QByteArray &json) {
 		t.artistName = o.value(QString::fromUtf8("artistName")).toString();
 		t.collectionName = o.value(QString::fromUtf8("collectionName")).toString();
 		t.artworkUrl100 = o.value(QString::fromUtf8("artworkUrl100")).toString();
-		out.push_back(t);
-
-		LOG(("parsed track: %1 - %2 [%3] (art: %4 )").arg(t.artistName, t.trackName, t.collectionName, t.artworkUrl100));
+		out.push_back(std::move(t));
 	}
 	return out;
 }
@@ -721,10 +721,15 @@ QUrl buildItunesUrl(const QString &performer, const QString &title) {
 	return url;
 }
 
-QString upgradeArtworkSize(QString url, int sizeHint) {
+int ArtworkSize(int sizeHint) {
+	return (sizeHint >= 600) ? 600 : (sizeHint >= 300) ? 300 : 100;
+}
+
+QString upgradeArtworkSize(QString url, int size) {
 	if (url.isEmpty()) return url;
-	url.replace(QString::fromUtf8("100x100"),
-				(sizeHint >= 600) ? QString::fromUtf8("600x600") : QString::fromUtf8("300x300"));
+	url.replace(
+		QString::fromUtf8("100x100"),
+		QString::number(size) + u"x"_q + QString::number(size));
 	return url;
 }
 
@@ -735,7 +740,12 @@ QImage FetchCover(const QString &performer, const QString &title, int sizeHintPx
 	const auto titl = title.trimmed();
 	if (perf.isEmpty() && titl.isEmpty()) return {};
 
-	const auto key = perf + QString::fromUtf8(" - ") + titl;
+	const auto artworkSize = ArtworkSize(sizeHintPx);
+	const auto key = perf.toCaseFolded()
+		+ u'\n'
+		+ titl.toCaseFolded()
+		+ u'\n'
+		+ QString::number(artworkSize);
 	{
 		auto &state = cache();
 		const auto lock = std::lock_guard(state.mutex);
@@ -752,20 +762,32 @@ QImage FetchCover(const QString &performer, const QString &title, int sizeHintPx
 
 	const auto baseArtists = splitArtists(perf);
 	auto artwork = pickArtworkUrl(tracks, titl, baseArtists);
-	artwork = upgradeArtworkSize(std::move(artwork), sizeHintPx);
+	artwork = upgradeArtworkSize(std::move(artwork), artworkSize);
 	if (artwork.isEmpty()) return {};
 
-	QByteArray contentType;
-	const auto imgBytes = getBytesWithTimeout(QUrl(artwork), timeoutMs, &contentType);
+	const auto imgBytes = getBytesWithTimeout(QUrl(artwork), timeoutMs);
 	if (imgBytes.isEmpty()) return {};
 
-	QImage image;
-	if (!image.loadFromData(imgBytes)) return {};
+	auto buffer = QBuffer();
+	buffer.setData(imgBytes);
+	if (!buffer.open(QIODevice::ReadOnly)) return {};
+	auto reader = QImageReader(&buffer);
+	const auto size = reader.size();
+	if (!size.isValid()
+		|| (qint64(size.width()) * size.height()) > kMaxArtworkPixels) {
+		return {};
+	}
+	reader.setAutoTransform(true);
+	const auto image = reader.read();
+	if (image.isNull()) return {};
 
 	{
 		auto &state = cache();
 		const auto lock = std::lock_guard(state.mutex);
-		state.entries.insert(key, new CacheEntry{ image });
+		const auto cost = std::max<qsizetype>(
+			1,
+			(image.sizeInBytes() + 1023) / 1024);
+		state.entries.insert(key, new CacheEntry{ image }, int(cost));
 	}
 	return image;
 }
