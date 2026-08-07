@@ -152,14 +152,12 @@ void LuxuryLanguage::fetchLanguage(const QString &id, const QString &baseId) {
 
 	// using `jsdelivr` since China (...and maybe other?) users have some problems with GitHub
 	// https://crowdin.com/project/ayugram/discussions/6
-	QUrl url;
-	if (!finalLangPackId.isEmpty() && !baseId.isEmpty() && !needFallback) {
-		url.setUrl(qsl("https://cdn.jsdelivr.net/gh/AyuGram/Languages@l10n_main/values/langs/%1/Shared.json").arg(
-			finalLangPackId));
-	} else {
-		url.setUrl(qsl("https://cdn.jsdelivr.net/gh/AyuGram/Languages@l10n_main/values/langs/%1/Shared.json").arg(
-			needFallback ? baseId : finalLangPackId));
-	}
+	const auto requestedId = needFallback ? baseId : finalLangPackId;
+	const auto encodedId = QString::fromLatin1(
+		QUrl::toPercentEncoding(requestedId));
+	const auto url = QUrl(qsl(
+		"https://cdn.jsdelivr.net/gh/AyuGram/Languages@l10n_main/values/langs/%1/Shared.json"
+	).arg(encodedId));
 	auto request = QNetworkRequest(url);
 	request.setTransferTimeout(kFetchTimeout);
 	_chkReply = networkManager.get(request);
