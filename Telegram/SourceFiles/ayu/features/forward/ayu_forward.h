@@ -6,6 +6,7 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include "base/weak_ptr.h"
 #include "history/history.h"
 #include "main/main_session.h"
 
@@ -46,7 +47,7 @@ public:
 	void setSentMessages(int sent);
 	void advanceChunk();
 	void updateBottomBar(
-		const Main::Session &session,
+		base::weak_ptr<Main::Session> session,
 		PeerId peer,
 		State state);
 
@@ -65,7 +66,6 @@ void intelligentForward(
 void forwardMessages(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,
-	bool reuseState,
 	const Data::ResolvedForwardDraft &draft);
 
 }

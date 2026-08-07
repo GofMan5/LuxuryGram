@@ -3833,17 +3833,13 @@ void ApiWrap::forwardMessages(
 
 	const auto fullLuxuryForward = LuxuryForward::isFullLuxuryForwardNeeded(draft.items.front());
 	if (fullLuxuryForward) {
-		crl::async([=] {
-			LuxuryForward::forwardMessages(_session, action, false, draft);
-		});
+		LuxuryForward::forwardMessages(_session, action, draft);
 		return;
 	}
 
 	const auto luxuryIntelligentForwardNeeded = LuxuryForward::isLuxuryForwardNeeded(draft.items);
 	if (luxuryIntelligentForwardNeeded) {
-		crl::async([=] {
-			LuxuryForward::intelligentForward(_session, action, draft);
-		});
+		LuxuryForward::intelligentForward(_session, action, draft);
 		return;
 	}
 

@@ -964,15 +964,9 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 				auto resolvedDraft = history->resolveForwardDraft(forwardDraft);
 
 				if (LuxuryForward::isFullLuxuryForwardNeeded(currentItem)) {
-					crl::async([=]
-					{
-						LuxuryForward::forwardMessages(session, action, false, resolvedDraft);
-					});
+					LuxuryForward::forwardMessages(session, action, resolvedDraft);
 				} else if (LuxuryForward::isLuxuryForwardNeeded(currentItem)) {
-					crl::async([=]
-					{
-						LuxuryForward::intelligentForward(session, action, resolvedDraft);
-					});
+					LuxuryForward::intelligentForward(session, action, resolvedDraft);
 				} else {
 					session->api().forwardMessages(std::move(resolvedDraft), action, [] {});
 				}

@@ -36,6 +36,97 @@ std::unordered_map<
 	std::unordered_map<PeerId, std::shared_ptr<ForwardState>>> ForwardStates;
 constexpr auto kMaxVoiceBytes = 64 * 1024 * 1024;
 
+struct ForwardItem {
+	FullMsgId id;
+	MessageGroupId groupId;
+	TextWithTags text;
+	QString path;
+	QString displayName;
+	qint64 expectedSize = 0;
+	int64 duration = 0;
+	bool luxury = false;
+	bool downloadable = false;
+	bool photo = false;
+	bool document = false;
+	bool sticker = false;
+	bool voice = false;
+	bool round = false;
+	bool video = false;
+	bool invertCaption = false;
+};
+
+struct ForwardChunk {
+	bool luxury = false;
+	std::vector<ForwardItem> items;
+};
+
+struct ForwardJob {
+	LuxurySync::WeakSession session;
+	const Main::Session *sessionKey = nullptr;
+	Api::SendAction action;
+	PeerId peerId;
+	Data::ForwardOptions options = Data::ForwardOptions::PreserveInfo;
+	bool slowmodeApplied = false;
+};
+
+ForwardItem SnapshotItem(
+		not_null<Main::Session*> session,
+		not_null<HistoryItem*> item) {
+	const auto media = item->media();
+	const auto document = media ? media->document() : nullptr;
+	const auto photo = media ? media->photo() : nullptr;
+	auto result = ForwardItem();
+	result.id = item->fullId();
+	result.groupId = item->groupId();
+	result.text = extractText(item);
+	result.path = LuxurySync::filePath(session, media);
+	result.displayName = document
+		? base::FileNameFromUserString(document->filename())
+		: QString();
+	result.expectedSize = document
+		? document->size
+		: photo
+		? photo->imageByteSize(Data::PhotoSize::Large)
+		: 0;
+	result.duration = document ? document->duration() : 0;
+	result.luxury = isLuxuryForwardNeeded(item);
+	result.downloadable = mediaDownloadable(media);
+	result.photo = (photo != nullptr);
+	result.document = (document != nullptr);
+	result.sticker = document && document->sticker();
+	result.voice = document && document->isVoiceMessage();
+	result.round = document && document->isVideoMessage();
+	result.video = document
+		&& (document->isVideoFile() || document->isGifv());
+	result.invertCaption = item->invertMedia();
+	return result;
+}
+
+std::vector<ForwardItem> SnapshotItems(
+		not_null<Main::Session*> session,
+		const std::vector<not_null<HistoryItem*>> &items) {
+	auto result = std::vector<ForwardItem>();
+	result.reserve(items.size());
+	for (const auto item : items) {
+		result.push_back(SnapshotItem(session, item));
+	}
+	return result;
+}
+
+ForwardJob SnapshotJob(
+		not_null<Main::Session*> session,
+		const Api::SendAction &action,
+		Data::ForwardOptions options) {
+	return ForwardJob{
+		.session = base::make_weak(session),
+		.sessionKey = session,
+		.action = action,
+		.peerId = action.history->peer->id,
+		.options = options,
+		.slowmodeApplied = action.history->peer->slowmodeApplied(),
+	};
+}
+
 std::shared_ptr<ForwardState> FindForwardState(
 		PeerId id,
 		const Main::Session *session) {
@@ -83,9 +174,10 @@ void RemoveForwardState(
 void FinishForward(
 		PeerId id,
 		const std::shared_ptr<ForwardState> &state,
-		const Main::Session &session) {
+		LuxurySync::WeakSession session,
+		const Main::Session *sessionKey) {
 	state->updateBottomBar(session, id, ForwardState::State::Finished);
-	RemoveForwardState(id, &session, state);
+	RemoveForwardState(id, sessionKey, state);
 }
 
 } // namespace
@@ -104,7 +196,7 @@ bool isForwarding(const PeerId &id, const Main::Session &session) {
 void cancelForward(const PeerId &id, const Main::Session &session) {
 	if (const auto state = FindForwardState(id, &session)) {
 		state->requestStop();
-		FinishForward(id, state, session);
+		FinishForward(id, state, base::make_weak(&session), &session);
 	}
 }
 
@@ -190,47 +282,45 @@ void ForwardState::advanceChunk() {
 }
 
 void ForwardState::updateBottomBar(
-		const Main::Session &session,
+		base::weak_ptr<Main::Session> session,
 		PeerId peer,
 		State state) {
 	{
 		const auto lock = std::lock_guard(_mutex);
 		_data.state = state;
 	}
-	const auto sessionPtr = &session;
-	crl::on_main(sessionPtr, [sessionPtr, peer] {
-		sessionPtr->changes().peerUpdated(
-			sessionPtr->data().peer(peer),
+	crl::on_main(session, [session, peer] {
+		const auto strong = session.get();
+		if (!strong) {
+			return;
+		}
+		strong->changes().peerUpdated(
+			strong->data().peer(peer),
 			Data::PeerUpdate::Flag::Rights);
 	});
 }
 
-static Ui::PreparedList prepareMedia(not_null<Main::Session*> session,
-									 const std::vector<not_null<HistoryItem*>> &items,
-									 int &i,
-									 std::vector<not_null<Data::Media*>> &groupMedia) {
-	const auto prepare = [&](not_null<Data::Media*> media)
-	{
-		auto prepared = Ui::PreparedFile(LuxurySync::filePath(session, media));
+Ui::PreparedList PrepareMedia(
+		const std::vector<ForwardItem> &items,
+		int &i,
+		std::vector<const ForwardItem*> &groupItems) {
+	const auto prepare = [&](const ForwardItem &item) {
+		auto prepared = Ui::PreparedFile(item.path);
 		if (prepared.path.isEmpty()) {
 			// otherwise will fail assertion in PrepareDetails
 			return prepared;
 		}
-		if (const auto document = media->document()) {
-			prepared.displayName = base::FileNameFromUserString(
-				document->filename());
-		}
+		prepared.displayName = item.displayName;
 		Storage::PrepareDetails(prepared, st::sendMediaPreviewSize, PhotoSideLimit());
-		groupMedia.emplace_back(media);
+		groupItems.push_back(&item);
 		return prepared;
 	};
 
-	const auto startItem = items[i];
-	const auto media = startItem->media();
-	const auto groupId = startItem->groupId();
+	const auto &startItem = items[i];
+	const auto groupId = startItem.groupId;
 
 	Ui::PreparedList list;
-	if (auto prepared = prepare(media); !prepared.path.isEmpty()) {
+	if (auto prepared = prepare(startItem); !prepared.path.isEmpty()) {
 		list.files.emplace_back(std::move(prepared));
 	}
 
@@ -238,45 +328,42 @@ static Ui::PreparedList prepareMedia(not_null<Main::Session*> session,
 		return list;
 	}
 
-	for (int k = i + 1; k < items.size(); ++k) {
-		const auto nextItem = items[k];
-		if (nextItem->groupId() != groupId) {
+	for (auto k = i + 1; k < int(items.size()); ++k) {
+		const auto &nextItem = items[k];
+		if (nextItem.groupId != groupId) {
 			break;
 		}
-		if (const auto nextMedia = nextItem->media()) {
-			if (auto prepared = prepare(nextMedia); !prepared.path.isEmpty()) {
-				list.files.emplace_back(std::move(prepared));
-			}
-			i = k;
+		if (auto prepared = prepare(nextItem); !prepared.path.isEmpty()) {
+			list.files.emplace_back(std::move(prepared));
 		}
+		i = k;
 	}
 	return list;
 }
 
 void sendMedia(
-	not_null<Main::Session*> session,
+	LuxurySync::WeakSession session,
 	const std::shared_ptr<Ui::PreparedBundle> &bundle,
-	not_null<Data::Media*> primaryMedia,
+	const ForwardItem &primaryItem,
 	Api::MessageToSend &&message,
 	bool sendImagesAsPhotos,
 	const LuxurySync::Cancelled &cancelled) {
-	if (const auto document = primaryMedia->document(); document && document->sticker()) {
+	if (primaryItem.sticker) {
 		LuxurySync::sendStickerSync(
 			session,
 			std::move(message),
-			document,
+			primaryItem.id,
 			cancelled);
 		return;
 	}
 
-	auto mediaType = [&]
-	{
-		if (const auto document = primaryMedia->document()) {
-			if (document->isVoiceMessage()) {
+	auto mediaType = [&] {
+		if (primaryItem.document) {
+			if (primaryItem.voice) {
 				return SendMediaType::Audio;
-			} else if (document->isVideoMessage()) {
+			} else if (primaryItem.round) {
 				return SendMediaType::Round;
-			} else if (document->isVideoFile() || document->isGifv()) {
+			} else if (primaryItem.video) {
 				// to send video as video need to pass it as 'photo'
 				// ref: `void HistoryWidget::sendingFilesConfirmed`
 				return SendMediaType::Photo;
@@ -298,7 +385,7 @@ void sendMedia(
 				LuxurySync::sendVoiceSync(
 					session,
 					data,
-					primaryMedia->document()->duration(),
+					primaryItem.duration,
 					mediaType == SendMediaType::Round,
 					std::move(message),
 					cancelled);
@@ -349,256 +436,248 @@ bool isFullLuxuryForwardNeeded(not_null<HistoryItem*> item) {
 	return item->from()->isLuxuryNoForwards() || item->history()->peer->isLuxuryNoForwards();
 }
 
-struct ForwardChunk
-{
-	bool isLuxuryForwardNeeded = false;
-	std::vector<not_null<HistoryItem*>> items;
-};
+namespace {
 
-void intelligentForward(
-	not_null<Main::Session*> session,
-	const Api::SendAction &action,
-	const Data::ResolvedForwardDraft &draft) {
-	const auto history = action.history;
-	const auto topicRootId = action.replyTo.topicRootId;
-	const auto monoforumPeerId = action.replyTo.monoforumPeerId;
-	crl::on_main(session, [=]
-	{
-		history->setForwardDraft(topicRootId, monoforumPeerId, {});
-	});
-
-	const auto items = draft.items;
-	if (items.empty()) {
-		return;
-	}
-	const auto peer = history->peer;
-
-	auto chunks = std::vector<ForwardChunk>();
-	auto currentArray = std::vector<not_null<HistoryItem*>>();
-
-	auto currentChunk = ForwardChunk({
-		.isLuxuryForwardNeeded = isLuxuryForwardNeeded(items[0]),
-		.items = currentArray
-	});
-
+std::vector<FullMsgId> ItemIds(const std::vector<ForwardItem> &items) {
+	auto result = std::vector<FullMsgId>();
+	result.reserve(items.size());
 	for (const auto &item : items) {
-		if (isLuxuryForwardNeeded(item) != currentChunk.isLuxuryForwardNeeded) {
-			currentChunk.items = currentArray;
-			chunks.push_back(currentChunk);
-
-			currentArray = std::vector<not_null<HistoryItem*>>();
-
-			currentChunk = ForwardChunk({
-				.isLuxuryForwardNeeded = isLuxuryForwardNeeded(item),
-				.items = currentArray
-			});
-		}
-		currentArray.push_back(item);
+		result.push_back(item.id);
 	}
-
-	currentChunk.items = currentArray;
-	chunks.push_back(currentChunk);
-
-	auto state = std::make_shared<ForwardState>(chunks.size());
-	SetForwardState(peer->id, session, state);
-	const auto cancelled = [state] {
-		return state->stopRequested();
-	};
-
-
-	for (const auto &chunk : chunks) {
-		if (state->stopRequested()) {
-			break;
-		}
-		if (chunk.isLuxuryForwardNeeded) {
-			forwardMessages(session, action, true, Data::ResolvedForwardDraft(chunk.items));
-		} else {
-			state->setMessages(chunk.items.size(), 0);
-			state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
-
-			LuxurySync::forwardMessagesSync(
-				session,
-				chunk.items,
-				action,
-				draft.options,
-				cancelled);
-			if (state->stopRequested()) {
-				break;
-			}
-			state->setSentMessages(chunk.items.size());
-		}
-		if (state->stopRequested()) {
-			break;
-		}
-		state->advanceChunk();
-	}
-
-	FinishForward(peer->id, state, *session);
+	return result;
 }
 
-void forwardMessages(
-	not_null<Main::Session*> session,
-	const Api::SendAction &action,
-	bool reuseState,
-	const Data::ResolvedForwardDraft &draft) {
-	const auto items = draft.items;
-	const auto history = action.history;
-	const auto peer = history->peer;
-
-	const auto topicRootId = action.replyTo.topicRootId;
-	const auto monoforumPeerId = action.replyTo.monoforumPeerId;
-	crl::on_main(session, [=]
-	{
-		history->setForwardDraft(topicRootId, monoforumPeerId, {});
-	});
-
-	auto state = reuseState
-		? FindForwardState(peer->id, session)
-		: std::make_shared<ForwardState>(1);
-	if (!state) {
-		return;
-	}
-	if (!reuseState) {
-		SetForwardState(peer->id, session, state);
-	}
-	const auto cancelled = [state] {
-		return state->stopRequested();
-	};
-
-	std::vector<not_null<HistoryItem*>> toBeDownloaded;
-
-
-	for (const auto item : items) {
-		if (mediaDownloadable(item->media())) {
-			toBeDownloaded.push_back(item);
-		}
-	}
-	state->setMessages(items.size(), 0);
-	if (!toBeDownloaded.empty()) {
-		state->updateBottomBar(*session, peer->id, ForwardState::State::Downloading);
-		LuxurySync::loadDocuments(session, toBeDownloaded, cancelled);
-	}
-	if (state->stopRequested()) {
-		if (!reuseState) {
-			FinishForward(peer->id, state, *session);
-		}
-		return;
-	}
-
-
-	state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
-
-	for (int i = 0; i < items.size(); i++) {
-		const auto item = items[i];
-
-		if (state->stopRequested()) {
-			if (!reuseState) {
-				FinishForward(peer->id, state, *session);
-			}
+void LoadDocuments(
+		const ForwardJob &job,
+		const std::vector<ForwardItem> &items,
+		const LuxurySync::Cancelled &cancelled) {
+	for (const auto &item : items) {
+		if (cancelled && cancelled()) {
 			return;
+		} else if (!item.downloadable) {
+			continue;
 		}
+		const auto file = QFile(item.path);
+		const auto size = file.exists() ? file.size() : 0;
+		if (size == item.expectedSize) {
+			continue;
+		} else if (item.document) {
+			LuxurySync::loadDocumentSync(
+				job.session,
+				item.id,
+				item.path,
+				item.expectedSize,
+				cancelled);
+		} else if (item.photo) {
+			LuxurySync::loadPhotoSync(
+				job.session,
+				item.id,
+				item.path,
+				cancelled);
+		}
+	}
+}
 
-		auto extractedText = extractText(item);
-		if (extractedText.empty() && !mediaDownloadable(item->media())) {
+void ForwardItems(
+		const ForwardJob &job,
+		const std::shared_ptr<ForwardState> &state,
+		const std::vector<ForwardItem> &items) {
+	const auto cancelled = [state, session = job.session] {
+		return state->stopRequested() || !session.get();
+	};
+	state->setMessages(int(items.size()), 0);
+	if (std::ranges::any_of(items, &ForwardItem::downloadable)) {
+		state->updateBottomBar(
+			job.session,
+			job.peerId,
+			ForwardState::State::Downloading);
+		LoadDocuments(job, items, cancelled);
+	}
+	if (cancelled()) {
+		return;
+	}
+
+	state->updateBottomBar(
+		job.session,
+		job.peerId,
+		ForwardState::State::Sending);
+	for (auto i = 0; i != int(items.size()); ++i) {
+		const auto &item = items[i];
+		if (cancelled()) {
+			return;
+		} else if (item.text.empty() && !item.downloadable) {
 			continue;
 		}
 
-		auto message = Api::MessageToSend(Api::SendAction(session->data().history(peer->id)));
-		message.action.options.invertCaption = item->invertMedia();
-		message.action.replyTo = action.replyTo;
-
-		if (draft.options != Data::ForwardOptions::NoNamesAndCaptions) {
-			message.textWithTags = extractedText;
+		auto message = Api::MessageToSend(job.action);
+		message.action.options.invertCaption = item.invertCaption;
+		if (job.options != Data::ForwardOptions::NoNamesAndCaptions) {
+			message.textWithTags = item.text;
 		}
 
-		if (!mediaDownloadable(item->media())) {
+		if (!item.downloadable) {
 			LuxurySync::sendMessageSync(
-				session,
+				job.session,
 				std::move(message),
 				cancelled);
-		} else if (const auto media = item->media()) {
-			if (media->poll()) {
-				LuxurySync::sendMessageSync(
-					session,
-					std::move(message),
-					cancelled);
-				if (state->stopRequested()) {
-					if (!reuseState) {
-						FinishForward(peer->id, state, *session);
-					}
-					return;
-				}
-				state->setSentMessages(i + 1);
-				state->updateBottomBar(
-					*session,
-					peer->id,
-					ForwardState::State::Sending);
-				continue;
-			}
-
-			std::vector<not_null<Data::Media*>> groupMedia;
-			auto preparedMedia = prepareMedia(session, items, i, groupMedia);
-
-			// remove not finished files
+		} else {
+			auto groupItems = std::vector<const ForwardItem*>();
+			auto preparedMedia = PrepareMedia(items, i, groupItems);
 			for (auto j = int(preparedMedia.files.size()); j > 0;) {
 				--j;
-				auto &file = preparedMedia.files[j];
-
-				QFile f(file.path);
-				if (
-                    (groupMedia[j]->photo() && f.size() < groupMedia[j]->photo()->imageByteSize(Data::PhotoSize::Large)) ||
-					(groupMedia[j]->document() && f.size() < groupMedia[j]->document()->size)
-				) {
+				const auto groupItem = groupItems[j];
+				const auto file = QFile(preparedMedia.files[j].path);
+				const auto size = file.exists() ? file.size() : 0;
+				if ((groupItem->photo || groupItem->document)
+					&& size < groupItem->expectedSize) {
 					preparedMedia.files.erase(preparedMedia.files.begin() + j);
-					groupMedia.erase(groupMedia.begin() + j);
+					groupItems.erase(groupItems.begin() + j);
 				}
 			}
-
 			if (preparedMedia.files.empty()) {
 				continue;
 			}
-			Ui::SendFilesWay way;
-			way.setGroupFiles(true);
-			way.setSendImagesAsPhotos(false);
-			for (const auto &media : groupMedia) {
-				if (media->photo()) {
-					way.setSendImagesAsPhotos(true);
-					break;
-				}
-			}
 
+			auto way = Ui::SendFilesWay();
+			way.setGroupFiles(true);
+			way.setSendImagesAsPhotos(
+				std::ranges::any_of(groupItems, [](const auto item) {
+					return item->photo;
+				}));
 			auto groups = Ui::DivideByGroups(
 				std::move(preparedMedia),
 				way,
-				peer->slowmodeApplied());
-
+				job.slowmodeApplied);
 			auto bundle = Ui::PrepareFilesBundle(
 				std::move(groups),
 				way,
 				false);
 			sendMedia(
-				session,
+				job.session,
 				bundle,
-				groupMedia.front(),
+				*groupItems.front(),
 				std::move(message),
 				way.sendImagesAsPhotos(),
 				cancelled);
 		}
-		// if there are grouped messages
-		// "i" is incremented in prepareMedia
-		if (state->stopRequested()) {
-			if (!reuseState) {
-				FinishForward(peer->id, state, *session);
-			}
+		if (cancelled()) {
 			return;
 		}
-
 		state->setSentMessages(i + 1);
-		state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
-	}
-	if (!reuseState) {
-		FinishForward(peer->id, state, *session);
+		state->updateBottomBar(
+			job.session,
+			job.peerId,
+			ForwardState::State::Sending);
 	}
 }
 
-} // namespace LuxuryFeatures::LuxuryForward
+void RunForward(
+		const ForwardJob &job,
+		const std::vector<ForwardItem> &items,
+		const std::shared_ptr<ForwardState> &state) {
+	ForwardItems(job, state, items);
+	FinishForward(
+		job.peerId,
+		state,
+		job.session,
+		job.sessionKey);
+}
+
+void RunIntelligentForward(
+		const ForwardJob &job,
+		const std::vector<ForwardChunk> &chunks,
+		const std::shared_ptr<ForwardState> &state) {
+	const auto cancelled = [state, session = job.session] {
+		return state->stopRequested() || !session.get();
+	};
+	for (const auto &chunk : chunks) {
+		if (cancelled()) {
+			break;
+		} else if (chunk.luxury) {
+			ForwardItems(job, state, chunk.items);
+		} else {
+			state->setMessages(int(chunk.items.size()), 0);
+			state->updateBottomBar(
+				job.session,
+				job.peerId,
+				ForwardState::State::Sending);
+			LuxurySync::forwardMessagesSync(
+				job.session,
+				ItemIds(chunk.items),
+				job.action,
+				job.options,
+				cancelled);
+			if (!cancelled()) {
+				state->setSentMessages(int(chunk.items.size()));
+			}
+		}
+		if (cancelled()) {
+			break;
+		}
+		state->advanceChunk();
+	}
+	FinishForward(
+		job.peerId,
+		state,
+		job.session,
+		job.sessionKey);
+}
+
+void ClearForwardDraft(const Api::SendAction &action) {
+	action.history->setForwardDraft(
+		action.replyTo.topicRootId,
+		action.replyTo.monoforumPeerId,
+		{});
+}
+
+} // namespace
+
+void intelligentForward(
+		not_null<Main::Session*> session,
+		const Api::SendAction &action,
+		const Data::ResolvedForwardDraft &draft) {
+	ClearForwardDraft(action);
+	if (draft.items.empty()) {
+		return;
+	}
+	auto chunks = std::vector<ForwardChunk>();
+	for (auto &item : SnapshotItems(session, draft.items)) {
+		if (chunks.empty() || chunks.back().luxury != item.luxury) {
+			chunks.push_back(ForwardChunk{ .luxury = item.luxury });
+		}
+		chunks.back().items.push_back(std::move(item));
+	}
+	auto job = SnapshotJob(session, action, draft.options);
+	auto state = std::make_shared<ForwardState>(int(chunks.size()));
+	SetForwardState(job.peerId, job.sessionKey, state);
+	crl::async([
+		job = std::move(job),
+		chunks = std::move(chunks),
+		state
+	] {
+		RunIntelligentForward(job, chunks, state);
+	});
+}
+
+void forwardMessages(
+		not_null<Main::Session*> session,
+		const Api::SendAction &action,
+		const Data::ResolvedForwardDraft &draft) {
+	ClearForwardDraft(action);
+	if (draft.items.empty()) {
+		return;
+	}
+	auto job = SnapshotJob(session, action, draft.options);
+	auto items = SnapshotItems(session, draft.items);
+	auto state = std::make_shared<ForwardState>(1);
+	SetForwardState(job.peerId, job.sessionKey, state);
+	crl::async([
+		job = std::move(job),
+		items = std::move(items),
+		state
+	] {
+		RunForward(job, items, state);
+	});
+}
+
+} // namespace LuxuryForward

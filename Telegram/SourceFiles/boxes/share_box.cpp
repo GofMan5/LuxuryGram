@@ -1866,28 +1866,22 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 		};
 
 		if (LuxuryForward::isFullLuxuryForwardNeeded(items.front())) {
-			crl::async([=]{
-				for (const auto thread : result) {
-					LuxuryForward::forwardMessages(
+			for (const auto thread : result) {
+				LuxuryForward::forwardMessages(
 					&history->owner().session(),
 					Api::SendAction(thread, options),
-					false,
 					Data::ResolvedForwardDraft(items, forwardOptions));
-				}
-			});
+			}
 
 			dismiss();
 			return;
 		} else if (LuxuryForward::isLuxuryForwardNeeded(items)) {
-			crl::async([=]
-			{
-				for (const auto thread : result) {
-					LuxuryForward::intelligentForward(
-						&history->owner().session(),
-						Api::SendAction(thread, options),
-						Data::ResolvedForwardDraft(items, forwardOptions));
-				}
-			});
+			for (const auto thread : result) {
+				LuxuryForward::intelligentForward(
+					&history->owner().session(),
+					Api::SendAction(thread, options),
+					Data::ResolvedForwardDraft(items, forwardOptions));
+			}
 
 			dismiss();
 			return;
