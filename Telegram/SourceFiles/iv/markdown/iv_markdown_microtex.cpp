@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "iv/markdown/iv_markdown_microtex.h"
 #include "base/base_file_utilities.h"
+#ifdef Q_OS_WIN
+#undef TRANSPARENT // wingdi.h conflicts with MicroTeX's color macro.
+#endif // Q_OS_WIN
 #include "platform/qt/graphic_qt.h"
 #include "latex.h"
 
