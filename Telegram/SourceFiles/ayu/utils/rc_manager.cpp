@@ -16,6 +16,7 @@ constexpr auto kPrimaryUrl = "https://update.ayugram.one/rc/current/desktop2";
 constexpr auto kExteraUrl = "https://api.exteragram.app/api/v1/profiles/compact";
 constexpr auto kFetchTimeout = 15 * 1000;
 constexpr auto kMaxResponseBytes = 4 * 1024 * 1024;
+constexpr auto kMaxBadgeTextLength = 4096;
 
 }
 
@@ -147,6 +148,11 @@ bool RCManager::applyResponse(const QByteArray &response) {
 		return false;
 	}
 	const auto root = document.object();
+	if (!root.value("developers").isArray()
+		|| !root.value("officialChannels").isArray()) {
+		LOG(("RCManager: required arrays are missing"));
+		return false;
+	}
 
 	const auto developers = root.value("developers").toArray();
 	const auto officialChannels = root.value("officialChannels").toArray();
@@ -205,7 +211,7 @@ bool RCManager::applyResponse(const QByteArray &response) {
 			continue;
 		}
 		if (const auto text = badgeData.value("text").toString(); !text.isEmpty()) {
-			customBadge.text = text;
+			customBadge.text = text.left(kMaxBadgeTextLength);
 		}
 		_customBadges[id] = customBadge;
 	}
