@@ -25,11 +25,19 @@
 #include <QFile>
 #include <QSaveFile>
 
+#include <charconv>
+
 using json = nlohmann::json;
 
 namespace {
 
 constexpr auto kMaxSettingsBytes = 4 * 1024 * 1024;
+// ponytail: desktop state is bounded; raise only for a real 64-account profile.
+constexpr auto kMaxGhostAccounts = std::size_t(64);
+constexpr auto kMaxShadowBanIds = std::size_t(65'536);
+constexpr auto kMaxMarkLength = 64;
+constexpr auto kMaxFontFamilyLength = 256;
+constexpr auto kMaxThemeTitleLength = 512;
 
 QString getSettingsPath() {
 	return cWorkingDir() + u"tdata/luxury_settings.json"_q;
@@ -290,13 +298,14 @@ void MessageShotSettings::setEmbeddedTheme(int type, uint32 accentColor) {
 }
 
 void MessageShotSettings::setCloudTheme(uint64 accountId, uint64 id, uint64 accessHash, uint64 documentId, const QString &title) {
+	const auto validatedTitle = title.left(kMaxThemeTitleLength);
 	if (_embeddedThemeType.current() == -1
 		&& _embeddedThemeAccentColor.current() == 0
 		&& _cloudThemeAccountId.current() == accountId
 		&& _cloudThemeId.current() == id
 		&& _cloudThemeAccessHash.current() == accessHash
 		&& _cloudThemeDocumentId.current() == documentId
-		&& _cloudThemeTitle.current() == title) {
+		&& _cloudThemeTitle.current() == validatedTitle) {
 		return;
 	}
 	_embeddedThemeType = -1;
@@ -305,7 +314,7 @@ void MessageShotSettings::setCloudTheme(uint64 accountId, uint64 id, uint64 acce
 	_cloudThemeId = id;
 	_cloudThemeAccessHash = accessHash;
 	_cloudThemeDocumentId = documentId;
-	_cloudThemeTitle = title;
+	_cloudThemeTitle = validatedTitle;
 	LuxurySettings::save();
 }
 
@@ -476,6 +485,10 @@ void LuxurySettings::setUseGlobalGhostMode(bool val) {
 }
 
 void LuxurySettings::addShadowBan(int64 id) {
+	if (_shadowBanIds.size() >= kMaxShadowBanIds
+		&& !_shadowBanIds.contains(id)) {
+		return;
+	}
 	if (_shadowBanIds.insert(id).second) {
 		FiltersCacheController::rebuildCache();
 		FiltersCacheController::fireUpdate();
@@ -509,6 +522,12 @@ void LuxurySettings::validate() {
 			modified = true;
 		}
 	};
+	auto validateText = [&](auto &var, int maxLength) {
+		if (var.current().size() > maxLength) {
+			var = var.current().left(maxLength);
+			modified = true;
+		}
+	};
 
 	validateEnum(_showPeerId, defaults._showPeerId);
 	validateEnum(_channelBottomButton, defaults._channelBottomButton);
@@ -534,6 +553,10 @@ void LuxurySettings::validate() {
 	validateRange(_messageBubbleRadius, 0, 16, defaults._messageBubbleRadius);
 	validateRange(_wideMultiplier, 0.5, 4.0, defaults._wideMultiplier);
 	validateRange(_avatarCorners, 0, LuxuryUiSettings::kMaxAvatarCorners, defaults._avatarCorners);
+	validateText(_deletedMark, kMaxMarkLength);
+	validateText(_editedMark, kMaxMarkLength);
+	validateText(_monoFont, kMaxFontFamilyLength);
+	validateText(_messageShotSettings._cloudThemeTitle, kMaxThemeTitleLength);
 
 	const auto embeddedType = _messageShotSettings._embeddedThemeType.current();
 	auto embeddedTypeValid = (embeddedType == -1) || (embeddedType >= 0 && embeddedType <= 3); // from Window::Theme::EmbeddedType::DayBlue to Window::Theme::EmbeddedType::NightGreen
@@ -743,14 +766,16 @@ void LuxurySettings::setReplaceBottomInfoWithIcons(bool val) {
 }
 
 void LuxurySettings::setDeletedMark(const QString &val) {
-	if (_deletedMark.current() == val) return;
-	_deletedMark = val;
+	const auto validated = val.left(kMaxMarkLength);
+	if (_deletedMark.current() == validated) return;
+	_deletedMark = validated;
 	save();
 }
 
 void LuxurySettings::setEditedMark(const QString &val) {
-	if (_editedMark.current() == val) return;
-	_editedMark = val;
+	const auto validated = val.left(kMaxMarkLength);
+	if (_editedMark.current() == validated) return;
+	_editedMark = validated;
 	save();
 }
 
@@ -941,11 +966,9 @@ void LuxurySettings::setShowStreamerToggleInTray(bool val) {
 }
 
 void LuxurySettings::setMonoFont(const QString &val) {
-	if (_monoFont.current() == val) return;
-	_monoFont = val;
-	// doesn't work because `static const auto family = ...`
-	// LuxuryUiSettings::setMonoFont(val);
-	// repaintApp();
+	const auto validated = val.left(kMaxFontFamilyLength);
+	if (_monoFont.current() == validated) return;
+	_monoFont = validated;
 	save();
 }
 
@@ -1194,9 +1217,25 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	if (j.contains("ghostModeSettings") && j["ghostModeSettings"].is_object()) {
 		s._ghostAccounts.clear();
 		for (auto &[key, value] : j["ghostModeSettings"].items()) {
-			auto account = std::make_unique<GhostModeAccountSettings>();
-			value.get_to(*account);
-			s._ghostAccounts[std::stoull(key)] = std::move(account);
+			if (s._ghostAccounts.size() >= kMaxGhostAccounts) {
+				break;
+			}
+			auto id = uint64();
+			const auto [end, error] = std::from_chars(
+				key.data(),
+				key.data() + key.size(),
+				id);
+			if (error != std::errc()
+				|| end != key.data() + key.size()
+				|| !value.is_object()) {
+				continue;
+			}
+			try {
+				auto account = std::make_unique<GhostModeAccountSettings>();
+				value.get_to(*account);
+				s._ghostAccounts[id] = std::move(account);
+			} catch (...) {
+			}
 		}
 	}
 
@@ -1204,7 +1243,22 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	s._saveDeletedMessages = j.value("saveDeletedMessages", defaults._saveDeletedMessages.current());
 	s._saveMessagesHistory = j.value("saveMessagesHistory", defaults._saveMessagesHistory.current());
 	s._saveForBots = j.value("saveForBots", defaults._saveForBots.current());
-	s._shadowBanIds = j.value("shadowBanIds", defaults._shadowBanIds);
+	s._shadowBanIds.clear();
+	const auto shadowBans = j.find("shadowBanIds");
+	if (shadowBans != j.end() && shadowBans->is_array()) {
+		for (const auto &value : *shadowBans) {
+			if (s._shadowBanIds.size() >= kMaxShadowBanIds) {
+				break;
+			}
+			if (!value.is_number_integer()) {
+				continue;
+			}
+			try {
+				s._shadowBanIds.insert(value.get<int64>());
+			} catch (...) {
+			}
+		}
+	}
 	s._filtersEnabled = j.value("filtersEnabled", defaults._filtersEnabled.current());
 	s._filtersEnabledInChats = j.value("filtersEnabledInChats", defaults._filtersEnabledInChats.current());
 	s._hideFromBlocked = j.value("hideFromBlocked", defaults._hideFromBlocked.current());

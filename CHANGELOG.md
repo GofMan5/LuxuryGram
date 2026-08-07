@@ -31,6 +31,7 @@ The project has not published its first binary release.
 - Preserved media-only deleted and edited history entries as localized text and retained sender peer types instead of silently dropping or misidentifying them.
 - Bounded per-message filter memoization so long browsing sessions cannot grow the hidden-message cache indefinitely.
 - Removed duplicate source text from the translation LRU and promoted cache hits in place instead of copying list nodes.
+- Bounded per-account ghost settings, shadow-ban IDs, marks, font names, and saved theme titles from both files and live UI input.
 - Prevented missed media-download completions and main-thread observer teardown races in custom forwarding.
 - Snapshotted forwarding inputs on the main thread and resolved messages by stable IDs so background work no longer retains UI-owned message/media pointers.
 - Prevented fast-send completion races, overlapping album sends, unsafe download filename collisions, and cross-account forward-state collisions.

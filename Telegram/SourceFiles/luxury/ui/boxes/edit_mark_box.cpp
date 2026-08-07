@@ -19,6 +19,12 @@
 
 #include <utility>
 
+namespace {
+
+constexpr auto kMaxMarkLength = 64;
+
+} // namespace
+
 EditMarkBox::EditMarkBox(QWidget *,
 						 rpl::producer<QString> title,
 						 const QString &currentValue,
@@ -35,6 +41,7 @@ EditMarkBox::EditMarkBox(QWidget *,
 }
 
 void EditMarkBox::prepare() {
+	_text->setMaxLength(kMaxMarkLength);
 	auto newHeight = st::contactPadding.top() + _text->height();
 
 	setTitle(_title);
