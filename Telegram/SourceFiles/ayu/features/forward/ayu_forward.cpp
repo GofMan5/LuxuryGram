@@ -258,9 +258,14 @@ void sendMedia(
 	const std::shared_ptr<Ui::PreparedBundle> &bundle,
 	not_null<Data::Media*> primaryMedia,
 	Api::MessageToSend &&message,
-	bool sendImagesAsPhotos) {
+	bool sendImagesAsPhotos,
+	const LuxurySync::Cancelled &cancelled) {
 	if (const auto document = primaryMedia->document(); document && document->sticker()) {
-		LuxurySync::sendStickerSync(session, std::move(message), document);
+		LuxurySync::sendStickerSync(
+			session,
+			std::move(message),
+			document,
+			cancelled);
 		return;
 	}
 
@@ -295,7 +300,8 @@ void sendMedia(
 					data,
 					primaryMedia->document()->duration(),
 					mediaType == SendMediaType::Round,
-					std::move(message));
+					std::move(message),
+					cancelled);
 				return;
 			}
 		}
@@ -311,12 +317,16 @@ void sendMedia(
 	}
 
 	for (auto &group : bundle->groups) {
+		if (cancelled && cancelled()) {
+			break;
+		}
 		LuxurySync::sendDocumentSync(
 			session,
 			group,
 			mediaType,
 			std::move(message.textWithTags),
-			message.action);
+			message.action,
+			cancelled);
 	}
 }
 
@@ -391,6 +401,9 @@ void intelligentForward(
 
 	auto state = std::make_shared<ForwardState>(chunks.size());
 	SetForwardState(peer->id, session, state);
+	const auto cancelled = [state] {
+		return state->stopRequested();
+	};
 
 
 	for (const auto &chunk : chunks) {
@@ -403,9 +416,19 @@ void intelligentForward(
 			state->setMessages(chunk.items.size(), 0);
 			state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);
 
-			LuxurySync::forwardMessagesSync(session, chunk.items, action, draft.options);
-
+			LuxurySync::forwardMessagesSync(
+				session,
+				chunk.items,
+				action,
+				draft.options,
+				cancelled);
+			if (state->stopRequested()) {
+				break;
+			}
 			state->setSentMessages(chunk.items.size());
+		}
+		if (state->stopRequested()) {
+			break;
 		}
 		state->advanceChunk();
 	}
@@ -438,6 +461,9 @@ void forwardMessages(
 	if (!reuseState) {
 		SetForwardState(peer->id, session, state);
 	}
+	const auto cancelled = [state] {
+		return state->stopRequested();
+	};
 
 	std::vector<not_null<HistoryItem*>> toBeDownloaded;
 
@@ -450,7 +476,13 @@ void forwardMessages(
 	state->setMessages(items.size(), 0);
 	if (!toBeDownloaded.empty()) {
 		state->updateBottomBar(*session, peer->id, ForwardState::State::Downloading);
-		LuxurySync::loadDocuments(session, toBeDownloaded);
+		LuxurySync::loadDocuments(session, toBeDownloaded, cancelled);
+	}
+	if (state->stopRequested()) {
+		if (!reuseState) {
+			FinishForward(peer->id, state, *session);
+		}
+		return;
 	}
 
 
@@ -480,10 +512,27 @@ void forwardMessages(
 		}
 
 		if (!mediaDownloadable(item->media())) {
-			LuxurySync::sendMessageSync(session, std::move(message));
+			LuxurySync::sendMessageSync(
+				session,
+				std::move(message),
+				cancelled);
 		} else if (const auto media = item->media()) {
 			if (media->poll()) {
-				LuxurySync::sendMessageSync(session, std::move(message));
+				LuxurySync::sendMessageSync(
+					session,
+					std::move(message),
+					cancelled);
+				if (state->stopRequested()) {
+					if (!reuseState) {
+						FinishForward(peer->id, state, *session);
+					}
+					return;
+				}
+				state->setSentMessages(i + 1);
+				state->updateBottomBar(
+					*session,
+					peer->id,
+					ForwardState::State::Sending);
 				continue;
 			}
 
@@ -532,10 +581,17 @@ void forwardMessages(
 				bundle,
 				groupMedia.front(),
 				std::move(message),
-				way.sendImagesAsPhotos());
+				way.sendImagesAsPhotos(),
+				cancelled);
 		}
 		// if there are grouped messages
 		// "i" is incremented in prepareMedia
+		if (state->stopRequested()) {
+			if (!reuseState) {
+				FinishForward(peer->id, state, *session);
+			}
+			return;
+		}
 
 		state->setSentMessages(i + 1);
 		state->updateBottomBar(*session, peer->id, ForwardState::State::Sending);

@@ -29,13 +29,36 @@ namespace LuxurySync {
 
 namespace {
 
+bool WaitUntil(
+		const std::shared_ptr<TimedCountDownLatch> &latch,
+		std::chrono::milliseconds timeout,
+		const Cancelled &cancelled) {
+	constexpr auto kPoll = std::chrono::milliseconds(250);
+	const auto deadline = std::chrono::steady_clock::now() + timeout;
+	while (!cancelled || !cancelled()) {
+		const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now());
+		if (remaining <= std::chrono::milliseconds::zero()) {
+			return false;
+		}
+		if (latch->await(std::min(kPoll, remaining))) {
+			return true;
+		}
+	}
+	return false;
+}
+
 template <typename Callback>
 void SendAndWait(
 		not_null<Main::Session*> session,
 		const Api::SendAction &action,
 		int count,
+		const Cancelled &cancelled,
 		Callback &&callback) {
 	Expects(count > 0);
+	if (cancelled && cancelled()) {
+		return;
+	}
 
 	auto latch = std::make_shared<TimedCountDownLatch>(count);
 	auto lifetime = std::make_shared<rpl::lifetime>();
@@ -58,7 +81,7 @@ void SendAndWait(
 		callback();
 	});
 
-	latch->await(std::chrono::minutes(5));
+	WaitUntil(latch, std::chrono::minutes(5), cancelled);
 	crl::on_main([lifetime = std::move(lifetime)] {
 		lifetime->destroy();
 	});
@@ -156,8 +179,14 @@ qint64 fileSize(not_null<HistoryItem*> item) {
 	return 0;
 }
 
-void loadDocuments(not_null<Main::Session*> session, const std::vector<not_null<HistoryItem*>> &items) {
+void loadDocuments(
+		not_null<Main::Session*> session,
+		const std::vector<not_null<HistoryItem*>> &items,
+		const Cancelled &cancelled) {
 	for (const auto &item : items) {
+		if (cancelled && cancelled()) {
+			break;
+		}
 		if (const auto data = item->media()->document()) {
 			const auto size = fileSize(item);
 
@@ -165,18 +194,25 @@ void loadDocuments(not_null<Main::Session*> session, const std::vector<not_null<
 				continue;
 			}
 
-			loadDocumentSync(session, data, item);
+			loadDocumentSync(session, data, item, cancelled);
 		} else if (auto photo = item->media()->photo()) {
 			if (fileSize(item) == photo->imageByteSize(Data::PhotoSize::Large)) {
 				continue;
 			}
 
-			loadPhotoSync(session, std::pair(photo, item->fullId()));
+			loadPhotoSync(
+				session,
+				std::pair(photo, item->fullId()),
+				cancelled);
 		}
 	}
 }
 
-void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_null<HistoryItem*> item) {
+void loadDocumentSync(
+		not_null<Main::Session*> session,
+		DocumentData *data,
+		not_null<HistoryItem*> item,
+		const Cancelled &cancelled) {
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 	auto lifetime = std::make_shared<rpl::lifetime>();
 
@@ -200,18 +236,7 @@ void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_
 								  *lifetime);
 	});
 
-	constexpr auto overall = std::chrono::minutes(15);
-	const auto startTime = std::chrono::steady_clock::now();
-
-	while (std::chrono::steady_clock::now() - startTime < overall) {
-		if (latch->await(std::chrono::minutes(5))) {
-			break;
-		}
-
-		if (!data || !data->loading()) {
-			break;
-		}
-	}
+	WaitUntil(latch, std::chrono::minutes(15), cancelled);
 
 	crl::on_main([lifetime = std::move(lifetime)] {
 		lifetime->destroy();
@@ -221,7 +246,11 @@ void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_
 void forwardMessagesSync(not_null<Main::Session*> session,
 						 const std::vector<not_null<HistoryItem*>> &items,
 						 const ApiWrap::SendAction &action,
-						 Data::ForwardOptions options) {
+						 Data::ForwardOptions options,
+						 const Cancelled &cancelled) {
+	if (cancelled && cancelled()) {
+		return;
+	}
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 
 	crl::on_main(session, [=]
@@ -235,10 +264,13 @@ void forwardMessagesSync(not_null<Main::Session*> session,
 	});
 
 
-	latch->await(std::chrono::minutes(1));
+	WaitUntil(latch, std::chrono::minutes(1), cancelled);
 }
 
-void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<PhotoData*>, FullMsgId> &photo) {
+void loadPhotoSync(
+		not_null<Main::Session*> session,
+		const std::pair<not_null<PhotoData*>, FullMsgId> &photo,
+		const Cancelled &cancelled) {
 	const auto path = pathForSave(session);
 	if (path.isEmpty()) {
 		return;
@@ -285,16 +317,22 @@ void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<Ph
 									  },
 									  *lifetime);
 		});
-		latch->await(std::chrono::minutes(5));
+		WaitUntil(latch, std::chrono::minutes(5), cancelled);
 		crl::on_main([lifetime = std::move(lifetime)] {
 			lifetime->destroy();
 		});
 	}
 }
 
-void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&message) {
+void sendMessageSync(
+		not_null<Main::Session*> session,
+		Api::MessageToSend &&message,
+		const Cancelled &cancelled) {
 	const auto action = message.action;
-	SendAndWait(session, action, 1, [session, message = std::move(message)]() mutable {
+	SendAndWait(session, action, 1, cancelled, [
+		session,
+		message = std::move(message)
+	]() mutable {
 		// we cannot send events to objects
 		// owned by a different thread
 		// because sendMessage updates UI too
@@ -307,12 +345,13 @@ void sendDocumentSync(not_null<Main::Session*> session,
 					  Ui::PreparedGroup &group,
 					  SendMediaType type,
 					  TextWithTags &&caption,
-					  const Api::SendAction &action) {
+					  const Api::SendAction &action,
+					  const Cancelled &cancelled) {
 	auto groupId = std::make_shared<SendingAlbum>();
 	groupId->groupId = base::RandomValue<uint64>();
 	const auto count = int(group.list.files.size());
 
-	SendAndWait(session, action, count, [
+	SendAndWait(session, action, count, cancelled, [
 		session,
 		groupId,
 		type,
@@ -334,9 +373,13 @@ void sendDocumentSync(not_null<Main::Session*> session,
 
 void sendStickerSync(not_null<Main::Session*> session,
 					 Api::MessageToSend &&message,
-					 not_null<DocumentData*> document) {
+					 not_null<DocumentData*> document,
+					 const Cancelled &cancelled) {
 	const auto action = message.action;
-	SendAndWait(session, action, 1, [document, message = std::move(message)]() mutable {
+	SendAndWait(session, action, 1, cancelled, [
+		document,
+		message = std::move(message)
+	]() mutable {
 		Api::SendExistingDocument(std::move(message), document, std::nullopt);
 	});
 }
@@ -345,10 +388,11 @@ void sendVoiceSync(not_null<Main::Session*> session,
 				   const QByteArray &data,
 				   int64_t duration,
 				   bool video,
-				   Api::MessageToSend &&message) {
+				   Api::MessageToSend &&message,
+				   const Cancelled &cancelled) {
 	const auto action = message.action;
 
-	SendAndWait(session, action, 1, [
+	SendAndWait(session, action, 1, cancelled, [
 		session,
 		data,
 		duration,

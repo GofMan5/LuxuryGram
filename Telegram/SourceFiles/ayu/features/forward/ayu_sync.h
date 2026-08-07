@@ -19,29 +19,48 @@
 
 namespace LuxurySync {
 
+using Cancelled = Fn<bool()>;
+
 QString pathForSave(not_null<Main::Session*> session);
 QString filePath(not_null<Main::Session*> session, const Data::Media *media);
-void loadDocuments(not_null<Main::Session*> session, const std::vector<not_null<HistoryItem*>> &items);
-void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&message);
+void loadDocuments(
+	not_null<Main::Session*> session,
+	const std::vector<not_null<HistoryItem*>> &items,
+	const Cancelled &cancelled);
+void sendMessageSync(
+	not_null<Main::Session*> session,
+	Api::MessageToSend &&message,
+	const Cancelled &cancelled);
 
 void sendDocumentSync(not_null<Main::Session*> session,
 					  Ui::PreparedGroup &group,
 					  SendMediaType type,
 					  TextWithTags &&caption,
-					  const Api::SendAction &action);
+					  const Api::SendAction &action,
+					  const Cancelled &cancelled);
 
 void sendStickerSync(not_null<Main::Session*> session,
 					 Api::MessageToSend &&message,
-					 not_null<DocumentData*> document);
-void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<PhotoData*>, FullMsgId> &photos);
-void loadDocumentSync(not_null<Main::Session*> session, DocumentData *data, not_null<HistoryItem*> item);
+					 not_null<DocumentData*> document,
+					 const Cancelled &cancelled);
+void loadPhotoSync(
+	not_null<Main::Session*> session,
+	const std::pair<not_null<PhotoData*>, FullMsgId> &photos,
+	const Cancelled &cancelled);
+void loadDocumentSync(
+	not_null<Main::Session*> session,
+	DocumentData *data,
+	not_null<HistoryItem*> item,
+	const Cancelled &cancelled);
 void forwardMessagesSync(not_null<Main::Session*> session,
 						 const std::vector<not_null<HistoryItem*>> &items,
 						 const ApiWrap::SendAction &action,
-						 Data::ForwardOptions options);
+						 Data::ForwardOptions options,
+						 const Cancelled &cancelled);
 void sendVoiceSync(not_null<Main::Session*> session,
 				   const QByteArray &data,
 				   int64_t duration,
 				   bool video,
-				   Api::MessageToSend &&message);
+				   Api::MessageToSend &&message,
+				   const Cancelled &cancelled);
 }
