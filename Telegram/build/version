@@ -4,4 +4,8 @@ AppVersionStrSmall 7.0.9
 AppVersionStr      7.0.9
 BetaChannel        0
 AlphaVersion       0
-AppVersionOriginal 7.0.9
+AppVersionOriginal 1.0.0
+LuxuryVersionStrMajor 1.0
+LuxuryVersionStrSmall 1.0.0
+LuxuryVersionStr      1.0.0
+UpstreamVersionOriginal 7.0.9

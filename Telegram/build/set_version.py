@@ -120,7 +120,7 @@ replaceInFile(scriptPath + '/version', [
   [ r'(AppVersionStr\s+)\d[\d\.]*', r'\g<1>' + versionStr ],
   [ r'(BetaChannel\s+)\d', r'\g<1>' + ('1' if versionBeta else '0') ],
   [ r'(AlphaVersion\s+)\d+', r'\g<1>' + versionFullAlpha ],
-  [ r'(AppVersionOriginal\s+)\d[\d\.beta]*', r'\g<1>' + versionOriginal ],
+  [ r'(UpstreamVersionOriginal\s+)\d[\d\.beta]*', r'\g<1>' + versionOriginal ],
 ])
 
 print('Patching core/version.h...')
@@ -131,23 +131,4 @@ replaceInFile(scriptPath + '/../SourceFiles/core/version.h', [
   [ r'(AppBetaVersion\s+=\s+)[a-z]+', r'\g<1>' + ('true' if versionBeta else 'false') ],
 ])
 
-parts = [versionMajor, versionMinor, versionPatch, versionAlpha]
-withcomma = ','.join(parts)
-withdot = '.'.join(parts)
-rcReplaces = [
-  [ r'(FILEVERSION\s+)\d+,\d+,\d+,\d+', r'\g<1>' + withcomma ],
-  [ r'(PRODUCTVERSION\s+)\d+,\d+,\d+,\d+', r'\g<1>' + withcomma ],
-  [ r'("FileVersion",\s+)"\d+\.\d+\.\d+\.\d+"', r'\g<1>"' + withdot + '"' ],
-  [ r'("ProductVersion",\s+)"\d+\.\d+\.\d+\.\d+"', r'\g<1>"' + withdot + '"' ],
-]
-
-print('Patching Telegram.rc...')
-replaceInFile(scriptPath + '/../Resources/winrc/Telegram.rc', rcReplaces)
-
-print('Patching Updater.rc...')
-replaceInFile(scriptPath + '/../Resources/winrc/Updater.rc', rcReplaces)
-
-print('Patching appxmanifest.xml...')
-replaceInFile(scriptPath + '/../Resources/uwp/AppX/AppxManifest.xml', [
-  [ r'( Version=)"\d+\.\d+\.\d+\.\d+"', r'\g<1>"' + withdot + '"' ],
-])
+print('Product resources keep the independent LuxuryGram version.')

@@ -31,6 +31,9 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
   set $line
   eval $1="$2"
 done < "$FullScriptPath/version"
+AppVersionStrMajor="$LuxuryVersionStrMajor"
+AppVersionStrSmall="$LuxuryVersionStrSmall"
+AppVersionStr="$LuxuryVersionStr"
 
 VersionForPacker="$AppVersion"
 if [ "$AlphaVersion" != "0" ]; then

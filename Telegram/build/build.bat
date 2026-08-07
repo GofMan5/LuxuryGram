@@ -67,6 +67,9 @@ if %Build64% neq 0 (
 )
 
 FOR /F "tokens=1,2* delims= " %%i in (%FullScriptPath%version) do set "%%i=%%j"
+set "AppVersionStrMajor=%LuxuryVersionStrMajor%"
+set "AppVersionStrSmall=%LuxuryVersionStrSmall%"
+set "AppVersionStr=%LuxuryVersionStr%"
 
 set "VersionForPacker=%AppVersion%"
 if %AlphaVersion% neq 0 (

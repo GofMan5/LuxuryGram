@@ -22,7 +22,10 @@ constexpr auto AppId = "{72B0BF1B-CBA5-5A13-94AE-8A66FF278E2A}"_cs;
 constexpr auto AppNameOld = "AyuGram for Windows"_cs;
 constexpr auto AppName = "LuxuryGram Desktop"_cs;
 constexpr auto AppFile = "LuxuryGram"_cs;
+// Keep AppVersion on the upstream line for storage and update compatibility.
 constexpr auto AppVersion = 7000009;
 constexpr auto AppVersionStr = "7.0.9";
+// Product version is bumped only for LuxuryGram releases.
+constexpr auto LuxuryVersionStr = "1.0.0";
 constexpr auto AppBetaVersion = false;
 constexpr auto AppAlphaVersion = TDESKTOP_ALPHA_VERSION;
