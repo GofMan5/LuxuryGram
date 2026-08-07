@@ -146,6 +146,19 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 	LuxuryDatabase::addDeletedMessage(message);
 }
 
+void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
+	auto messages = std::vector<DeletedMessage>();
+	messages.reserve(items.size());
+	for (const auto item : items) {
+		auto message = DeletedMessage();
+		map(item, message);
+		if (!message.text.empty()) {
+			messages.push_back(std::move(message));
+		}
+	}
+	LuxuryDatabase::addDeletedMessages(messages);
+}
+
 std::vector<LuxuryMessageBase>
 getDeletedMessages(not_null<PeerData*> peer, ID topicId, ID minId, ID maxId, int totalLimit, const QString &searchQuery) {
 	const auto userId = DatabaseUserId(peer->session());

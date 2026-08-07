@@ -336,10 +336,19 @@ bool hasRevisions(ID userId, ID dialogId, ID messageId) {
 }
 
 void addDeletedMessage(const DeletedMessage &message) {
+	addDeletedMessages({ message });
+}
+
+void addDeletedMessages(const std::vector<DeletedMessage> &messages) {
+	if (messages.empty()) {
+		return;
+	}
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.begin_transaction();
-		storage.insert(message);
+		for (const auto &message : messages) {
+			storage.insert(message);
+		}
 		storage.commit();
 	} catch (std::exception &ex) {
 		try {

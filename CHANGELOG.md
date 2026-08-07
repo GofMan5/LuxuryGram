@@ -29,6 +29,7 @@ The project has not published its first binary release.
 - Isolated hidden-message, filter, ghost-mode, message-history, and message-shot state between production, test, and multi-account sessions.
 - Made settings and language-cache writes atomic, contained language cache/CDN paths, and bounded bulk message deletion memory.
 - Made SQLite recovery preserve the database, WAL, and SHM as one rollback-safe set and stopped failed migrations from being marked successful.
+- Batched bulk deleted-message persistence into one SQLite transaction to prevent hundreds of synchronous disk commits from stalling the UI.
 - Keyed translation results by the complete text, entities, languages, and provider so edits and provider changes cannot reuse stale output.
 - Removed dangling delayed UI/config callbacks and initialized inherited data/UI state deterministically.
 - Bounded translator responses and batches, serialized message-history storage, and hardened network/media lifetimes.

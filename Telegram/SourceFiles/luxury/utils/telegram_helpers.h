@@ -95,6 +95,7 @@ int getScheduleTime(int64 sumSize);
 
 bool isMessageSavable(not_null<HistoryItem *> item);
 void processMessageDelete(not_null<HistoryItem *> item);
+void processMessagesDelete(const std::vector<not_null<HistoryItem*>> &items);
 
 void searchUserById(ID userId, Main::Session *session, const UsernameResolverCallback &callback);
 void searchChatById(ID chatId, Main::Session *session, const UsernameResolverCallback &callback);

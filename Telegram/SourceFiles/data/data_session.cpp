@@ -3087,14 +3087,16 @@ void Session::checkTTLs() {
 		}
 		expired.insert(expired.end(), items.begin(), items.end());
 	}
+	auto toSave = std::vector<not_null<HistoryItem*>>();
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	for (const auto &item : expired) {
 		if (isMessageSavable(item)) {
-			processMessageDelete(item);
+			toSave.push_back(item);
 		} else {
 			toDestroy.push_back(item);
 		}
 	}
+	processMessagesDelete(toSave);
 	if (!toDestroy.empty()) {
 		notifyItemsAboutToBeDestroyed(toDestroy);
 		for (const auto &item : toDestroy) {
@@ -3156,6 +3158,7 @@ void Session::processMessagesDeleted(
 		return;
 	}
 
+	auto toSave = std::vector<not_null<HistoryItem*>>();
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	auto historiesToCheck = base::flat_set<not_null<History*>>();
 	for (const auto &messageId : data) {
@@ -3164,7 +3167,7 @@ void Session::processMessagesDeleted(
 			const auto item = i->second;
 			const auto history = item->history();
 			if (isMessageSavable(item)) {
-				processMessageDelete(item);
+				toSave.push_back(item);
 			} else {
 				toDestroy.push_back(item);
 			}
@@ -3173,6 +3176,7 @@ void Session::processMessagesDeleted(
 			affected->unknownMessageDeleted(messageId.v);
 		}
 	}
+	processMessagesDelete(toSave);
 	if (!toDestroy.empty()) {
 		notifyItemsAboutToBeDestroyed(toDestroy);
 		for (const auto &item : toDestroy) {
@@ -3187,19 +3191,21 @@ void Session::processMessagesDeleted(
 }
 
 void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
+	auto toSave = std::vector<not_null<HistoryItem*>>();
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	auto historiesToCheck = base::flat_set<not_null<History*>>();
 	for (const auto &messageId : data) {
 		if (const auto item = nonChannelMessage(messageId.v)) {
 			const auto history = item->history();
 			if (isMessageSavable(item)) {
-				processMessageDelete(item);
+				toSave.push_back(item);
 			} else {
 				toDestroy.push_back(item);
 			}
 			historiesToCheck.emplace(history);
 		}
 	}
+	processMessagesDelete(toSave);
 	if (!toDestroy.empty()) {
 		notifyItemsAboutToBeDestroyed(toDestroy);
 		for (const auto &item : toDestroy) {

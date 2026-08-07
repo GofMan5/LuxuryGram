@@ -733,6 +733,24 @@ void processMessageDelete(not_null<HistoryItem*> item) {
 	}
 }
 
+void processMessagesDelete(
+		const std::vector<not_null<HistoryItem*>> &items) {
+	auto toStore = std::vector<not_null<HistoryItem*>>();
+	toStore.reserve(items.size());
+	for (const auto item : items) {
+		Expects(isMessageSavable(item));
+		if (item->isDeleted()) {
+			continue;
+		}
+		if (item->ttlDestroyAt() > 0) {
+			item->applyTTL(0);
+		}
+		item->setDeleted();
+		toStore.push_back(item);
+	}
+	LuxuryMessages::addDeletedMessages(toStore);
+}
+
 void resolvePeer(
 	const QString &peerId,
 	const QString &username,

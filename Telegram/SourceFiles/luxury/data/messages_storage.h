@@ -22,6 +22,7 @@ std::vector<LuxuryMessageBase> getEditedMessages(
 bool hasRevisions(not_null<HistoryItem*> item);
 
 void addDeletedMessage(not_null<HistoryItem*> item);
+void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items);
 std::vector<LuxuryMessageBase> getDeletedMessages(not_null<PeerData*> peer, ID topicId, ID minId, ID maxId, int totalLimit, const QString &searchQuery = QString());
 std::vector<LuxuryMessageBase> getDeletedMessages(
 	ID userId,
