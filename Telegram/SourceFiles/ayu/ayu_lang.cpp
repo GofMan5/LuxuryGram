@@ -52,6 +52,7 @@ LuxuryLanguage::LuxuryLanguage()
 
 LuxuryLanguage::~LuxuryLanguage() {
 	clearReply();
+	instance = nullptr;
 }
 
 void LuxuryLanguage::init() {

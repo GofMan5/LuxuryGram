@@ -291,8 +291,15 @@ TranslateManager *TranslateManager::currentInstance() {
 
 TranslateManager *TranslateManager::instance = nullptr;
 
+TranslateManager::~TranslateManager() {
+	instance = nullptr;
+}
+
 void TranslateManager::init() {
-	if (!instance) instance = new TranslateManager;
+	if (!instance) {
+		static TranslateManager manager;
+		instance = &manager;
+	}
 }
 
 QString TranslateManager::generateCacheKey(

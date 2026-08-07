@@ -77,7 +77,7 @@ public:
     };
 
     TranslateManager() = default;
-    ~TranslateManager() = default;
+    ~TranslateManager();
 
     Builder request(
         Main::Session *session,
