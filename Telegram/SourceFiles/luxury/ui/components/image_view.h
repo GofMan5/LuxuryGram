@@ -31,5 +31,6 @@ private:
 	QImage newDiffImage;
 
 	Ui::Animations::Simple animation;
+	int _imageGeneration = 0;
 
 };

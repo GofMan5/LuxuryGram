@@ -25,6 +25,8 @@
 
 #include <QFileInfo>
 
+#include <atomic>
+
 namespace LuxurySync {
 
 namespace {
@@ -49,7 +51,7 @@ bool WaitUntil(
 }
 
 template <typename Callback>
-void SendAndWait(
+bool SendAndWait(
 		WeakSession session,
 		const Api::SendAction &action,
 		int count,
@@ -60,11 +62,12 @@ void SendAndWait(
 		return !session.get() || (cancelled && cancelled());
 	};
 	if (stopped()) {
-		return;
+		return false;
 	}
 
 	auto latch = std::make_shared<TimedCountDownLatch>(count);
 	auto lifetime = std::make_shared<rpl::lifetime>();
+	auto started = std::make_shared<std::atomic_bool>(false);
 
 	crl::on_main(session, [
 		session,
@@ -72,6 +75,7 @@ void SendAndWait(
 		count,
 		latch,
 		lifetime,
+		started,
 		stopped,
 		callback = std::forward<Callback>(callback)
 	]() mutable {
@@ -89,17 +93,23 @@ void SendAndWait(
 		}) | rpl::take(count) | rpl::on_next([latch] {
 			latch->countDown();
 		}, *lifetime);
+		started->store(true);
 		if (!callback(strong)) {
+			started->store(false);
 			for (auto i = 0; i != count; ++i) {
 				latch->countDown();
 			}
 		}
 	});
 
-	WaitUntil(latch, std::chrono::minutes(5), stopped);
+	const auto completed = WaitUntil(
+		latch,
+		std::chrono::minutes(5),
+		stopped);
 	crl::on_main([lifetime = std::move(lifetime)] {
 		lifetime->destroy();
 	});
+	return completed && started->load();
 }
 
 QString ForwardPhotoName(not_null<PhotoData*> photo) {
@@ -229,7 +239,7 @@ void loadDocumentSync(
 	});
 }
 
-void forwardMessagesSync(WeakSession session,
+bool forwardMessagesSync(WeakSession session,
 						 const std::vector<FullMsgId> &itemIds,
 						 const ApiWrap::SendAction &action,
 						 Data::ForwardOptions options,
@@ -238,9 +248,10 @@ void forwardMessagesSync(WeakSession session,
 		return !session.get() || (cancelled && cancelled());
 	};
 	if (stopped()) {
-		return;
+		return false;
 	}
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
+	auto started = std::make_shared<std::atomic_bool>(false);
 
 	crl::on_main(session, [=] {
 		if (stopped()) {
@@ -262,13 +273,15 @@ void forwardMessagesSync(WeakSession session,
 			latch->countDown();
 			return;
 		}
+		started->store(true);
 		strong->api().forwardMessages(
 			Data::ResolvedForwardDraft(items, options),
 			action,
 			[latch] { latch->countDown(); });
 	});
 
-	WaitUntil(latch, std::chrono::minutes(1), stopped);
+	return WaitUntil(latch, std::chrono::minutes(1), stopped)
+		&& started->load();
 }
 
 void loadPhotoSync(
@@ -318,12 +331,12 @@ void loadPhotoSync(
 	});
 }
 
-void sendMessageSync(
+bool sendMessageSync(
 		WeakSession session,
 		Api::MessageToSend &&message,
 		const Cancelled &cancelled) {
 	const auto action = message.action;
-	SendAndWait(session, action, 1, cancelled, [
+	return SendAndWait(session, action, 1, cancelled, [
 		message = std::move(message)
 	](not_null<Main::Session*> strong) mutable {
 		// we cannot send events to objects
@@ -335,7 +348,7 @@ void sendMessageSync(
 	});
 }
 
-void sendDocumentSync(WeakSession session,
+bool sendDocumentSync(WeakSession session,
 					  Ui::PreparedGroup &group,
 					  SendMediaType type,
 					  TextWithTags &&caption,
@@ -345,7 +358,7 @@ void sendDocumentSync(WeakSession session,
 	groupId->groupId = base::RandomValue<uint64>();
 	const auto count = int(group.list.files.size());
 
-	SendAndWait(session, action, count, cancelled, [
+	return SendAndWait(session, action, count, cancelled, [
 		groupId,
 		type,
 		action,
@@ -365,12 +378,12 @@ void sendDocumentSync(WeakSession session,
 	});
 }
 
-void sendStickerSync(WeakSession session,
+bool sendStickerSync(WeakSession session,
 					 Api::MessageToSend &&message,
 					 FullMsgId itemId,
 					 const Cancelled &cancelled) {
 	const auto action = message.action;
-	SendAndWait(session, action, 1, cancelled, [
+	return SendAndWait(session, action, 1, cancelled, [
 		itemId,
 		message = std::move(message)
 	](not_null<Main::Session*> strong) mutable {
@@ -385,7 +398,7 @@ void sendStickerSync(WeakSession session,
 	});
 }
 
-void sendVoiceSync(WeakSession session,
+bool sendVoiceSync(WeakSession session,
 				   const QByteArray &data,
 				   int64_t duration,
 				   bool video,
@@ -393,7 +406,7 @@ void sendVoiceSync(WeakSession session,
 				   const Cancelled &cancelled) {
 	const auto action = message.action;
 
-	SendAndWait(session, action, 1, cancelled, [
+	return SendAndWait(session, action, 1, cancelled, [
 		data,
 		duration,
 		video,

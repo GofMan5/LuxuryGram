@@ -12,23 +12,34 @@
 #include "styles/style_chat.h"
 #include "ui/painter.h"
 
+namespace {
+
+// ponytail: large previews use the native crossfade; raise only after profiling.
+constexpr auto kMaxDiffPixels = 4 * 1024 * 1024;
+
+} // namespace
+
 ImageView::ImageView(QWidget *parent)
 	: RpWidget(parent) {
 }
 
 void ImageView::setImage(const QImage &image) {
+	const auto generation = ++_imageGeneration;
 	if (this->image == image) {
 		return;
 	}
 
-	const auto set = [=]
-	{
+	const auto set = [=] {
+		if (generation != _imageGeneration) {
+			return;
+		}
 		this->prevImage = this->image;
 		this->image = image;
 
 		if (!this->prevImage.isNull()
 			&& !image.isNull()
-			&& this->prevImage.size() == image.size()) {
+			&& this->prevImage.size() == image.size()
+			&& (qint64(image.width()) * image.height()) <= kMaxDiffPixels) {
 			computeDiffImages(this->prevImage, image);
 		} else {
 			this->baseImage = QImage();

@@ -62,10 +62,12 @@ bool isFullLuxuryForwardNeeded(not_null<HistoryItem*> item);
 void intelligentForward(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,
-	const Data::ResolvedForwardDraft &draft);
+	const Data::ResolvedForwardDraft &draft,
+	FnMut<void()> &&successCallback = nullptr);
 void forwardMessages(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,
-	const Data::ResolvedForwardDraft &draft);
+	const Data::ResolvedForwardDraft &draft,
+	FnMut<void()> &&successCallback = nullptr);
 
 }

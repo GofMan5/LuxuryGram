@@ -25,19 +25,19 @@ using WeakSession = base::weak_ptr<Main::Session>;
 
 QString pathForSave(not_null<Main::Session*> session);
 QString filePath(not_null<Main::Session*> session, const Data::Media *media);
-void sendMessageSync(
+[[nodiscard]] bool sendMessageSync(
 	WeakSession session,
 	Api::MessageToSend &&message,
 	const Cancelled &cancelled);
 
-void sendDocumentSync(WeakSession session,
+[[nodiscard]] bool sendDocumentSync(WeakSession session,
 					  Ui::PreparedGroup &group,
 					  SendMediaType type,
 					  TextWithTags &&caption,
 					  const Api::SendAction &action,
 					  const Cancelled &cancelled);
 
-void sendStickerSync(WeakSession session,
+[[nodiscard]] bool sendStickerSync(WeakSession session,
 					 Api::MessageToSend &&message,
 					 FullMsgId itemId,
 					 const Cancelled &cancelled);
@@ -52,12 +52,12 @@ void loadDocumentSync(
 	const QString &path,
 	qint64 expectedSize,
 	const Cancelled &cancelled);
-void forwardMessagesSync(WeakSession session,
+[[nodiscard]] bool forwardMessagesSync(WeakSession session,
 						 const std::vector<FullMsgId> &itemIds,
 						 const ApiWrap::SendAction &action,
 						 Data::ForwardOptions options,
 						 const Cancelled &cancelled);
-void sendVoiceSync(WeakSession session,
+[[nodiscard]] bool sendVoiceSync(WeakSession session,
 				   const QByteArray &data,
 				   int64_t duration,
 				   bool video,

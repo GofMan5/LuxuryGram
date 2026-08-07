@@ -23,6 +23,8 @@ The project has not published its first binary release.
 
 ### Fixed
 
+- Restored completion callbacks for custom and mixed forwarding, firing them once only after every chunk succeeds and suppressing them on cancellation, timeout, or missing media.
+- Discarded stale delayed message-shot previews and avoided expensive pixel-diff buffers for images larger than four megapixels.
 - Prevented missed media-download completions and main-thread observer teardown races in custom forwarding.
 - Snapshotted forwarding inputs on the main thread and resolved messages by stable IDs so background work no longer retains UI-owned message/media pointers.
 - Prevented fast-send completion races, overlapping album sends, unsafe download filename collisions, and cross-account forward-state collisions.

@@ -66,6 +66,7 @@ struct ForwardJob {
 	Api::SendAction action;
 	PeerId peerId;
 	Data::ForwardOptions options = Data::ForwardOptions::PreserveInfo;
+	FnMut<void()> successCallback;
 	bool slowmodeApplied = false;
 };
 
@@ -116,13 +117,15 @@ std::vector<ForwardItem> SnapshotItems(
 ForwardJob SnapshotJob(
 		not_null<Main::Session*> session,
 		const Api::SendAction &action,
-		Data::ForwardOptions options) {
+		Data::ForwardOptions options,
+		FnMut<void()> &&successCallback) {
 	return ForwardJob{
 		.session = base::make_weak(session),
 		.sessionKey = session,
 		.action = action,
 		.peerId = action.history->peer->id,
 		.options = options,
+		.successCallback = std::move(successCallback),
 		.slowmodeApplied = action.history->peer->slowmodeApplied(),
 	};
 }
@@ -175,9 +178,16 @@ void FinishForward(
 		PeerId id,
 		const std::shared_ptr<ForwardState> &state,
 		LuxurySync::WeakSession session,
-		const Main::Session *sessionKey) {
+		const Main::Session *sessionKey,
+		bool success,
+		FnMut<void()> &&successCallback) {
 	state->updateBottomBar(session, id, ForwardState::State::Finished);
 	RemoveForwardState(id, sessionKey, state);
+	if (success && successCallback) {
+		crl::on_main(session, [callback = std::move(successCallback)]() mutable {
+			callback();
+		});
+	}
 }
 
 } // namespace
@@ -196,7 +206,13 @@ bool isForwarding(const PeerId &id, const Main::Session &session) {
 void cancelForward(const PeerId &id, const Main::Session &session) {
 	if (const auto state = FindForwardState(id, &session)) {
 		state->requestStop();
-		FinishForward(id, state, base::make_weak(&session), &session);
+		FinishForward(
+			id,
+			state,
+			base::make_weak(&session),
+			&session,
+			false,
+			nullptr);
 	}
 }
 
@@ -341,7 +357,7 @@ Ui::PreparedList PrepareMedia(
 	return list;
 }
 
-void sendMedia(
+bool sendMedia(
 	LuxurySync::WeakSession session,
 	const std::shared_ptr<Ui::PreparedBundle> &bundle,
 	const ForwardItem &primaryItem,
@@ -349,12 +365,11 @@ void sendMedia(
 	bool sendImagesAsPhotos,
 	const LuxurySync::Cancelled &cancelled) {
 	if (primaryItem.sticker) {
-		LuxurySync::sendStickerSync(
+		return LuxurySync::sendStickerSync(
 			session,
 			std::move(message),
 			primaryItem.id,
 			cancelled);
-		return;
 	}
 
 	auto mediaType = [&] {
@@ -382,14 +397,13 @@ void sendMedia(
 		} else if (file.size() > 0 && file.size() <= kMaxVoiceBytes) {
 			const auto data = file.read(kMaxVoiceBytes + 1);
 			if (!data.isEmpty() && data.size() <= kMaxVoiceBytes) {
-				LuxurySync::sendVoiceSync(
+				return LuxurySync::sendVoiceSync(
 					session,
 					data,
 					primaryItem.duration,
 					mediaType == SendMediaType::Round,
 					std::move(message),
 					cancelled);
-				return;
 			}
 		}
 		// Keep large round videos and voice messages off the heap.
@@ -405,16 +419,19 @@ void sendMedia(
 
 	for (auto &group : bundle->groups) {
 		if (cancelled && cancelled()) {
-			break;
+			return false;
 		}
-		LuxurySync::sendDocumentSync(
+		if (!LuxurySync::sendDocumentSync(
 			session,
 			group,
 			mediaType,
 			std::move(message.textWithTags),
 			message.action,
-			cancelled);
+			cancelled)) {
+			return false;
+		}
 	}
+	return true;
 }
 
 bool isLuxuryForwardNeeded(const std::vector<not_null<HistoryItem*>> &items) {
@@ -447,19 +464,22 @@ std::vector<FullMsgId> ItemIds(const std::vector<ForwardItem> &items) {
 	return result;
 }
 
-void LoadDocuments(
+qint64 FileSize(const QString &path) {
+	const auto file = QFile(path);
+	return file.exists() ? file.size() : 0;
+}
+
+bool LoadDocuments(
 		const ForwardJob &job,
 		const std::vector<ForwardItem> &items,
 		const LuxurySync::Cancelled &cancelled) {
 	for (const auto &item : items) {
 		if (cancelled && cancelled()) {
-			return;
+			return false;
 		} else if (!item.downloadable) {
 			continue;
 		}
-		const auto file = QFile(item.path);
-		const auto size = file.exists() ? file.size() : 0;
-		if (size == item.expectedSize) {
+		if (FileSize(item.path) == item.expectedSize) {
 			continue;
 		} else if (item.document) {
 			LuxurySync::loadDocumentSync(
@@ -475,10 +495,15 @@ void LoadDocuments(
 				item.path,
 				cancelled);
 		}
+		if ((cancelled && cancelled())
+			|| FileSize(item.path) != item.expectedSize) {
+			return false;
+		}
 	}
+	return true;
 }
 
-void ForwardItems(
+bool ForwardItems(
 		const ForwardJob &job,
 		const std::shared_ptr<ForwardState> &state,
 		const std::vector<ForwardItem> &items) {
@@ -491,10 +516,12 @@ void ForwardItems(
 			job.session,
 			job.peerId,
 			ForwardState::State::Downloading);
-		LoadDocuments(job, items, cancelled);
+		if (!LoadDocuments(job, items, cancelled)) {
+			return false;
+		}
 	}
 	if (cancelled()) {
-		return;
+		return false;
 	}
 
 	state->updateBottomBar(
@@ -504,9 +531,9 @@ void ForwardItems(
 	for (auto i = 0; i != int(items.size()); ++i) {
 		const auto &item = items[i];
 		if (cancelled()) {
-			return;
+			return false;
 		} else if (item.text.empty() && !item.downloadable) {
-			continue;
+			return false;
 		}
 
 		auto message = Api::MessageToSend(job.action);
@@ -516,26 +543,27 @@ void ForwardItems(
 		}
 
 		if (!item.downloadable) {
-			LuxurySync::sendMessageSync(
+			if (!LuxurySync::sendMessageSync(
 				job.session,
 				std::move(message),
-				cancelled);
+				cancelled)) {
+				return false;
+			}
 		} else {
 			auto groupItems = std::vector<const ForwardItem*>();
 			auto preparedMedia = PrepareMedia(items, i, groupItems);
 			for (auto j = int(preparedMedia.files.size()); j > 0;) {
 				--j;
 				const auto groupItem = groupItems[j];
-				const auto file = QFile(preparedMedia.files[j].path);
-				const auto size = file.exists() ? file.size() : 0;
 				if ((groupItem->photo || groupItem->document)
-					&& size < groupItem->expectedSize) {
+					&& FileSize(preparedMedia.files[j].path)
+						< groupItem->expectedSize) {
 					preparedMedia.files.erase(preparedMedia.files.begin() + j);
 					groupItems.erase(groupItems.begin() + j);
 				}
 			}
 			if (preparedMedia.files.empty()) {
-				continue;
+				return false;
 			}
 
 			auto way = Ui::SendFilesWay();
@@ -552,16 +580,18 @@ void ForwardItems(
 				std::move(groups),
 				way,
 				false);
-			sendMedia(
+			if (!sendMedia(
 				job.session,
 				bundle,
 				*groupItems.front(),
 				std::move(message),
 				way.sendImagesAsPhotos(),
-				cancelled);
+				cancelled)) {
+				return false;
+			}
 		}
 		if (cancelled()) {
-			return;
+			return false;
 		}
 		state->setSentMessages(i + 1);
 		state->updateBottomBar(
@@ -569,49 +599,54 @@ void ForwardItems(
 			job.peerId,
 			ForwardState::State::Sending);
 	}
+	return true;
 }
 
 void RunForward(
-		const ForwardJob &job,
+		ForwardJob &job,
 		const std::vector<ForwardItem> &items,
 		const std::shared_ptr<ForwardState> &state) {
-	ForwardItems(job, state, items);
+	const auto success = ForwardItems(job, state, items);
 	FinishForward(
 		job.peerId,
 		state,
 		job.session,
-		job.sessionKey);
+		job.sessionKey,
+		success,
+		std::move(job.successCallback));
 }
 
 void RunIntelligentForward(
-		const ForwardJob &job,
+		ForwardJob &job,
 		const std::vector<ForwardChunk> &chunks,
 		const std::shared_ptr<ForwardState> &state) {
 	const auto cancelled = [state, session = job.session] {
 		return state->stopRequested() || !session.get();
 	};
+	auto success = true;
 	for (const auto &chunk : chunks) {
 		if (cancelled()) {
-			break;
+			success = false;
 		} else if (chunk.luxury) {
-			ForwardItems(job, state, chunk.items);
+			success = ForwardItems(job, state, chunk.items);
 		} else {
 			state->setMessages(int(chunk.items.size()), 0);
 			state->updateBottomBar(
 				job.session,
 				job.peerId,
 				ForwardState::State::Sending);
-			LuxurySync::forwardMessagesSync(
+			success = LuxurySync::forwardMessagesSync(
 				job.session,
 				ItemIds(chunk.items),
 				job.action,
 				job.options,
 				cancelled);
-			if (!cancelled()) {
+			if (success && !cancelled()) {
 				state->setSentMessages(int(chunk.items.size()));
 			}
 		}
-		if (cancelled()) {
+		if (!success || cancelled()) {
+			success = false;
 			break;
 		}
 		state->advanceChunk();
@@ -620,7 +655,9 @@ void RunIntelligentForward(
 		job.peerId,
 		state,
 		job.session,
-		job.sessionKey);
+		job.sessionKey,
+		success,
+		std::move(job.successCallback));
 }
 
 void ClearForwardDraft(const Api::SendAction &action) {
@@ -635,7 +672,8 @@ void ClearForwardDraft(const Api::SendAction &action) {
 void intelligentForward(
 		not_null<Main::Session*> session,
 		const Api::SendAction &action,
-		const Data::ResolvedForwardDraft &draft) {
+		const Data::ResolvedForwardDraft &draft,
+		FnMut<void()> &&successCallback) {
 	ClearForwardDraft(action);
 	if (draft.items.empty()) {
 		return;
@@ -647,14 +685,18 @@ void intelligentForward(
 		}
 		chunks.back().items.push_back(std::move(item));
 	}
-	auto job = SnapshotJob(session, action, draft.options);
+	auto job = SnapshotJob(
+		session,
+		action,
+		draft.options,
+		std::move(successCallback));
 	auto state = std::make_shared<ForwardState>(int(chunks.size()));
 	SetForwardState(job.peerId, job.sessionKey, state);
 	crl::async([
 		job = std::move(job),
 		chunks = std::move(chunks),
 		state
-	] {
+	]() mutable {
 		RunIntelligentForward(job, chunks, state);
 	});
 }
@@ -662,12 +704,17 @@ void intelligentForward(
 void forwardMessages(
 		not_null<Main::Session*> session,
 		const Api::SendAction &action,
-		const Data::ResolvedForwardDraft &draft) {
+		const Data::ResolvedForwardDraft &draft,
+		FnMut<void()> &&successCallback) {
 	ClearForwardDraft(action);
 	if (draft.items.empty()) {
 		return;
 	}
-	auto job = SnapshotJob(session, action, draft.options);
+	auto job = SnapshotJob(
+		session,
+		action,
+		draft.options,
+		std::move(successCallback));
 	auto items = SnapshotItems(session, draft.items);
 	auto state = std::make_shared<ForwardState>(1);
 	SetForwardState(job.peerId, job.sessionKey, state);
@@ -675,7 +722,7 @@ void forwardMessages(
 		job = std::move(job),
 		items = std::move(items),
 		state
-	] {
+	]() mutable {
 		RunForward(job, items, state);
 	});
 }

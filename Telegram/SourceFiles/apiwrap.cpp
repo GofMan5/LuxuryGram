@@ -3833,13 +3833,21 @@ void ApiWrap::forwardMessages(
 
 	const auto fullLuxuryForward = LuxuryForward::isFullLuxuryForwardNeeded(draft.items.front());
 	if (fullLuxuryForward) {
-		LuxuryForward::forwardMessages(_session, action, draft);
+		LuxuryForward::forwardMessages(
+			_session,
+			action,
+			draft,
+			std::move(successCallback));
 		return;
 	}
 
 	const auto luxuryIntelligentForwardNeeded = LuxuryForward::isLuxuryForwardNeeded(draft.items);
 	if (luxuryIntelligentForwardNeeded) {
-		LuxuryForward::intelligentForward(_session, action, draft);
+		LuxuryForward::intelligentForward(
+			_session,
+			action,
+			draft,
+			std::move(successCallback));
 		return;
 	}
 

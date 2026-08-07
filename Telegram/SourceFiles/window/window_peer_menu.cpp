@@ -3416,14 +3416,9 @@ base::weak_qptr<Ui::BoxContent> ShowForwardMessagesBox(
 			std::move(comment),
 			options,
 			forwardOptions);
-		const auto items = history->owner().idsToItems(msgIds);
-		const auto luxuryForwarding = LuxuryForward::isLuxuryForwardNeeded(items)
-			|| LuxuryForward::isFullLuxuryForwardNeeded(items.front());
-
-		if ((!state->submit || luxuryForwarding) && successCallback) {
+		if (!state->submit && successCallback) {
 			successCallback();
 		}
-		// LuxuryGram-changed
 	};
 
 	const auto sendMenuType = [=] {

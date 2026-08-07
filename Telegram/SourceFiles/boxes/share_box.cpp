@@ -1857,36 +1857,34 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 			&& result.front()->peer()->isSelf()
 			&& history->session().premium();
 
-		// LuxuryGram-changed
-		const auto dismiss = [=]
-		{
+		if (LuxuryForward::isFullLuxuryForwardNeeded(items.front())
+			|| LuxuryForward::isLuxuryForwardNeeded(items)) {
+			const auto requestsLeft = std::make_shared<int>(int(result.size()));
+			for (const auto thread : result) {
+				if (!comment.text.isEmpty()) {
+					auto message = Api::MessageToSend(
+						Api::SendAction(thread, options));
+					message.textWithTags = comment;
+					message.action.clearDraft = false;
+					api.sendMessage(std::move(message));
+				}
+				api.forwardMessages(
+					Data::ResolvedForwardDraft(items, forwardOptions),
+					Api::SendAction(thread, options),
+					[=] {
+						if (!--*requestsLeft && show->valid()) {
+							ShowForwardedMessageToast(
+								show,
+								&history->session(),
+								donePhraseArgs);
+						}
+					});
+			}
 			if (show->valid()) {
 				show->hideLayer();
 			}
-		};
-
-		if (LuxuryForward::isFullLuxuryForwardNeeded(items.front())) {
-			for (const auto thread : result) {
-				LuxuryForward::forwardMessages(
-					&history->owner().session(),
-					Api::SendAction(thread, options),
-					Data::ResolvedForwardDraft(items, forwardOptions));
-			}
-
-			dismiss();
-			return;
-		} else if (LuxuryForward::isLuxuryForwardNeeded(items)) {
-			for (const auto thread : result) {
-				LuxuryForward::intelligentForward(
-					&history->owner().session(),
-					Api::SendAction(thread, options),
-					Data::ResolvedForwardDraft(items, forwardOptions));
-			}
-
-			dismiss();
 			return;
 		}
-		// LuxuryGram-changed
 
 		for (const auto &thread : result) {
 			const auto peer = thread->peer();
