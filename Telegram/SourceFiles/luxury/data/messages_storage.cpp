@@ -1,4 +1,4 @@
-﻿// This is the source code of AyuGram for Desktop.
+// This is the source code of AyuGram for Desktop.
 //
 // We do not and cannot prevent the use of our code,
 // but be respectful and credit the original author.
@@ -28,11 +28,11 @@ ID DatabaseUserId(const Main::Session &session) {
 } // namespace
 
 template<typename DerivedMessage>
-std::vector<LuxuryMessageBase> convertToBase(const std::vector<DerivedMessage> &messages) {
+std::vector<LuxuryMessageBase> convertToBase(std::vector<DerivedMessage> messages) {
 	std::vector<LuxuryMessageBase> based;
 	based.reserve(messages.size());
-	for (const auto &msg : messages) {
-		based.push_back(static_cast<LuxuryMessageBase>(msg));
+	for (auto &message : messages) {
+		based.push_back(std::move(static_cast<LuxuryMessageBase&>(message)));
 	}
 	return based;
 }
@@ -43,8 +43,8 @@ void map(not_null<HistoryItem*> item, LuxuryMessageBase &message) {
 	message.userId = userId;
 	message.dialogId = getDialogIdFromPeer(item->history()->peer);
 	message.groupedId = item->groupId().raw();
-	message.peerId = item->history()->peer->id.value & PeerId::kChatTypeMask;
-	message.fromId = item->from()->id.value & PeerId::kChatTypeMask;
+	message.peerId = static_cast<ID>(item->history()->peer->id.value);
+	message.fromId = static_cast<ID>(item->from()->id.value);
 	if (item->topic()) {
 		message.topicId = item->topicRootId().bare;
 	} else {
@@ -143,7 +143,7 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 		return;
 	}
 
-	LuxuryDatabase::addDeletedMessage(message);
+	LuxuryDatabase::addDeletedMessage(std::move(message));
 }
 
 void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
@@ -156,7 +156,7 @@ void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
 			messages.push_back(std::move(message));
 		}
 	}
-	LuxuryDatabase::addDeletedMessages(messages);
+	LuxuryDatabase::addDeletedMessages(std::move(messages));
 }
 
 std::vector<LuxuryMessageBase>

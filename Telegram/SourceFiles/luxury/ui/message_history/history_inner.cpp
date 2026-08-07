@@ -810,7 +810,7 @@ void InnerWidget::addMessages(Direction direction, const std::vector<LuxuryMessa
 	auto &addToItems = (direction == Direction::Up)
 						   ? _items
 						   : newItemsForDownDirection;
-	addToItems.reserve(oldItemsCount + messages.size() * 2);
+	addToItems.reserve(oldItemsCount + messages.size());
 
 	for (const auto &message : messages) {
 		const auto id = _item
@@ -819,7 +819,6 @@ void InnerWidget::addMessages(Direction direction, const std::vector<LuxuryMessa
 		if (_messageIds.find(id) != _messageIds.end()) {
 			continue;
 		}
-		auto count = 0;
 		const auto addOne = [&](
 			OwnedItem item,
 			TimeId sentDate,
@@ -831,22 +830,12 @@ void InnerWidget::addMessages(Direction direction, const std::vector<LuxuryMessa
 			_messageIds.emplace(id);
 			_itemsByData.emplace(item->data(), item.get());
 			addToItems.push_back(std::move(item));
-			++count;
 		};
 		GenerateItems(
 			this,
 			_history,
 			message,
 			addOne);
-		if (count > 1) {
-			// Reverse the inner order of the added messages, because we load messages
-			// from bottom to top but inside one message they go from top to bottom.
-			auto full = addToItems.size();
-			auto from = full - count;
-			for (auto i = 0, toReverse = count / 2; i != toReverse; ++i) {
-				std::swap(addToItems[from + i], addToItems[full - i - 1]);
-			}
-		}
 	}
 	auto newItemsCount = _items.size() + ((direction == Direction::Up) ? 0 : newItemsForDownDirection.size());
 	if (newItemsCount != oldItemsCount) {

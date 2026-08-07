@@ -82,11 +82,13 @@ MTPObject deserializeObject(const std::vector<char> &serialized) {
 }
 
 std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<HistoryItem*> item) {
-	if (item->emptyText()) {
+	auto textWithEntities = item->originalText();
+	if (textWithEntities.empty()) {
+		textWithEntities = item->notificationText();
+	}
+	if (textWithEntities.empty()) {
 		return std::make_pair("", std::vector<char>());
 	}
-	auto textWithEntities = item->originalText();
-
 
 	std::vector<char> entities;
 	if (!textWithEntities.entities.empty()) {

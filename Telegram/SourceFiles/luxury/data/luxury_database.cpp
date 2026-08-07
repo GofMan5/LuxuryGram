@@ -335,11 +335,13 @@ bool hasRevisions(ID userId, ID dialogId, ID messageId) {
 	}
 }
 
-void addDeletedMessage(const DeletedMessage &message) {
-	addDeletedMessages({ message });
+void addDeletedMessage(DeletedMessage message) {
+	auto messages = std::vector<DeletedMessage>();
+	messages.push_back(std::move(message));
+	addDeletedMessages(std::move(messages));
 }
 
-void addDeletedMessages(const std::vector<DeletedMessage> &messages) {
+void addDeletedMessages(std::vector<DeletedMessage> messages) {
 	if (messages.empty()) {
 		return;
 	}

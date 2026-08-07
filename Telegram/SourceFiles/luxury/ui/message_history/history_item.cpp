@@ -65,14 +65,23 @@ void OwnedItem::clearView() {
 void GenerateItems(
 	not_null<HistoryView::ElementDelegate*> delegate,
 	not_null<History*> history,
-	LuxuryMessageBase message,
+	const LuxuryMessageBase &message,
 	Fn<void(OwnedItem item, TimeId sentDate, MsgId)> callback) {
-	PeerData *from = history->owner().userLoaded(message.fromId);
-	if (!from) {
-		from = history->owner().channelLoaded(message.fromId);
+	const auto fromId = PeerId(PeerIdHelper(static_cast<BareId>(message.fromId)));
+	PeerData *from = nullptr;
+	if (fromId.is<UserId>()) {
+		from = history->owner().userLoaded(fromId.to<UserId>());
+	} else if (fromId.is<ChannelId>()) {
+		from = history->owner().channelLoaded(fromId.to<ChannelId>());
+	} else if (fromId.is<ChatId>()) {
+		from = history->owner().chatLoaded(fromId.to<ChatId>());
 	}
-	if (!from) {
-		from = history->owner().chatLoaded(message.fromId);
+	if (!from && fromId.is<UserId>()) {
+		const auto bare = fromId.value & PeerId::kChatTypeMask;
+		from = history->owner().channelLoaded(ChannelId(bare));
+		if (!from) {
+			from = history->owner().chatLoaded(ChatId(bare));
+		}
 	}
 	const auto date = message.entityCreateDate;
 	const auto addPart = [&](
