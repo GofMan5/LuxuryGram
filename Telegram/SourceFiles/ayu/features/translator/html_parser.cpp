@@ -11,7 +11,7 @@ namespace Luxury::Translator::Html {
 // yandex messes up HTML badly, so formatting removed for now
 
 QString entitiesToHtml(const TextWithEntities &text) {
-	return text.text;
+	return text.text.toHtmlEscaped().replace(u'\n', u"<br>"_q);
 }
 
 TextWithEntities htmlToEntities(const QString &text) {
