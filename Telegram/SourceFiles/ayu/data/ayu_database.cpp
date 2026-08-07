@@ -10,6 +10,9 @@
 #include "ayu/libs/sqlite/sqlite_orm.h"
 #include "base/unixtime.h"
 
+#include <QFile>
+
+#include <array>
 #include <mutex>
 
 using namespace sqlite_orm;
@@ -162,7 +165,7 @@ void migrateToV1(decltype(storage) &storage) {
 
 }
 
-void runMigrations(decltype(storage) &storage) {
+bool runMigrations(decltype(storage) &storage) {
 	constexpr int kLatestVersion = 1;
 
 	const std::map<int, Fn<void(decltype(storage) &)>> migrations = {
@@ -183,7 +186,7 @@ void runMigrations(decltype(storage) &storage) {
 
 	if (currentVersion >= kLatestVersion) {
 		LOG(("Database is ok"));
-		return;
+		return true;
 	}
 
 	LOG(("Database version: %1. Latest version: %2.").arg(currentVersion).arg(kLatestVersion));
@@ -202,31 +205,50 @@ void runMigrations(decltype(storage) &storage) {
 			} catch (...) {
 				storage.rollback();
 				LOG(("Failed to apply migration for version: %1.").arg(v));
-				LuxuryDatabase::moveCurrentDatabase();
-
-				return;
+				return LuxuryDatabase::moveCurrentDatabase();
 			}
 		}
 	}
+	return true;
 }
 
 namespace LuxuryDatabase {
 
-void moveCurrentDatabase() {
+bool moveCurrentDatabase() {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	const auto time = base::unixtime::now();
-
-	if (QFile::exists("./tdata/ayudata.db")) {
-		QFile::rename("./tdata/ayudata.db", QString("./tdata/ayudata_%1.db").arg(time));
+	const auto source = u"./tdata/ayudata.db"_q;
+	auto target = u"./tdata/ayudata_%1.db"_q.arg(time);
+	for (auto index = 2
+		; QFile::exists(target)
+		|| QFile::exists(target + u"-shm"_q)
+		|| QFile::exists(target + u"-wal"_q)
+		; ++index) {
+		target = u"./tdata/ayudata_%1_%2.db"_q.arg(time).arg(index);
 	}
-
-	if (QFile::exists("./tdata/ayudata.db-shm")) {
-		QFile::rename("./tdata/ayudata.db-shm", QString("./tdata/ayudata_%1.db-shm").arg(time));
+	const auto files = std::array{
+		std::pair(source + u"-shm"_q, target + u"-shm"_q),
+		std::pair(source + u"-wal"_q, target + u"-wal"_q),
+		std::pair(source, target),
+	};
+	auto moved = std::vector<std::pair<QString, QString>>();
+	for (const auto &[from, to] : files) {
+		if (!QFile::exists(from)) {
+			continue;
+		}
+		if (QFile::rename(from, to)) {
+			moved.emplace_back(from, to);
+			continue;
+		}
+		LOG(("Failed to preserve database file: %1").arg(from));
+		for (auto i = moved.rbegin(); i != moved.rend(); ++i) {
+			if (!QFile::rename(i->second, i->first)) {
+				LOG(("Failed to roll back database file: %1").arg(i->first));
+			}
+		}
+		return false;
 	}
-
-	if (QFile::exists("./tdata/ayudata.db-wal")) {
-		QFile::rename("./tdata/ayudata.db-wal", QString("./tdata/ayudata_%1.db-wal").arg(time));
-	}
+	return true;
 }
 
 void initialize() {
@@ -234,12 +256,16 @@ void initialize() {
 	try {
 		storage.sync_schema(true);
 
-		runMigrations(storage);
+		if (!runMigrations(storage)) {
+			return;
+		}
 
 		storage.sync_schema(true);
 	} catch (const std::exception &ex) {
 		LOG(("Database initialization failed: %1").arg(ex.what()));
-		moveCurrentDatabase();
+		if (!moveCurrentDatabase()) {
+			return;
+		}
 
 		storage.sync_schema(true);
 		if (!storage.get_pointer<SchemaVersion>(1)) {
@@ -259,7 +285,7 @@ void addEditedMessage(const EditedMessage &message) {
 			storage.rollback();
 		} catch (...) {
 		}
-		LOG(("Failed to save edited message for some reason: %1").arg(ex.what()));
+		LOG(("Failed to save edited message: %1").arg(ex.what()));
 	}
 }
 
@@ -312,7 +338,7 @@ void addDeletedMessage(const DeletedMessage &message) {
 			storage.rollback();
 		} catch (...) {
 		}
-		LOG(("Failed to save edited message for some reason: %1").arg(ex.what()));
+		LOG(("Failed to save deleted message: %1").arg(ex.what()));
 	}
 }
 
@@ -403,7 +429,8 @@ void clearDeletedMessages(ID userId, ID dialogId, ID topicId) {
 				(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0)
 			)
 		);
-	} catch (std::exception &) {
+	} catch (const std::exception &ex) {
+		LOG(("Failed to clear deleted messages: %1").arg(ex.what()));
 	}
 }
 

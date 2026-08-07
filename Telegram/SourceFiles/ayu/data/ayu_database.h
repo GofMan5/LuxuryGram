@@ -56,6 +56,6 @@ void deleteAllExclusions();
 bool hasFilters();
 bool hasPerDialogFilters();
 
-void moveCurrentDatabase();
+[[nodiscard]] bool moveCurrentDatabase();
 
 }
