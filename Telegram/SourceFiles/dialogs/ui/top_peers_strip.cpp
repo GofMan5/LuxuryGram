@@ -834,7 +834,6 @@ void TopPeersStrip::paintUserpic(
 		q.setCompositionMode(QPainter::CompositionMode_Source);
 		const auto onlineSize = st::dialogsOnlineBadgeSize;
 		const auto stroke = st::dialogsOnlineBadgeStroke;
-		const auto skip = st::dialogsOnlineBadgeSkip;
 		const auto shrink = (onlineSize / 2) * (1. - online);
 
 		auto pen = QPen(Qt::transparent);
