@@ -48,6 +48,7 @@ jobs:
     runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || ((github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/nightly') && 'depot-windows-latest-16' || 'windows-latest') }}
 
     strategy:
+      fail-fast: false
       matrix:
         arch: [x64_x86, x64, arm64]
         qt: ["", qt6]
@@ -122,6 +123,31 @@ jobs:
           arch: ${{ matrix.arch }}
           sdk: ${{ env.SDK }}
           toolset: ${{ case(matrix.arch == 'arm64', '', '14.44') }}
+
+      - name: Free runner disk space.
+        shell: pwsh
+        run: |
+          $before = (Get-PSDrive C).Free
+          $paths = @(
+            'C:\Program Files\Android',
+            'C:\Program Files\Java',
+            'C:\Program Files\LLVM',
+            'C:\Program Files\Microsoft SQL Server',
+            'C:\Program Files\MongoDB',
+            'C:\Program Files\MySQL',
+            'C:\Program Files\PostgreSQL',
+            'C:\ghcup',
+            'C:\hostedtoolcache\windows\CodeQL'
+          )
+          foreach ($path in $paths) {
+            if (Test-Path -LiteralPath $path) {
+              Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+          $after = (Get-PSDrive C).Free
+          "free_before_gib=$([math]::Round($before / 1GB, 2))"
+          "free_after_gib=$([math]::Round($after / 1GB, 2))"
+          "freed_gib=$([math]::Round(($after - $before) / 1GB, 2))"
 
       - name: NuGet sources.
         run: |
