@@ -12,6 +12,7 @@
 #include "api/api_attached_stickers.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/ui/message_history/history_section.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "base/call_delayed.h"
 #include "base/unixtime.h"
 #include "base/platform/base_platform_info.h"
