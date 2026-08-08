@@ -6,7 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/components/avatar_corners_preview.h"
 
-#include "data/data_peer_id.h"
+#include "data/data_peer.h"
 #include "styles/style_luxury_icons.h"
 #include "styles/style_dialogs.h"
 #include "styles/style_settings.h"
