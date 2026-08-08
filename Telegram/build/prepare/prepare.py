@@ -743,7 +743,7 @@ win:
 
 # Somehow in x86 Debug build dav1d crashes on AV1 10bpc videos.
 stage('dav1d', """
-    git clone -b 1.5.4 https://code.videolan.org/videolan/dav1d.git
+    git clone -b 1.5.4 https://github.com/videolan/dav1d.git
     cd dav1d
 win32:
     SET "TARGET=x86"
