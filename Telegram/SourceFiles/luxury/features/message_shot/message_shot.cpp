@@ -224,7 +224,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 	}
 	auto messageIds = std::vector<FullMsgId>();
 	messageIds.reserve(messages.size());
-	for (const auto message : messages) {
+	for (const auto &message : messages) {
 		messageIds.push_back(message->fullId());
 	}
 
@@ -498,7 +498,7 @@ void ShowMessageShotBox(
 		Fn<void()> clearSelected) {
 	auto messages = std::vector<not_null<HistoryItem*>>();
 	messages.reserve(ids.size());
-	for (const auto item : ids) {
+	for (const auto &item : ids) {
 		if (const auto message = resolveMessage(item)) {
 			messages.push_back(message);
 		}

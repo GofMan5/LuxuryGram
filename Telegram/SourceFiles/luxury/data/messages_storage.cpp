@@ -149,7 +149,7 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
 	auto messages = std::vector<DeletedMessage>();
 	messages.reserve(items.size());
-	for (const auto item : items) {
+	for (const auto &item : items) {
 		auto message = DeletedMessage();
 		map(item, message);
 		if (!message.text.empty()) {

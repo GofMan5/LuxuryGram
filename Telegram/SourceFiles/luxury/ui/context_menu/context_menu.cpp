@@ -69,7 +69,7 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 					}
 				}
 				LuxuryMessages::clearDeletedMessages(peer, topicId);
-				for (const auto item : items) {
+				for (const auto &item : items) {
 					item->destroy();
 				}
 				close();
@@ -589,7 +589,7 @@ void AddTranslateMessageAction(
 		tr::now,
 		lt_name,
 		Ui::LanguageName(to));
-	for (const auto action : menu->actions()) {
+	for (const auto &action : menu->actions()) {
 		if (action->text() == title) {
 			return;
 		}

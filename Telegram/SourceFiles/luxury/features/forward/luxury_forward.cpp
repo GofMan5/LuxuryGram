@@ -108,7 +108,7 @@ std::vector<ForwardItem> SnapshotItems(
 		const std::vector<not_null<HistoryItem*>> &items) {
 	auto result = std::vector<ForwardItem>();
 	result.reserve(items.size());
-	for (const auto item : items) {
+	for (const auto &item : items) {
 		result.push_back(SnapshotItem(session, item));
 	}
 	return result;
