@@ -737,7 +737,7 @@ void processMessagesDelete(
 		const std::vector<not_null<HistoryItem*>> &items) {
 	auto toStore = std::vector<not_null<HistoryItem*>>();
 	toStore.reserve(items.size());
-	for (const auto item : items) {
+	for (const auto &item : items) {
 		Expects(isMessageSavable(item));
 		if (item->isDeleted()) {
 			continue;
