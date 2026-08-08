@@ -304,7 +304,7 @@ void LuxuryMusicButton::makeCover() {
 			if (noCover) {
 				pixmap = MakeNoCoverImage(QSize(size, size));
 			} else if (fetched) {
-				const auto image = Image(background);
+				const auto image = Image(std::move(background));
 				pixmap = image.pix(
 					QSize(size, size),
 					Images::PrepareArgs{
