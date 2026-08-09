@@ -54,7 +54,7 @@ void Fill(Platform::Tray &tray) {
 	}
 	tray.addSeparator();
 	constexpr auto kMaxLength = 30;
-	for (const auto account : accounts) {
+	for (const auto &account : accounts) {
 		const auto user = account->session().user();
 		const auto weak = base::make_weak(account);
 		tray.addAction(
