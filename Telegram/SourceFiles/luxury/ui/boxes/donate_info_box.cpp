@@ -114,7 +114,7 @@ object_ptr<Ui::RpWidget> InfoRow(
 
 	label->setMarkedText(
 		text,
-		std::move(context)
+		context
 	);
 
 	object_ptr<Info::Profile::FloatingIcon>(
@@ -217,7 +217,7 @@ void FillDonateInfoBox(not_null<Ui::GenericBox*> box, not_null<Window::SessionCo
 		proofText,
 		&st::menuIconPhoto,
 		Core::TextContext({
-			.session = std::move(&controller->session()),
+			.session = &controller->session(),
 		})));
 
 	Ui::AddSkip(box->verticalLayout());
@@ -231,7 +231,7 @@ void FillDonateInfoBox(not_null<Ui::GenericBox*> box, not_null<Window::SessionCo
 		},
 		&st::menuIconStarRefShare,
 		Core::TextContext({
-			.session = std::move(&controller->session()),
+			.session = &controller->session(),
 		})));
 
 	const auto closeButton = box->addButton(tr::lng_close(), [=] { box->closeBox(); });
