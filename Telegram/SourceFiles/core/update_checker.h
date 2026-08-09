@@ -9,10 +9,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "mtproto/dedicated_file_loader.h"
 
-namespace Main {
-class Session;
-} // namespace Main
-
 namespace Core {
 
 bool UpdaterDisabled();
@@ -40,8 +36,6 @@ public:
 	void start(bool forceWait = false);
 	void stop();
 	void test();
-
-	void setMtproto(base::weak_ptr<Main::Session> session);
 
 	State state() const;
 	int already() const;

@@ -19,9 +19,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/click_handler_types.h"
 #include "core/version.h"
 #include "mainwindow.h"
-#include "main/main_account.h"
-#include "main/main_session.h"
-#include "main/main_domain.h"
 #include "info/info_memento.h"
 #include "info/info_controller.h"
 #include "window/window_controller.h"
@@ -211,30 +208,6 @@ private:
 	QString _url;
 	QNetworkAccessManager _manager;
 	std::unique_ptr<QNetworkReply> _reply;
-
-};
-
-class MtpChecker : public Checker {
-public:
-	MtpChecker(base::weak_ptr<Main::Session> session, bool testing);
-
-	void start() override;
-
-private:
-	using FileLocation = MTP::DedicatedLoader::Location;
-
-	using Checker::fail;
-	Fn<void(const MTP::Error &error)> failHandler();
-
-	void gotMessage(const MTPmessages_Messages &result);
-	std::optional<FileLocation> parseMessage(
-		const MTPmessages_Messages &result) const;
-	std::optional<FileLocation> parseText(const QByteArray &text) const;
-	FileLocation validateLatestLocation(
-		uint64 availableVersion,
-		const FileLocation &location) const;
-
-	MTP::WeakInstance _mtp;
 
 };
 
@@ -966,135 +939,6 @@ void HttpLoaderActor::partFailed(QNetworkReply::NetworkError e) {
 	_parent->threadSafeFailed();
 }
 
-MtpChecker::MtpChecker(
-	base::weak_ptr<Main::Session> session,
-	bool testing)
-: Checker(testing)
-, _mtp(session) {
-}
-
-void MtpChecker::start() {
-	if (!_mtp.valid()) {
-		LOG(("Update Info: MTP is unavailable."));
-		crl::on_main(this, [=] { fail(); });
-		return;
-	}
-	const auto updaterVersion = Platform::AutoUpdateVersion();
-	const auto feed = "tdhbcfeed"
-		+ (updaterVersion > 1 ? QString::number(updaterVersion) : QString());
-	MTP::ResolveChannel(&_mtp, feed, [=](
-			const MTPInputChannel &channel) {
-		_mtp.send(
-			MTPmessages_GetHistory(
-				MTP_inputPeerChannel(
-					channel.c_inputChannel().vchannel_id(),
-					channel.c_inputChannel().vaccess_hash()),
-				MTP_int(0),  // offset_id
-				MTP_int(0),  // offset_date
-				MTP_int(0),  // add_offset
-				MTP_int(1),  // limit
-				MTP_int(0),  // max_id
-				MTP_int(0),  // min_id
-				MTP_long(0)), // hash
-			[=](const MTPmessages_Messages &result) { gotMessage(result); },
-			failHandler());
-	}, [=] { fail(); });
-}
-
-void MtpChecker::gotMessage(const MTPmessages_Messages &result) {
-	const auto location = parseMessage(result);
-	if (!location) {
-		fail();
-		return;
-	} else if (location->username.isEmpty()) {
-		done(nullptr);
-		return;
-	}
-	const auto ready = [=](std::unique_ptr<MTP::DedicatedLoader> loader) {
-		if (loader) {
-			done(std::move(loader));
-		} else {
-			fail();
-		}
-	};
-	MTP::StartDedicatedLoader(&_mtp, *location, UpdatesFolder(), ready);
-}
-
-auto MtpChecker::parseMessage(const MTPmessages_Messages &result) const
--> std::optional<FileLocation> {
-	const auto message = MTP::GetMessagesElement(result);
-	if (!message || message->type() != mtpc_message) {
-		LOG(("Update Error: MTP feed message not found."));
-		return std::nullopt;
-	}
-	return parseText(message->c_message().vmessage().v);
-}
-
-auto MtpChecker::parseText(const QByteArray &text) const
--> std::optional<FileLocation> {
-	auto bestAvailableVersion = 0ULL;
-	auto bestLocation = FileLocation();
-	const auto accumulate = [&](
-			uint64 version,
-			bool isAlpha,
-			const QJsonObject &map) {
-		if (isAlpha) {
-			LOG(("Update Error: MTP closed alpha found."));
-			return false;
-		}
-		bestAvailableVersion = version;
-		const auto key = testing() ? "testing" : "released";
-		const auto entry = map.constFind(key);
-		if (entry == map.constEnd()) {
-			LOG(("Update Error: MTP entry not found for version %1."
-				).arg(version));
-			return false;
-		} else if (!(*entry).isString()) {
-			LOG(("Update Error: MTP entry is not a string for version %1."
-				).arg(version));
-			return false;
-		}
-		const auto full = (*entry).toString();
-		const auto start = full.indexOf(':');
-		const auto post = full.indexOf('#');
-		if (start <= 0 || post < start) {
-			LOG(("Update Error: MTP entry '%1' is bad for version %2."
-				).arg(full
-				).arg(version));
-			return false;
-		}
-		bestLocation.username = full.mid(start + 1, post - start - 1);
-		bestLocation.postId = base::StringViewMid(full, post + 1).toInt();
-		if (bestLocation.username.isEmpty() || !bestLocation.postId) {
-			LOG(("Update Error: MTP entry '%1' is bad for version %2."
-				).arg(full
-				).arg(version));
-			return false;
-		}
-		return true;
-	};
-	const auto result = ParseCommonMap(text, testing(), accumulate);
-	if (!result) {
-		return std::nullopt;
-	}
-	return validateLatestLocation(bestAvailableVersion, bestLocation);
-}
-
-auto MtpChecker::validateLatestLocation(
-		uint64 availableVersion,
-		const FileLocation &location) const -> FileLocation {
-	const auto myVersion = uint64(AppVersion);
-	return (availableVersion <= myVersion) ? FileLocation() : location;
-}
-
-Fn<void(const MTP::Error &error)> MtpChecker::failHandler() {
-	return [=](const MTP::Error &error) {
-		LOG(("Update Error: MTP check failed with '%1'"
-			).arg(QString::number(error.code()) + ':' + error.type()));
-		fail();
-	};
-}
-
 #if !defined Q_OS_WIN && !defined Q_OS_MAC
 FlatpakChecker::FlatpakChecker(bool testing)
 : Checker(testing)
@@ -1281,8 +1125,6 @@ public:
 	int size() const;
 	bool percent() const;
 
-	void setMtproto(base::weak_ptr<Main::Session> session);
-
 	~Updater();
 
 private:
@@ -1323,11 +1165,8 @@ private:
 	rpl::event_stream<> _failed;
 	rpl::event_stream<> _ready;
 	Implementation _httpImplementation;
-	Implementation _mtpImplementation;
 	Implementation _flatpakImplementation;
 	std::shared_ptr<Loader> _activeLoader;
-	bool _usingMtprotoLoader = (cAlphaVersion() != 0);
-	base::weak_ptr<Main::Session> _session;
 
 	rpl::lifetime _lifetime;
 
@@ -1439,7 +1278,6 @@ bool Updater::percent() const {
 
 void Updater::stop() {
 	_httpImplementation = Implementation();
-	_mtpImplementation = Implementation();
 	_flatpakImplementation = Implementation{
 		std::move(_flatpakImplementation.checker)
 	};
@@ -1549,19 +1387,11 @@ void Updater::test() {
 	start(false);
 }
 
-void Updater::setMtproto(base::weak_ptr<Main::Session> session) {
-	_session = session;
-}
-
 void Updater::handleTimeout() {
 	if (_action == Action::Checking) {
-		const auto reset = [&](Implementation &which) {
-			if (base::take(which.checker)) {
-				which.failed = true;
-			}
-		};
-		reset(_httpImplementation);
-		reset(_mtpImplementation);
+		if (base::take(_httpImplementation.checker)) {
+			_httpImplementation.failed = true;
+		}
 		if (!tryLoaders()) {
 			cSetLastUpdateCheck(0);
 			_timer.callOnce(kUpdaterTimeout);
@@ -1572,7 +1402,7 @@ void Updater::handleTimeout() {
 }
 
 bool Updater::tryLoaders() {
-	if (_httpImplementation.checker || _mtpImplementation.checker) {
+	if (_httpImplementation.checker) {
 		// Some checkers didn't finish yet.
 		return true;
 	}
@@ -1608,18 +1438,11 @@ bool Updater::tryLoaders() {
 		} else {
 			tryOne(_flatpakImplementation);
 		}
-	} else if (_mtpImplementation.failed && _httpImplementation.failed) {
+	} else if (_httpImplementation.failed) {
 		_failed.fire({});
 		return false;
-	} else if (!_mtpImplementation.loader) {
-		tryOne(_httpImplementation);
-	} else if (!_httpImplementation.loader) {
-		tryOne(_mtpImplementation);
 	} else {
-		tryOne(_usingMtprotoLoader
-			? _mtpImplementation
-			: _httpImplementation);
-		_usingMtprotoLoader = !_usingMtprotoLoader;
+		tryOne(_httpImplementation);
 	}
 	return true;
 }
@@ -1654,11 +1477,6 @@ Updater::~Updater() {
 
 UpdateChecker::UpdateChecker()
 : _updater(GetUpdaterInstance()) {
-	if (IsAppLaunched() && Core::App().domain().started()) {
-		if (const auto session = Core::App().activeAccount().maybeSession()) {
-			_updater->setMtproto(session);
-		}
-	}
 }
 
 rpl::producer<> UpdateChecker::checking() const {
@@ -1688,10 +1506,6 @@ void UpdateChecker::start(bool forceWait) {
 
 void UpdateChecker::test() {
 	_updater->test();
-}
-
-void UpdateChecker::setMtproto(base::weak_ptr<Main::Session> session) {
-	_updater->setMtproto(session);
 }
 
 void UpdateChecker::stop() {
