@@ -1860,7 +1860,7 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 		if (LuxuryForward::isFullLuxuryForwardNeeded(items.front())
 			|| LuxuryForward::isLuxuryForwardNeeded(items)) {
 			const auto requestsLeft = std::make_shared<int>(int(result.size()));
-			for (const auto thread : result) {
+			for (const auto &thread : result) {
 				const auto peer = thread->peer();
 				const auto forum = thread->owningHistory()->asForum();
 				const auto needNewTopic = forum
