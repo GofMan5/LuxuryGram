@@ -33,7 +33,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
 #include "main/main_domain.h"
-#include "main/main_app_config.h"
 #include "mtproto/mtproto_config.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
@@ -65,11 +64,6 @@ constexpr auto kUpdateFullPeerTimeout = crl::time(5000); // Not more than once i
 constexpr auto kUserpicSize = 160;
 
 using UpdateFlag = Data::PeerUpdate::Flag;
-
-[[nodiscard]] const std::vector<QString> &IgnoredReasons(
-		not_null<Main::Session*> session) {
-	return session->appConfig().ignoredRestrictionReasons();
-}
 
 [[nodiscard]] int ParseRegistrationDate(const QString &text) {
 	// MM.YYYY
