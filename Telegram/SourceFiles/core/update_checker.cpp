@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/click_handler_types.h"
 #include "core/version.h"
 #include "mainwindow.h"
+#include "main/main_session.h"
 #include "info/info_memento.h"
 #include "info/info_controller.h"
 #include "window/window_controller.h"
