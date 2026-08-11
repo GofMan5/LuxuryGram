@@ -21,6 +21,7 @@
 #include <QtNetwork/QNetworkRequest>
 
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 
 namespace Luxury::Ui::Itunes {
@@ -29,6 +30,7 @@ namespace {
 constexpr auto kMaxResponseBytes = 8 * 1024 * 1024;
 constexpr auto kMaxArtworkPixels = 4 * 1024 * 1024;
 constexpr auto kArtworkCacheKiB = 16 * 1024;
+constexpr auto kParallelFetchLimit = 3;
 
 struct Cache {
 	QCache<QString, QImage> entries{ kArtworkCacheKiB };
@@ -39,6 +41,49 @@ Cache &cache() {
 	static auto result = Cache();
 	return result;
 }
+
+// A track without artwork is cached as a null image, so a recycled list row
+// does not repeat the lookup on every scroll pass.
+QImage rememberMissing(const QString &key) {
+	auto &state = cache();
+	const auto lock = std::lock_guard(state.mutex);
+	state.entries.insert(key, new QImage(), 1);
+	return {};
+}
+
+// Every lookup blocks a shared crl::async thread for up to two timeouts, so
+// only a few may run while a long list scrolls past.
+class FetchSlot final {
+public:
+	FetchSlot() {
+		auto count = counter().load(std::memory_order_relaxed);
+		while (count < kParallelFetchLimit) {
+			if (counter().compare_exchange_weak(count, count + 1)) {
+				_taken = true;
+				break;
+			}
+		}
+	}
+
+	~FetchSlot() {
+		if (_taken) {
+			counter().fetch_sub(1);
+		}
+	}
+
+	[[nodiscard]] bool taken() const {
+		return _taken;
+	}
+
+private:
+	[[nodiscard]] static std::atomic<int> &counter() {
+		static auto result = std::atomic<int>(0);
+		return result;
+	}
+
+	bool _taken = false;
+
+};
 
 QString translitSafe(const QString &s) {
 	// ponytail: NFKD plus common exceptions; extend only for a real artist match.
@@ -277,32 +322,38 @@ QImage FetchCover(const QString &performer, const QString &title, int sizeHintPx
 		}
 	}
 
+	const auto slot = FetchSlot();
+	if (!slot.taken()) {
+		// Not remembered as missing: a later refresh of the row retries.
+		return {};
+	}
+
 	const auto url = buildItunesUrl(perf, titl);
 	const auto json = getBytesWithTimeout(url, timeoutMs);
-	if (json.isEmpty()) return {};
+	if (json.isEmpty()) return rememberMissing(key);
 	const auto tracks = parseTracks(json);
-	if (tracks.isEmpty()) return {};
+	if (tracks.isEmpty()) return rememberMissing(key);
 
 	const auto baseArtists = splitArtists(perf);
 	auto artwork = pickArtworkUrl(tracks, titl, baseArtists);
 	artwork = upgradeArtworkSize(std::move(artwork), artworkSize);
-	if (artwork.isEmpty()) return {};
+	if (artwork.isEmpty()) return rememberMissing(key);
 
 	const auto imgBytes = getBytesWithTimeout(QUrl(artwork), timeoutMs);
-	if (imgBytes.isEmpty()) return {};
+	if (imgBytes.isEmpty()) return rememberMissing(key);
 
 	auto buffer = QBuffer();
 	buffer.setData(imgBytes);
-	if (!buffer.open(QIODevice::ReadOnly)) return {};
+	if (!buffer.open(QIODevice::ReadOnly)) return rememberMissing(key);
 	auto reader = QImageReader(&buffer);
 	const auto size = reader.size();
 	if (!size.isValid()
 		|| (qint64(size.width()) * size.height()) > kMaxArtworkPixels) {
-		return {};
+		return rememberMissing(key);
 	}
 	reader.setAutoTransform(true);
 	const auto image = reader.read();
-	if (image.isNull()) return {};
+	if (image.isNull()) return rememberMissing(key);
 
 	{
 		auto &state = cache();
