@@ -19,6 +19,7 @@ jobs:
 
     outputs:
       version: ${{ steps.resolve.outputs.version }}
+      update: ${{ steps.resolve.outputs.update }}
 
     steps:
       - name: Clone.
@@ -41,8 +42,16 @@ jobs:
             exit 1
           fi
 
+          UPDATE=$(sed -n "s/^constexpr auto LuxuryUpdateVersion = \(.*\);$/\1/p" Telegram/SourceFiles/core/version.h | tr -d "'")
+          EXPECTED=$(echo "$VERSION" | awk -F. '{ print $1 * 1000000 + $2 * 1000 + $3 }')
+          if [ "$UPDATE" != "$EXPECTED" ]; then
+            echo "LuxuryUpdateVersion is $UPDATE but version $VERSION expects $EXPECTED." >&2
+            exit 1
+          fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION"
+          echo "update=$UPDATE" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION (update counter $UPDATE)"
 
   windows-libraries:
     name: Windows x64 libraries
@@ -171,6 +180,7 @@ jobs:
     env:
       PREPARE_PATH: "Telegram/build/prepare/prepare.py"
       VERSION: ${{ needs.version.outputs.version }}
+      UPDATE_VERSION: ${{ needs.version.outputs.update }}
 
     defaults:
       run:
@@ -194,6 +204,17 @@ jobs:
           ref: ${{ inputs.tag }}
           submodules: recursive
           path: ${{ env.TBUILD }}\${{ env.REPO_NAME }}
+
+      - name: Update signing key.
+        shell: bash
+        env:
+          UPDATE_KEY: ${{ secrets.LUXURY_UPDATE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$UPDATE_KEY" ]; then
+            echo "LUXURY_UPDATE_PRIVATE_KEY is not set: refusing to publish a release without signed updates." >&2
+            exit 1
+          fi
+          python "$TBUILD/$REPO_NAME/Telegram/build/write_packer_private.py" "$TBUILD/$REPO_NAME/Telegram/SourceFiles/_other/packer_private.h"
 
       - name: First set up.
         shell: bash
@@ -284,10 +305,23 @@ jobs:
           qt6 ^
           %TDESKTOP_BUILD_API% ^
           -D CMAKE_CONFIGURATION_TYPES=Release ^
-          -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
+          -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
 
           cmake --build ..\out --config Release --parallel
+
+      - name: Sign update package.
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:TBUILD "$env:REPO_NAME\out\Release"
+          Push-Location $out
+          & (Join-Path $out 'Packer.exe') -path LuxuryGram.exe -path Updater.exe -version $env:UPDATE_VERSION -target win64
+          if ($LASTEXITCODE -ne 0) { throw "Packer failed with $LASTEXITCODE." }
+          Pop-Location
+          $package = Join-Path $out "tx64upd$env:UPDATE_VERSION"
+          if (-not (Test-Path -LiteralPath $package)) { throw "Packer produced no $package." }
+          Copy-Item -LiteralPath $package -Destination $env:GITHUB_WORKSPACE
+          Get-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "tx64upd$env:UPDATE_VERSION") | Select-Object Name, Length
 
       - name: Package portable archive.
         shell: pwsh
@@ -311,6 +345,13 @@ jobs:
           path: LuxuryGram-${{ needs.version.outputs.version }}-win-x64-portable.zip
           if-no-files-found: error
 
+      - uses: actions/upload-artifact@v7
+        name: Upload update package.
+        with:
+          name: update-win-x64
+          path: tx64upd${{ needs.version.outputs.update }}
+          if-no-files-found: error
+
   linux:
     name: Linux x64
     needs: version
@@ -319,6 +360,7 @@ jobs:
     env:
       IMAGE_TAG: tdesktop:centos_env
       VERSION: ${{ needs.version.outputs.version }}
+      UPDATE_VERSION: ${{ needs.version.outputs.update }}
 
     steps:
       - name: Clone.
@@ -326,6 +368,16 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           submodules: recursive
+
+      - name: Update signing key.
+        env:
+          UPDATE_KEY: ${{ secrets.LUXURY_UPDATE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$UPDATE_KEY" ]; then
+            echo "LUXURY_UPDATE_PRIVATE_KEY is not set: refusing to publish a release without signed updates." >&2
+            exit 1
+          fi
+          python3 Telegram/build/write_packer_private.py Telegram/SourceFiles/_other/packer_private.h
 
       - name: First set up.
         run: |
@@ -390,8 +442,21 @@ jobs:
           -D CMAKE_CONFIGURATION_TYPES=Release \
           -D TDESKTOP_API_ID=${{ secrets.TDESKTOP_API_ID || '611335' }} \
           -D TDESKTOP_API_HASH=${{ secrets.TDESKTOP_API_HASH || 'd524b414d21f4d37f08684c1df41ac9c' }} \
-          -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
+          -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF \
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
+
+      - name: Sign update package.
+        run: |
+          docker run --rm \
+          -u $(id -u) \
+          -v $PWD:/usr/src/tdesktop \
+          -w /usr/src/tdesktop/out/Release \
+          --entrypoint /usr/src/tdesktop/out/Release/Packer \
+          $IMAGE_TAG \
+          -path LuxuryGram -path Updater -version $UPDATE_VERSION
+          test -f "out/Release/tlinuxupd$UPDATE_VERSION"
+          mv "out/Release/tlinuxupd$UPDATE_VERSION" .
+          ls -l "tlinuxupd$UPDATE_VERSION"
 
       - name: Package portable archive.
         run: |
@@ -400,7 +465,7 @@ jobs:
             exit 1
           fi
           mkdir -p package/LuxuryGram
-          cp out/Release/LuxuryGram package/LuxuryGram/
+          cp out/Release/LuxuryGram out/Release/Updater package/LuxuryGram/
           tar -C package -cJf "LuxuryGram-$VERSION-linux-x64.tar.xz" LuxuryGram
           ls -l "LuxuryGram-$VERSION-linux-x64.tar.xz"
 
@@ -409,6 +474,13 @@ jobs:
         with:
           name: release-linux-x64
           path: LuxuryGram-${{ needs.version.outputs.version }}-linux-x64.tar.xz
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        name: Upload update package.
+        with:
+          name: update-linux-x64
+          path: tlinuxupd${{ needs.version.outputs.update }}
           if-no-files-found: error
 
   draft:
@@ -420,6 +492,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag }}
       VERSION: ${{ needs.version.outputs.version }}
+      UPDATE_VERSION: ${{ needs.version.outputs.update }}
 
     steps:
       - name: Clone.
@@ -432,6 +505,13 @@ jobs:
         with:
           path: assets
           pattern: release-*
+          merge-multiple: true
+
+      - name: Download update packages.
+        uses: actions/download-artifact@v7
+        with:
+          path: updates
+          pattern: update-*
           merge-multiple: true
 
       - name: Checksums.
@@ -462,13 +542,36 @@ jobs:
               echo "| \`${name#\*}\` | \`$sum\` |"
             done < <(grep -v 'SHA256SUMS.txt' assets/SHA256SUMS.txt)
             echo
-            echo "Portable builds: unpack and run, no installer and no automatic updates."
+            echo "Portable builds: unpack and run. Updates are delivered by the built-in updater from this repository, signed with the LuxuryGram update key."
             echo "Built with shared open Telegram API credentials, so sign-in can intermittently fail with a flood or API error; build from source with your own api_id and api_hash if you need reliable login."
             echo "The binaries are not code-signed, so Windows SmartScreen and macOS-style gatekeepers may warn on first launch."
             echo
             echo "Built from \`$TAG\` by workflow run [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
           } > notes.md
           cat notes.md
+
+      - name: Update feed.
+        run: |
+          ls -l updates
+          test -f "updates/tx64upd$UPDATE_VERSION"
+          test -f "updates/tlinuxupd$UPDATE_VERSION"
+
+          # AutoUpdateVersion() is 4 on Windows and on glibc 2.28 or newer.
+          python3 Telegram/build/write_update_feed.py "$UPDATE_VERSION" assets/current4
+          cat assets/current4
+          (cd assets && sha256sum current4 >> SHA256SUMS.txt)
+
+      - name: Publish update packages.
+        run: |
+          # Packages go live before the feed points at them; the feed is copied
+          # over by hand once the draft release has been verified and published.
+          if ! gh release view updates >/dev/null 2>&1; then
+            gh release create updates --target "$(git rev-parse HEAD)" --latest=false \
+              --title "LuxuryGram update feed" \
+              --notes "Signed update packages and the feed the LuxuryGram updater polls. Not a downloadable release: see the Releases page for installable builds."
+          fi
+          gh release upload updates updates/* --clobber
+          gh release view updates --json assets --jq '.assets[].name'
 
       - name: Create or update draft release.
         run: |

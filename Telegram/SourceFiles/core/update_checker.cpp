@@ -311,9 +311,9 @@ bool UnpackUpdate(const QString &filepath) {
 	}
 
 #if defined Q_OS_WIN && !defined TDESKTOP_USE_PACKAGED // use Lzma SDK for win
-	const int32 hSigLen = 128, hShaLen = 20, hPropsLen = LZMA_PROPS_SIZE, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hPropsLen + hOriginalSizeLen; // header
+	const int32 hSigLen = 512, hShaLen = 32, hPropsLen = LZMA_PROPS_SIZE, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hPropsLen + hOriginalSizeLen; // header
 #else // Q_OS_WIN && !TDESKTOP_USE_PACKAGED
-	const int32 hSigLen = 128, hShaLen = 20, hPropsLen = 0, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hOriginalSizeLen; // header
+	const int32 hSigLen = 512, hShaLen = 32, hPropsLen = 0, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hOriginalSizeLen; // header
 #endif // Q_OS_WIN && !TDESKTOP_USE_PACKAGED
 
 	QByteArray compressed = input.readAll();
@@ -333,10 +333,10 @@ bool UnpackUpdate(const QString &filepath) {
 		return false;
 	}
 
-	uchar sha1Buffer[20];
-	bool goodSha1 = !memcmp(compressed.constData() + hSigLen, hashSha1(compressed.constData() + hSigLen + hShaLen, compressedLen + hPropsLen + hOriginalSizeLen, sha1Buffer), hShaLen);
-	if (!goodSha1) {
-		LOG(("Update Error: bad SHA1 hash of update file!"));
+	uchar shaBuffer[32];
+	bool goodSha = !memcmp(compressed.constData() + hSigLen, hashSha256(compressed.constData() + hSigLen + hShaLen, compressedLen + hPropsLen + hOriginalSizeLen, shaBuffer), hShaLen);
+	if (!goodSha) {
+		LOG(("Update Error: bad SHA256 hash of update file!"));
 		return false;
 	}
 
@@ -351,7 +351,12 @@ bool UnpackUpdate(const QString &filepath) {
 		LOG(("Update Error: cant read public rsa key!"));
 		return false;
 	}
-	if (RSA_verify(NID_sha1, (const uchar*)(compressed.constData() + hSigLen), hShaLen, (const uchar*)(compressed.constData()), hSigLen, pbKey) != 1) { // verify signature
+	if (RSA_size(pbKey) != hSigLen) {
+		LOG(("Update Error: bad public rsa key size: %1").arg(RSA_size(pbKey)));
+		RSA_free(pbKey);
+		return false;
+	}
+	if (RSA_verify(NID_sha256, (const uchar*)(compressed.constData() + hSigLen), hShaLen, (const uchar*)(compressed.constData()), hSigLen, pbKey) != 1) { // verify signature
         RSA_free(pbKey);
         LOG(("Update Error: bad RSA signature of update file!"));
         return false;
@@ -441,8 +446,8 @@ bool UnpackUpdate(const QString &filepath) {
 				LOG(("Update Error: downloaded alpha version %1 is not greater, than mine %2").arg(alphaVersion).arg(cAlphaVersion()));
 				return false;
 			}
-		} else if (int32(version) <= AppVersion) {
-			LOG(("Update Error: downloaded version %1 is not greater, than mine %2").arg(version).arg(AppVersion));
+		} else if (int32(version) <= LuxuryUpdateVersion) {
+			LOG(("Update Error: downloaded version %1 is not greater, than mine %2").arg(version).arg(LuxuryUpdateVersion));
 			return false;
 		}
 
@@ -796,7 +801,7 @@ QString HttpChecker::validateLatestUrl(
 		QString url) const {
 	const auto myVersion = isAvailableAlpha
 		? cAlphaVersion()
-		: uint64(AppVersion);
+		: uint64(LuxuryUpdateVersion);
 	const auto validVersion = (cAlphaVersion() || !isAvailableAlpha);
 	if (!validVersion || availableVersion <= myVersion) {
 		return QString();

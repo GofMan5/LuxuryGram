@@ -13,9 +13,17 @@ bool OnlyAlphaKey = false;
 
 const char *PublicKey = "\
 -----BEGIN RSA PUBLIC KEY-----\n\
-MIGJAoGBAOIENxe1sfT2t7b+HUMpnT6RnN/sCqY0JjK7/1A/59daDc6i/K4023jw\n\
-Us+187Pa2VSaPh3kDywp9PfLDFgFiPTD9BsBvpaSK9p3zyG8k6an3+GbUTlUgmFv\n\
-eI0pg7vmceIl0Lcy9nndfEx27UQId3Y3dQTMuwwFYGtjJAMHNNq5AgMBAAE=\n\
+MIICCgKCAgEA0fHaXZpTXYY9vfE6beIbByF/JNU+zhzE1kxpogzdUpDg2VTbAJHW\n\
+HwCI9ZU7Gu4GVLgb7dT26NduGk+HNCnnNKddww/wgbD2ORKXSE+6KWIJYESisv1u\n\
+TYRDtcGGVdRSP0WJmu8GDxKg7sH37f2oM2zhRiQ11pWNCxj8pzqX7ACLr8rhlKjC\n\
+x8cqov9Q5JtREpxe9Aj7s1DSVET4b0nbfPLV6xWJKYlSl8XqOwrtFE96KIi/GK8E\n\
+Yjb6WPO5LeN2bZ+wq9QZBc6sPlU7zxSuYLnzdTzyHoV+lLacssgxYhJuqN6vjzGr\n\
+soypmldcDjoTvNvrK+KtsC3pLSSuzQLgZFfK9vcJW7L1cwPeBxh/n1HK3bOxNLiK\n\
+ucQk87Hg7qH/yu6cnJ8T+zJz/ObGVsbYw+o+6VqMLFU0SPpmibju1Va9wuapqqM9\n\
+9xZWBEI7v9Z6y1IQeXKqUDZX0RA/T2e5f6gN8PDANJ4wnQssS0PNGe/JhOiHWTi8\n\
+JCig6DKPYBm7bDZb2R70s7mM+2iCQtmFDlKaB1mp6eosO9teD1WgLR2hUrgsO/PT\n\
+ktCJ6PRfaIVbUgogEGXHexq9F1yU5amKNYBwJQAQVR2JFbVJSNbDIQGxQK83QD5H\n\
+lBi3Hj42R81d8BVg/Zxm8+h9WzmhoN43nQOenMWz2aLGtzsO/b9Xfl8CAwEAAQ==\n\
 -----END RSA PUBLIC KEY-----\
 ";
 
@@ -128,6 +136,10 @@ int32 *hashSha1(const void *data, uint32 len, void *dest) {
 	}
 
 	return (int32*)sha1To;
+}
+
+uchar *hashSha256(const void *data, uint32 len, void *dest) {
+	return SHA256((const uchar*)data, (size_t)len, (uchar*)dest);
 }
 
 QString AlphaSignature;
@@ -283,9 +295,9 @@ int main(int argc, char *argv[])
 
 	QByteArray compressed, resultCheck;
 #if defined Q_OS_WIN && !defined PACKER_USE_PACKAGED // use Lzma SDK for win
-	const int32 hSigLen = 128, hShaLen = 20, hPropsLen = LZMA_PROPS_SIZE, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hPropsLen + hOriginalSizeLen; // header
+	const int32 hSigLen = 512, hShaLen = 32, hPropsLen = LZMA_PROPS_SIZE, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hPropsLen + hOriginalSizeLen; // header
 
-	compressed.resize(hSize + resultSize + 1024 * 1024); // rsa signature + sha1 + lzma props + max compressed size
+	compressed.resize(hSize + resultSize + 1024 * 1024); // rsa signature + sha256 + lzma props + max compressed size
 
 	size_t compressedLen = compressed.size() - hSize;
 	size_t outPropsSize = LZMA_PROPS_SIZE;
@@ -326,7 +338,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 #else // use liblzma for others
-	const int32 hSigLen = 128, hShaLen = 20, hPropsLen = 0, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hOriginalSizeLen; // header
+	const int32 hSigLen = 512, hShaLen = 32, hPropsLen = 0, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hOriginalSizeLen; // header
 
 	compressed.resize(hSize + resultSize + 1024 * 1024); // rsa signature + sha1 + lzma props + max compressed size
 
@@ -434,10 +446,10 @@ int main(int argc, char *argv[])
 	/**/
 	result = resultCheck = QByteArray();
 
-	cout << "Counting SHA1 hash..\n";
+	cout << "Counting SHA256 hash..\n";
 
-	uchar sha1Buffer[20];
-	memcpy(compressed.data() + hSigLen, hashSha1(compressed.constData() + hSigLen + hShaLen, uint32(compressedLen + hPropsLen + hOriginalSizeLen), sha1Buffer), hShaLen); // count sha1
+	uchar shaBuffer[32];
+	memcpy(compressed.data() + hSigLen, hashSha256(compressed.constData() + hSigLen + hShaLen, uint32(compressedLen + hPropsLen + hOriginalSizeLen), shaBuffer), hShaLen); // count sha256
 
 	uint32 siglen = 0;
 
@@ -460,7 +472,7 @@ int main(int argc, char *argv[])
 		RSA_free(prKey);
 		return -1;
 	}
-	if (RSA_sign(NID_sha1, (const uchar*)(compressed.constData() + hSigLen), hShaLen, (uchar*)(compressed.data()), &siglen, prKey) != 1) { // count signature
+	if (RSA_sign(NID_sha256, (const uchar*)(compressed.constData() + hSigLen), hShaLen, (uchar*)(compressed.data()), &siglen, prKey) != 1) { // count signature
 		cout << "Signing failed!\n";
 		RSA_free(prKey);
 		return -1;
@@ -486,7 +498,7 @@ int main(int argc, char *argv[])
 		cout << "Could not read RSA public key!\n";
 		return -1;
 	}
-	if (RSA_verify(NID_sha1, (const uchar*)(compressed.constData() + hSigLen), hShaLen, (const uchar*)(compressed.constData()), siglen, pbKey) != 1) { // verify signature
+	if (RSA_verify(NID_sha256, (const uchar*)(compressed.constData() + hSigLen), hShaLen, (const uchar*)(compressed.constData()), siglen, pbKey) != 1) { // verify signature
 		RSA_free(pbKey);
 		cout << "Signature verification failed!\n";
 		return -1;
