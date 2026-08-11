@@ -459,7 +459,7 @@ jobs:
             echo "| File | SHA-256 |"
             echo "| --- | --- |"
             while read -r sum name; do
-              echo "| \`$name\` | \`$sum\` |"
+              echo "| \`${name#\*}\` | \`$sum\` |"
             done < <(grep -v 'SHA256SUMS.txt' assets/SHA256SUMS.txt)
             echo
             echo "Portable builds: unpack and run, no installer and no automatic updates."
