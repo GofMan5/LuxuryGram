@@ -9,15 +9,6 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 ### Added
 
 - Added automatic updates served from this repository's releases. Packages are signed with the LuxuryGram update key and verified with RSA-4096 and SHA-256 before anything is unpacked.
-
-### Fixed
-
-- Stopped refetching artwork for saved music tracks that have none, which repeated two blocking network requests on every scroll pass, and limited how many cover lookups may run at once.
-
-## 1.0.0
-
-### Added
-
 - Added a message context-menu action that translates any selected message to the language configured in LuxuryGram settings.
 
 ### Changed
@@ -33,6 +24,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Fixed
 
+- Stopped refetching artwork for saved music tracks that have none, which repeated two blocking network requests on every scroll pass, and limited how many cover lookups may run at once.
 - Restored completion callbacks for custom and mixed forwarding, firing them once only after every chunk succeeds and suppressing them on cancellation, timeout, or missing media.
 - Discarded stale delayed message-shot previews and avoided expensive pixel-diff buffers for images larger than four megapixels.
 - Preserved protected polls, contacts, locations, dice, stories, and other non-file media as rich text during custom forwarding instead of treating them as missing files.

@@ -80,7 +80,7 @@ sha256sum -c SHA256SUMS.txt
 certutil -hashfile LuxuryGram-<version>-win-x64-portable.zip SHA256
 ```
 
-From 1.0.1 onward the app updates itself: it checks this repository for a newer version, and verifies the update signature with the LuxuryGram key before unpacking anything. Version 1.0.0 has no updater, so upgrading from it is a one-time manual download. The archives are not code-signed, so Windows SmartScreen may warn on first launch.
+The app updates itself: it checks this repository for a newer version and verifies the update signature with the LuxuryGram key before unpacking anything. The archives are not code-signed, so Windows SmartScreen may warn on first launch.
 
 ### Source
 
