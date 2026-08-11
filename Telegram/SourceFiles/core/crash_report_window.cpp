@@ -36,6 +36,11 @@ namespace {
 
 constexpr auto kDefaultProxyPort = 80;
 
+// LuxuryGram runs no crash collector, so reports stay on the user's disk and
+// the dialog only offers viewing and saving them. Point this at a collector to
+// enable sending again.
+constexpr auto kCrashReportEndpoint = "";
+
 } // namespace
 
 PreLaunchWindow *PreLaunchWindowInstance = nullptr;
@@ -323,7 +328,7 @@ LastCrashedWindow::LastCrashedWindow(
 
 #ifndef TDESKTOP_DISABLE_AUTOUPDATE
 	const auto &settings = LuxurySettings::getInstance();
-	if (!settings.crashReporting()) {
+	if (!*kCrashReportEndpoint || !settings.crashReporting()) {
 #else
 	if (true) {
 #endif
@@ -603,7 +608,7 @@ QString LastCrashedWindow::minidumpFileName() {
 }
 
 void LastCrashedWindow::checkingFinished() {
-	if (_sendReply) return;
+	if (_sendReply || !*kCrashReportEndpoint) return;
 
 	auto multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
 
@@ -656,7 +661,7 @@ void LastCrashedWindow::checkingFinished() {
 		}
 	}
 
-	_sendReply = _sendManager.post(QNetworkRequest(u"https://sentry.radolyn.com/api/2/minidump/?sentry_key=cad638b2ec4a692e57c3dcc4af1508bf"_q), multipart);
+	_sendReply = _sendManager.post(QNetworkRequest(QString::fromUtf8(kCrashReportEndpoint)), multipart);
 	multipart->setParent(_sendReply);
 
 	connect(
