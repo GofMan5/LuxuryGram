@@ -1,6 +1,6 @@
 # LuxuryGram versioning
 
-The current LuxuryGram product version is **1.0.0**.
+The current LuxuryGram product version is **1.0.1**.
 
 ## Policy
 
@@ -15,7 +15,7 @@ Every approved bump must update the product constant, build metadata, Windows/UW
 
 ## Правила на русском
 
-- Текущая версия продукта — **1.0.0**.
+- Текущая версия продукта — **1.0.1**.
 - Бамп выполняется только по прямому запросу или для крупного обновления LuxuryGram.
 - Патч-линейка идёт от `1.0.0` до `1.0.1000`; переход на `1.1.0` — только после отдельного подтверждения.
 - Синхронизация с Telegram Desktop, CI и количество коммитов версию автоматически не меняют.

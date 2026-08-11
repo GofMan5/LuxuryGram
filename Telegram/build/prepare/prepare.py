@@ -61,6 +61,7 @@ optionsList = [
     'qt6',
     'skip-release',
     'build-stackwalk',
+    'build-dump-syms',
 ]
 options = []
 runCommand = []
@@ -1399,6 +1400,13 @@ depends:patches/breakpad.diff
     xcodebuild -project processor.xcodeproj -target minidump_stackwalk -configuration Release build
 """)
 
+# dump_syms produces symbols for a crash symbol server and needs the ATL
+# headers, so it is built only when a build explicitly asks for it.
+winDumpSyms = ('''    cd tools\\windows\\dump_syms
+    gyp dump_syms.gyp --format=msvs
+    msbuild -m dump_syms.vcxproj /property:Configuration=Release /property:Platform="x64" %ToolsetProp%
+''' if 'build-dump-syms' in options else '')
+
 stage('breakpad', """
     git clone https://chromium.googlesource.com/breakpad/breakpad
     cd breakpad
@@ -1424,10 +1432,7 @@ depends:python/Scripts/activate.bat
     ninja -C out/Debug%FolderPostfix% common crash_generation_client exception_handler
 release:
     ninja -C out/Release%FolderPostfix% common crash_generation_client exception_handler
-    cd tools\\windows\\dump_syms
-    gyp dump_syms.gyp --format=msvs
-    msbuild -m dump_syms.vcxproj /property:Configuration=Release /property:Platform="x64" %ToolsetProp%
-win:
+""" + winDumpSyms + """win:
     deactivate
 mac:
     git clone https://chromium.googlesource.com/linux-syscall-support src/third_party/lss

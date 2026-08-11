@@ -70,12 +70,27 @@ A release publishes one verified LuxuryGram product version on GitHub Releases. 
 3. `gh workflow run release.yml --ref dev -f tag=luxury-v<version>`. Dispatch from `dev`, not from the tag: the workflow definition and the Actions caches both come from the default branch, while every job checks out the tag. `release.yml` builds Release-configuration Windows x64 and Linux x64 portable archives, writes `SHA256SUMS.txt`, and creates or updates a **draft** release.
 4. When all jobs finish, download every asset, verify each SHA-256 against `SHA256SUMS.txt`, and inspect the archive layout and the packaged executable metadata.
 5. Publish only after that check: `gh release edit luxury-v<version> --draft=false --latest`.
-6. Record run IDs, asset names with hashes, and the release URL in the task delivery record under `.ai/delivery/`.
+6. Point the updater at the new build, which is a deliberate second step so no client updates to an unverified release:
+
+   ```
+   gh release download luxury-v<version> -p current4 -D .
+   gh release upload updates current4 --clobber
+   ```
+
+7. Record run IDs, asset names with hashes, and the release URL in the task delivery record under `.ai/delivery/`.
+
+### Updates
+
+- Clients poll `https://github.com/GofMan5/LuxuryGram/releases/download/updates/current4` and download the package it names from the same release. The `updates` release is a container, never a downloadable build: keep it out of `--latest`.
+- Packages are signed by `Packer` with RSA-4096 over SHA-256 and verified against `UpdatesPublicKey` in `Telegram/SourceFiles/config.h` before anything is unpacked. Never publish a package built without the key, and never weaken the verification to make a build pass.
+- The private key lives in the `LUXURY_UPDATE_PRIVATE_KEY` repository secret and is written to `Telegram/SourceFiles/_other/packer_private.h` at build time by `Telegram/build/write_packer_private.py`. That header is gitignored and must never be committed. Losing the key means shipping a new public key and asking every user to reinstall by hand.
+- Update packages are compared by `LuxuryUpdateVersion` (`major * 1000000 + minor * 1000 + patch`), not by the upstream `AppVersion`. A version bump must move both, or `release.yml` refuses to build.
+- `release.yml` uploads the signed packages before the feed names them, so the assets always exist by the time a client is told about them.
 
 ### Artifact rules
 
 - Only Release-configuration builds may be published. The `win.yml` and `linux.yml` Debug artifacts are gating evidence, never release assets.
-- Ship portable archives while `DESKTOP_APP_DISABLE_AUTOUPDATE=ON` and no update feed exists. Do not ship an installer that implies working automatic updates.
+- Ship portable archives with the `Updater` binary alongside the application, so the built-in updater can replace them in place.
 - Binaries are unsigned. State that in the notes instead of omitting it.
 - `release.yml` uses the `TDESKTOP_API_ID` and `TDESKTOP_API_HASH` repository secrets when they exist and otherwise falls back to the public open credentials. Never commit credentials.
 

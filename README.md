@@ -26,7 +26,7 @@
 </div>
 
 > [!IMPORTANT]
-> Official LuxuryGram builds are published only on this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page. They are portable, unsigned archives without automatic updates, so verify the published `SHA256SUMS.txt` before the first run.
+> Official LuxuryGram builds are published only on this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page. They are portable archives that update themselves from this repository, and they are not code-signed, so verify the published `SHA256SUMS.txt` before the first run.
 
 > [!NOTE]
 > LuxuryGram is an independent, unofficial client. It is not affiliated with, maintained by, or endorsed by Telegram.
@@ -50,7 +50,7 @@ Some features operate locally and cannot change Telegram server-side behavior. A
 
 | Surface | Status |
 | --- | --- |
-| Product version | [`1.0.0`](VERSIONING.md); bumps are manual or tied to substantial updates |
+| Product version | [`1.0.1`](VERSIONING.md); bumps are manual or tied to substantial updates |
 | Source code | Public on the [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) branch |
 | Windows | Portable `x64` archive published |
 | macOS | Build guide available; no published package |
@@ -80,7 +80,7 @@ sha256sum -c SHA256SUMS.txt
 certutil -hashfile LuxuryGram-<version>-win-x64-portable.zip SHA256
 ```
 
-The archives are portable and not code-signed, and they do not update themselves. Windows SmartScreen may warn on first launch, and each new version has to be downloaded from the same page.
+From 1.0.1 onward the app updates itself: it checks this repository for a newer version, and verifies the update signature with the LuxuryGram key before unpacking anything. Version 1.0.0 has no updater, so upgrading from it is a one-time manual download. The archives are not code-signed, so Windows SmartScreen may warn on first launch.
 
 ### Source
 
