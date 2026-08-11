@@ -24,6 +24,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Fixed
 
+- Stopped offering to upload crash minidumps and reports to the upstream project's collector; reports stay on disk and can be viewed or saved.
 - Stopped refetching artwork for saved music tracks that have none, which repeated two blocking network requests on every scroll pass, and limited how many cover lookups may run at once.
 - Restored completion callbacks for custom and mixed forwarding, firing them once only after every chunk succeeds and suppressing them on cancellation, timeout, or missing media.
 - Discarded stale delayed message-shot previews and avoided expensive pixel-diff buffers for images larger than four megapixels.
