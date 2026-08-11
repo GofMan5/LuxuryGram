@@ -51,6 +51,44 @@ After any task that used Docker or BuildKit:
 3. Delete only build cache and temporary build artifacts created by the task.
 4. Preserve containers, images, volumes, projects, and recovery/VHDX files unless the user explicitly requests their deletion.
 
+## Releases
+
+A release publishes one verified LuxuryGram product version on GitHub Releases. Tags use `luxury-v<product version>`, for example `luxury-v1.0.0`. The clone also carries the inherited Telegram Desktop tags `v0.x`-`v7.x`; never reuse, move, or push one of those to `origin`.
+
+### Preconditions
+
+1. `dev` is clean, equal to `origin/dev`, and `0 behind` upstream.
+2. Linux and Windows CI are green for the exact release commit. Record both run IDs.
+3. `LuxuryVersionStr` equals the version being released, and `VERSIONING.md`, `CHANGELOG.md`, and README version references agree. Never bump the version to enable a release; a bump needs an explicit request.
+4. `CHANGELOG.md` has a `## <version>` section for the release, and no remaining wording that the release makes false.
+5. The tag does not exist locally or on `origin`.
+
+### Procedure
+
+1. Commit the release documentation, then push `dev`.
+2. `git tag -a luxury-v<version> <sha> -m "LuxuryGram <version>"` and `git push origin luxury-v<version>`.
+3. `gh workflow run release.yml --ref dev -f tag=luxury-v<version>`. Dispatch from `dev`, not from the tag: the workflow definition and the Actions caches both come from the default branch, while every job checks out the tag. `release.yml` builds Release-configuration Windows x64 and Linux x64 portable archives, writes `SHA256SUMS.txt`, and creates or updates a **draft** release.
+4. When all jobs finish, download every asset, verify each SHA-256 against `SHA256SUMS.txt`, and inspect the archive layout and the packaged executable metadata.
+5. Publish only after that check: `gh release edit luxury-v<version> --draft=false --latest`.
+6. Record run IDs, asset names with hashes, and the release URL in the task delivery record under `.ai/delivery/`.
+
+### Artifact rules
+
+- Only Release-configuration builds may be published. The `win.yml` and `linux.yml` Debug artifacts are gating evidence, never release assets.
+- Ship portable archives while `DESKTOP_APP_DISABLE_AUTOUPDATE=ON` and no update feed exists. Do not ship an installer that implies working automatic updates.
+- Binaries are unsigned. State that in the notes instead of omitting it.
+- `release.yml` uses the `TDESKTOP_API_ID` and `TDESKTOP_API_HASH` repository secrets when they exist and otherwise falls back to the public open credentials. Never commit credentials.
+
+### Rollback
+
+- A draft or bad release: `gh release delete luxury-v<version> --yes`, then `git push origin :refs/tags/luxury-v<version>` and `git tag -d luxury-v<version>`.
+- Deleting a published release does not recall downloads. Supersede it with a new patch version instead of moving an existing release tag.
+
+### Known ceilings
+
+- Windows release libraries are prepared without `skip-release`, so a cold run is long. If the job approaches the six-hour limit, split library preparation and the application build into two runs using the `ONLY_CACHE` pattern from `win.yml`.
+- `release.yml` does not build macOS, Windows arm64 or x86, or any installer yet.
+
 ## Code and data conventions
 
 - Follow `REVIEW.md` for C++/Qt formatting and review rules.

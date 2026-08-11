@@ -26,7 +26,7 @@
 </div>
 
 > [!IMPORTANT]
-> LuxuryGram is currently a **source preview**. Official LuxuryGram binaries have not been published yet. When releases begin, this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page will be the canonical download source.
+> Official LuxuryGram builds are published only on this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page. They are portable, unsigned archives without automatic updates, so verify the published `SHA256SUMS.txt` before the first run.
 
 > [!NOTE]
 > LuxuryGram is an independent, unofficial client. It is not affiliated with, maintained by, or endorsed by Telegram.
@@ -52,9 +52,9 @@ Some features operate locally and cannot change Telegram server-side behavior. A
 | --- | --- |
 | Product version | [`1.0.0`](VERSIONING.md); bumps are manual or tied to substantial updates |
 | Source code | Public on the [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) branch |
-| Windows | Build guide available; first verified package pending |
-| macOS | Build guide available; first verified package pending |
-| Linux | Build guide available; first verified package pending |
+| Windows | Portable `x64` archive published |
+| macOS | Build guide available; no published package |
+| Linux | Portable `x64` archive published |
 | Official package managers | Not published |
 
 The user-facing application identity is LuxuryGram across supported desktop platforms. A small set of inherited AyuGram paths, service endpoints, and attribution references remains intentionally preserved where changing them would break profile, protocol, or source-line compatibility.
@@ -63,7 +63,24 @@ The user-facing application identity is LuxuryGram across supported desktop plat
 
 ### Releases
 
-There is no official binary release yet. Do not trust installers or archives claiming to be official LuxuryGram builds when they are not attached to this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page.
+Download LuxuryGram only from this repository's [Releases](https://github.com/GofMan5/LuxuryGram/releases) page. Do not trust installers or archives that are not attached to a release there.
+
+| Platform | Asset | How to run |
+| --- | --- | --- |
+| Windows x64 | `LuxuryGram-<version>-win-x64-portable.zip` | Unpack, run `LuxuryGram.exe` |
+| Linux x64 | `LuxuryGram-<version>-linux-x64.tar.xz` | Unpack, run `LuxuryGram` |
+
+Every release also ships `SHA256SUMS.txt`. Check your download before running it:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+```
+
+```powershell
+certutil -hashfile LuxuryGram-<version>-win-x64-portable.zip SHA256
+```
+
+The archives are portable and not code-signed, and they do not update themselves. Windows SmartScreen may warn on first launch, and each new version has to be downloaded from the same page.
 
 ### Source
 
@@ -106,7 +123,7 @@ Telegram API credentials are required for self-built clients. Use your own crede
 
 ## Security and privacy
 
-- Download only from this repository's release page once binaries are published.
+- Download only from this repository's release page, and verify the published checksum.
 - Never post API hashes, phone numbers, authentication codes, session data, or unredacted logs in an issue.
 - Report security vulnerabilities privately according to [`SECURITY.md`](SECURITY.md).
 - Review code and build from source when your threat model requires independent verification.

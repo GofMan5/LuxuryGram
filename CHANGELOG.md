@@ -2,9 +2,9 @@
 
 This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and inherited AyuGram changes remain available in [`changelog.txt`](changelog.txt) and the Git history.
 
-The project has not published its first binary release. The source preview uses the LuxuryGram product version `1.0.0`.
+Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
-## 1.0.0 (source preview)
+## 1.0.0
 
 ### Added
 
