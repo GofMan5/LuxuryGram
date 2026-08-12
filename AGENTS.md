@@ -86,6 +86,8 @@ A release publishes one verified LuxuryGram product version on GitHub Releases. 
 - The private key lives in the `LUXURY_UPDATE_PRIVATE_KEY` repository secret and is written to `Telegram/SourceFiles/_other/packer_private.h` at build time by `Telegram/build/write_packer_private.py`. That header is gitignored and must never be committed. Losing the key means shipping a new public key and asking every user to reinstall by hand.
 - Update packages are compared by `LuxuryUpdateVersion` (`major * 1000000 + minor * 1000 + patch`), not by the upstream `AppVersion`. A version bump must move both, or `release.yml` refuses to build.
 - `release.yml` uploads the signed packages before the feed names them, so the assets always exist by the time a client is told about them.
+- `Packer` is built next to the application and carries the private key compiled into it. Packaging names the files it ships; never copy a build directory by extension, and never attach a build directory to a release or a workflow artifact. Artifacts of a public repository are downloadable by anyone.
+- This repository is a fork, so its `GITHUB_TOKEN` cannot create releases even with `contents: write` (`403 Resource not accessible by integration`). Create the release yourself and let the workflow upload to it.
 
 ### Artifact rules
 
