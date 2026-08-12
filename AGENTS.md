@@ -87,7 +87,7 @@ A release publishes one verified LuxuryGram product version on GitHub Releases. 
 - Update packages are compared by `LuxuryUpdateVersion` (`major * 1000000 + minor * 1000 + patch`), not by the upstream `AppVersion`. A version bump must move both, or `release.yml` refuses to build.
 - `release.yml` uploads the signed packages before the feed names them, so the assets always exist by the time a client is told about them.
 - `Packer` is built next to the application and carries the private key compiled into it. Packaging names the files it ships; never copy a build directory by extension, and never attach a build directory to a release or a workflow artifact. Artifacts of a public repository are downloadable by anyone.
-- This repository is a fork, so its `GITHUB_TOKEN` cannot create releases even with `contents: write` (`403 Resource not accessible by integration`). Create the release yourself and let the workflow upload to it.
+- Releases need `default_workflow_permissions` set to `write` for this repository, or the workflow fails with `403 Resource not accessible by integration`. Changing that setting does not reach a run that already exists: re-running a job keeps the permissions its run was created with, so dispatch a new run instead of re-running the old one.
 
 ### Artifact rules
 
