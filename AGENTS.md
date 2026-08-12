@@ -103,6 +103,7 @@ A release publishes one verified LuxuryGram product version on GitHub Releases. 
 
 - Windows release libraries are prepared without `skip-release`, so a cold run is long. If the job approaches the six-hour limit, split library preparation and the application build into two runs using the `ONLY_CACHE` pattern from `win.yml`.
 - `release.yml` does not build macOS, Windows arm64 or x86, or any installer yet.
+- Windows release binaries are linked without debug information: with it, `link.exe` exhausts the runner's memory (`LNK1102`). No symbol server consumes the PDBs, so nothing is lost until one exists.
 
 ## Code and data conventions
 
