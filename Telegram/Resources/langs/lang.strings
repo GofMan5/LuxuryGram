@@ -8708,17 +8708,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_LinksTranslate" = "Translate";
 "luxury_LinksDocumentation" = "Documentation";
 "luxury_CategoriesHeader" = "Categories";
-"luxury_SupportHeader" = "Support";
-"luxury_SupportDescription1" = "Support Development";
-"luxury_SupportDescription2" = "{item} and get an unique badge!";
-"luxury_SupportBoxHeader" = "Support Development";
-"luxury_SupportBoxInfo" = "By supporting the project, you not only contribute to its development but also get a unique badge.";
-"luxury_SupportBoxMakeDonationHeader" = "Make a Donation";
-"luxury_SupportBoxMakeDonationInfo" = "Transfer an amount of {amount1} ({amount2}) to any of the project's payment details. These can be found in the **Other** section of the app settings.";
-"luxury_SupportBoxSendProofHeader" = "Send Proof of Payment";
-"luxury_SupportBoxSendProofInfo" = "Send a photo of the payment confirmation to **{item}**. Make sure the photo clearly shows the amount, date, and time of the transfer.";
-"luxury_SupportBoxReceiveBadgeHeader" = "Receive Your Badge";
-"luxury_SupportBoxReceiveBadgeInfo" = "After payment verification, you will receive a unique badge that will be displayed on your profile and visible to other users.";
 "luxury_CrashReporting" = "Crash Reporting";
 "luxury_CrashReportingDescription" = "When this option is enabled, you'll be prompted to send a report after the app crashes. You can decide whether to send it or not.";
 "luxury_ResetSettings" = "Reset Settings";
@@ -9019,9 +9008,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SessionTerminated" = "Session **{item}** was terminated. You may still browse cached messages.";
 "luxury_InvalidConnectionLayerNote" = "You should re-login due to an error during the update.";
 "luxury_LocalPremiumNotice" = "You're using **local** Telegram Premium.\nIt **won't** give you any benefits.\n**Enjoy the star near your nickname!**";
-"luxury_DeveloperPopup" = "**{item}** is a member of the **exteraGram** development team.";
-"luxury_SupporterPopup" = "**{item}** supported the development of **exteraGram** or **AyuGram** and received an unique badge.";
-"luxury_OfficialResourcePopup" = "**{item}** is the official resource of **exteraGram** or **AyuGram**.";
 "luxury_MutualContactInfo" = "This contact is mutual.";
 "luxury_SessionInfoOfficialApp" = "Official app";
 "luxury_SettingsWatermark" = "LuxuryGram builds on AyuGram by Radolyn Labs and Telegram Desktop.";

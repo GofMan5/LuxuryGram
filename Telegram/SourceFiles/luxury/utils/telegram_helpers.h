@@ -8,11 +8,9 @@
 
 #include "api/api_common.h"
 #include "luxury/data/entities.h"
-#include "luxury/utils/rc_manager.h"
 #include "core/application.h"
 #include "data/data_media_types.h"
 #include "dialogs/dialogs_main_list.h"
-#include "info/profile/info_profile_badge.h"
 
 namespace Api {
 struct SendOptions;
@@ -61,13 +59,7 @@ ID getBareDialogId(ID dialogId);
 
 ID getBareID(not_null<PeerData*> peer);
 
-bool isExteraPeer(ID peerId);
-bool isSupporterPeer(ID peerId);
-bool isCustomBadgePeer(ID peerId);
-CustomBadge getCustomBadge(ID peerId);
 
-rpl::producer<Info::Profile::Badge::Content> ExteraBadgeTypeFromPeer(not_null<PeerData*> peer);
-Fn<void()> badgeClickHandler(not_null<PeerData *> peer);
 
 bool isMessageHidden(not_null<HistoryItem*> item);
 

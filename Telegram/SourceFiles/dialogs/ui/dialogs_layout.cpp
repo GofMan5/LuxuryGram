@@ -886,14 +886,6 @@ void PaintRow(
 				: context.selected
 				? &st::dialogsVerifiedIconOver
 				: &st::dialogsVerifiedIcon),
-			.exteraOfficial = &ThreeStateIcon(
-				st::dialogsExteraOfficialIcon,
-				context.active,
-				context.selected),
-			.exteraSupporter = &ThreeStateIcon(
-				st::dialogsExteraSupporterIcon,
-				context.active,
-				context.selected),
 			.premium = &ThreeStateIcon(
 				st::dialogsPremiumIcon,
 				context.active,

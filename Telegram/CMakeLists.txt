@@ -121,8 +121,6 @@ set(luxurygram_files
         luxury/utils/telegram_helpers.h
         luxury/utils/windows_utils.cpp
         luxury/utils/windows_utils.h
-        luxury/utils/rc_manager.cpp
-        luxury/utils/rc_manager.h
         luxury/ui/luxury_logo.cpp
         luxury/ui/luxury_logo.h
         luxury/ui/toasts.cpp
@@ -183,10 +181,6 @@ set(luxurygram_files
         luxury/ui/boxes/theme_selector_box.h
         luxury/ui/boxes/message_shot_box.cpp
         luxury/ui/boxes/message_shot_box.h
-        luxury/ui/boxes/donate_qr_box.cpp
-        luxury/ui/boxes/donate_qr_box.h
-        luxury/ui/boxes/donate_info_box.cpp
-        luxury/ui/boxes/donate_info_box.h
         luxury/ui/boxes/plugin_info_box.cpp
         luxury/ui/boxes/plugin_info_box.h
         luxury/ui/components/image_view.cpp

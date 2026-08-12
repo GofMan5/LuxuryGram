@@ -15,7 +15,6 @@
 #include "features/translator/luxury_translator.h"
 #include "lang/lang_instance.h"
 #include "ui/chat/chat_style_radius.h"
-#include "utils/rc_manager.h"
 
 #ifdef Q_OS_WIN
 #include "luxury/utils/windows_utils.h"
@@ -52,10 +51,6 @@ void initWorker() {
 	LuxuryWorker::initialize();
 }
 
-void initRCManager() {
-	RCManager::getInstance().start();
-}
-
 void initTranslator() {
 	Luxury::Translator::TranslateManager::init();
 }
@@ -73,7 +68,6 @@ void init() {
 	initUiSettings();
 	initIcon();
 	initWorker();
-	initRCManager();
 	initTranslator();
 }
 

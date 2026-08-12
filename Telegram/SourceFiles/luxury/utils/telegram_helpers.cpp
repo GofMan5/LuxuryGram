@@ -15,9 +15,7 @@
 #include "luxury/data/entities.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/features/filters/filters_controller.h"
-#include "luxury/ui/boxes/donate_info_box.h"
 #include "luxury/ui/toasts.h"
-#include "luxury/utils/rc_manager.h"
 #include "core/core_settings.h"
 #include "core/application.h"
 #include "base/call_delayed.h"
@@ -62,69 +60,11 @@
 
 namespace {
 
-constexpr auto regDateBotId = 8083294286L;
-const auto regDateBotUsername = QString("exteraAuthBot");
-
-constexpr auto regDateBotFallbackId = 6247153446L;
-const auto regDateBotFallbackUsername = QString("ayugrambot");
+constexpr auto regDateBotId = 6247153446L;
+const auto regDateBotUsername = QString("ayugrambot");
 
 const auto kZalgoPattern = QStringLiteral(
 	"\\p{Mn}{3,}|[\\x{202A}-\\x{202E}\\x{2066}-\\x{2069}\\x{200E}\\x{200F}\\x{061C}]");
-
-class BadgeToastIcon final : public Ui::RpWidget {
-public:
-	BadgeToastIcon(
-		QWidget *parent,
-		not_null<PeerData*> peer,
-		Info::Profile::Badge::Content content);
-
-private:
-	void updateInnerGeometry();
-
-	Info::Profile::Badge _badge;
-
-};
-
-BadgeToastIcon::BadgeToastIcon(
-	QWidget *parent,
-	not_null<PeerData*> peer,
-	Info::Profile::Badge::Content content)
-: Ui::RpWidget(parent)
-, _badge(
-	this,
-	st::infoPeerBadge,
-	&peer->session(),
-	rpl::single(content),
-	nullptr,
-	[] { return false; },
-	0,
-	Info::Profile::BadgeType::Extera
-		| Info::Profile::BadgeType::ExteraSupporter
-		| Info::Profile::BadgeType::ExteraCustom) {
-	setAttribute(Qt::WA_TransparentForMouseEvents);
-	_badge.setOverrideStyle(&st::exteraBadgeToastBadge);
-	_badge.updated() | rpl::on_next([=] {
-		updateInnerGeometry();
-	}, lifetime());
-	updateInnerGeometry();
-}
-
-void BadgeToastIcon::updateInnerGeometry() {
-	const auto widget = _badge.widget();
-	const auto size = widget ? widget->size() : QSize();
-	resize(size.width(), size.height());
-	if (widget) {
-		widget->moveToLeft(0, 0);
-	}
-}
-
-[[nodiscard]] object_ptr<Ui::RpWidget> MakeBadgeToastIcon(
-		not_null<PeerData*> peer,
-		Info::Profile::Badge::Content content) {
-	return (content.badge == Info::Profile::BadgeType::None)
-		? object_ptr<Ui::RpWidget>(nullptr)
-		: object_ptr<BadgeToastIcon>(nullptr, peer, content);
-}
 
 }
 
@@ -169,125 +109,6 @@ ID getBareDialogId(ID dialogId) {
 
 ID getBareID(not_null<PeerData*> peer) {
 	return peer->id.value & PeerId::kChatTypeMask;
-}
-
-bool isExteraPeer(ID peerId) {
-	return RCManager::getInstance().developers().contains(peerId) || RCManager::getInstance().channels().
-		contains(peerId);
-}
-
-bool isSupporterPeer(ID peerId) {
-	return RCManager::getInstance().supporters().contains(peerId) || RCManager::getInstance().supporterChannels().
-		contains(peerId);
-}
-
-bool isCustomBadgePeer(ID peerId) {
-	return RCManager::getInstance().supporterCustomBadges().contains(peerId);
-}
-
-CustomBadge getCustomBadge(ID peerId) {
-	const auto &badges = RCManager::getInstance().supporterCustomBadges();
-	if (const auto it = badges.find(peerId); it != badges.end()) {
-		return it->second;
-	}
-	return {};
-}
-
-[[nodiscard]] Info::Profile::Badge::Content ComputeExteraBadgeContent(
-		not_null<PeerData*> peer) {
-	if (isCustomBadgePeer(getBareID(peer))) {
-		return Info::Profile::Badge::Content{
-			.badge = Info::Profile::BadgeType::ExteraCustom,
-			.emojiStatusId = getCustomBadge(getBareID(peer)).emojiStatusId,
-		};
-	} else if (isExteraPeer(getBareID(peer))) {
-		return Info::Profile::Badge::Content{
-			.badge = Info::Profile::BadgeType::Extera,
-		};
-	} else if (isSupporterPeer(getBareID(peer))) {
-		return Info::Profile::Badge::Content{
-			.badge = Info::Profile::BadgeType::ExteraSupporter,
-		};
-	}
-	return {};
-}
-
-rpl::producer<Info::Profile::Badge::Content> ExteraBadgeTypeFromPeer(not_null<PeerData*> peer) {
-	return rpl::single(ComputeExteraBadgeContent(peer));
-}
-
-Fn<void()> badgeClickHandler(not_null<PeerData*> peer) {
-	return [=]
-	{
-		const auto badge = ComputeExteraBadgeContent(peer);
-		const auto isCustomBadge = isCustomBadgePeer(getBareID(peer));
-		const auto isExtera = isExteraPeer(getBareID(peer));
-		const auto isSupporter = isSupporterPeer(getBareID(peer));
-
-		TextWithEntities text;
-		if (isCustomBadge) {
-			const auto custom = getCustomBadge(getBareID(peer));
-			text = custom.text.isEmpty()
-					   ? (isExtera
-							  ? tr::luxury_DeveloperPopup(
-								  tr::now,
-								  lt_item,
-								  TextWithEntities{peer->name()},
-								  tr::rich)
-							  : tr::luxury_SupporterPopup(
-								  tr::now,
-								  lt_item,
-								  TextWithEntities{peer->name()},
-								  tr::rich))
-					   : tr::rich(custom.text);
-		} else if (isExtera) {
-			text = peer->isUser()
-					   ? tr::luxury_DeveloperPopup(
-						   tr::now,
-						   lt_item,
-						   TextWithEntities{peer->name()},
-						   tr::rich)
-					   : tr::luxury_OfficialResourcePopup(
-						   tr::now,
-						   lt_item,
-						   TextWithEntities{peer->name()},
-						   tr::rich);
-		} else if (isSupporter) {
-			text = tr::luxury_SupporterPopup(
-				tr::now,
-				lt_item,
-				TextWithEntities{peer->name()},
-				tr::rich);
-		} else {
-			return;
-		}
-
-		auto config = Ui::Toast::Config{
-			.text = text,
-			.iconContent = MakeBadgeToastIcon(peer, badge),
-			.st = &st::exteraBadgeToast,
-			.adaptive = true,
-			.duration = 3 * crl::time(1000),
-		};
-		if (badge.badge == Info::Profile::BadgeType::ExteraSupporter) {
-			Luxury::Ui::ShowToastWithAction(
-				std::move(config),
-				tr::lng_collectible_learn_more(tr::now),
-				[=] {
-					const auto window = Core::App().activeWindow();
-					const auto controller = window
-						? window->sessionController()
-						: nullptr;
-					if (!controller) {
-						return;
-					}
-					controller->show(Box(Ui::FillDonateInfoBox, controller));
-					window->activate();
-				});
-		} else {
-			Ui::Toast::Show(std::move(config));
-		}
-	};
 }
 
 bool isMessageHidden(const not_null<HistoryItem*> item) {
@@ -1322,11 +1143,8 @@ void getUserRegistrationDateInner(
 
 void getUserRegistrationDate(not_null<UserData*> user, Fn<void(TextWithEntities)> callback) {
 	const auto session = &user->session();
-	const auto selfId = getDialogIdFromPeer(session->user());
-	const auto isSupporter = isSupporterPeer(selfId) || isExteraPeer(selfId);
-
-	const auto botId = isSupporter ? regDateBotId : regDateBotFallbackId;
-	const auto botUsername = isSupporter ? regDateBotUsername : regDateBotFallbackUsername;
+	const auto botId = regDateBotId;
+	const auto botUsername = regDateBotUsername;
 
 	if (session->data().userLoaded(botId)) {
 		getUserRegistrationDateInner(user, botId, callback);

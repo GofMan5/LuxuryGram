@@ -40,8 +40,6 @@ inChannelBadgeSelectedIcon: icon {{ "luxury/channel", msgInDateFgSelected }};
 outChannelBadgeIcon: icon {{ "luxury/channel", msgOutDateFg }};
 outChannelBadgeSelectedIcon: icon {{ "luxury/channel", msgOutDateFgSelected }};
 
-infoExteraOfficialBadge: icon {{ "luxury/extera_official", profileVerifiedCheckBg }};
-infoExteraSupporterBadge: icon {{ "luxury/extera_badge", profileVerifiedCheckBg }};
 
 winEnterWithGuestIcon: icon {{ "luxury/ghost_tray", windowFg }};
 
@@ -61,17 +59,6 @@ burntIcon: IconEmoji{
     icon: icon{{ "luxury/burnt", windowFg }};
     padding: margins(0px, 0px, 0px, 0px);
     useIconColor: false;
-}
-
-dialogsExteraOfficialIcon: ThreeStateIcon {
-	icon: icon {{ "luxury/dialogs_extera_official", dialogsVerifiedIconBg }};
-	over: icon {{ "luxury/dialogs_extera_official", dialogsVerifiedIconBgOver }};
-	active: icon {{ "luxury/dialogs_extera_official", dialogsVerifiedIconBgActive }};
-}
-dialogsExteraSupporterIcon: ThreeStateIcon {
-	icon: icon {{ "luxury/dialogs_extera_supporter", dialogsVerifiedIconBg }};
-	over: icon {{ "luxury/dialogs_extera_supporter", dialogsVerifiedIconBgOver }};
-	active: icon {{ "luxury/dialogs_extera_supporter", dialogsVerifiedIconBgActive }};
 }
 
 luxuryHistoryFileInPlugin: icon {{ "luxury/history_file_plugin", historyFileInIconFg }};

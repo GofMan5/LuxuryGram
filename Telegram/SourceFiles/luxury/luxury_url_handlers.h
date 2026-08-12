@@ -28,11 +28,6 @@ bool HandleLuxury(
 	const Match &match,
 	const QVariant &context);
 
-bool HandleSupport(
-	Window::SessionController *controller,
-	const Match &match,
-	const QVariant &context);
-
 bool HandleLuxurySettings(
 	Window::SessionController *controller,
 	const Match &match,

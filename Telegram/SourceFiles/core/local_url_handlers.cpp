@@ -1847,10 +1847,6 @@ const std::vector<LocalUrlHandler> &LocalUrlHandlers() {
 			LuxuryUrlHandlers::HandleLuxury
 		},
 		{
-			u"^(support)|(donate)$"_q,
-			LuxuryUrlHandlers::HandleSupport
-		},
-		{
 			u"^([^\\?]+)(\\?|#|$)"_q,
 			HandleUnknown
 		},

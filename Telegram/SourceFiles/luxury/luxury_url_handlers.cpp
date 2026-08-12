@@ -18,7 +18,6 @@
 #include "main/main_session.h"
 #include "settings/settings_builder.h"
 #include "ui/boxes/confirm_box.h"
-#include "ui/boxes/donate_info_box.h"
 #include "window/window_controller.h"
 
 #include <QDesktopServices>
@@ -128,20 +127,6 @@ bool HandleLuxury(
 	} catch (...) {
 	}
 
-	return true;
-}
-
-bool HandleSupport(
-	Window::SessionController *controller,
-	const Match &match,
-	const QVariant &context) {
-	if (!controller) {
-		return false;
-	}
-	auto box = Box(
-		Ui::FillDonateInfoBox,
-		controller);
-	Ui::show(std::move(box));
 	return true;
 }
 

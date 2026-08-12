@@ -43,9 +43,6 @@ enum class BadgeType : ushort {
 	Scam = 0x08,
 	Fake = 0x10,
 	Direct = 0x20,
-	Extera = 0x40,
-	ExteraSupporter = 0x80,
-	ExteraCustom = 0x100,
 };
 inline constexpr bool is_flag_type(BadgeType) { return true; }
 

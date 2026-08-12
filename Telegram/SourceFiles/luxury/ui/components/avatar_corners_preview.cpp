@@ -56,10 +56,6 @@ void AvatarCornersPreview::paintEvent(QPaintEvent *e) {
 	p.setFont(st::semiboldFont);
 	p.drawText(row.nameLeft + xShift, row.nameTop + st::semiboldFont->ascent, nameText);
 
-	const auto nameWidth = st::semiboldFont->width(nameText);
-	const auto &badge = st::dialogsExteraOfficialIcon.icon;
-	badge.paint(p, row.nameLeft + xShift + nameWidth, row.nameTop, width());
-
 	p.setPen(st::dialogsTextFg);
 	p.setFont(st::dialogsTextFont);
 	p.drawText(row.textLeft + xShift, row.textTop + st::dialogsTextFont->ascent, u"Better late than never"_q);
