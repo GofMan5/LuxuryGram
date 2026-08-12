@@ -13,6 +13,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Changed
 
+- Removed the inherited remote-config lookups to other projects' servers, the badges they granted their own developers and donors, and the donation screens collecting money for their author.
 - Synchronized the codebase with Telegram Desktop 7.0.9 while preserving LuxuryGram and AyuGram features.
 - Published LuxuryGram forks for the updated `codegen`, `lib_ui`, `lib_tl`, and `lib_icu` submodules and restored Linux/Windows CI.
 - Established the LuxuryGram project identity and public repository profile.
