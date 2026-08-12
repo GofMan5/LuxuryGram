@@ -117,8 +117,21 @@ A release publishes one verified LuxuryGram product version on GitHub Releases. 
 - For the project-wide Unix fallback, prefer `!defined Q_OS_WIN && !defined Q_OS_MAC`; use `Q_OS_LINUX` only for genuinely Linux-specific behavior.
 - Preserve each edited file's established line endings and encoding. Use UTF-8 without BOM for rewritten project text; never normalize unrelated files.
 
+## Changelog
+
+`CHANGELOG.md` is the record of what this fork did, for users and for the next agent. Keep it complete enough that nobody has to read the Git history to learn what changed.
+
+- Every change a user could notice gets an entry in the same task that makes the change, not later: new features, behaviour changes, fixes, removals, performance work with a number, and anything that alters what is installed or sent over the network.
+- Write entries for the person running the app: what changed and what it means for them. Name the surface (`saved music covers`, `custom forwarding`), not the function.
+- Entries land under `## Unreleased` until a version is tagged. Never add to a released section: a published tag cannot gain entries, and claiming work it does not contain is a lie in the release notes the workflow generates from that section.
+- When a version is cut, `## Unreleased` becomes `## <version>` and a fresh `## Unreleased` is not created until the next change needs it.
+- Group entries under `### Added`, `### Changed`, `### Fixed`, `### Removed`, and `### Security`. Security-relevant changes are always called out, including key rotations and anything that stops data leaving the machine.
+- Purely internal work that no user can observe — refactors, CI plumbing, contract checks — stays out of `CHANGELOG.md` and lives in the commit message instead. Deleting a feature is never internal.
+- Quantify when a number exists: `169x faster bulk deletion`, `download 93 MB to 65 MB`. A claim without a measurement does not belong in the changelog.
+
 ## Completion
 
 - Reopen every changed artifact and review the final diff.
+- Confirm every user-visible change of the task has a `CHANGELOG.md` entry under `## Unreleased`.
 - Report exact checks and their outcomes, remaining unverified surfaces, and all changed paths.
 - Leave unrelated files untouched and the task-owned diff reproducible and reversible.
