@@ -446,6 +446,18 @@ jobs:
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF \
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
 
+      - name: Strip binaries.
+        run: |
+          # .symtab and .strtab are 40% of the binary and nothing symbolises it.
+          docker run --rm \
+          -u $(id -u) \
+          -v $PWD:/usr/src/tdesktop \
+          -w /usr/src/tdesktop/out/Release \
+          --entrypoint strip \
+          $IMAGE_TAG \
+          --strip-all LuxuryGram Updater
+          ls -l out/Release/LuxuryGram out/Release/Updater
+
       - name: Sign update package.
         run: |
           docker run --rm \
