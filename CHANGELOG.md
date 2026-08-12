@@ -4,6 +4,13 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Changed
+
+- Removed the inherited remote-config lookups to other projects' servers, the badges they granted their own developers and donors, and the donation screens collecting money for their author.
+- Stripped the Linux release binaries, cutting the download and the on-disk size by about 40%.
+
 ## 1.0.1
 
 ### Added
@@ -13,7 +20,6 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Changed
 
-- Removed the inherited remote-config lookups to other projects' servers, the badges they granted their own developers and donors, and the donation screens collecting money for their author.
 - Synchronized the codebase with Telegram Desktop 7.0.9 while preserving LuxuryGram and AyuGram features.
 - Published LuxuryGram forks for the updated `codegen`, `lib_ui`, `lib_tl`, and `lib_icu` submodules and restored Linux/Windows CI.
 - Established the LuxuryGram project identity and public repository profile.
