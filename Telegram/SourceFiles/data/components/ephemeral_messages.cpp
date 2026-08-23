@@ -421,7 +421,9 @@ HistoryItem *EphemeralMessages::applyNew(const MTPDephemeralMessage &data) {
 					? MessageFlag::InvertMedia
 					: MessageFlag())
 				| (data.is_noforwards()
-					? MessageFlag::NoForwards
+					// LuxuryGram: same as FlagsFromMTP -- the server's
+					// noforward bit is recorded but never restricts us.
+					? MessageFlag::LuxuryNoForwards
 					: MessageFlag())
 				| (fromId ? MessageFlag::HasFromId : MessageFlag())
 				| (replyTo.messageId

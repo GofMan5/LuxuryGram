@@ -1434,13 +1434,16 @@ ComposeControls::ComposeControls(
 				) | rpl::to_empty | rpl::start_to_stream(
 					_botKeyboardToggleClicks,
 					_botKeyboardHide->lifetime());
-				_tabbedSelectorToggle->hide();
+				// LuxuryGram: upstream hides the emoji toggle right here.
+				// updateControlsVisibility() owns it -- that button also
+				// answers to showEmojiButtonInMessageField -- so it reads
+				// _botKeyboardHide and a call here would only fight it.
 				orderControls();
 				updateControlsVisibility();
 				updateControlsGeometry(_wrap->size());
 			} else if (_botKeyboardHide && !has) {
 				_botKeyboardHide = nullptr;
-				_tabbedSelectorToggle->show();
+				updateControlsVisibility();
 				updateControlsGeometry(_wrap->size());
 			}
 		}, _wrap->lifetime());
@@ -4920,7 +4923,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		- (commentsShown
 			? (_commentsShown->width() + _st.commentsSkip)
 			: 0)
-		- ((_attachToggle || _sendAs) ? _st.padding.left() : _st.fieldLeft)
+		- ((attachShown || _sendAs) ? _st.padding.left() : _st.fieldLeft)
 		- (_botMenu.button
 			? (st::historyBotMenuSkip + _botMenu.button->width())
 			: 0)
@@ -4973,7 +4976,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		_commentsShown->moveToLeft(left, buttonsTop);
 		left += _commentsShown->width() + _st.commentsSkip;
 	}
-	left += (_attachToggle || _sendAs) ? _st.padding.left() : _st.fieldLeft;
+	left += (attachShown || _sendAs) ? _st.padding.left() : _st.fieldLeft;
 	if (_botMenu.button) {
 		const auto skip = st::historyBotMenuSkip;
 		_botMenu.button->moveToLeft(left + skip, buttonsTop + skip);
@@ -5140,9 +5143,10 @@ void ComposeControls::updateControlsVisibility() {
 	if (_starsReaction) {
 		_starsReaction->show();
 	}
+	// Upstream swaps the emoji toggle out for the bot-keyboard hide button.
 	SWITCH_BUTTON(
 		_tabbedSelectorToggle,
-		settings.showEmojiButtonInMessageField());
+		!_botKeyboardHide && settings.showEmojiButtonInMessageField());
 	updateAiButtonVisibility();
 	updateSendAsFileVisibility();
 	updateExpandButtonVisibility();

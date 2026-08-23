@@ -282,6 +282,7 @@ public:
 	[[nodiscard]] bool isIncomingUnreadMedia() const;
 	[[nodiscard]] bool hasUnreadMediaFlag() const;
 	[[nodiscard]] bool isTtlCoveredMedia() const;
+	// Zero result means this message is not self-destructing right now.
 	[[nodiscard]] TimeId mediaDestroyAt() const;
 	void markReactionsRead();
 	void markPollVotesRead();
@@ -299,7 +300,6 @@ public:
 	[[nodiscard]] HistoryMessageContent backupContent();
 	void applyContent(HistoryMessageContent &&content);
 
-	// Zero result means this message is not self-destructing right now.
 	void applyMediaContentsRead(TimeId readDate);
 
 	[[nodiscard]] bool definesReplyKeyboard() const;

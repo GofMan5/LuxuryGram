@@ -804,18 +804,18 @@ ChatWidget::ChatWidget(
 				// jumping to the scheduled section on every send would drag
 				// the user out of the chat they are typing in.
 				const auto &ghost = LuxurySettings::ghost(&session());
-				if (ghost.isUseScheduledMessages()) {
-				} else if (_topic) {
-					crl::on_main(this, [=, t = _topic] {
-						controller->showSection(
-							std::make_shared<HistoryView::ScheduledMemento>(t));
-					});
-				} else if (mode() == Mode::History) {
-					crl::on_main(this, [=, history = action.history] {
-						controller->showSection(
-							std::make_shared<HistoryView::ScheduledMemento>(
-								history));
-					});
+				if (!ghost.isUseScheduledMessages()) {
+					if (_topic) {
+						crl::on_main(this, [=, t = _topic] {
+							controller->showSection(
+								std::make_shared<ScheduledMemento>(t));
+						});
+					} else if (mode() == Mode::History) {
+						crl::on_main(this, [=, history = action.history] {
+							controller->showSection(
+								std::make_shared<ScheduledMemento>(history));
+						});
+					}
 				}
 			} else {
 				if (mode() == Mode::History) {

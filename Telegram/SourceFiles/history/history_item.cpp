@@ -8282,6 +8282,12 @@ void HistoryItem::unarmMediaDestroy() {
 		const auto at = std::get_if<TimeId>(&selfdestruct->destructAt);
 		if (at && *at > 0) {
 			_history->owner().unregisterMediaDestroy(*at, this);
+			// LuxuryGram: forget the deadline too, not just the registration.
+			// Upstream only unarms media it is about to delete, so a stale
+			// destructAt is invisible there; we keep the media, and then every
+			// mediaDestroyAt() reader shows a countdown stuck at zero -- the
+			// viewer even re-arms a one second timer on it forever.
+			selfdestruct->destructAt = TimeId();
 		}
 	}
 }

@@ -465,7 +465,9 @@ void Photo::draw(Painter &p, const PaintContext &context) const {
 			return spoilerTagBackground();
 		});
 	}
-	if (ttlCovered) {
+	if (ttlCovered
+		&& !LuxuryFeatures::MessageShot::ignoreRender(
+			LuxuryFeatures::MessageShot::RenderPart::Date)) {
 		PaintTtlLabel(
 			p,
 			QPoint(paintx, painty),
@@ -959,7 +961,9 @@ void Photo::drawGrouped(
 				context.paused);
 		}
 	}
-	if (ttlCovered) {
+	if (ttlCovered
+		&& !LuxuryFeatures::MessageShot::ignoreRender(
+			LuxuryFeatures::MessageShot::RenderPart::Date)) {
 		PaintTtlLabel(
 			p,
 			geometry.topLeft(),
