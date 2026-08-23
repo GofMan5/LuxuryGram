@@ -40,7 +40,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_polls.h"
 
 // LuxuryGram includes
-#include "luxury/luxury_settings.h"
+#include "luxury/features/message_shot/message_shot_render.h"
 
 
 namespace HistoryView {
@@ -850,8 +850,8 @@ void Reply::paint(
 	}
 	Ui::Text::ValidateQuotePaintCache(*cache, quoteSt);
 	Ui::Text::FillQuotePaint(p, rect, *cache, quoteSt);
-	const auto &settings = LuxurySettings::getInstance();
-	if (!settings.simpleQuotesAndReplies() && backgroundEmojiData) {
+	const auto simple = LuxuryFeatures::MessageShot::simpleQuotesAndReplies();
+	if (!simple && backgroundEmojiData) {
 		ValidateBackgroundEmoji(
 			backgroundEmojiId,
 			colorCollectible,

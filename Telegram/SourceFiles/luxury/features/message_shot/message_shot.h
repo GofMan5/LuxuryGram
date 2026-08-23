@@ -6,6 +6,7 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include "luxury/features/message_shot/message_shot_render.h"
 #include "luxury/features/message_shot/message_shot_theme_state.h"
 #include "history/view/history_view_list_widget.h"
 #include "ui/chat/chat_style.h"
@@ -19,8 +20,15 @@ struct ShotConfig
 {
 	not_null<Window::SessionController*> controller;
 	std::shared_ptr<Ui::ChatStyle> st;
-	std::vector<not_null<HistoryItem*>> messages;
+	// Ids, not pointers: the box outlives the messages it renders, and it
+	// re-renders from this list on every preference toggle.
+	std::vector<FullMsgId> messages;
 };
+
+// Skips the ones deleted since the box was opened. Empty means nothing is left
+// to render.
+[[nodiscard]] std::vector<not_null<HistoryItem*>> ResolveMessages(
+	const ShotConfig &config);
 
 enum RenderPart
 {
@@ -30,7 +38,6 @@ enum RenderPart
 };
 
 bool ignoreRender(RenderPart part);
-bool isTakingShot();
 
 bool isChoosingTheme();
 bool setChoosingTheme(bool val);

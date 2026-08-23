@@ -23,7 +23,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
-#include "luxury/utils/telegram_helpers.h"
 #include "styles/style_info.h"
 
 

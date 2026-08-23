@@ -11,6 +11,7 @@
 #include "luxury/ui/boxes/theme_selector_box.h"
 #include "luxury/ui/components/image_view.h"
 #include "boxes/abstract_box.h"
+#include "core/file_utilities.h"
 #include "data/data_chat.h"
 #include "data/data_channel.h"
 #include "data/data_todo_list.h"
@@ -24,11 +25,11 @@
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
 #include "ui/vertical_list.h"
+#include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
 #include "ui/wrap/vertical_layout.h"
 
 #include <memory>
-#include <QFileDialog>
 #include <QGuiApplication>
 
 MessageShotBox::MessageShotBox(
@@ -50,10 +51,7 @@ void MessageShotBox::setupContent() {
 
 	LuxuryFeatures::MessageShot::ensureChatThemesRefreshed();
 
-	auto &settings = LuxurySettings::getInstance();
-	auto &shotSettings = settings.messageShotSettings();
-	const auto savedSimpleQuotesAndReplies = settings.simpleQuotesAndReplies();
-	settings.setSimpleQuotesAndReplies(!shotSettings.showColorfulReplies());
+	auto &shotSettings = LuxurySettings::getInstance().messageShotSettings();
 
 	using namespace Settings;
 
@@ -91,7 +89,9 @@ void MessageShotBox::setupContent() {
 	auto hasReplies = false;
 	auto hasHeaderDecorations = false;
 	auto hasSpoilers = false;
-	for (const auto &item : _config.messages) {
+	// Which preference rows to offer is decided once, from whatever still exists
+	// when the box opens.
+	for (const auto &item : LuxuryFeatures::MessageShot::ResolveMessages(_config)) {
 		if (!hasReactions && !item->reactions().empty()) {
 			hasReactions = true;
 		}
@@ -362,10 +362,10 @@ void MessageShotBox::setupContent() {
 		) | rpl::skip(1) | on_next(
 			[=](bool enabled)
 			{
-				auto &currentSettings = LuxurySettings::getInstance();
-				currentSettings.messageShotSettings().setShowColorfulReplies(enabled);
-				currentSettings.setSimpleQuotesAndReplies(!enabled);
+				LuxurySettings::getInstance().messageShotSettings().setShowColorfulReplies(enabled);
 
+				// The quote colours are cached inside the style, so the shot needs
+				// a fresh one to pick the new answer up.
 				_config.st = std::make_shared<Ui::ChatStyle>(_config.st.get());
 				updatePreview();
 			},
@@ -395,23 +395,54 @@ void MessageShotBox::setupContent() {
 			  [=]
 			  {
 				  const auto image = imageView->getImage();
-				  const auto path = QFileDialog::getSaveFileName(
+				  if (image.isNull()) {
+					  // Nothing was rendered -- the size guard rejected it, or every
+					  // message is gone. Keep the box and the user's selection.
+					  showToast(tr::luxury_MessageShotEmpty(tr::now));
+					  return;
+				  }
+				  auto filter = u"PNG Image (*.png);;"_q
+					  + FileDialog::AllFilesFilter();
+				  FileDialog::GetWritePath(
 					  this,
 					  tr::lng_save_file(tr::now),
-					  QString(),
-					  "*.png");
-
-				  if (!path.isEmpty()) {
-					  image.save(path);
-				  }
-
-			  	  _tookShot = true;
-				  closeBox();
+					  filter,
+					  filedialogDefaultName(u"shot"_q, u".png"_q),
+					  crl::guard(this, [=](const QString &result) {
+						  if (result.isEmpty()) {
+							  return;
+						  }
+						  // QImage::save() infers the format from the suffix, and a
+						  // name typed without one would silently write nothing.
+						  const auto path = result.endsWith(
+							  u".png"_q,
+							  Qt::CaseInsensitive)
+							  ? result
+							  : (result + u".png"_q);
+						  _tookShot = true;
+						  closeBox();
+						  // A shot can encode to tens of megabytes, so it does not
+						  // belong on the main thread.
+						  crl::async([=] {
+							  if (!image.save(path)) {
+								  crl::on_main([] {
+									  Ui::Toast::Show(
+										  tr::luxury_MessageShotSaveFailed(tr::now));
+								  });
+							  }
+						  });
+					  }));
 			  });
 	addButton(tr::luxury_MessageShotCopy(),
 			  [=]
 			  {
-				  QGuiApplication::clipboard()->setImage(imageView->getImage());
+				  const auto image = imageView->getImage();
+				  if (image.isNull()) {
+					  // Do not wipe the clipboard with nothing.
+					  showToast(tr::luxury_MessageShotEmpty(tr::now));
+					  return;
+				  }
+				  QGuiApplication::clipboard()->setImage(image);
 
 			  	  _tookShot = true;
 				  closeBox();
@@ -426,7 +457,6 @@ void MessageShotBox::setupContent() {
 		{
 			LuxuryFeatures::MessageShot::resetCustomSelected();
 			LuxuryFeatures::MessageShot::resetDefaultSelected();
-			LuxurySettings::getInstance().setSimpleQuotesAndReplies(savedSimpleQuotesAndReplies);
 		},
 		content->lifetime());
 

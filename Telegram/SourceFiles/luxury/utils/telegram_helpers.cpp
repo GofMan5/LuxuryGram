@@ -12,10 +12,8 @@
 #include "luxury/luxury_settings.h"
 #include "luxury/luxury_state.h"
 #include "luxury/luxury_worker.h"
-#include "luxury/data/entities.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/features/filters/filters_controller.h"
-#include "luxury/ui/toasts.h"
 #include "core/core_settings.h"
 #include "core/application.h"
 #include "base/call_delayed.h"
@@ -49,7 +47,6 @@
 #include "ui/layers/generic_box.h"
 #include "ui/text/format_values.h"
 #include "ui/text/text_entity.h"
-#include "ui/toast/toast.h"
 #include "window/window_controller.h"
 
 #include <atomic>
@@ -321,19 +318,30 @@ QString formatDateTime(const QDateTime &date) {
 }
 
 QString formatMessageTime(const QTime &time) {
-	const auto &settings = LuxurySettings::getInstance();
+	// Called for every message on layout, and the format only depends on the
+	// system locale, which does not change while we are running. Building a
+	// QLocale and asking it for the format each time was pure overhead.
+	static const auto locale = QLocale();
+	static const auto shortFormat = locale.timeFormat(QLocale::ShortFormat);
+	static const auto secondsFormat = [] {
+		// Insert the seconds right after the minutes, reusing the separator the
+		// locale already picked, so "h:mm AP" and "H.mm" both stay themselves.
+		const auto minutes = shortFormat.indexOf(u"mm"_q);
+		if (minutes < 1) {
+			return shortFormat.contains(u"AP"_q, Qt::CaseInsensitive)
+				? u"h:mm:ss AP"_q
+				: u"HH:mm:ss"_q;
+		}
+		auto result = shortFormat;
+		return result.insert(minutes + 2, u"%1ss"_q.arg(
+			shortFormat.at(minutes - 1)));
+	}();
 
-	const auto format =
-		settings.showMessageSeconds()
-			? (QLocale().timeFormat(QLocale::ShortFormat).contains("AP")
-				   ? "h:mm:ss AP"
-				   : "HH:mm:ss")
-			: QLocale().timeFormat(QLocale::ShortFormat);
-
-	return QLocale().toString(
+	return locale.toString(
 		time,
-		format
-	);
+		LuxurySettings::getInstance().showMessageSeconds()
+			? secondsFormat
+			: shortFormat);
 }
 
 int getMediaSizeBytes(not_null<HistoryItem*> message) {

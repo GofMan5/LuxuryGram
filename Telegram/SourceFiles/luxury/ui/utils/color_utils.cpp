@@ -153,42 +153,6 @@ double ColorUtils::calculateContrast(QRgb foreground, QRgb background) {
 	return std::max(luminance1, luminance2) / std::min(luminance1, luminance2);
 }
 
-int ColorUtils::calculateMinimumAlpha(QRgb foreground, QRgb background, float minContrastRatio) {
-	if (qAlpha(background) != 255) {
-		return -1;
-	}
-
-	auto testForeground = setAlphaComponent(foreground, 255);
-	auto testRatio = calculateContrast(testForeground, background);
-	if (testRatio < minContrastRatio) {
-		return -1;
-	}
-
-	constexpr int MAX_ITERATIONS = 10;
-	constexpr int PRECISION = 1;
-
-	int numIterations = 0;
-	int minAlpha = 0;
-	int maxAlpha = 255;
-
-	while (numIterations <= MAX_ITERATIONS && (maxAlpha - minAlpha) > PRECISION) {
-		const auto testAlpha = (minAlpha + maxAlpha) / 2;
-
-		testForeground = setAlphaComponent(foreground, testAlpha);
-		testRatio = calculateContrast(testForeground, background);
-
-		if (testRatio < minContrastRatio) {
-			minAlpha = testAlpha;
-		} else {
-			maxAlpha = testAlpha;
-		}
-
-		numIterations++;
-	}
-
-	return maxAlpha;
-}
-
 int ColorUtils::compositeAlpha(int foregroundAlpha, int backgroundAlpha) {
 	return 0xFF - (((0xFF - backgroundAlpha) * (0xFF - foregroundAlpha)) / 0xFF);
 }
@@ -220,10 +184,6 @@ QRgb ColorUtils::compositeColors(QRgb foreground, QRgb background) {
 									  a);
 
 	return qRgba(r, g, b, a);
-}
-
-QRgb ColorUtils::setAlphaComponent(QRgb color, int alpha) {
-	return qRgba(qRed(color), qGreen(color), qBlue(color), alpha);
 }
 
 } // namespace Luxury::Ui

@@ -67,6 +67,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+#include "luxury/features/filters/filters_controller.h"
 #include "api/api_blocked_peers.h"
 
 
@@ -352,6 +353,10 @@ void Session::finishLogout() {
 }
 
 Session::~Session() {
+	// The filter caches are keyed by uniqueId() and outlive us otherwise, so a
+	// logged-out account kept its verdicts until the size cap wiped everyone's.
+	FiltersController::invalidateSession(uniqueId());
+
 	unlockTerms();
 	data().clear();
 	ClickHandler::clearActive();

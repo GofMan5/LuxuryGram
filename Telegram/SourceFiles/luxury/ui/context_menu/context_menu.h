@@ -42,7 +42,10 @@ void AddDeleteOwnMessagesAction(PeerData *peerData,
 								const Window::PeerMenuCallback &addCallback);
 
 void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
-void AddTranslateMessageAction(
+
+// Returns true when the entry was added, so a caller that has a fallback text
+// for the same message can tell whether it still needs to offer one.
+bool AddTranslateMessageAction(
 	not_null<Ui::PopupMenu*> menu,
 	not_null<Window::SessionController*> controller,
 	HistoryItem *item,

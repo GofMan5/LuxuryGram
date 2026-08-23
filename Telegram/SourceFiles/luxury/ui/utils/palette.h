@@ -6,10 +6,11 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-#include <map>
-#include <QColor>
-#include <QPixmap>
+#include <array>
+#include <set>
+#include <utility>
 #include <vector>
+#include <QImage>
 
 namespace Luxury::Ui {
 
@@ -19,31 +20,24 @@ public:
 	Swatch(QRgb color, int population);
 
 	[[nodiscard]] QRgb rgb() const;
-	[[nodiscard]] int red() const;
-	[[nodiscard]] int green() const;
-	[[nodiscard]] int blue() const;
 	[[nodiscard]] int population() const;
 	[[nodiscard]] std::array<float, 3> hsl() const;
 
-	[[nodiscard]] QColor titleTextColor() const;
-	[[nodiscard]] QColor bodyTextColor() const;
-
 private:
-	void ensureTextColorsGenerated() const;
-
 	int _red = 0;
 	int _green = 0;
 	int _blue = 0;
 	QRgb _rgb = 0;
 	int _population = 0;
 
-	mutable bool _generatedTextColors = false;
-	mutable QColor _titleTextColor;
-	mutable QColor _bodyTextColor;
 	mutable std::array<float, 3> _hsl = {};
 	mutable bool _hslCalculated = false;
 };
 
+// One of the six ranges of saturation and lightness a swatch is scored against.
+// All six stay in play even though only three are ever asked for: they are
+// exclusive, so each claims its colour and takes it out of the running for the
+// ones after it. Dropping any changes what the rest pick.
 class Target
 {
 public:
@@ -55,7 +49,6 @@ public:
 	static const Target DARK_MUTED;
 
 	Target();
-	Target(const Target &from);
 
 	[[nodiscard]] float minimumSaturation() const;
 	[[nodiscard]] float targetSaturation() const;
@@ -90,40 +83,17 @@ private:
 class Palette
 {
 public:
-	using Filter = std::function<bool(QRgb, const std::array<float, 3> &)>;
-
 	class Builder;
 
-	[[nodiscard]] const std::vector<Swatch> &swatches() const;
-	[[nodiscard]] const std::vector<Target> &targets() const;
-
-	[[nodiscard]] const Swatch *vibrantSwatch() const;
-	[[nodiscard]] const Swatch *lightVibrantSwatch() const;
 	[[nodiscard]] const Swatch *darkVibrantSwatch() const;
 	[[nodiscard]] const Swatch *mutedSwatch() const;
-	[[nodiscard]] const Swatch *lightMutedSwatch() const;
 	[[nodiscard]] const Swatch *darkMutedSwatch() const;
 	[[nodiscard]] const Swatch *dominantSwatch() const;
 
-	[[nodiscard]] QRgb vibrantColor(QRgb defaultColor) const;
-	[[nodiscard]] QRgb lightVibrantColor(QRgb defaultColor) const;
-	[[nodiscard]] QRgb darkVibrantColor(QRgb defaultColor) const;
-	[[nodiscard]] QRgb mutedColor(QRgb defaultColor) const;
-	[[nodiscard]] QRgb lightMutedColor(QRgb defaultColor) const;
-	[[nodiscard]] QRgb darkMutedColor(QRgb defaultColor) const;
-	[[nodiscard]] QRgb dominantColor(QRgb defaultColor) const;
-
-	[[nodiscard]] const Swatch *swatchForTarget(const Target &target) const;
-	[[nodiscard]] QRgb colorForTarget(const Target &target, QRgb defaultColor) const;
-
-	static Builder from(const QPixmap &pixmap);
-	static Builder from(const QImage &image);
-	static Palette fromSwatches(const std::vector<Swatch> &swatches);
+	[[nodiscard]] static Builder from(const QImage &image);
 
 	static constexpr int DEFAULT_RESIZE_BITMAP_AREA = 112 * 112;
 	static constexpr int DEFAULT_CALCULATE_NUMBER_COLORS = 16;
-	static constexpr float MIN_CONTRAST_TITLE_TEXT = 3.0f;
-	static constexpr float MIN_CONTRAST_BODY_TEXT = 4.5f;
 
 private:
 	Palette(
@@ -131,6 +101,7 @@ private:
 		std::vector<Target> targets);
 
 	void generate();
+	[[nodiscard]] const Swatch *swatchForTarget(const Target &target) const;
 	const Swatch *generateScoredTarget(const Target &target);
 	const Swatch *getMaxScoredSwatchForTarget(const Target &target);
 	bool shouldBeScoredForTarget(const Swatch &swatch, const Target &target);
@@ -149,36 +120,13 @@ private:
 class Palette::Builder
 {
 public:
-	explicit Builder(const QPixmap &pixmap);
 	explicit Builder(const QImage &image);
-	explicit Builder(const std::vector<Swatch> &swatches);
-
-	Builder &maximumColorCount(int colors);
-	Builder &resizeBitmapArea(int area);
-	Builder &clearFilters();
-	Builder &addFilter(Filter filter);
-	Builder &setRegion(int left, int top, int right, int bottom);
-	Builder &clearRegion();
-	Builder &addTarget(const Target &target);
-	Builder &clearTargets();
 
 	[[nodiscard]] Palette generate();
 
 private:
-	std::vector<int> getPixelsFromImage(const QImage &image);
-	QImage scaleBitmapDown(const QImage &image);
-
-	std::vector<Swatch> _swatches;
 	QImage _image;
 	std::vector<Target> _targets;
-	int _maxColors = DEFAULT_CALCULATE_NUMBER_COLORS;
-	int _resizeArea = DEFAULT_RESIZE_BITMAP_AREA;
-	std::vector<Filter> _filters;
-	QRect _region;
-	bool _hasRegion = false;
-	bool _hasImage = false;
-
-	static Filter DEFAULT_FILTER;
 };
 
 } // namespace Luxury::Ui

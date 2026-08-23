@@ -12,10 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "data/data_changes.h"
-#include "data/data_channel.h"
-#include "data/data_flags.h"
 #include "data/data_peer.h"
-#include "data/data_peer_values.h" // Data::AmPremiumValue.
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -59,18 +56,10 @@ rpl::producer<bool> TranslateTracker::trackingLanguage() const {
 }
 
 void TranslateTracker::setup() {
-	const auto peer = _history->peer;
-	peer->updateFull();
+	_history->peer->updateFull();
 
-	const auto channel = peer->asChannel();
-	auto autoTranslationValue = (channel
-		? (channel->flagsValue() | rpl::type_erased)
-		: rpl::single(Data::Flags<ChannelDataFlags>::Change({}, {}))
-		) | rpl::map([=](Data::Flags<ChannelDataFlags>::Change data) {
-		return (data.value & ChannelDataFlag::AutoTranslation);
-	}) | rpl::distinct_until_changed();
-
-	using namespace rpl::mappers;
+	// Upstream also requires Premium or a channel with auto-translation on;
+	// LuxuryGram tracks whenever chat translation is enabled in settings.
 	_trackingLanguage = Core::App().settings().translateChatEnabledValue();
 	_trackingLanguage.value() | rpl::on_next([=](bool tracking) {
 		_trackingLifetime.destroy();

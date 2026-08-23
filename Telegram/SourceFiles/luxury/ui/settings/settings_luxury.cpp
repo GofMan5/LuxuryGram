@@ -717,8 +717,4 @@ void LuxuryGhost::setupContent() {
 	Ui::ResizeFitChild(this, content);
 }
 
-Type LuxuryGhostId() {
-	return LuxuryGhost::Id();
-}
-
 } // namespace Settings

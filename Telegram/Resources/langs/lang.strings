@@ -8783,6 +8783,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ImportDataCancel" = "No, close window";
 "luxury_ImportDataSuccess" = "Database imported successfully.";
 "luxury_ImportDataFailure" = "Failed to import database.";
+"luxury_DatabaseError" = "Failed to save changes to the database.";
 "luxury_RegexFilters" = "Message Filters";
 "luxury_RegexFiltersAmount#one" = "{count} filter";
 "luxury_RegexFiltersAmount#other" = "{count} filters";
@@ -8960,6 +8961,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MessageShotShowHeaderDecorations" = "Show header decorations";
 "luxury_MessageShotShowColorfulReplies" = "Show colorful replies";
 "luxury_MessageShotRevealSpoilers" = "Reveal spoilers";
+"luxury_MessageShotEmpty" = "Nothing to save: the shot is too large, or the messages are gone.";
+"luxury_MessageShotSaveFailed" = "Could not save the image.";
 "luxury_SendAsSticker" = "Send as Sticker";
 "luxury_SendWithSound" = "Send With Sound";
 "luxury_LuxuryForwardStatusPreparing" = "Forwarding messages";

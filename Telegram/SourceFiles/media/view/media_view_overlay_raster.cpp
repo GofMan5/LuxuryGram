@@ -81,11 +81,8 @@ void OverlayWidget::RendererSW::paintBackground() {
 
 	const auto m = _p->compositionMode();
 	_p->setCompositionMode(QPainter::CompositionMode_Source);
-	const auto &bg = _owner->_fullScreenVideo
-		? st::mediaviewVideoBg
-		: st::mediaviewBg;
 	for (const auto &rect : region) {
-		_p->fillRect(rect, bg);
+		_p->fillRect(rect, st::mediaviewOverlayBg);
 	}
 	if (const auto notch = _owner->topNotchSkip()) {
 		const auto top = QRect(0, 0, _owner->width(), notch);

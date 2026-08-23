@@ -24,7 +24,11 @@ ICON(CHIBI2, "chibi2");
 ICON(EXTERA2, "extera2");
 
 bool isValidAppIcon(const QString &name);
-void loadAppIco();
+
+// Writes the selected .ico next to the settings, returns true only when the
+// file actually changed: refreshing the shell after it is expensive.
+bool loadAppIco();
+
 QString appIcoPath();
 
 QImage loadPreview(const QString& name);
@@ -32,5 +36,10 @@ QImage loadPreview(const QString& name);
 QString currentAppLogoName();
 QImage currentAppLogo();
 QImage currentAppLogoPad();
+
+// Pushes the icon named in the settings out to the shell, the window and the
+// tray. Both the picker and a settings reset change that name without touching
+// anything that draws it.
+void applyAppIcon();
 
 }

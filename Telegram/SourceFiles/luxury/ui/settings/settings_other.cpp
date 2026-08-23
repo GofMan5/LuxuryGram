@@ -73,8 +73,12 @@ void BuildOtherThings(SectionBuilder &builder) {
 			controller->show(Ui::MakeConfirmBox({
 				.text = tr::luxury_ResetSettingsConfirmation(tr::rich),
 				.confirmed = [=](Fn<void()> &&close) {
-					LuxurySettings::reset();
-					controller->showToast(tr::lng_box_done(tr::now));
+					const auto needsRestart = LuxurySettings::reset();
+					if (needsRestart) {
+						ShowRestartPrompt(controller);
+					} else {
+						controller->showToast(tr::lng_box_done(tr::now));
+					}
 					close();
 				},
 				.confirmText = tr::lng_box_yes(),
@@ -114,10 +118,6 @@ void LuxuryOther::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
-}
-
-Type LuxuryOtherId() {
-	return LuxuryOther::Id();
 }
 
 } // namespace Settings

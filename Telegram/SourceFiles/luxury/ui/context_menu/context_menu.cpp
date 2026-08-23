@@ -337,9 +337,10 @@ void AddLuxuryGramActions(PeerData *peerData,
 					tr::luxury_ViewFiltersMenuText(tr::now),
 					[=]
 					{
-						sessionController->dialogId = getDialogIdFromPeer(peerData);
-						sessionController->showExclude = true;
-						sessionController->shadowBan = false;
+						sessionController->luxuryFilters = {
+							.dialogId = getDialogIdFromPeer(peerData),
+							.showExclude = true,
+						};
 						sessionController->showSettings(Settings::LuxuryFiltersList::Id());
 					},
 					&st::menuIconAddToFolder);
@@ -406,6 +407,12 @@ void AddJumpToBeginningAction(PeerData *peerData,
 	}
 
 	const auto controller = sessionController;
+	// A forum topic can be destroyed by a server update while the menu is open or
+	// while resolveJumpToDate is in flight, and both Dialogs::Key and showTopic()
+	// take it as a raw / not_null pointer. Peers live with the session, topics do
+	// not.
+	const auto isTopic = (topic != nullptr);
+	const auto weakTopic = base::make_weak(topic);
 	const auto jumpToDate = [=](auto history, auto callback)
 	{
 		const auto weak = base::make_weak(controller);
@@ -432,18 +439,24 @@ void AddJumpToBeginningAction(PeerData *peerData,
 			id);
 	};
 
-	const auto showTopic = [=](auto topic, MsgId id)
+	const auto showTopic = [=](MsgId id)
 	{
-		controller->showTopic(
-			topic,
-			id,
-			Window::SectionShow::Way::Forward);
+		if (const auto strong = weakTopic.get()) {
+			controller->showTopic(
+				strong,
+				id,
+				Window::SectionShow::Way::Forward);
+		}
 	};
 
 	addCallback(
 		tr::luxury_JumpToBeginning(tr::now),
 		[=]
 		{
+			const auto topic = weakTopic.get();
+			if (isTopic && !topic) {
+				return;
+			}
 			if (user) {
 				jumpToDate(controller->session().data().history(user), showPeerHistory);
 			} else if (group && !chat) {
@@ -456,13 +469,13 @@ void AddJumpToBeginningAction(PeerData *peerData,
 				}
 			} else if (topic) {
 				if (topic->isGeneral()) {
-					showTopic(topic, 1);
+					showTopic(1);
 				} else {
 					jumpToDate(
 						topic,
 						[=](not_null<PeerData*>, MsgId id)
 						{
-							showTopic(topic, id);
+							showTopic(id);
 						});
 				}
 			}
@@ -549,6 +562,11 @@ void AddDeleteOwnMessagesAction(PeerData *peerData,
 }
 
 void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
+	const auto &settings = LuxurySettings::getInstance();
+	if (!needToShowItem(settings.showEditsHistoryInContextMenu())) {
+		return;
+	}
+
 	if (item->hideEditedBadge()) {
 		return;
 	}
@@ -558,59 +576,80 @@ void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 		return;
 	}
 
+	// Synchronous on purpose -- see the note over hasRevisions() in the database
+	// header: the row only exists if the answer is yes, and the menu is built in
+	// one pass.
 	const auto has = LuxuryMessages::hasRevisions(item);
 	if (!has) {
 		return;
 	}
 
+	// The action runs after the menu closed, so the item may already be gone
+	// by then: deleted from the other side, or dropped when the history was
+	// unloaded. Re-resolve it instead of holding the pointer.
+	const auto weak = base::make_weak(&item->history()->session());
+	const auto itemId = item->fullId();
 	menu->addAction(
 		tr::luxury_EditsHistoryMenuText(tr::now),
 		[=]
 		{
-			if (const auto window = item->history()->session().tryResolveWindow()) {
+			const auto session = weak.get();
+			const auto item = session
+				? session->data().message(itemId)
+				: nullptr;
+			if (!item) {
+				return;
+			}
+			if (const auto window = session->tryResolveWindow()) {
 				window->showSection(
-					std::make_shared<MessageHistory::SectionMemento>(item->history()->peer, item, 0));
+					std::make_shared<MessageHistory::SectionMemento>(
+						item->history()->peer,
+						item,
+						0));
 			}
 		},
 		&st::luxuryEditsHistoryIcon);
 }
 
-void AddTranslateMessageAction(
+bool AddTranslateMessageAction(
 		not_null<Ui::PopupMenu*> menu,
 		not_null<Window::SessionController*> controller,
 		HistoryItem *item,
 		TextWithEntities text,
 		bool hasCopyRestriction) {
-	if (!item || text.text.isEmpty()) {
-		return;
+	const auto &settings = LuxurySettings::getInstance();
+	if (!item
+		|| !needToShowItem(settings.showTranslateInContextMenu())
+		|| Ui::SkipTranslate(text)) {
+		return false;
 	}
+	// A server-side translation keeps the formatting, but only when the text
+	// we hand over is the message body itself and not a transcript or a poll.
+	const auto msgId = (text.text == item->originalText().text)
+		? item->id
+		: MsgId();
 	const auto to = Core::App().settings().translateTo();
-	const auto title = tr::lng_translate_bar_to(
-		tr::now,
-		lt_name,
-		Ui::LanguageName(to));
-	for (const auto &action : menu->actions()) {
-		if (action->text() == title) {
-			return;
-		}
-	}
 	const auto weak = base::make_weak(controller);
 	const auto itemId = item->fullId();
-	menu->addAction(title, [=, text = std::move(text)]() mutable {
-		if (const auto strong = weak.get()) {
-			const auto item = strong->session().data().message(itemId);
-			if (!item) {
-				return;
+	menu->addAction(
+		tr::lng_translate_bar_to(tr::now, lt_name, Ui::LanguageName(to)),
+		[=, text = std::move(text)]() mutable {
+			if (const auto strong = weak.get()) {
+				const auto item = strong->session().data().message(itemId);
+				if (!item) {
+					return;
+				}
+				strong->show(Box(
+					Ui::TranslateBoxTo,
+					item->history()->peer,
+					msgId,
+					std::move(text),
+					hasCopyRestriction,
+					to));
 			}
-			strong->show(Box(
-				Ui::TranslateBoxTo,
-				item->history()->peer,
-				MsgId(),
-				std::move(text),
-				hasCopyRestriction,
-				to));
-		}
-	}, &st::menuIconTranslate);
+		},
+		&st::menuIconTranslate);
+	return true;
 }
 
 void AddHideMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
@@ -625,11 +664,17 @@ void AddHideMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 
 	const auto history = item->history();
 	const auto owner = &history->owner();
+	const auto itemId = item->fullId();
 	menu->addAction(
 		tr::luxury_ContextHideMessage(tr::now),
 		[=]()
 		{
-			const auto ids = owner->itemOrItsGroup(item);
+			// The message can be deleted while the menu is open.
+			const auto clicked = owner->message(itemId);
+			if (!clicked) {
+				return;
+			}
+			const auto ids = owner->itemOrItsGroup(clicked);
 			for (const auto &fullId : ids) {
 				if (const auto current = owner->message(fullId)) {
 					LuxuryState::hide(current);
@@ -652,18 +697,26 @@ void AddUserMessagesAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 	}
 
 	if (item->history()->peer->isChat() || item->history()->peer->isMegagroup()) {
+		const auto history = item->history();
+		const auto itemId = item->fullId();
 		menu->addAction(
 			tr::luxury_UserMessagesMenuText(tr::now),
 			[=]
 			{
-				if (const auto controller = item->history()->session().tryResolveWindow()) {
-					const auto peer = item->history()->peer;
+				// The message can be deleted while the menu is open, and its
+				// sender is what we search by.
+				const auto current = history->owner().message(itemId);
+				if (!current) {
+					return;
+				}
+				if (const auto controller = history->session().tryResolveWindow()) {
+					const auto peer = history->peer;
 					const auto key = (peer && !peer->isUser())
-										 ? item->topic()
-											   ? Dialogs::Key{item->topic()}
-											   : Dialogs::Key{item->history()}
-										 : Dialogs::Key{item->history()};
-					controller->searchInChat(key, item->from());
+										 ? current->topic()
+											   ? Dialogs::Key{current->topic()}
+											   : Dialogs::Key{history}
+										 : Dialogs::Key{history};
+					controller->searchInChat(key, current->from());
 				}
 			},
 			&st::menuIconTTL);
@@ -904,22 +957,24 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 		tr::luxury_RepeatMessage(tr::now),
 		[=]
 		{
+			// The message can be deleted while the menu is open, so nothing may
+			// touch the item until it has been resolved again.
+			const auto currentItem = history->owner().message(itemId);
+			if (!currentItem) {
+				return;
+			}
+
 			const auto sendAs = (peer->isUser() || peer->isChat() || history->peer->isMonoforum())
 				? nullptr
 				: session->sendAsPeers().resolveChosen(peer).get();
 
 			const auto inRepliesView = (context == HistoryView::Context::Replies);
-			const auto replyTo = item->replyTo();
+			const auto replyTo = currentItem->replyTo();
 			const auto hasReply = replyTo.messageId.msg != 0;
 			const auto shiftPressed = base::IsShiftPressed();
 
 			const auto useNoQuote = shiftPressed || (inRepliesView && !history->peer->isForum());
 			const auto preserveReply = inRepliesView ? hasReply : (hasReply && shiftPressed);
-
-			const auto currentItem = history->owner().message(itemId);
-			if (!currentItem) {
-				return;
-			}
 
 			auto action = Api::SendAction(
 				history,
@@ -978,6 +1033,11 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 }
 
 void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
+	const auto &settings = LuxurySettings::getInstance();
+	if (!needToShowItem(settings.showReadUntilInContextMenu())) {
+		return;
+	}
+
 	const auto group = item->history()->owner().groups().find(item);
 	const auto readItem = group ? group->items.back().get() : item;
 	if (!readItem->isHistoryEntry()
@@ -993,60 +1053,89 @@ void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 		return;
 	}
 
+	// Same as everywhere else here: by the time the action runs the item may
+	// be deleted, and the reply may arrive even later.
+	const auto weak = base::make_weak(&readItem->history()->session());
+	const auto readId = readItem->fullId();
 	menu->addAction(
 		tr::luxury_ReadUntilMenuText(tr::now),
 		[=]
 		{
-			readHistory(readItem);
-			const auto media = readItem->media();
-			if (media
-				&& media->ttlSeconds() <= 0
-				&& readItem->unsupportedTTL() <= 0
-				&& !readItem->out()) {
-				const auto ids = MTP_vector<MTPint>(1, MTP_int(readItem->id));
-				if (const auto channel = readItem->history()->peer->asChannel()) {
-					readItem->history()->session().api().request(
-						MTPchannels_ReadMessageContents(
-						channel->inputChannel(),
-						ids)).send();
-				} else {
-					readItem->history()->session().api().request(
-						MTPmessages_ReadMessageContents(ids)
-					).done([=](const MTPmessages_AffectedMessages &result)
-					{
-						readItem->history()->session().api()
-							.applyAffectedMessages(
-							readItem->history()->peer,
-							result);
-					}).send();
-				}
-				readItem->markContentsRead();
+			const auto session = weak.get();
+			const auto item = session
+				? session->data().message(readId)
+				: nullptr;
+			if (!item) {
+				return;
 			}
+			readHistory(item);
+			const auto media = item->media();
+			if (!media
+				|| media->ttlSeconds() > 0
+				|| item->unsupportedTTL() > 0
+				|| item->out()) {
+				return;
+			}
+			const auto peer = item->history()->peer;
+			const auto ids = MTP_vector<MTPint>(1, MTP_int(readId.msg));
+			if (const auto channel = peer->asChannel()) {
+				session->api().request(MTPchannels_ReadMessageContents(
+					channel->inputChannel(),
+					ids)).send();
+			} else {
+				session->api().request(MTPmessages_ReadMessageContents(
+					ids
+				)).done([=](const MTPmessages_AffectedMessages &result)
+				{
+					if (const auto session = weak.get()) {
+						session->api().applyAffectedMessages(peer, result);
+					}
+				}).send();
+			}
+			item->markContentsRead();
 		},
 		&st::menuIconShowInChat);
 }
 
 void AddBurnAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
+	const auto &settings = LuxurySettings::getInstance();
+	if (!needToShowItem(settings.showExpireMediaInContextMenu())) {
+		return;
+	}
+
 	if (!item->media() || (item->media()->ttlSeconds() <= 0 && item->unsupportedTTL() <= 0) || item->out() ||
 		!item->hasUnreadMediaFlag()) {
 		return;
 	}
 
+	const auto weak = base::make_weak(&item->history()->session());
+	const auto itemId = item->fullId();
 	menu->addAction(
 		tr::luxury_ExpireMediaContextMenuText(tr::now),
 		[=]
 		{
-			const auto ids = MTP_vector<MTPint>(1, MTP_int(item->id));
-
-			item->history()->session().api().request(MTPmessages_ReadMessageContents(
-					ids
-				)).done([=](const MTPmessages_AffectedMessages &result)
-				{
-					item->history()->session().api().applyAffectedMessages(
-						item->history()->peer,
-						result);
+			const auto session = weak.get();
+			const auto item = session
+				? session->data().message(itemId)
+				: nullptr;
+			if (!item) {
+				return;
+			}
+			const auto peer = item->history()->peer;
+			const auto ids = MTP_vector<MTPint>(1, MTP_int(itemId.msg));
+			session->api().request(MTPmessages_ReadMessageContents(
+				ids
+			)).done([=](const MTPmessages_AffectedMessages &result)
+			{
+				const auto session = weak.get();
+				if (!session) {
+					return;
+				}
+				session->api().applyAffectedMessages(peer, result);
+				if (const auto item = session->data().message(itemId)) {
 					item->markContentsRead();
-				}).send();
+				}
+			}).send();
 		},
 		&st::menuIconTTLAny);
 }
@@ -1064,6 +1153,10 @@ void AddCreateFilterAction(not_null<Ui::PopupMenu*> menu,
 		return;
 	}
 
+	// The dialog the new filter is scoped to is the only thing we need from the
+	// message, and the message can be deleted while the menu is open: read it now.
+	const auto dialogId = getDialogIdFromPeer(item->history()->peer);
+
 	menu->addAction(
 		tr::luxury_RegexFilterQuickAdd(tr::now),
 		[=]
@@ -1076,7 +1169,7 @@ void AddCreateFilterAction(not_null<Ui::PopupMenu*> menu,
 
 			controller->show(Settings::RegexEditBox(
 				&filter,
-				getDialogIdFromPeer(item->history()->peer),
+				dialogId,
 				true));
 		},
 		&st::menuIconAddToFolder);

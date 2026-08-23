@@ -136,26 +136,31 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 		if (const auto peerData = Data::PeerFromInputMTP(&req.session()->data(), req.peer())) {
 			for (int i = 0; i < req.ids().v.size(); ++i) {
 				const auto msgId = req.ids().v[i].v;
-				if (const auto message = req.session()->data().message(peerData->id, msgId)) {
-					const auto textWithEntities = message->originalText();
-					const auto key = generateCacheKey(
-						textWithEntities,
-						fromLang,
-						toLang,
-						req._provider);
-					cacheKeys.push_back(key);
-
-					if (const auto cached = getFromCache(key)) {
-						resultTexts.push_back(*cached);
-					} else {
-						resultTexts.push_back({});
-						uncachedIndices.push_back(i);
-						uncachedTexts.push_back(textWithEntities);
-					}
-				} else {
-					// todo: ??
+				const auto message = req.session()->data().message(
+					peerData->id,
+					msgId);
+				if (!message) {
+					// Keep the slot so the reply stays index-aligned with the
+					// request; an empty key is never cached and an empty text
+					// is reported as an error by the provider.
 					cacheKeys.push_back(QString());
 					resultTexts.push_back({});
+					continue;
+				}
+				const auto textWithEntities = message->originalText();
+				const auto key = generateCacheKey(
+					textWithEntities,
+					fromLang,
+					toLang,
+					req._provider);
+				cacheKeys.push_back(key);
+
+				if (const auto cached = getFromCache(key)) {
+					resultTexts.push_back(*cached);
+				} else {
+					resultTexts.push_back({});
+					uncachedIndices.push_back(i);
+					uncachedTexts.push_back(textWithEntities);
 				}
 			}
 		}
@@ -272,7 +277,17 @@ void TranslateManager::resetCache() {
 	_cacheList.clear();
 	_cacheMap.clear();
 
-	// todo: remove all running requests
+	// Whatever is still in flight was sent to the provider we just left, so
+	// let the callers know instead of leaving them on a spinner forever. The
+	// pending map is moved out first, so a callback that starts a new request
+	// does not invalidate what we are iterating.
+	for (const auto &[id, pending] : base::take(_pending)) {
+		if (pending.fail) {
+			pending.fail(MTP::Error(MTP::Error::MTPLocal(
+				"REQUEST_CANCELED",
+				"Translation provider changed.")));
+		}
+	}
 }
 
 TranslateManager *TranslateManager::currentInstance() {

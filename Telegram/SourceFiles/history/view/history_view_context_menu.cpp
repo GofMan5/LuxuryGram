@@ -1570,6 +1570,7 @@ void FillContextMenuItems(
 	}
 
 	AddTopMessageActions(result, request, list);
+	auto addedTranslate = false;
 	if (lnkPhoto && request.selectedItems.empty()) {
 		AddPhotoActions(result, lnkPhoto, item, list);
 	} else if (lnkDocument) {
@@ -1583,6 +1584,9 @@ void FillContextMenuItems(
 			context,
 			list->controller(),
 			skipWhoReacted);
+		// AddPollActions offers the question and answers for translation, so
+		// the fallback below must not offer the same message a second time.
+		addedTranslate = true;
 	} else if (!request.overSelection && view && !hasSelection) {
 		const auto owner = &view->history()->owner();
 		const auto media = view->media();
@@ -1614,7 +1618,7 @@ void FillContextMenuItems(
 					.append(item->originalText()))
 				: item->originalText();
 			if (!translate.text.isEmpty()) {
-				LuxuryUi::AddTranslateMessageAction(
+				addedTranslate = LuxuryUi::AddTranslateMessageAction(
 					result,
 					list->controller(),
 					item,
@@ -1625,7 +1629,7 @@ void FillContextMenuItems(
 	}
 
 	AddCopyLinkAction(result, link);
-	if (item && !hasSelection && !request.overSelection) {
+	if (item && !addedTranslate && !hasSelection && !request.overSelection) {
 		LuxuryUi::AddTranslateMessageAction(
 			result,
 			list->controller(),

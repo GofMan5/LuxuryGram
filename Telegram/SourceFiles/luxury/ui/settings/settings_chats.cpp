@@ -353,6 +353,42 @@ void BuildContextMenuElements(SectionBuilder &builder, LuxurySectionBuilder &lux
 		.setter = [](int i) { LuxurySettings::getInstance().setShowRepeatMessageInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 		.icon = { &st::luxuryRepeatMenuIcon },
 	});
+	luxury.addChooseButton({
+		.id = u"luxury/showTranslateInContextMenu"_q,
+		.title = tr::lng_context_translate(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
+		.initialSelection = static_cast<int>(settings->showTranslateInContextMenu()),
+		.options = options,
+		.setter = [](int i) { LuxurySettings::getInstance().setShowTranslateInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.icon = { &st::menuIconTranslate },
+	});
+	luxury.addChooseButton({
+		.id = u"luxury/showEditsHistoryInContextMenu"_q,
+		.title = tr::luxury_EditsHistoryMenuText(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
+		.initialSelection = static_cast<int>(settings->showEditsHistoryInContextMenu()),
+		.options = options,
+		.setter = [](int i) { LuxurySettings::getInstance().setShowEditsHistoryInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.icon = { &st::luxuryEditsHistoryIcon },
+	});
+	luxury.addChooseButton({
+		.id = u"luxury/showReadUntilInContextMenu"_q,
+		.title = tr::luxury_ReadUntilMenuText(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
+		.initialSelection = static_cast<int>(settings->showReadUntilInContextMenu()),
+		.options = options,
+		.setter = [](int i) { LuxurySettings::getInstance().setShowReadUntilInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.icon = { &st::menuIconShowInChat },
+	});
+	luxury.addChooseButton({
+		.id = u"luxury/showExpireMediaInContextMenu"_q,
+		.title = tr::luxury_ExpireMediaContextMenuText(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
+		.initialSelection = static_cast<int>(settings->showExpireMediaInContextMenu()),
+		.options = options,
+		.setter = [](int i) { LuxurySettings::getInstance().setShowExpireMediaInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.icon = { &st::menuIconTTLAny },
+	});
 	if (settings->filtersEnabled()) {
 		luxury.addChooseButton({
 			.id = u"luxury/showAddFilterInContextMenu"_q,
@@ -482,10 +518,6 @@ void LuxuryChats::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
-}
-
-Type LuxuryChatsId() {
-	return LuxuryChats::Id();
 }
 
 } // namespace Settings

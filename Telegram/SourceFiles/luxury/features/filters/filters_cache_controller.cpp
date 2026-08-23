@@ -22,20 +22,13 @@
 #include <unordered_set>
 
 namespace FiltersCacheController {
+namespace {
 
 std::mutex rebuildMutex;
 std::mutex cacheMutex;
 std::mutex filteredMessagesMutex;
 
 rpl::event_stream<> filtersUpdateStream;
-
-void fireUpdate() {
-	filtersUpdateStream.fire({});
-}
-
-rpl::producer<> updates() {
-	return filtersUpdateStream.events();
-}
 
 std::shared_ptr<const Cache> cache;
 
@@ -46,6 +39,24 @@ std::unordered_map<uint64, std::unordered_set<BareId>> dialogsWithHiddenBlockedM
 std::size_t filteredMessagesCount = 0;
 std::size_t hiddenBlockedDialogsCount = 0;
 constexpr auto kMaxCachedFilterResults = std::size_t(65'536);
+
+std::unordered_map<ID, std::unordered_set<HashablePattern, PatternHasher>> buildExclusions(
+		const std::vector<RegexFilterGlobalExclusion> &exclusions,
+		const std::vector<HashablePattern> &shared) {
+	std::unordered_map<ID, std::unordered_set<HashablePattern, PatternHasher>> exclusionsByDialogId;
+
+	for (const auto &exclusion : exclusions) {
+		auto &exclusionSet = exclusionsByDialogId[exclusion.dialogId];
+
+		for (const auto &filter : shared) {
+			if (filter.id == exclusion.filterId) {
+				exclusionSet.insert(filter);
+				break;
+			}
+		}
+	}
+	return exclusionsByDialogId;
+}
 
 std::shared_ptr<const Cache> buildCache() {
 	const auto filters = LuxuryDatabase::getAllRegexFilters();
@@ -96,36 +107,38 @@ std::shared_ptr<const Cache> buildCache() {
 	return result;
 }
 
-void rebuildCache() {
-	std::lock_guard rebuildLock(rebuildMutex);
-	auto next = buildCache();
-	{
-		std::lock_guard cacheLock(cacheMutex);
-		std::lock_guard filteredLock(filteredMessagesMutex);
-		cache = std::move(next);
-		filteredMessages.clear();
-		dialogsWithHiddenBlockedMessages.clear();
-		filteredMessagesCount = 0;
-		hiddenBlockedDialogsCount = 0;
-	}
+void clearResults() {
+	const auto lock = std::lock_guard(filteredMessagesMutex);
+	filteredMessages.clear();
+	dialogsWithHiddenBlockedMessages.clear();
+	filteredMessagesCount = 0;
+	hiddenBlockedDialogsCount = 0;
 }
 
-std::unordered_map<long long, std::unordered_set<HashablePattern, PatternHasher>> buildExclusions(
-	const std::vector<RegexFilterGlobalExclusion> &exclusions,
-	const std::vector<HashablePattern> &shared) {
-	std::unordered_map<long long, std::unordered_set<HashablePattern, PatternHasher>> exclusionsByDialogId;
+} // namespace
 
-	for (const auto &exclusion : exclusions) {
-		auto &exclusionSet = exclusionsByDialogId[exclusion.dialogId];
+void fireUpdate() {
+	filtersUpdateStream.fire({});
+}
 
-		for (const auto &filter : shared) {
-			if (filter.id == exclusion.filterId) {
-				exclusionSet.insert(filter);
-				break;
-			}
-		}
-	}
-	return exclusionsByDialogId;
+rpl::producer<> updates() {
+	return filtersUpdateStream.events();
+}
+
+void reloadNow() {
+	const auto rebuildLock = std::lock_guard(rebuildMutex);
+	auto next = buildCache();
+	// Swap the patterns and drop the verdicts under one cacheMutex hold, in the
+	// same order putFiltered() takes them: a reader that slipped in between
+	// would have its result wiped a moment later for no reason.
+	const auto cacheLock = std::lock_guard(cacheMutex);
+	cache = std::move(next);
+	clearResults();
+}
+
+void dropResults() {
+	clearResults();
+	fireUpdate();
 }
 
 std::shared_ptr<const Cache> snapshot() {
@@ -280,6 +293,22 @@ void invalidate(not_null<HistoryItem*> item) {
 		}
 	} else {
 		invalidateSingle(item);
+	}
+}
+
+void invalidateSession(uint64 sessionId) {
+	const auto lock = std::lock_guard(filteredMessagesMutex);
+	if (const auto i = filteredMessages.find(sessionId)
+		; i != end(filteredMessages)) {
+		for (const auto &[peerId, messages] : i->second) {
+			filteredMessagesCount -= messages.size();
+		}
+		filteredMessages.erase(i);
+	}
+	if (const auto i = dialogsWithHiddenBlockedMessages.find(sessionId)
+		; i != end(dialogsWithHiddenBlockedMessages)) {
+		hiddenBlockedDialogsCount -= i->second.size();
+		dialogsWithHiddenBlockedMessages.erase(i);
 	}
 }
 

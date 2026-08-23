@@ -11,6 +11,7 @@
 #include "luxury/luxury_ui_settings.h"
 #include "luxury/luxury_worker.h"
 #include "luxury/data/luxury_database.h"
+#include "luxury/features/filters/filters_cache_controller.h"
 #include "luxury/ui/luxury_logo.h"
 #include "features/translator/luxury_translator.h"
 #include "lang/lang_instance.h"
@@ -45,6 +46,15 @@ void initUiSettings() {
 
 void initDatabase() {
 	LuxuryDatabase::initialize();
+
+	// snapshot() builds the cache on whatever thread asks for it first, and the
+	// first asker is a message paint. Do it here instead, on the queue the
+	// database work belongs on, so nothing but the very first frame can race it.
+	if (LuxurySettings::getInstance().filtersEnabled()) {
+		LuxuryDatabase::async([] {
+			FiltersCacheController::reloadNow();
+		});
+	}
 }
 
 void initWorker() {
@@ -57,8 +67,12 @@ void initTranslator() {
 
 void initIcon() {
 #ifdef Q_OS_WIN
-	LuxuryAssets::loadAppIco();
-	reloadAppIconFromTaskBar();
+	// Rewriting the pinned taskbar shortcuts walks a directory and loads every
+	// .lnk in it through COM, and this runs before the first window is shown.
+	// Only pay for it when the icon on disk is not the one we want.
+	if (LuxuryAssets::loadAppIco()) {
+		reloadAppIconFromTaskBar();
+	}
 #endif
 }
 

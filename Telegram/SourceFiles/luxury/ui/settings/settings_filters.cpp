@@ -13,6 +13,7 @@
 #include "luxury/ui/boxes/import_filters_box.h"
 #include "luxury/ui/settings/luxury_builder.h"
 #include "luxury/ui/settings/settings_main.h"
+#include "luxury/ui/toasts.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "boxes/abstract_box.h"
 #include "boxes/peer_list_box.h"
@@ -61,8 +62,9 @@ void BuildFiltersSettings(SectionBuilder &builder) {
 			return (enabled != settings->filtersEnabled());
 		}) | on_next([=](bool enabled) {
 			LuxurySettings::getInstance().setFiltersEnabled(enabled);
-			FiltersCacheController::rebuildCache();
-			FiltersCacheController::fireUpdate();
+			// None of these three feed into the compiled patterns, they only
+			// change where the existing ones apply, so the verdicts are enough.
+			FiltersCacheController::dropResults();
 		}, enabledButton->lifetime());
 	}
 
@@ -79,8 +81,7 @@ void BuildFiltersSettings(SectionBuilder &builder) {
 			return (enabled != settings->filtersEnabledInChats());
 		}) | on_next([=](bool enabled) {
 			LuxurySettings::getInstance().setFiltersEnabledInChats(enabled);
-			FiltersCacheController::rebuildCache();
-			FiltersCacheController::fireUpdate();
+			FiltersCacheController::dropResults();
 		}, sharedButton->lifetime());
 	}
 
@@ -96,8 +97,7 @@ void BuildFiltersSettings(SectionBuilder &builder) {
 			return (enabled != settings->hideFromBlocked());
 		}) | on_next([=](bool enabled) {
 			LuxurySettings::getInstance().setHideFromBlocked(enabled);
-			FiltersCacheController::rebuildCache();
-			FiltersCacheController::fireUpdate();
+			FiltersCacheController::dropResults();
 		}, blockedButton->lifetime());
 	}
 
@@ -114,8 +114,7 @@ void BuildShared(SectionBuilder &builder) {
 		.title = tr::luxury_RegexFiltersShared(),
 		.st = &st::settingsButtonNoIcon,
 		.onClick = [=] {
-			controller->dialogId = std::nullopt;
-			controller->showExclude = false;
+			controller->luxuryFilters = { .showExclude = false };
 			controller->showSettings(LuxuryFiltersList::Id());
 		},
 	});
@@ -130,9 +129,10 @@ void BuildShadowBan(SectionBuilder &builder) {
 		.title = tr::luxury_FiltersShadowBan(),
 		.st = &st::settingsButtonNoIcon,
 		.onClick = [=] {
-			controller->dialogId = std::nullopt;
-			controller->showExclude = false;
-			controller->shadowBan = true;
+			controller->luxuryFilters = {
+				.showExclude = false,
+				.shadowBan = true,
+			};
 			controller->showSettings(LuxuryFiltersList::Id());
 		},
 	});
@@ -205,8 +205,10 @@ void LuxuryFilters::fillTopBarMenu(const Ui::Menu::MenuCallback &addAction) {
 						controller,
 						[=](not_null<Data::Thread*> thread) {
 							const auto peer = thread->peer();
-							controller->dialogId = getDialogIdFromPeer(peer);
-							controller->showExclude = true;
+							controller->luxuryFilters = {
+								.dialogId = getDialogIdFromPeer(peer),
+								.showExclude = true,
+							};
 							controller->showSettings(LuxuryFiltersList::Id());
 							return true;
 						},
@@ -239,11 +241,22 @@ void LuxuryFilters::fillTopBarMenu(const Ui::Menu::MenuCallback &addAction) {
 		.text = tr::luxury_FiltersMenuClear(tr::now),
 		.handler = [=] {
 			auto callback = [=](Fn<void()> &&close) {
-				LuxuryDatabase::deleteAllFilters();
-				LuxuryDatabase::deleteAllExclusions();
-				FiltersCacheController::rebuildCache();
-				FiltersCacheController::fireUpdate();
 				close();
+				LuxuryDatabase::async([] {
+					// Both, always: && would leave the exclusions behind
+					// whenever clearing the filters themselves failed.
+					const auto filters = LuxuryDatabase::deleteAllFilters();
+					const auto exclusions =
+						LuxuryDatabase::deleteAllExclusions();
+					// Already off the main thread.
+					FiltersCacheController::reloadNow();
+					crl::on_main([=] {
+						if (!filters || !exclusions) {
+							Luxury::Ui::ShowDatabaseError();
+						}
+						FiltersCacheController::fireUpdate();
+					});
+				});
 			};
 			auto box = Ui::MakeConfirmBox({
 				.text = tr::luxury_FiltersClearPopupText(),
@@ -269,10 +282,6 @@ void LuxuryFilters::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
-}
-
-Type LuxuryFiltersId() {
-	return LuxuryFilters::Id();
 }
 
 } // namespace Settings

@@ -27,6 +27,4 @@ private:
 	not_null<Window::SessionController*> _controller;
 };
 
-[[nodiscard]] Type LuxuryGhostId();
-
 } // namespace Settings

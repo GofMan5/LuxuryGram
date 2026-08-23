@@ -8,7 +8,6 @@
 
 #include "settings/sections/settings_main.h"
 #include "lang_auto.h"
-#include "luxury/luxury_settings.h"
 #include "luxury/ui/luxury_logo.h"
 #include "luxury/ui/settings/settings_appearance.h"
 #include "luxury/ui/settings/settings_luxury.h"
@@ -212,10 +211,6 @@ void LuxuryMain::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
-}
-
-Type LuxuryMainId() {
-	return LuxuryMain::Id();
 }
 
 } // namespace Settings

@@ -16,7 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Media::View {
 
 QColor OverBackgroundColor() {
-	auto c1 = st::mediaviewBg->c;
+	auto c1 = st::mediaviewOverlayBg->c;
 	auto c2 = QColor(255, 255, 255);
 	const auto mix = [&](int a, int b) {
 		constexpr auto k1 = 0.15 * 0.85 / (1. - 0.85 * 0.85);

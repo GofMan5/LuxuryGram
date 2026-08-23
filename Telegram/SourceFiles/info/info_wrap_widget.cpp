@@ -480,7 +480,7 @@ void WrapWidget::setupTopBarMenuToggle() {
 			const auto button = _topBar->addButton(base::make_unique_q<Ui::IconButton>(_topBar, st));
 
 			const auto show = controller->uiShow();
-			if (controller->shadowBan) {
+			if (controller->luxuryFilters.shadowBan) {
 				auto types = InlineBots::PeerTypes();
 				types |= InlineBots::PeerType::Bot;
 				types |= InlineBots::PeerType::User;
@@ -507,19 +507,19 @@ void WrapWidget::setupTopBarMenuToggle() {
 				{
 					show->show(::Settings::RegexEditBox(
 						nullptr,
-						controller->dialogId));
+						controller->luxuryFilters.dialogId));
 				});
 			}
 
 
-			if (controller->showExclude.has_value() && controller->showExclude.value()) {
+			if (controller->luxuryFilters.showExclude.value_or(false)) {
 				auto icon = base::make_unique_q<Ui::IconButton>(_topBar, st::filtersExcludeIcon);
 
 				const auto excludeButton = _topBar->addButton(std::move(icon));
 				excludeButton->addClickHandler([=, content = _content.data()]
 				{
-					// open new
-					controller->showExclude = false;
+					// Reopen the list in "what can still be excluded" mode.
+					controller->luxuryFilters.showExclude = false;
 					controller->showSettings(::Settings::LuxuryFiltersList::Id());
 				});
 			}

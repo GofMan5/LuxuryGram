@@ -7,6 +7,7 @@
 #pragma once
 
 #include "luxury/data/entities.h"
+#include "base/weak_ptr.h"
 #include "boxes/peer_list_box.h"
 #include "boxes/peer_list_controllers.h"
 #include "data/data_peer.h"
@@ -33,7 +34,11 @@ private:
 	PeerId peerId;
 };
 
-class PerDialogFiltersListController final : public PeerListController
+class PerDialogFiltersListController final
+	: public PeerListController
+	// prepare() reads the filter tables on a worker thread and appends the rows
+	// when they come back, and the section can be closed in between.
+	, public base::has_weak_ptr
 {
 public:
 	explicit PerDialogFiltersListController(not_null<Main::Session*> session,
@@ -45,6 +50,11 @@ public:
 	void prepare() override;
 
 	void rowClicked(not_null<PeerListRow*> row) override;
+
+	// Public only because prepare() hands it to a crl::on_main continuation.
+	void fillCounts(
+		const std::vector<RegexFilter> &filters,
+		const std::vector<RegexFilterGlobalExclusion> &exclusions);
 
 private:
 	void prepareShadowBan();

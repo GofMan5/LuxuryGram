@@ -25,6 +25,4 @@ private:
 	void setupContent();
 };
 
-[[nodiscard]] Type LuxuryOtherId();
-
 } // namespace Settings

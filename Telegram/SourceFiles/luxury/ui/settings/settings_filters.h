@@ -26,6 +26,4 @@ private:
 	void setupContent();
 };
 
-[[nodiscard]] Type LuxuryFiltersId();
-
 } // namespace Settings

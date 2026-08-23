@@ -33,6 +33,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
 #include "luxury/features/filters/filters_controller.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Api {
@@ -733,7 +734,10 @@ QString FormatReadDate(TimeId date, const QDateTime &now) {
 	const auto parsed = base::unixtime::parse(date);
 	const auto readDate = parsed.date();
 	const auto nowDate = now.date();
-	const auto &settings = LuxurySettings::getInstance();
+	// One toggle, one rendering: formatMessageTime() owns showMessageSeconds()
+	// and keeps the locale's own layout, instead of forcing "HH:mm:ss" on
+	// locales that write 12-hour time.
+	const auto time = formatMessageTime(parsed.time());
 
 	if (readDate.year() < nowDate.year()) {
 		return tr::lng_mediaview_date_time(
@@ -748,25 +752,19 @@ QString FormatReadDate(TimeId date, const QDateTime &now) {
 				lt_year,
 				QString::number(readDate.year())),
 			lt_time,
-			QLocale().toString(parsed.time(), settings.showMessageSeconds() ? "HH:mm:ss" : QLocale::system().timeFormat(QLocale::ShortFormat)));
+			time);
 	}
 	if (readDate == nowDate) {
-		return tr::lng_mediaview_today(
-			tr::now,
-			lt_time,
-			QLocale().toString(parsed.time(), settings.showMessageSeconds() ? "HH:mm:ss" : QLocale::system().timeFormat(QLocale::ShortFormat)));
+		return tr::lng_mediaview_today(tr::now, lt_time, time);
 	} else if (readDate.addDays(1) == nowDate) {
-		return tr::lng_mediaview_yesterday(
-			tr::now,
-			lt_time,
-			QLocale().toString(parsed.time(), settings.showMessageSeconds() ? "HH:mm:ss" : QLocale::system().timeFormat(QLocale::ShortFormat)));
+		return tr::lng_mediaview_yesterday(tr::now, lt_time, time);
 	}
 	return tr::lng_mediaview_date_time(
 		tr::now,
 		lt_date,
 		langDayOfMonthShort(readDate),
 		lt_time,
-		QLocale().toString(parsed.time(), settings.showMessageSeconds() ? "HH:mm:ss" : QLocale::system().timeFormat(QLocale::ShortFormat)));
+		time);
 }
 
 bool WhoReadExists(not_null<HistoryItem*> item) {

@@ -23,12 +23,25 @@
 
 #include <QElapsedTimer>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace FiltersController {
+namespace {
 
+// Read from filtered() on every visible message and written from the context
+// menu, same as its neighbours in the cache controller.
+std::mutex ShownMutex;
 std::unordered_map<uint64, std::unordered_set<long long>> showingFilteredMessages;
+
+[[nodiscard]] bool shownFor(uint64 sessionId, uint64 peerId) {
+	const auto lock = std::lock_guard(ShownMutex);
+	const auto i = showingFilteredMessages.find(sessionId);
+	return (i != end(showingFilteredMessages)) && i->second.contains(peerId);
+}
+
+} // namespace
 
 constexpr auto kRegexEvaluationBudgetMs = 25;
 constexpr auto kRegexStackLimitBytes = 1024 * 1024;
@@ -181,19 +194,17 @@ bool isBlocked(const not_null<PeerData*> peer) {
 }
 
 bool filtered(const not_null<HistoryItem*> item) {
-	const auto sessionId = item->history()->session().uniqueId();
-	const auto shown = showingFilteredMessages.find(sessionId);
-	if (shown != end(showingFilteredMessages)
-		&& shown->second.contains(item->history()->peer->id.value)) {
-		return false;
-	}
-
+	// Cheapest possible check first: this runs per visible message per frame
+	// through Element::isHidden(), and filters are off by default, so everyone
+	// pays for whatever sits above this line. Session::uniqueId() alone is
+	// four non-inlinable calls across translation units.
 	const auto &settings = LuxurySettings::getInstance();
-	if (!settings.filtersEnabled()) {
+	if (!settings.filtersEnabled() || item->out()) {
 		return false;
 	}
 
-	if (item->out()) {
+	const auto sessionId = item->history()->session().uniqueId();
+	if (shownFor(sessionId, item->history()->peer->id.value)) {
 		return false;
 	}
 
@@ -226,10 +237,9 @@ bool filtered(const not_null<HistoryItem*> item) {
 }
 
 std::optional<bool> filteredMessagesShown(not_null<PeerData*> peer) {
-	const auto sessionId = peer->session().uniqueId();
-	const auto shown = showingFilteredMessages.find(sessionId);
-	const auto showing = shown != end(showingFilteredMessages)
-		&& shown->second.contains(peer->id.value);
+	const auto showing = shownFor(
+		peer->session().uniqueId(),
+		peer->id.value);
 	if (!showing
 		&& !FiltersCacheController::hasFilteredMessages(peer)) {
 		return std::nullopt;
@@ -238,21 +248,32 @@ std::optional<bool> filteredMessagesShown(not_null<PeerData*> peer) {
 }
 
 void toggleFilteredMessagesShown(not_null<PeerData*> peer) {
-	const auto sessionId = peer->session().uniqueId();
-	auto &shown = showingFilteredMessages[sessionId];
-	if (shown.contains(peer->id.value)) {
-		shown.erase(peer->id.value);
-		if (shown.empty()) {
-			showingFilteredMessages.erase(sessionId);
+	{
+		const auto sessionId = peer->session().uniqueId();
+		const auto lock = std::lock_guard(ShownMutex);
+		auto &shown = showingFilteredMessages[sessionId];
+		if (shown.contains(peer->id.value)) {
+			shown.erase(peer->id.value);
+			if (shown.empty()) {
+				showingFilteredMessages.erase(sessionId);
+			}
+		} else {
+			shown.insert(peer->id.value);
 		}
-	} else {
-		shown.insert(peer->id.value);
 	}
 	FiltersCacheController::fireUpdate();
 }
 
 void invalidate(not_null<HistoryItem*> item) {
 	FiltersCacheController::invalidate(item);
+}
+
+void invalidateSession(uint64 sessionId) {
+	{
+		const auto lock = std::lock_guard(ShownMutex);
+		showingFilteredMessages.erase(sessionId);
+	}
+	FiltersCacheController::invalidateSession(sessionId);
 }
 
 }

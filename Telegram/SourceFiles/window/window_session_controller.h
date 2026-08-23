@@ -752,11 +752,18 @@ public:
 		return _lifetime;
 	}
 
-	// LuxuryGram filters
-	std::optional<long long> dialogId;
-	std::vector<char> filterId;
-	std::optional<bool> showExclude; // whether to show exclude button in the top bar
-	bool shadowBan = false;
+	// LuxuryGram filters: what the LuxuryFiltersList section should show. Assign it
+	// whole -- these used to be three loose members, and every entry point had to
+	// remember to reset the ones it did not care about. "Shared filters" was
+	// opening the shadow ban list because one of them forgot.
+	struct LuxuryFiltersRequest {
+		std::optional<long long> dialogId;
+		// Unset means the list was opened from the "exclude" button itself, so it
+		// lists what can still be excluded instead of what already is.
+		std::optional<bool> showExclude;
+		bool shadowBan = false;
+	};
+	LuxuryFiltersRequest luxuryFilters;
 private:
 	struct CachedThemeKey;
 	struct CachedTheme;

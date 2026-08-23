@@ -353,8 +353,4 @@ void LuxuryGeneral::setupContent() {
 	Ui::ResizeFitChild(this, content);
 }
 
-Type LuxuryGeneralId() {
-	return LuxuryGeneral::Id();
-}
-
 } // namespace Settings

@@ -714,6 +714,7 @@ private:
 
 	rpl::lifetime _defaultPaletteChangeLifetime;
 	rpl::lifetime _colorIndicesLifetime;
+	rpl::lifetime _luxuryQuoteStyleLifetime; // LuxuryGram
 
 };
 

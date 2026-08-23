@@ -16,7 +16,6 @@
 #include "base/qthelp_url.h"
 #include "boxes/abstract_box.h"
 #include "core/local_url_handlers.h"
-#include "crl/crl_async.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_document.h"
@@ -474,7 +473,7 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 			if (strong && !peers.empty()) {
 				ResolveFilterBackupPeers(strong, peers);
 			}
-			crl::async([changes = std::move(changes)]() mutable {
+			LuxuryDatabase::async([changes = std::move(changes)]() mutable {
 				try {
 					if (!applyChanges(std::move(changes))) {
 						crl::on_main([] {
@@ -982,7 +981,9 @@ bool FilterUtils::applyChanges(ApplyChanges changes) {
 		changes.removeExclusions)) {
 		return false;
 	}
-	FiltersCacheController::rebuildCache();
+	// applyChanges() only ever runs from a crl::async import, so the synchronous
+	// rebuild is the right one here.
+	FiltersCacheController::reloadNow();
 	crl::on_main([] {
 		FiltersCacheController::fireUpdate();
 	});

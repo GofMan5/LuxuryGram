@@ -37,6 +37,7 @@
 #include <memory>
 
 namespace Settings {
+namespace {
 
 bool validateRegex(const icu::UnicodeString& pattern, std::string& errorMsg) {
 	UErrorCode status = U_ZERO_ERROR;
@@ -111,7 +112,7 @@ not_null<Ui::SlideWrap<Ui::FlatLabel>*> AddError(
 			input->lifetime());
 	}
 	return error;
-};
+}
 
 void RegexEditBuilder(
 	not_null<Ui::GenericBox*> box,
@@ -197,13 +198,21 @@ void RegexEditBuilder(
 
 		box->closeBox();
 
-		crl::async([=]
+		LuxuryDatabase::async([=]
 		{
-			LuxuryDatabase::addRegexFilter(newFilter);
-			FiltersCacheController::rebuildCache();
+			const auto saved = LuxuryDatabase::addRegexFilter(newFilter);
+			if (saved) {
+				// Already off the main thread.
+				FiltersCacheController::reloadNow();
+			}
 
 			crl::on_main([=]
 			{
+				if (!saved) {
+					Luxury::Ui::ShowDatabaseError();
+					return;
+				}
+
 				FiltersCacheController::fireUpdate();
 
 				if (showToast) {
@@ -220,9 +229,22 @@ void RegexEditBuilder(
 							[=]() mutable {
 								newFilter.dialogId = dialogId;
 
-								LuxuryDatabase::updateRegexFilter(newFilter);
-								FiltersCacheController::rebuildCache();
-								FiltersCacheController::fireUpdate();
+								LuxuryDatabase::async([=] {
+									const auto scoped =
+										LuxuryDatabase::updateRegexFilter(
+											newFilter);
+									if (scoped) {
+										// Already off the main thread.
+										FiltersCacheController::reloadNow();
+									}
+									crl::on_main([=] {
+										if (!scoped) {
+											Luxury::Ui::ShowDatabaseError();
+											return;
+										}
+										FiltersCacheController::fireUpdate();
+									});
+								});
 							});
 					} else {
 						Ui::Toast::Show(std::move(config));
@@ -246,6 +268,8 @@ void RegexEditBuilder(
 	errorText->entity()->resizeToWidth(box->width());
 	errorText->resizeToWidth(box->width());
 }
+
+} // namespace
 
 object_ptr<Ui::GenericBox> RegexEditBox(RegexFilter *filter,
 										std::optional<long long> dialogId,

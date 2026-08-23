@@ -6,9 +6,17 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/luxury_logo.h"
 
+#include "tray.h"
 #include "luxury/luxury_settings.h"
+#include "core/application.h"
+#include "main/main_domain.h"
 #include "styles/style_luxury_styles.h"
 #include "ui/rect.h"
+#include "window/main_window.h"
+
+#ifdef Q_OS_WIN
+#include "luxury/utils/windows_utils.h"
+#endif
 
 #include <QSvgRenderer>
 
@@ -39,24 +47,41 @@ QString appIcoPath() {
 		+ u".ico"_q;
 }
 
-void loadAppIco() {
+bool loadAppIco() {
 	const auto iconName = safeAppIconName();
 	const auto iconPath = appIcoPath();
 
+	auto source = QFile(qsl(":/gui/art/luxury/%1/app_icon.ico").arg(iconName));
+	if (!source.open(QIODevice::ReadOnly)) {
+		LOG(("Failed to read LuxuryGram application icon: %1").arg(iconName));
+		return false;
+	}
+	const auto wanted = source.readAll();
+
+	// Called on every launch, and a rewrite means rewriting every pinned
+	// shortcut after it, so bail out when the file on disk is already right.
 	auto f = QFile(iconPath);
+	if (f.open(QIODevice::ReadOnly)) {
+		if (f.readAll() == wanted) {
+			return false;
+		}
+		f.close();
+	}
+
 	if (f.exists() && !f.remove()) {
 		f.setPermissions(f.permissions() | QFile::WriteOwner);
 		if (!f.remove()) {
 			LOG(("Failed to replace LuxuryGram application icon: %1"
 			).arg(f.errorString()));
-			return;
+			return false;
 		}
 	}
-	if (!QFile::copy(
-			qsl(":/gui/art/luxury/%1/app_icon.ico").arg(iconName),
-			iconPath)) {
+	if (!f.open(QIODevice::WriteOnly)
+		|| f.write(wanted) != wanted.size()) {
 		LOG(("Failed to write LuxuryGram application icon: %1").arg(iconPath));
+		return false;
 	}
+	return true;
 }
 
 QImage CreateImage(const QString &name, const QSize resultImageSize, const int padding = 0) {
@@ -139,6 +164,21 @@ QImage currentAppLogo() {
 QImage currentAppLogoPad() {
 	loadIcons();
 	return LAST_LOADED_PAD;
+}
+
+void applyAppIcon() {
+#ifdef Q_OS_WIN
+	// Unlike startup, refresh the shell unconditionally: the .ico path carries
+	// the icon name, so switching back to an icon written earlier leaves the
+	// file untouched while the shortcuts still point at the previous one.
+	loadAppIco();
+	reloadAppIconFromTaskBar();
+#endif
+
+	Window::OverrideApplicationIcon(currentAppLogo());
+	Core::App().refreshApplicationIcon();
+	Core::App().tray().updateIconCounters();
+	Core::App().domain().notifyUnreadBadgeChanged();
 }
 
 }

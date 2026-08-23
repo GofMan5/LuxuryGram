@@ -11,10 +11,10 @@
 #include "luxury/data/luxury_database.h"
 #include "luxury/features/filters/filters_cache_controller.h"
 #include "luxury/features/filters/filters_utils.h"
-#include "luxury/ui/components/icon_picker.h"
 #include "luxury/ui/settings/settings_luxury_utils.h"
 #include "luxury/ui/settings/filters/edit_filter.h"
 #include "luxury/ui/settings/filters/per_dialog_filter.h"
+#include "luxury/ui/toasts.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "boxes/connection_box.h"
 #include "data/data_channel.h"
@@ -66,17 +66,15 @@ LuxuryFiltersList::LuxuryFiltersList(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 	: Section(parent, controller), _controller(controller), _content(Ui::CreateChild<Ui::VerticalLayout>(this)),
-	  shadowBan(_controller->shadowBan) {
-	if (_controller->dialogId.has_value()) {
-		dialogId = *_controller->dialogId;
-	}
-
+	  dialogId(_controller->luxuryFilters.dialogId),
+	  showExclude(_controller->luxuryFilters.showExclude),
+	  shadowBan(_controller->luxuryFilters.shadowBan) {
 	setupContent(controller);
 }
 
 void LuxuryFiltersList::checkBeforeClose(Fn<void()> close) {
-	_controller->showExclude = true;
-	_controller->shadowBan = false;
+	_controller->luxuryFilters.showExclude = true;
+	_controller->luxuryFilters.shadowBan = false;
 	close();
 }
 
@@ -109,12 +107,31 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 
 		_contextMenu->addAction(
 			state->enabled ? tr::lng_settings_auto_night_disable(tr::now) : tr::lng_sure_enable(tr::now),
-			[=]
+			[=, weak = base::make_weak(this)]
 			{
+				// The row is drawn from this state, so flip it now and put it
+				// back if the write does not land.
 				state->enabled = !state->enabled;
-				LuxuryDatabase::updateRegexFilter(*state);
-				FiltersCacheController::rebuildCache();
-				FiltersCacheController::fireUpdate();
+				const auto wanted = *state;
+				LuxuryDatabase::async([=] {
+					const auto saved = LuxuryDatabase::updateRegexFilter(
+						wanted);
+					if (saved) {
+						// Already off the main thread.
+						FiltersCacheController::reloadNow();
+					}
+					crl::on_main([=] {
+						if (saved) {
+							FiltersCacheController::fireUpdate();
+							return;
+						}
+						Luxury::Ui::ShowDatabaseError();
+						// state belongs to the section's lifetime.
+						if (weak) {
+							state->enabled = !state->enabled;
+						}
+					});
+				});
 			},
 			state->enabled ? &st::menuIconBlock : &st::menuIconUnblock);
 
@@ -124,10 +141,22 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 			tr::lng_theme_delete(tr::now),
 			[=]
 			{
-				LuxuryDatabase::deleteFilter(state->id);
-				LuxuryDatabase::deleteExclusionsByFilterId(state->id);
-				FiltersCacheController::rebuildCache();
-				FiltersCacheController::fireUpdate();
+				const auto id = state->id;
+				LuxuryDatabase::async([=] {
+					// Both, always: dropping the filter but keeping its
+					// exclusions would leave rows pointing at nothing.
+					const auto removed = LuxuryDatabase::deleteFilter(id);
+					const auto cleaned =
+						LuxuryDatabase::deleteExclusionsByFilterId(id);
+					// Already off the main thread.
+					FiltersCacheController::reloadNow();
+					crl::on_main([=] {
+						if (!removed || !cleaned) {
+							Luxury::Ui::ShowDatabaseError();
+						}
+						FiltersCacheController::fireUpdate();
+					});
+				});
 			},
 			&st::menuIconDelete);
 
@@ -166,14 +195,31 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 			.filterId = state->id
 		};
 
-		LuxuryDatabase::addRegexExclusion(newExclusion);
-		FiltersCacheController::rebuildCache();
-		FiltersCacheController::fireUpdate();
-
-		controller->dialogId = dialogId;
-		controller->showExclude = true;
-
-		wrap->showBackFromStackInternal(Window::SectionShow(anim::type::normal));
+		const auto weakWrap = base::make_weak(wrap);
+		LuxuryDatabase::async([=] {
+			const auto saved = LuxuryDatabase::addRegexExclusion(newExclusion);
+			if (saved) {
+				// Already off the main thread.
+				FiltersCacheController::reloadNow();
+			}
+			crl::on_main([=] {
+				if (!saved) {
+					Luxury::Ui::ShowDatabaseError();
+					return;
+				}
+				FiltersCacheController::fireUpdate();
+				// The user can navigate away while the write is in flight, and
+				// then there is nothing left to go back from.
+				if (const auto strong = weakWrap.get()) {
+					controller->luxuryFilters = {
+						.dialogId = dialogId,
+						.showExclude = true,
+					};
+					strong->showBackFromStackInternal(
+						Window::SectionShow(anim::type::normal));
+				}
+			});
+		});
 	};
 	auto deleteExclusionsClickHandler = [=, this]() mutable
 	{
@@ -186,9 +232,24 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 			{
 				Expects(dialogId.has_value());
 
-				LuxuryDatabase::deleteExclusion(*dialogId, state->id);
-				FiltersCacheController::rebuildCache();
-				FiltersCacheController::fireUpdate();
+				const auto did = *dialogId;
+				const auto id = state->id;
+				LuxuryDatabase::async([=] {
+					const auto removed = LuxuryDatabase::deleteExclusion(
+						did,
+						id);
+					if (removed) {
+						// Already off the main thread.
+						FiltersCacheController::reloadNow();
+					}
+					crl::on_main([=] {
+						if (!removed) {
+							Luxury::Ui::ShowDatabaseError();
+							return;
+						}
+						FiltersCacheController::fireUpdate();
+					});
+				});
 			},
 			&st::menuIconDelete);
 
@@ -197,7 +258,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 
 	if (exclusion) {
 		button->addClickHandler(deleteExclusionsClickHandler);
-	} else if (dialogId && _controller->showExclude && !*_controller->showExclude) {
+	} else if (dialogId && showExclude && !*showExclude) {
 		button->addClickHandler(exclusionsClickHandler);
 	} else {
 		button->addClickHandler(defaultClickHandler);
@@ -215,18 +276,29 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 
 void LuxuryFiltersList::initializeSharedFilters(
 	not_null<Ui::VerticalLayout*> container) {
-	if (dialogId && _controller->showExclude && *_controller->showExclude) {
-		filters = LuxuryDatabase::getByDialogId(*dialogId);
-		exclusions = LuxuryDatabase::getExcludedByDialogId(*dialogId);
-	} else {
-		filters = LuxuryDatabase::getShared();
+	// Up to three full-table reads, and the section is built during a navigation
+	// animation, so they do not belong on the main thread. The rows land a frame
+	// or two later; the empty state waits with them, because "no filters" is only
+	// known once the read is back.
+	const auto perDialog = dialogId && showExclude && *showExclude;
+	const auto forExcluding = dialogId && showExclude && !*showExclude;
+	const auto did = dialogId.value_or(0);
+	const auto weak = base::make_weak(this);
+	LuxuryDatabase::async([=] {
+		auto loadedFilters = perDialog
+			? LuxuryDatabase::getByDialogId(did)
+			: LuxuryDatabase::getShared();
+		auto loadedExclusions = perDialog
+			? LuxuryDatabase::getExcludedByDialogId(did)
+			: std::vector<RegexFilter>();
 
 		// remove shared filters that already excluded for that peer exclusion
-		if (dialogId && _controller->showExclude && !*_controller->showExclude) {
-			const auto excludedForDialogId = LuxuryDatabase::getExcludedByDialogId(*dialogId);
+		if (forExcluding) {
+			const auto excludedForDialogId =
+				LuxuryDatabase::getExcludedByDialogId(did);
 
 			auto rangeToRemove = std::ranges::remove_if(
-				filters,
+				loadedFilters,
 				[&](const RegexFilter &filter)
 				{
 					for (const auto &excluded : excludedForDialogId) {
@@ -236,10 +308,25 @@ void LuxuryFiltersList::initializeSharedFilters(
 					}
 					return false;
 				});
-			filters.erase(rangeToRemove.begin(), rangeToRemove.end());
+			loadedFilters.erase(rangeToRemove.begin(), rangeToRemove.end());
 		}
-	}
 
+		crl::on_main([=,
+				loadedFilters = std::move(loadedFilters),
+				loadedExclusions = std::move(loadedExclusions)]() mutable {
+			const auto strong = weak.get();
+			if (!strong) {
+				return;
+			}
+			strong->filters = std::move(loadedFilters);
+			strong->exclusions = std::move(loadedExclusions);
+			strong->fillLoadedFilters(container);
+		});
+	});
+}
+
+void LuxuryFiltersList::fillLoadedFilters(
+	not_null<Ui::VerticalLayout*> container) {
 	if (!filters.empty()) {
 		AddSkip(container);
 		filtersTitle = AddSubsectionTitle(container, tr::luxury_RegexFiltersHeader());

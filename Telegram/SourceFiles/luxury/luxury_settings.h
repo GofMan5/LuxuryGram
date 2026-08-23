@@ -6,8 +6,10 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-#include "luxury/libs/json.hpp"
-#include "luxury/libs/json_ext.hpp"
+// Only the name nlohmann::json is needed here, and this header reaches ~130
+// translation units. The 25k-line json.hpp belongs in the .cpp files that
+// actually build or parse a json value.
+#include "luxury/libs/json_fwd.hpp"
 #include "rpl/lifetime.h"
 #include "rpl/producer.h"
 #include "rpl/variable.h"
@@ -51,36 +53,8 @@ enum class SendWithoutSoundOption {
 	Always = 2,
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(PeerIdDisplay, {
-	{PeerIdDisplay::Hidden, 0},
-	{PeerIdDisplay::TelegramApi, 1},
-	{PeerIdDisplay::BotApi, 2},
-})
-
-NLOHMANN_JSON_SERIALIZE_ENUM(ChannelBottomButton, {
-	{ChannelBottomButton::Hidden, 0},
-	{ChannelBottomButton::MuteUnmute, 1},
-	{ChannelBottomButton::DiscussWithFallback, 2},
-})
-
-NLOHMANN_JSON_SERIALIZE_ENUM(ContextMenuVisibility, {
-	{ContextMenuVisibility::Hidden, 0},
-	{ContextMenuVisibility::Visible, 1},
-	{ContextMenuVisibility::VisibleWithModifier, 2},
-})
-
-NLOHMANN_JSON_SERIALIZE_ENUM(TranslationProvider, {
-	{TranslationProvider::Telegram, "telegram"},
-	{TranslationProvider::Google, "google"},
-	{TranslationProvider::Yandex, "yandex"},
-	{TranslationProvider::Native, "native"},
-})
-
-NLOHMANN_JSON_SERIALIZE_ENUM(SendWithoutSoundOption, {
-	{SendWithoutSoundOption::Never, 0},
-	{SendWithoutSoundOption::InGhostMode, 1},
-	{SendWithoutSoundOption::Always, 2},
-})
+// The json mappings for the enums above live in luxury_settings.cpp, next to
+// the only code that serializes them.
 
 class GhostModeAccountSettings {
 public:
@@ -248,8 +222,17 @@ public:
 	[[nodiscard]] static LuxurySettings &getInstance();
 
 	static void load();
+
+	// Schedules a write. Every setter calls this, and the avatar corners
+	// slider calls it on every mouse move.
 	static void save();
-	static void reset();
+
+	// Writes a scheduled save out right now. Call before the app dies.
+	static void saveIfScheduled();
+
+	// Back to the defaults, applying every side effect the setters carry. Returns
+	// true when a setting only a restart can apply actually changed.
+	[[nodiscard]] static bool reset();
 
 	[[nodiscard]] static GhostModeAccountSettings &ghost(not_null<Main::Session*> session);
 	[[nodiscard]] static GhostModeAccountSettings &ghost(uint64 userId);
@@ -309,6 +292,10 @@ public:
 	[[nodiscard]] ContextMenuVisibility showMessageDetailsInContextMenu() const { return _showMessageDetailsInContextMenu.current(); }
 	[[nodiscard]] ContextMenuVisibility showRepeatMessageInContextMenu() const { return _showRepeatMessageInContextMenu.current(); }
 	[[nodiscard]] ContextMenuVisibility showAddFilterInContextMenu() const { return _showAddFilterInContextMenu.current(); }
+	[[nodiscard]] ContextMenuVisibility showTranslateInContextMenu() const { return _showTranslateInContextMenu.current(); }
+	[[nodiscard]] ContextMenuVisibility showEditsHistoryInContextMenu() const { return _showEditsHistoryInContextMenu.current(); }
+	[[nodiscard]] ContextMenuVisibility showReadUntilInContextMenu() const { return _showReadUntilInContextMenu.current(); }
+	[[nodiscard]] ContextMenuVisibility showExpireMediaInContextMenu() const { return _showExpireMediaInContextMenu.current(); }
 	[[nodiscard]] bool showAttachButtonInMessageField() const { return _showAttachButtonInMessageField.current(); }
 	[[nodiscard]] bool showCommandsButtonInMessageField() const { return _showCommandsButtonInMessageField.current(); }
 	[[nodiscard]] bool showEmojiButtonInMessageField() const { return _showEmojiButtonInMessageField.current(); }
@@ -396,6 +383,10 @@ public:
 	void setShowMessageDetailsInContextMenu(ContextMenuVisibility val);
 	void setShowRepeatMessageInContextMenu(ContextMenuVisibility val);
 	void setShowAddFilterInContextMenu(ContextMenuVisibility val);
+	void setShowTranslateInContextMenu(ContextMenuVisibility val);
+	void setShowEditsHistoryInContextMenu(ContextMenuVisibility val);
+	void setShowReadUntilInContextMenu(ContextMenuVisibility val);
+	void setShowExpireMediaInContextMenu(ContextMenuVisibility val);
 	void setShowAttachButtonInMessageField(bool val);
 	void setShowCommandsButtonInMessageField(bool val);
 	void setShowEmojiButtonInMessageField(bool val);
@@ -526,6 +517,14 @@ public:
 	[[nodiscard]] rpl::producer<ContextMenuVisibility> showRepeatMessageInContextMenuChanges() const { return _showRepeatMessageInContextMenu.changes(); }
 	[[nodiscard]] rpl::producer<ContextMenuVisibility> showAddFilterInContextMenuValue() const { return _showAddFilterInContextMenu.value(); }
 	[[nodiscard]] rpl::producer<ContextMenuVisibility> showAddFilterInContextMenuChanges() const { return _showAddFilterInContextMenu.changes(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showTranslateInContextMenuValue() const { return _showTranslateInContextMenu.value(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showTranslateInContextMenuChanges() const { return _showTranslateInContextMenu.changes(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showEditsHistoryInContextMenuValue() const { return _showEditsHistoryInContextMenu.value(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showEditsHistoryInContextMenuChanges() const { return _showEditsHistoryInContextMenu.changes(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showReadUntilInContextMenuValue() const { return _showReadUntilInContextMenu.value(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showReadUntilInContextMenuChanges() const { return _showReadUntilInContextMenu.changes(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showExpireMediaInContextMenuValue() const { return _showExpireMediaInContextMenu.value(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showExpireMediaInContextMenuChanges() const { return _showExpireMediaInContextMenu.changes(); }
 	[[nodiscard]] rpl::producer<bool> showAttachButtonInMessageFieldValue() const { return _showAttachButtonInMessageField.value(); }
 	[[nodiscard]] rpl::producer<bool> showAttachButtonInMessageFieldChanges() const { return _showAttachButtonInMessageField.changes(); }
 	[[nodiscard]] rpl::producer<bool> showCommandsButtonInMessageFieldValue() const { return _showCommandsButtonInMessageField.value(); }
@@ -666,6 +665,10 @@ private:
 	rpl::variable<ContextMenuVisibility> _showMessageDetailsInContextMenu = ContextMenuVisibility::VisibleWithModifier;
 	rpl::variable<ContextMenuVisibility> _showRepeatMessageInContextMenu = ContextMenuVisibility::Hidden;
 	rpl::variable<ContextMenuVisibility> _showAddFilterInContextMenu = ContextMenuVisibility::Visible;
+	rpl::variable<ContextMenuVisibility> _showTranslateInContextMenu = ContextMenuVisibility::Visible;
+	rpl::variable<ContextMenuVisibility> _showEditsHistoryInContextMenu = ContextMenuVisibility::Visible;
+	rpl::variable<ContextMenuVisibility> _showReadUntilInContextMenu = ContextMenuVisibility::Visible;
+	rpl::variable<ContextMenuVisibility> _showExpireMediaInContextMenu = ContextMenuVisibility::Visible;
 	rpl::variable<bool> _showAttachButtonInMessageField = true;
 	rpl::variable<bool> _showCommandsButtonInMessageField = true;
 	rpl::variable<bool> _showEmojiButtonInMessageField = true;

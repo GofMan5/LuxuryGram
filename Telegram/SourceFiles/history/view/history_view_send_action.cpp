@@ -21,7 +21,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_dialogs.h"
 
 // LuxuryGram includes
-#include "luxury/luxury_settings.h"
 #include "luxury/features/filters/filters_controller.h"
 
 

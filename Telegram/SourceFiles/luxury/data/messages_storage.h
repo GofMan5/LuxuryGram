@@ -10,6 +10,12 @@
 
 namespace LuxuryMessages {
 
+// The three deleted-message writes below map the item here and then post the row
+// through LuxuryDatabase::async, so they return before it has reached the disk.
+// They stay in order relative to each other, which is what matters: a delete
+// arriving before its own insert would drop nothing. addEditedMessage() is the
+// exception and writes synchronously, because hasRevisions() reads it back on
+// the main thread -- see the note over that in luxury_database.h.
 void addEditedMessage(not_null<HistoryItem *> item);
 std::vector<LuxuryMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit);
 std::vector<LuxuryMessageBase> getEditedMessages(
@@ -32,7 +38,6 @@ std::vector<LuxuryMessageBase> getDeletedMessages(
 	ID maxId,
 	int totalLimit,
 	const QString &searchQuery = QString());
-bool hasDeletedMessages(not_null<PeerData*> peer, ID topicId);
 void removeDeletedMessage(not_null<HistoryItem*> item);
 void clearDeletedMessages(not_null<PeerData*> peer, ID topicId);
 

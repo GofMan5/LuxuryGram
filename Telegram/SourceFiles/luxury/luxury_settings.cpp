@@ -8,10 +8,13 @@
 
 #include "lang_auto.h"
 #include "tray.h"
+#include "luxury/libs/json.hpp"
+#include "luxury/libs/json_ext.hpp"
 #include "luxury/luxury_ui_settings.h"
 #include "luxury/luxury_worker.h"
 #include "luxury/features/streamer_mode/streamer_mode.h"
 #include "luxury/ui/luxury_logo.h"
+#include "base/timer.h"
 #include "core/application.h"
 #include "features/filters/filters_cache_controller.h"
 #include "features/translator/luxury_translator.h"
@@ -29,6 +32,37 @@
 
 using json = nlohmann::json;
 
+NLOHMANN_JSON_SERIALIZE_ENUM(PeerIdDisplay, {
+	{PeerIdDisplay::Hidden, 0},
+	{PeerIdDisplay::TelegramApi, 1},
+	{PeerIdDisplay::BotApi, 2},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM(ChannelBottomButton, {
+	{ChannelBottomButton::Hidden, 0},
+	{ChannelBottomButton::MuteUnmute, 1},
+	{ChannelBottomButton::DiscussWithFallback, 2},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM(ContextMenuVisibility, {
+	{ContextMenuVisibility::Hidden, 0},
+	{ContextMenuVisibility::Visible, 1},
+	{ContextMenuVisibility::VisibleWithModifier, 2},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM(TranslationProvider, {
+	{TranslationProvider::Telegram, "telegram"},
+	{TranslationProvider::Google, "google"},
+	{TranslationProvider::Yandex, "yandex"},
+	{TranslationProvider::Native, "native"},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM(SendWithoutSoundOption, {
+	{SendWithoutSoundOption::Never, 0},
+	{SendWithoutSoundOption::InGhostMode, 1},
+	{SendWithoutSoundOption::Always, 2},
+})
+
 namespace {
 
 constexpr auto kMaxSettingsBytes = 4 * 1024 * 1024;
@@ -41,6 +75,27 @@ constexpr auto kMaxThemeTitleLength = 512;
 
 QString getSettingsPath() {
 	return cWorkingDir() + u"tdata/luxury_settings.json"_q;
+}
+
+constexpr auto kSaveDelay = crl::time(500);
+
+void writeSettings() {
+	json p = LuxurySettings::getInstance();
+	const auto data = QByteArray::fromStdString(p.dump(4));
+	QSaveFile file(getSettingsPath());
+	if (!file.open(QIODevice::WriteOnly)
+		|| file.write(data) != data.size()
+		|| !file.commit()) {
+		LOG(("LuxuryGramSettings: failed to save settings file"));
+	}
+}
+
+// Single-shot, so it has already cancelled itself by the time it fires. Bound
+// to whichever thread asks for it first, which is the main one: load() runs
+// from Local::readSettings() and ends in validate() calling save().
+base::Timer &saveTimer() {
+	static base::Timer timer([] { writeSettings(); });
+	return timer;
 }
 
 void repaintApp() {
@@ -436,20 +491,64 @@ void LuxurySettings::load() {
 }
 
 void LuxurySettings::save() {
-	auto &settings = getInstance();
-	json p = settings;
-	const auto data = QByteArray::fromStdString(p.dump(4));
-	QSaveFile file(getSettingsPath());
-	if (!file.open(QIODevice::WriteOnly)
-		|| file.write(data) != data.size()
-		|| !file.commit()) {
-		LOG(("LuxuryGramSettings: failed to save settings file"));
+	// Every setter calls this, and some of them fire per mouse move, so a
+	// synchronous 4 KB dump plus file rename per call used to show up as
+	// stutter while dragging a slider. Coalesce into one write instead.
+	auto &timer = saveTimer();
+	if (timer.thread() != QThread::currentThread()) {
+		// A timer owned by another thread cannot be started from here, and
+		// dropping the write is not an option, so pay for it on the spot.
+		writeSettings();
+		return;
+	}
+	timer.callOnce(kSaveDelay);
+}
+
+void LuxurySettings::saveIfScheduled() {
+	auto &timer = saveTimer();
+	if (timer.isActive()) {
+		timer.cancel();
+		writeSettings();
 	}
 }
 
-void LuxurySettings::reset() {
-	getInstance() = LuxurySettings();
+bool LuxurySettings::reset() {
+	auto &settings = getInstance();
+	// Assigning the struct bypasses every setter, and for a third of them the side
+	// effect is what makes the setting real: the lib_ui mirrors live in a second
+	// singleton this does not touch, streamer mode's capture exclusion is applied
+	// nowhere else, and the app icon is a file on disk. Push the defaults out by
+	// hand afterwards, and report the ones only a restart can push.
+	const LuxurySettings defaults;
+	// These are read once before style::StartManager() or cached for the process
+	// lifetime, so their own setters cannot apply them live either -- every one of
+	// them is behind a ShowRestartPrompt in the UI.
+	const auto needsRestart = (settings.monoFont() != defaults.monoFont())
+		|| (settings.wideMultiplier() != defaults.wideMultiplier())
+		|| (settings.messageBubbleRadius() != defaults.messageBubbleRadius())
+		|| (settings.avatarCorners() != defaults.avatarCorners())
+		|| (settings.disableStories() != defaults.disableStories())
+		|| (settings.filterZalgo() != defaults.filterZalgo());
+	const auto wasStreamerMode = settings.streamerMode();
+
+	settings = LuxurySettings();
+
+	LuxuryUiSettings::setMaterialSwitches(settings.materialSwitches());
+	LuxuryUiSettings::setAvatarCorners(settings.avatarCorners());
+	if (wasStreamerMode != settings.streamerMode()) {
+		LuxuryFeatures::StreamerMode::apply(settings.streamerMode());
+	}
+	// Covers the notification badge too: it ends in the same three App() calls
+	// setHideNotificationBadge makes.
+	LuxuryAssets::applyAppIcon();
+	if (const auto manager = Luxury::Translator::TranslateManager::currentInstance()) {
+		manager->resetCache();
+	}
+	FiltersCacheController::dropResults();
+	repaintApp();
+
 	save();
+	return needsRestart;
 }
 
 GhostModeAccountSettings &LuxurySettings::ghost(not_null<Main::Session*> session) {
@@ -490,16 +589,16 @@ void LuxurySettings::addShadowBan(int64 id) {
 		return;
 	}
 	if (_shadowBanIds.insert(id).second) {
-		FiltersCacheController::rebuildCache();
-		FiltersCacheController::fireUpdate();
+		// The shadow ban list is not part of the compiled patterns, so only the
+		// remembered per-message verdicts have to go.
+		FiltersCacheController::dropResults();
 		save();
 	}
 }
 
 void LuxurySettings::removeShadowBan(int64 id) {
 	if (_shadowBanIds.erase(id) > 0) {
-		FiltersCacheController::rebuildCache();
-		FiltersCacheController::fireUpdate();
+		FiltersCacheController::dropResults();
 		save();
 	}
 }
@@ -538,6 +637,10 @@ void LuxurySettings::validate() {
 	validateEnum(_showMessageDetailsInContextMenu, defaults._showMessageDetailsInContextMenu);
 	validateEnum(_showRepeatMessageInContextMenu, defaults._showRepeatMessageInContextMenu);
 	validateEnum(_showAddFilterInContextMenu, defaults._showAddFilterInContextMenu);
+	validateEnum(_showTranslateInContextMenu, defaults._showTranslateInContextMenu);
+	validateEnum(_showEditsHistoryInContextMenu, defaults._showEditsHistoryInContextMenu);
+	validateEnum(_showReadUntilInContextMenu, defaults._showReadUntilInContextMenu);
+	validateEnum(_showExpireMediaInContextMenu, defaults._showExpireMediaInContextMenu);
 
 	validateEnum(_translationProvider, defaults._translationProvider, 3);
 	if ((_translationProvider.current() == TranslationProvider::Native)
@@ -750,6 +853,10 @@ void LuxurySettings::setAppIcon(const QString &val) {
 void LuxurySettings::setSimpleQuotesAndReplies(bool val) {
 	if (_simpleQuotesAndReplies.current() == val) return;
 	_simpleQuotesAndReplies = val;
+	// Assigning above is what drops the quote caches every ChatStyle built from
+	// this setting -- see the note in ChatStyle's constructor. They only refill on
+	// a paint, so ask for one.
+	repaintApp();
 	save();
 }
 
@@ -824,6 +931,30 @@ void LuxurySettings::setShowRepeatMessageInContextMenu(ContextMenuVisibility val
 void LuxurySettings::setShowAddFilterInContextMenu(ContextMenuVisibility val) {
 	if (_showAddFilterInContextMenu.current() == val) return;
 	_showAddFilterInContextMenu = val;
+	save();
+}
+
+void LuxurySettings::setShowTranslateInContextMenu(ContextMenuVisibility val) {
+	if (_showTranslateInContextMenu.current() == val) return;
+	_showTranslateInContextMenu = val;
+	save();
+}
+
+void LuxurySettings::setShowEditsHistoryInContextMenu(ContextMenuVisibility val) {
+	if (_showEditsHistoryInContextMenu.current() == val) return;
+	_showEditsHistoryInContextMenu = val;
+	save();
+}
+
+void LuxurySettings::setShowReadUntilInContextMenu(ContextMenuVisibility val) {
+	if (_showReadUntilInContextMenu.current() == val) return;
+	_showReadUntilInContextMenu = val;
+	save();
+}
+
+void LuxurySettings::setShowExpireMediaInContextMenu(ContextMenuVisibility val) {
+	if (_showExpireMediaInContextMenu.current() == val) return;
+	_showExpireMediaInContextMenu = val;
 	save();
 }
 
@@ -1162,6 +1293,10 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"showMessageDetailsInContextMenu", s._showMessageDetailsInContextMenu.current()},
 		{"showRepeatMessageInContextMenu", s._showRepeatMessageInContextMenu.current()},
 		{"showAddFilterInContextMenu", s._showAddFilterInContextMenu.current()},
+		{"showTranslateInContextMenu", s._showTranslateInContextMenu.current()},
+		{"showEditsHistoryInContextMenu", s._showEditsHistoryInContextMenu.current()},
+		{"showReadUntilInContextMenu", s._showReadUntilInContextMenu.current()},
+		{"showExpireMediaInContextMenu", s._showExpireMediaInContextMenu.current()},
 		{"showAttachButtonInMessageField", s._showAttachButtonInMessageField.current()},
 		{"showCommandsButtonInMessageField", s._showCommandsButtonInMessageField.current()},
 		{"showEmojiButtonInMessageField", s._showEmojiButtonInMessageField.current()},
@@ -1297,6 +1432,10 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	s._showMessageDetailsInContextMenu = j.value("showMessageDetailsInContextMenu", defaults._showMessageDetailsInContextMenu.current());
 	s._showRepeatMessageInContextMenu = j.value("showRepeatMessageInContextMenu", defaults._showRepeatMessageInContextMenu.current());
 	s._showAddFilterInContextMenu = j.value("showAddFilterInContextMenu", defaults._showAddFilterInContextMenu.current());
+	s._showTranslateInContextMenu = j.value("showTranslateInContextMenu", defaults._showTranslateInContextMenu.current());
+	s._showEditsHistoryInContextMenu = j.value("showEditsHistoryInContextMenu", defaults._showEditsHistoryInContextMenu.current());
+	s._showReadUntilInContextMenu = j.value("showReadUntilInContextMenu", defaults._showReadUntilInContextMenu.current());
+	s._showExpireMediaInContextMenu = j.value("showExpireMediaInContextMenu", defaults._showExpireMediaInContextMenu.current());
 	s._showAttachButtonInMessageField = j.value("showAttachButtonInMessageField", defaults._showAttachButtonInMessageField.current());
 	s._showCommandsButtonInMessageField = j.value("showCommandsButtonInMessageField", defaults._showCommandsButtonInMessageField.current());
 	s._showEmojiButtonInMessageField = j.value("showEmojiButtonInMessageField", defaults._showEmojiButtonInMessageField.current());

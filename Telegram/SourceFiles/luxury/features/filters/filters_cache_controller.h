@@ -29,7 +29,16 @@ using ReversiblePattern = FiltersController::ReversiblePattern;
 void fireUpdate();
 [[nodiscard]] rpl::producer<> updates();
 
-void rebuildCache();
+// Re-reads every filter from the database and recompiles every pattern. Reads
+// the whole filter table and runs the ICU compiler, so it must not be called on
+// the main thread: post it through LuxuryDatabase::async, which also keeps it
+// ordered behind the write it is meant to pick up.
+void reloadNow();
+
+// Throws away the per-message results without touching the patterns. Enough for
+// anything that changes what counts as hidden but not the patterns themselves,
+// like the shadow ban list or the master toggle.
+void dropResults();
 
 struct Cache
 {
@@ -39,10 +48,6 @@ struct Cache
 };
 
 [[nodiscard]] std::shared_ptr<const Cache> snapshot();
-
-std::unordered_map<long long, std::unordered_set<HashablePattern, PatternHasher>> buildExclusions(
-	const std::vector<RegexFilterGlobalExclusion> &exclusions,
-	const std::vector<HashablePattern> &shared);
 
 std::optional<bool> isFiltered(not_null<HistoryItem*> item);
 bool hasFilteredMessages(not_null<PeerData*> peer);
@@ -54,5 +59,8 @@ void putFiltered(
 	const std::shared_ptr<const Cache> &matchedCache);
 
 void invalidate(not_null<HistoryItem*> item);
+
+// Forgets everything remembered for a session that is going away.
+void invalidateSession(uint64 sessionId);
 
 }

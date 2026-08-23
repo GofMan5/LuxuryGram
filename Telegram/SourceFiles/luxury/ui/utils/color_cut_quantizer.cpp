@@ -16,17 +16,13 @@
 namespace Luxury::Ui {
 
 ColorCutQuantizer::ColorCutQuantizer(
-	const std::vector<int> &pixels,
+	const std::vector<QRgb> &pixels,
 	int maxColors,
-	const std::vector<Filter*> &filters)
+	Filter filter)
 	: _histogram(1 << (QUANTIZE_WORD_WIDTH * 3), 0)
-	  , _filters(filters) {
-	std::vector<int> quantizedPixels(pixels.size());
-
-	for (size_t i = 0; i < pixels.size(); ++i) {
-		const auto quantizedColor = quantizeFromRgb888(pixels[i]);
-		quantizedPixels[i] = quantizedColor;
-		_histogram[quantizedColor]++;
+	  , _filter(std::move(filter)) {
+	for (const auto pixel : pixels) {
+		++_histogram[quantizeFromRgb888(pixel)];
 	}
 
 	int distinctColorCount = 0;
@@ -118,8 +114,7 @@ std::vector<Swatch> ColorCutQuantizer::generateAverageColors(const std::vector<V
 
 bool ColorCutQuantizer::shouldIgnoreColor(int color565) const {
 	const auto rgb = approximateToRgb888(color565);
-	_tempHsl = ColorUtils::colorToHSL(rgb);
-	return shouldIgnoreColor(rgb, _tempHsl);
+	return shouldIgnoreColor(rgb, ColorUtils::colorToHSL(rgb));
 }
 
 bool ColorCutQuantizer::shouldIgnoreColor(const Swatch &swatch) const {
@@ -127,14 +122,7 @@ bool ColorCutQuantizer::shouldIgnoreColor(const Swatch &swatch) const {
 }
 
 bool ColorCutQuantizer::shouldIgnoreColor(QRgb rgb, const std::array<float, 3> &hsl) const {
-	if (!_filters.empty()) {
-		for (const auto filter : _filters) {
-			if (!(*filter)(rgb, hsl)) {
-				return true;
-			}
-		}
-	}
-	return false;
+	return _filter && !_filter(rgb, hsl);
 }
 
 int ColorCutQuantizer::quantizeFromRgb888(QRgb color) {

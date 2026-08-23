@@ -17,6 +17,11 @@ using "chat_helpers/chat_helpers.style";
 
 mediaviewOverDuration: 150;
 
+// Photos sat on translucent dark grey (mediaviewBg) while fullscreen video sat
+// on solid black, so the backdrop jumped when a video went fullscreen and read
+// as washed-out grey over a light desktop. One solid black for the whole viewer.
+mediaviewOverlayBg: mediaviewVideoBg;
+
 mediaviewPlayback: MediaSlider {
 	width: 3px;
 	activeFg: mediaviewPlaybackActive;

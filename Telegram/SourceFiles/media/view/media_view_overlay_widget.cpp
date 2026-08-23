@@ -1351,7 +1351,7 @@ QSize OverlayWidget::videoSize() const {
 bool OverlayWidget::streamingRequiresControls() const {
 	return !_stories
 		&& _document;
-	// LuxuryGram: allow vieo messages seeking
+	// LuxuryGram: allow video messages seeking
 	//  && (!_document->isAnimation() || _document->isVideoMessage());
 }
 
@@ -1679,11 +1679,6 @@ void OverlayWidget::updateControls() {
 		return dNow;
 	}();
 	_dateText = d.isValid() ? Ui::FormatDateTime(d) : QString();
-	if (_photo) {
-		_dateText += QString(", DC%1").arg(_photo->getDC());
-	} else if (_document) {
-		_dateText += QString(", DC%1").arg(_document->getDC());
-	}
 	if (!_fromName.isEmpty()) {
 		_fromNameLabel.setText(
 			st::mediaviewTextStyle,

@@ -44,7 +44,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_ui_settings.h"
-#include "luxury/ui/luxury_userpic.h"
 
 
 namespace Info::PeerGifts {

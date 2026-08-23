@@ -6,18 +6,10 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/components/icon_picker.h"
 
-#include "tray.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/ui/luxury_logo.h"
-#include "core/application.h"
-#include "main/main_domain.h"
 #include "styles/style_luxury_styles.h"
 #include "ui/painter.h"
-#include "window/main_window.h"
-
-#ifdef Q_OS_WIN
-#include "luxury/utils/windows_utils.h"
-#endif
 
 namespace {
 
@@ -38,18 +30,6 @@ const QVector<QString> icons{
 
 const auto rows = static_cast<int>(icons.size()) / IconPicker::kColumns
 	+ std::min(1, static_cast<int>(icons.size()) % IconPicker::kColumns);
-
-void applyIcon() {
-#ifdef Q_OS_WIN
-	LuxuryAssets::loadAppIco();
-	reloadAppIconFromTaskBar();
-#endif
-
-	Window::OverrideApplicationIcon(LuxuryAssets::currentAppLogo());
-	Core::App().refreshApplicationIcon();
-	Core::App().tray().updateIconCounters();
-	Core::App().domain().notifyUnreadBadgeChanged();
-}
 
 } // namespace
 
@@ -175,7 +155,7 @@ void IconPicker::mousePressEvent(QMouseEvent *e) {
 	}
 
 	if (changed) {
-		applyIcon();
+		LuxuryAssets::applyAppIcon();
 
 		repaint();
 	}

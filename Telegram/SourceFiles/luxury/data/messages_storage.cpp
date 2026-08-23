@@ -38,18 +38,12 @@ std::vector<LuxuryMessageBase> convertToBase(std::vector<DerivedMessage> message
 }
 
 void map(not_null<HistoryItem*> item, LuxuryMessageBase &message) {
-	const auto userId = DatabaseUserId(item->history()->session());
-
-	message.userId = userId;
+	message.userId = DatabaseUserId(item->history()->session());
 	message.dialogId = getDialogIdFromPeer(item->history()->peer);
 	message.groupedId = item->groupId().raw();
 	message.peerId = static_cast<ID>(item->history()->peer->id.value);
 	message.fromId = static_cast<ID>(item->from()->id.value);
-	if (item->topic()) {
-		message.topicId = item->topicRootId().bare;
-	} else {
-		message.topicId = 0;
-	}
+	message.topicId = item->topic() ? item->topicRootId().bare : ID();
 	message.messageId = item->id.bare;
 	message.date = item->date();
 	message.flags = LuxuryMapper::mapItemFlagsToMTPFlags(item);
@@ -61,45 +55,33 @@ void map(not_null<HistoryItem*> item, LuxuryMessageBase &message) {
 	}
 
 	message.views = item->viewsCount();
-	message.fwdFlags = 0;
-	message.fwdFromId = 0;
-	// message.fwdName
-	message.fwdDate = 0;
-	// message.fwdPostAuthor
+
 	if (const auto msgsigned = item->Get<HistoryMessageSigned>()) {
 		message.postAuthor = msgsigned->author.toStdString();
 	}
-	message.replyFlags = 0;
-	message.replyMessageId = 0;
-	message.replyPeerId = 0;
-	message.replyTopId = 0;
-	message.replyForumTopic = false;
-	// message.replySerialized
-	// message.replyMarkupSerialized
+
 	message.entityCreateDate = base::unixtime::now();
 
 	auto serializedText = LuxuryMapper::serializeTextWithEntities(item);
 	message.text = serializedText.first;
 	message.textEntities = serializedText.second;
-
-	// todo: implement mapping
-	message.mediaPath = "/";
-	// message.hqThumbPath
-	message.documentType = 0; // document type none
-	// message.documentSerialized
-	// message.thumbsSerialized
-	// message.documentAttributesSerialized
-	// message.mimeType
 }
 
 void addEditedMessage(not_null<HistoryItem *> item) {
 	EditedMessage message;
 	map(item, message);
 
+	// map() goes through serializeTextWithEntities(), which falls back to the
+	// media label ("Photo", "Voice message"), so an empty text here means there
+	// is nothing left to show: the viewer only renders text messages.
 	if (message.text.empty()) {
 		return;
 	}
 
+	// Left synchronous on purpose: hasRevisions() is a synchronous main-thread
+	// probe (see the note in luxury_database.h), so posting this would let a
+	// right-click land before the revision it should be offering. One row, no
+	// fsync under WAL.
 	LuxuryDatabase::addEditedMessage(message);
 }
 
@@ -143,7 +125,9 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 		return;
 	}
 
-	LuxuryDatabase::addDeletedMessage(std::move(message));
+	LuxuryDatabase::async([message = std::move(message)]() mutable {
+		LuxuryDatabase::addDeletedMessage(std::move(message));
+	});
 }
 
 void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
@@ -156,7 +140,11 @@ void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
 			messages.push_back(std::move(message));
 		}
 	}
-	LuxuryDatabase::addDeletedMessages(std::move(messages));
+	// A "delete all my messages" run posts these by the hundred, one transaction
+	// each. Mapping needs the items and stays here; the write does not.
+	LuxuryDatabase::async([messages = std::move(messages)]() mutable {
+		LuxuryDatabase::addDeletedMessages(std::move(messages));
+	});
 }
 
 std::vector<LuxuryMessageBase>
@@ -190,20 +178,24 @@ std::vector<LuxuryMessageBase> getDeletedMessages(
 		searchQuery.toStdString()));
 }
 
-bool hasDeletedMessages(not_null<PeerData*> peer, ID topicId) {
-	const auto userId = DatabaseUserId(peer->session());
-	return LuxuryDatabase::hasDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
-}
-
 void removeDeletedMessage(not_null<HistoryItem*> item) {
 	const auto peer = item->history()->peer;
 	const auto userId = DatabaseUserId(peer->session());
-	LuxuryDatabase::removeDeletedMessage(userId, getDialogIdFromPeer(peer), item->id.bare);
+	const auto dialogId = getDialogIdFromPeer(peer);
+	const auto messageId = item->id.bare;
+	LuxuryDatabase::async([=] {
+		LuxuryDatabase::removeDeletedMessage(userId, dialogId, messageId);
+	});
 }
 
 void clearDeletedMessages(not_null<PeerData*> peer, ID topicId) {
 	const auto userId = DatabaseUserId(peer->session());
-	LuxuryDatabase::clearDeletedMessages(userId, getDialogIdFromPeer(peer), topicId);
+	const auto dialogId = getDialogIdFromPeer(peer);
+	// Nothing waits for it: the caller has already dropped the items it was
+	// showing. Resolve the ids here, though -- PeerData is main-thread only.
+	LuxuryDatabase::async([=] {
+		LuxuryDatabase::clearDeletedMessages(userId, dialogId, topicId);
+	});
 }
 
 }

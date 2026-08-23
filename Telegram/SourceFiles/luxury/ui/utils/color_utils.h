@@ -21,11 +21,7 @@ public:
 	static QRgb HSLToRGB(float h, float s, float l);
 	static QRgb HSLToRGB(const std::array<float, 3> &hsl);
 
-	static double calculateLuminance(QRgb color);
 	static double calculateContrast(QRgb foreground, QRgb background);
-	static int calculateMinimumAlpha(QRgb foreground, QRgb background, float minContrastRatio);
-	static QRgb compositeColors(QRgb foreground, QRgb background);
-	static QRgb setAlphaComponent(QRgb color, int alpha);
 
 private:
 	static constexpr float constrain(float value, float min, float max) {
@@ -37,6 +33,8 @@ private:
 	}
 
 	static void colorToXYZ(QRgb color, double *outXyz);
+	static double calculateLuminance(QRgb color);
+	static QRgb compositeColors(QRgb foreground, QRgb background);
 	static int compositeAlpha(int foregroundAlpha, int backgroundAlpha);
 	static int compositeComponent(int fgC, int fgA, int bgC, int bgA, int a);
 };

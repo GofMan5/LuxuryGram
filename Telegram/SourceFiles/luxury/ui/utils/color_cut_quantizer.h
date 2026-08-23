@@ -20,9 +20,9 @@ public:
 	using Filter = std::function<bool(QRgb, const std::array<float, 3> &)>;
 
 	ColorCutQuantizer(
-		const std::vector<int> &pixels,
+		const std::vector<QRgb> &pixels,
 		int maxColors,
-		const std::vector<Filter*> &filters);
+		Filter filter);
 
 	[[nodiscard]] std::vector<Swatch> quantizedColors() const;
 
@@ -84,8 +84,7 @@ private:
 	std::vector<int> _colors;
 	std::vector<int> _histogram;
 	std::vector<Swatch> _quantizedColors;
-	std::vector<Filter*> _filters;
-	mutable std::array<float, 3> _tempHsl = {};
+	Filter _filter;
 
 	friend class Vbox;
 };

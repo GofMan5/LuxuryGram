@@ -10,6 +10,7 @@
 #include "mainwidget.h"
 #include "mainwindow.h"
 #include "api/api_attached_stickers.h"
+#include "luxury/data/luxury_database.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/ui/message_history/history_section.h"
 #include "luxury/utils/telegram_helpers.h"
@@ -23,7 +24,6 @@
 #include "core/application.h"
 #include "core/click_handler_types.h"
 #include "core/file_utilities.h"
-#include "crl/crl_async.h"
 #include "data/data_cloud_file.h"
 #include "data/data_document.h"
 #include "data/data_file_click_handler.h"
@@ -757,7 +757,7 @@ void InnerWidget::preloadMore(Direction direction) {
 
 	const auto weak = base::make_weak(this);
 
-	crl::async([=] {
+	LuxuryDatabase::async([=] {
 		std::vector<LuxuryMessageBase> messages;
 		if (editing) { // viewing edited history
 			messages = LuxuryMessages::getEditedMessages(

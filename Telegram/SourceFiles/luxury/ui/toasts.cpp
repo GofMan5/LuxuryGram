@@ -1,5 +1,6 @@
 #include "luxury/ui/toasts.h"
 
+#include "lang_auto.h"
 #include "styles/style_chat.h"
 #include "ui/widgets/buttons.h"
 
@@ -61,6 +62,10 @@ void ShowToastWithAction(
 		callback();
 		hideToast();
 	});
+}
+
+void ShowDatabaseError() {
+	::Ui::Toast::Show(tr::luxury_DatabaseError(tr::now));
 }
 
 }

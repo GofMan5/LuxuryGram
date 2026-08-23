@@ -20,6 +20,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_widgets.h"
 
 // LuxuryGram includes
+#include "luxury/features/message_shot/message_shot_render.h"
 #include "luxury/luxury_settings.h"
 #include "styles/style_luxury_icons.h"
 
@@ -50,8 +51,7 @@ void EnsureBlockquoteCache(
 	cache->outlines = colors.outlines;
 	cache->icon = colors.name;
 
-	const auto &settings = LuxurySettings::getInstance();
-	if (settings.simpleQuotesAndReplies()) {
+	if (LuxuryFeatures::MessageShot::simpleQuotesAndReplies()) {
 		cache->bg = QColor(0, 0, 0, 0);
 	}
 }
@@ -222,6 +222,16 @@ ChatStyle::ChatStyle(rpl::producer<ColorIndicesCompressed> colorIndices) {
 			_colorIndices = std::move(indices);
 		});
 	}
+
+	// The simple-quotes setting is baked into the quote caches by
+	// EnsureBlockquoteCache, which fills each one once and returns early after
+	// that. Nothing else drops them outside a palette change, so without this the
+	// toggle would only show up after a theme switch or a restart. The setter
+	// repaints, which is what refills them.
+	LuxurySettings::getInstance().simpleQuotesAndRepliesChanges(
+	) | rpl::on_next([=] {
+		clearColorIndexCaches();
+	}, _luxuryQuoteStyleLifetime);
 
 	finalize();
 	make(_historyPsaForwardPalette, st::historyPsaForwardPalette);
@@ -719,6 +729,16 @@ void ChatStyle::clearColorIndexCaches() {
 	for (auto &cache : _coloredQuoteCaches) {
 		cache = nullptr;
 	}
+	// LuxuryGram: the three below are filled by EnsureBlockquoteCache too, so
+	// leaving them behind meant a palette change reached every quote except the
+	// service and collectible ones.
+	for (auto &cache : _serviceQuoteCache) {
+		cache = nullptr;
+	}
+	for (auto &cache : _serviceReplyCache) {
+		cache = nullptr;
+	}
+	_collectibleCaches.clear();
 }
 
 void ChatStyle::assignPalette(not_null<const style::palette*> palette) {

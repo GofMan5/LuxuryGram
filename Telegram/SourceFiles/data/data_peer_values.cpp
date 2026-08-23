@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Data {
@@ -493,21 +494,26 @@ QString OnlineTextFull(not_null<UserData*> user, TimeId now) {
 	} else if (const auto common = OnlineTextCommon(user->lastseen(), now)) {
 		return *common;
 	}
-	const auto &settings = LuxurySettings::getInstance();
 	const auto till = user->lastseen().onlineTill();
 	const auto onlineFull = base::unixtime::parse(till);
 	const auto nowFull = base::unixtime::parse(now);
-	const auto locale = QLocale();
+	// One toggle, one rendering: formatMessageTime() owns showMessageSeconds().
+	// LongFormat used to be the "with seconds" branch here, and it also drags
+	// the timezone name in, so "last seen at 14:35:02 MSK" in one place and
+	// "14:35:02" in another were the same setting.
+	const auto onlineTime = formatMessageTime(onlineFull.time());
 	if (onlineFull.date() == nowFull.date()) {
-		const auto onlineTime = locale.toString(onlineFull.time(), settings.showMessageSeconds() ? QLocale::LongFormat : QLocale::ShortFormat);
 		return tr::lng_status_lastseen_today(tr::now, lt_time, onlineTime);
 	} else if (onlineFull.date().addDays(1) == nowFull.date()) {
-		const auto onlineTime = locale.toString(onlineFull.time(), settings.showMessageSeconds() ? QLocale::LongFormat : QLocale::ShortFormat);
 		return tr::lng_status_lastseen_yesterday(tr::now, lt_time, onlineTime);
 	}
-	const auto date = locale.toString(onlineFull.date(), QLocale::ShortFormat);
-	const auto time = locale.toString(onlineFull.time(), settings.showMessageSeconds() ? QLocale::LongFormat : QLocale::ShortFormat);
-	return tr::lng_status_lastseen_date_time(tr::now, lt_date, date, lt_time, time);
+	const auto date = QLocale().toString(onlineFull.date(), QLocale::ShortFormat);
+	return tr::lng_status_lastseen_date_time(
+		tr::now,
+		lt_date,
+		date,
+		lt_time,
+		onlineTime);
 }
 
 bool OnlineTextActive(not_null<UserData*> user, TimeId now) {

@@ -665,21 +665,15 @@ void OverlayWidget::RendererRhi::releaseResources() {
 QColor OverlayWidget::RendererRhi::rhiClearColor() {
 	if (_owner->_hideWorkaround) {
 		return QColor(0, 0, 0, 0);
-	} else if (_owner->_fullScreenVideo) {
-		return st::mediaviewVideoBg->c;
-	} else {
-		return st::mediaviewBg->c;
 	}
+	return st::mediaviewOverlayBg->c;
 }
 
 std::optional<QColor> OverlayWidget::RendererRhi::clearColor() {
 	if (_owner->_hideWorkaround) {
 		return QColor(0, 0, 0, 0);
-	} else if (_owner->_fullScreenVideo) {
-		return st::mediaviewVideoBg->c;
-	} else {
-		return st::mediaviewBg->c;
 	}
+	return st::mediaviewOverlayBg->c;
 }
 
 void OverlayWidget::RendererRhi::drawTexturedQuad(
@@ -979,10 +973,7 @@ void OverlayWidget::RendererRhi::drawContentQuad(
 }
 
 void OverlayWidget::RendererRhi::paintBackground() {
-	const auto &bg = _owner->_fullScreenVideo
-		? st::mediaviewVideoBg
-		: st::mediaviewBg;
-	const auto c = bg->c;
+	const auto c = st::mediaviewOverlayBg->c;
 	const auto vw = float(_viewport.width() * _factor);
 	const auto vh = float(_viewport.height() * _factor);
 

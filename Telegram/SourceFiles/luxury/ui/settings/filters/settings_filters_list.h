@@ -33,6 +33,8 @@ public:
 private:
 	void setupContent(not_null<Window::SessionController*> controller);
 	void initializeSharedFilters(not_null<Ui::VerticalLayout*> container);
+	// The rows, once the reads initializeSharedFilters() started come back.
+	void fillLoadedFilters(not_null<Ui::VerticalLayout*> container);
 	void initializeShadowBan(not_null<Ui::VerticalLayout*> container);
 
 	void addNewFilter(const RegexFilter &filter, bool exclusion = false);
@@ -46,7 +48,10 @@ private:
 	Ui::FlatLabel *filtersTitle = nullptr;
 	Ui::FlatLabel *excludedTitle = nullptr;
 
+	// Snapshotted from the controller at construction: its copy is a handoff slot
+	// that the next navigation overwrites.
 	std::optional<long long> dialogId;
+	std::optional<bool> showExclude;
 	bool shadowBan = false;
 };
 

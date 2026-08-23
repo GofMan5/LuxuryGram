@@ -57,6 +57,13 @@ bool isTakingShot() {
 	return takingShot;
 }
 
+bool simpleQuotesAndReplies() {
+	const auto &settings = LuxurySettings::getInstance();
+	return isTakingShot()
+		? !settings.messageShotSettings().showColorfulReplies()
+		: settings.simpleQuotesAndReplies();
+}
+
 bool setChoosingTheme(bool val) {
 	choosingTheme = val;
 	return choosingTheme;
@@ -190,10 +197,25 @@ QColor makeDefaultBackgroundColor() {
 	return st::boxBg->c.darker(110);
 }
 
+std::vector<not_null<HistoryItem*>> ResolveMessages(const ShotConfig &config) {
+	auto result = std::vector<not_null<HistoryItem*>>();
+	result.reserve(config.messages.size());
+	const auto &owner = config.controller->session().data();
+	for (const auto &id : config.messages) {
+		if (const auto message = owner.message(id)) {
+			result.push_back(message);
+		}
+	}
+	return result;
+}
+
 void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage&,bool)>& callback) {
 	const auto controller = config.controller;
 	const auto st = config.st;
-	auto messages = config.messages;
+	// Resolve first: the ids in the config outlive the messages, so anything
+	// deleted since the box was opened has to be dropped before its pointer is
+	// touched.
+	auto messages = ResolveMessages(config);
 
 	if (messages.empty()) {
 		return;
@@ -208,20 +230,6 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 		},
 		messages.front()->history());
 
-	// remove deleted messages
-	messages.erase(
-		std::ranges::remove_if(
-			messages,
-			[=](const auto &message)
-			{
-				return !message || !controller->session().data().message(message->fullId());
-			}).begin(),
-		messages.end()
-	);
-
-	if (messages.empty()) {
-		return;
-	}
 	auto messageIds = std::vector<FullMsgId>();
 	messageIds.reserve(messages.size());
 	for (const auto &message : messages) {
@@ -435,7 +443,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			Fn<void()> render;
 
 			void finish() {
-				if (finished) {
+				if (finished || !render) {
 					return;
 				}
 				finished = true;
@@ -448,6 +456,16 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			render(true);
 		});
 		const auto weakState = std::weak_ptr<PreloadState>(state);
+		// The Elements built above live inside render, and Element's destructor
+		// dereferences its HistoryItem. crl::guard below only suppresses the call:
+		// base::call_delayed keeps the closure itself alive until it fires, so the
+		// Elements would outlive the box by up to the timeout. Drop them by hand.
+		QObject::connect(box, &QObject::destroyed, [weakState] {
+			if (const auto state = weakState.lock()) {
+				state->lifetime.destroy();
+				state->render = nullptr;
+			}
+		});
 		rpl::single() | rpl::then(
 			config.controller->session().downloaderTaskFinished()
 		) | rpl::filter([=]
@@ -496,11 +514,11 @@ void ShowMessageShotBox(
 		not_null<Window::SessionController*> controller,
 		const MessageIdsList &ids,
 		Fn<void()> clearSelected) {
-	auto messages = std::vector<not_null<HistoryItem*>>();
+	auto messages = std::vector<FullMsgId>();
 	messages.reserve(ids.size());
 	for (const auto &item : ids) {
-		if (const auto message = resolveMessage(item)) {
-			messages.push_back(message);
+		if (resolveMessage(item)) {
+			messages.push_back(item);
 		}
 	}
 	if (messages.empty()) {
@@ -510,7 +528,7 @@ void ShowMessageShotBox(
 	const LuxuryFeatures::MessageShot::ShotConfig config = {
 		controller,
 		BuildShotChatStyle(controller),
-		messages,
+		std::move(messages),
 	};
 	auto box = Box<MessageShotBox>(config);
 	const auto raw = box.data();

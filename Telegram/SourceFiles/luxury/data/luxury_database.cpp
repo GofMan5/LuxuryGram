@@ -46,31 +46,15 @@ auto storage = make_storage(
 		make_column("flags", &DeletedMessage::flags),
 		make_column("editDate", &DeletedMessage::editDate),
 		make_column("views", &DeletedMessage::views),
-		make_column("fwdFlags", &DeletedMessage::fwdFlags),
-		make_column("fwdFromId", &DeletedMessage::fwdFromId),
-		make_column("fwdName", &DeletedMessage::fwdName),
-		make_column("fwdDate", &DeletedMessage::fwdDate),
-		make_column("fwdPostAuthor", &DeletedMessage::fwdPostAuthor),
+		// The default is what the existing databases were created with; without
+		// it sync_schema sees a mismatch and rebuilds the whole table.
 		make_column(
 			"postAuthor",
 			&DeletedMessage::postAuthor,
 			default_value("")),
-		make_column("replyFlags", &DeletedMessage::replyFlags),
-		make_column("replyMessageId", &DeletedMessage::replyMessageId),
-		make_column("replyPeerId", &DeletedMessage::replyPeerId),
-		make_column("replyTopId", &DeletedMessage::replyTopId),
-		make_column("replyForumTopic", &DeletedMessage::replyForumTopic),
-		make_column("replySerialized", &DeletedMessage::replySerialized),
 		make_column("entityCreateDate", &DeletedMessage::entityCreateDate),
 		make_column("text", &DeletedMessage::text),
-		make_column("textEntities", &DeletedMessage::textEntities),
-		make_column("mediaPath", &DeletedMessage::mediaPath),
-		make_column("hqThumbPath", &DeletedMessage::hqThumbPath),
-		make_column("documentType", &DeletedMessage::documentType),
-		make_column("documentSerialized", &DeletedMessage::documentSerialized),
-		make_column("thumbsSerialized", &DeletedMessage::thumbsSerialized),
-		make_column("documentAttributesSerialized", &DeletedMessage::documentAttributesSerialized),
-		make_column("mimeType", &DeletedMessage::mimeType)
+		make_column("textEntities", &DeletedMessage::textEntities)
 	),
 	make_table<EditedMessage>(
 		"EditedMessage",
@@ -86,43 +70,13 @@ auto storage = make_storage(
 		make_column("flags", &EditedMessage::flags),
 		make_column("editDate", &EditedMessage::editDate),
 		make_column("views", &EditedMessage::views),
-		make_column("fwdFlags", &EditedMessage::fwdFlags),
-		make_column("fwdFromId", &EditedMessage::fwdFromId),
-		make_column("fwdName", &EditedMessage::fwdName),
-		make_column("fwdDate", &EditedMessage::fwdDate),
-		make_column("fwdPostAuthor", &EditedMessage::fwdPostAuthor),
 		make_column(
 			"postAuthor",
 			&EditedMessage::postAuthor,
 			default_value("")),
-		make_column("replyFlags", &EditedMessage::replyFlags),
-		make_column("replyMessageId", &EditedMessage::replyMessageId),
-		make_column("replyPeerId", &EditedMessage::replyPeerId),
-		make_column("replyTopId", &EditedMessage::replyTopId),
-		make_column("replyForumTopic", &EditedMessage::replyForumTopic),
-		make_column("replySerialized", &EditedMessage::replySerialized),
 		make_column("entityCreateDate", &EditedMessage::entityCreateDate),
 		make_column("text", &EditedMessage::text),
-		make_column("textEntities", &EditedMessage::textEntities),
-		make_column("mediaPath", &EditedMessage::mediaPath),
-		make_column("hqThumbPath", &EditedMessage::hqThumbPath),
-		make_column("documentType", &EditedMessage::documentType),
-		make_column("documentSerialized", &EditedMessage::documentSerialized),
-		make_column("thumbsSerialized", &EditedMessage::thumbsSerialized),
-		make_column("documentAttributesSerialized", &EditedMessage::documentAttributesSerialized),
-		make_column("mimeType", &EditedMessage::mimeType)
-	),
-	make_table<DeletedDialog>(
-		"DeletedDialog",
-		make_column("fakeId", &DeletedDialog::fakeId, primary_key().autoincrement()),
-		make_column("userId", &DeletedDialog::userId),
-		make_column("dialogId", &DeletedDialog::dialogId),
-		make_column("peerId", &DeletedDialog::peerId),
-		make_column("folderId", &DeletedDialog::folderId),
-		make_column("topMessage", &DeletedDialog::topMessage),
-		make_column("lastMessageDate", &DeletedDialog::lastMessageDate),
-		make_column("flags", &DeletedDialog::flags),
-		make_column("entityCreateDate", &DeletedDialog::entityCreateDate)
+		make_column("textEntities", &EditedMessage::textEntities)
 	),
 	make_table<RegexFilter>(
 		"RegexFilter",
@@ -138,28 +92,16 @@ auto storage = make_storage(
 		make_column("fakeId", &RegexFilterGlobalExclusion::fakeId, primary_key().autoincrement()),
 		make_column("dialogId", &RegexFilterGlobalExclusion::dialogId),
 		make_column("filterId", &RegexFilterGlobalExclusion::filterId)
-	),
-	make_table<SpyMessageRead>(
-		"SpyMessageRead",
-		make_column("fakeId", &SpyMessageRead::fakeId, primary_key().autoincrement()),
-		make_column("userId", &SpyMessageRead::userId),
-		make_column("dialogId", &SpyMessageRead::dialogId),
-		make_column("messageId", &SpyMessageRead::messageId),
-		make_column("entityCreateDate", &SpyMessageRead::entityCreateDate)
-	),
-	make_table<SpyMessageContentsRead>(
-		"SpyMessageContentsRead",
-		make_column("fakeId", &SpyMessageContentsRead::fakeId, primary_key().autoincrement()),
-		make_column("userId", &SpyMessageContentsRead::userId),
-		make_column("dialogId", &SpyMessageContentsRead::dialogId),
-		make_column("messageId", &SpyMessageContentsRead::messageId),
-		make_column("entityCreateDate", &SpyMessageContentsRead::entityCreateDate)
 	)
 );
 
 namespace {
 
 std::recursive_mutex DatabaseMutex;
+
+// Long enough to outlast a WAL checkpoint by another connection, short enough
+// that a stuck writer surfaces as a logged failure instead of a frozen UI.
+constexpr auto kBusyTimeoutMs = 3000;
 
 } // namespace
 
@@ -171,14 +113,33 @@ void migrateToV1(decltype(storage) &storage) {
 	LOG(("Migration to V1 successful."));
 }
 
+void migrateToV2(decltype(storage) &storage) {
+	// These three were declared but never written to and never read from, so
+	// sync_schema kept creating empty tables nobody queried. It only knows the
+	// tables we still declare, hence the explicit drop.
+	storage.drop_table_if_exists("DeletedDialog");
+	storage.drop_table_if_exists("SpyMessageRead");
+	storage.drop_table_if_exists("SpyMessageContentsRead");
+	LOG(("Migration to V2 successful."));
 }
 
-bool runMigrations(decltype(storage) &storage) {
-	constexpr int kLatestVersion = 1;
+}
 
+constexpr int kLatestSchemaVersion = 2;
+
+bool runMigrations(decltype(storage) &storage, bool freshDatabase) {
 	const std::map<int, Fn<void(decltype(storage) &)>> migrations = {
 		{1, LuxuryMigrations::migrateToV1},
+		{2, LuxuryMigrations::migrateToV2},
 	};
+
+	if (freshDatabase) {
+		// sync_schema() has just built every table at its current shape, so
+		// there is nothing to migrate. Running the list anyway would let
+		// migrateToV1 drop the RegexFilter table it had only just created.
+		storage.insert(SchemaVersion{1, kLatestSchemaVersion});
+		return true;
+	}
 
 	int currentVersion = 0;
 	try {
@@ -192,14 +153,14 @@ bool runMigrations(decltype(storage) &storage) {
 		storage.insert(SchemaVersion{1, 0});
 	}
 
-	if (currentVersion >= kLatestVersion) {
+	if (currentVersion >= kLatestSchemaVersion) {
 		LOG(("Database is ok"));
 		return true;
 	}
 
-	LOG(("Database version: %1. Latest version: %2.").arg(currentVersion).arg(kLatestVersion));
+	LOG(("Database version: %1. Latest version: %2.").arg(currentVersion).arg(kLatestSchemaVersion));
 
-	for (int v = currentVersion + 1; v <= kLatestVersion; ++v) {
+	for (int v = currentVersion + 1; v <= kLatestSchemaVersion; ++v) {
 		if (migrations.contains(v)) {
 			try {
 				LOG(("Migration for version: %1").arg(v));
@@ -221,6 +182,14 @@ bool runMigrations(decltype(storage) &storage) {
 }
 
 namespace LuxuryDatabase {
+
+void async(FnMut<void()> &&work) {
+	// One queue, so posted work runs in the order it was posted. DatabaseMutex
+	// would keep it safe either way, but not correct: a clear and an insert racing
+	// on the thread pool can swap.
+	static auto queue = crl::queue();
+	queue.async(std::move(work));
+}
 
 bool moveCurrentDatabase() {
 	const auto lock = std::lock_guard(DatabaseMutex);
@@ -261,14 +230,30 @@ bool moveCurrentDatabase() {
 
 void initialize() {
 	const auto lock = std::lock_guard(DatabaseMutex);
+	// A missing file means a first run: sync_schema() below builds everything at
+	// its current shape, so the migration list must not touch it. Check before
+	// sync_schema, which creates the file.
+	const auto freshDatabase = !QFile::exists(u"./tdata/ayudata.db"_q);
+	// sqlite_orm opens and closes the connection around statements and only
+	// re-applies synchronous/journal_mode itself, so busy_timeout has to be
+	// reinstalled on every open or the first checkpoint contention becomes
+	// SQLITE_BUSY instead of a short wait.
+	storage.on_open = [](sqlite3 *db) {
+		sqlite3_busy_timeout(db, kBusyTimeoutMs);
+	};
 	try {
+		// Without these, sqlite defaults to a rollback journal with
+		// synchronous=FULL, which costs two fsyncs per commit. Writes happen
+		// on the main thread (one transaction per edited message), so a burst
+		// of edits used to be a burst of stalls.
+		storage.pragma.journal_mode(journal_mode::WAL);
+		storage.pragma.synchronous(1); // NORMAL
+
 		storage.sync_schema(true);
 
-		if (!runMigrations(storage)) {
+		if (!runMigrations(storage, freshDatabase)) {
 			return;
 		}
-
-		storage.sync_schema(true);
 	} catch (const std::exception &ex) {
 		LOG(("Database initialization failed: %1").arg(ex.what()));
 		if (!moveCurrentDatabase()) {
@@ -276,9 +261,25 @@ void initialize() {
 		}
 
 		storage.sync_schema(true);
+		// A database sync_schema just built is at the current version, not at 0.
+		// Stamping 0 here made the next launch run every migration against it,
+		// and migrateToV1 drops RegexFilter -- so any filter created after a
+		// recovery vanished on the following start.
 		if (!storage.get_pointer<SchemaVersion>(1)) {
-			storage.insert(SchemaVersion{1, 0});
+			storage.insert(SchemaVersion{1, kLatestSchemaVersion});
 		}
+	}
+	// By default sqlite_orm opens the file, runs the statement and closes it
+	// again -- and closing the last connection to a WAL database checkpoints it
+	// and deletes the -wal file. Every query paid for that, including the ones on
+	// the main thread. Every entry point below is serialized by DatabaseMutex, so
+	// holding one connection for the process lifetime is safe. Not any earlier
+	// than here: moveCurrentDatabase() renames the file, which an open handle
+	// would block on Windows.
+	try {
+		storage.open_forever();
+	} catch (const std::exception &ex) {
+		LOG(("Failed to hold the database connection open: %1").arg(ex.what()));
 	}
 }
 
@@ -405,24 +406,6 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 	}
 }
 
-bool hasDeletedMessages(ID userId, ID dialogId, ID topicId) {
-	const auto lock = std::lock_guard(DatabaseMutex);
-	try {
-		return !storage.select(
-			columns(column<DeletedMessage>(&DeletedMessage::dialogId)),
-			where(
-				column<DeletedMessage>(&DeletedMessage::userId) == userId and
-				column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId and
-				(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0)
-			),
-			limit(1)
-		).empty();
-	} catch (std::exception &ex) {
-		LOG(("Failed to check if dialog has deleted message: %1").arg(ex.what()));
-		return false;
-	}
-}
-
 void removeDeletedMessage(ID userId, ID dialogId, ID messageId) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
@@ -484,28 +467,6 @@ std::vector<RegexFilter> getExcludedByDialogId(ID dialogId) {
 		);
 	} catch (std::exception &ex) {
 		LOG(("Failed to get excluded by dialog id: %1").arg(ex.what()));
-		return {};
-	}
-}
-
-int getCount() {
-	const auto lock = std::lock_guard(DatabaseMutex);
-	try {
-		return storage.count<RegexFilter>();
-	} catch (std::exception &ex) {
-		LOG(("Failed to get count: %1").arg(ex.what()));
-		return 0;
-	}
-}
-
-RegexFilter getById(std::vector<char> id) {
-	const auto lock = std::lock_guard(DatabaseMutex);
-	try {
-		return storage.get<RegexFilter>(
-			where(column<RegexFilter>(&RegexFilter::id) == std::move(id))
-		);
-	} catch (std::exception &ex) {
-		LOG(("Failed to get filters by id: %1").arg(ex.what()));
 		return {};
 	}
 }
@@ -588,37 +549,41 @@ bool applyFilterChanges(
 	}
 }
 
-void addRegexFilter(const RegexFilter &filter) {
+bool addRegexFilter(const RegexFilter &filter) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.begin_transaction();
 		storage.replace(filter); // we're using replace as we set std::vector<char> as primary key
 		storage.commit();
+		return true;
 	} catch (std::exception &ex) {
 		try {
 			storage.rollback();
 		} catch (...) {
 		}
 		LOG(("Failed to save regex filter for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 
-void addRegexExclusion(const RegexFilterGlobalExclusion &exclusion) {
+bool addRegexExclusion(const RegexFilterGlobalExclusion &exclusion) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.begin_transaction();
 		storage.insert(exclusion);
 		storage.commit();
+		return true;
 	} catch (std::exception &ex) {
 		try {
 			storage.rollback();
 		} catch (...) {
 		}
 		LOG(("Failed to save regex filter exclusion for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 
-void updateRegexFilter(const RegexFilter &filter) {
+bool updateRegexFilter(const RegexFilter &filter) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.update_all(
@@ -631,34 +596,40 @@ void updateRegexFilter(const RegexFilter &filter) {
 			),
 			where(c(&RegexFilter::id) == filter.id)
 		);
+		return true;
 	} catch (std::exception &ex) {
 		LOG(("Failed to update regex filter for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 
-void deleteFilter(const std::vector<char> &id) {
+bool deleteFilter(const std::vector<char> &id) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.remove_all<RegexFilter>(
 			where(column<RegexFilter>(&RegexFilter::id) == id)
 		);
+		return true;
 	} catch (std::exception &ex) {
 		LOG(("Failed to delete regex filter for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 
-void deleteExclusionsByFilterId(const std::vector<char> &id) {
+bool deleteExclusionsByFilterId(const std::vector<char> &id) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.remove_all<RegexFilterGlobalExclusion>(
 			where(column<RegexFilterGlobalExclusion>(&RegexFilterGlobalExclusion::filterId) == id)
 		);
+		return true;
 	} catch (std::exception &ex) {
 		LOG(("Failed to delete regex filter exclusion by filter id for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 
-void deleteExclusion(ID dialogId, const std::vector<char> &filterId) {
+bool deleteExclusion(ID dialogId, const std::vector<char> &filterId) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.remove_all<RegexFilterGlobalExclusion>(
@@ -666,26 +637,32 @@ void deleteExclusion(ID dialogId, const std::vector<char> &filterId) {
 				column<RegexFilterGlobalExclusion>(&RegexFilterGlobalExclusion::dialogId) == dialogId
 			)
 		);
+		return true;
 	} catch (std::exception &ex) {
 		LOG(("Failed to delete regex filter exclusion for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 
-void deleteAllFilters() {
+bool deleteAllFilters() {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.remove_all<RegexFilter>();
+		return true;
 	} catch (std::exception &ex) {
 		LOG(("Failed to delete all regex filter for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 
-void deleteAllExclusions() {
+bool deleteAllExclusions() {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
 		storage.remove_all<RegexFilterGlobalExclusion>();
+		return true;
 	} catch (std::exception &ex) {
 		LOG(("Failed to delete all regex filter exclusions for some reason: %1").arg(ex.what()));
+		return false;
 	}
 }
 

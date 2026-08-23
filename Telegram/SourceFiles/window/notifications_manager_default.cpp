@@ -48,7 +48,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
 #include "luxury/features/streamer_mode/streamer_mode.h"
-#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Window {

@@ -83,9 +83,25 @@ void PerDialogFiltersListController::prepare() {
 		prepareShadowBan();
 		return;
 	}
-	const auto filters = LuxuryDatabase::getAllRegexFilters();
-	const auto exclusions = LuxuryDatabase::getAllFiltersExclusions();
+	// Two full-table reads, and prepare() runs while the section it belongs to is
+	// being built. Append the rows when they come back instead.
+	const auto weak = base::make_weak(this);
+	LuxuryDatabase::async([=] {
+		auto filters = LuxuryDatabase::getAllRegexFilters();
+		auto exclusions = LuxuryDatabase::getAllFiltersExclusions();
+		crl::on_main([=,
+				filters = std::move(filters),
+				exclusions = std::move(exclusions)] {
+			if (const auto strong = weak.get()) {
+				strong->fillCounts(filters, exclusions);
+			}
+		});
+	});
+}
 
+void PerDialogFiltersListController::fillCounts(
+		const std::vector<RegexFilter> &filters,
+		const std::vector<RegexFilterGlobalExclusion> &exclusions) {
 	if (filters.empty() && exclusions.empty()) {
 		return;
 	}
@@ -153,8 +169,10 @@ void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
 		_contextMenu->popup(QCursor::pos());
 		return;
 	}
-	_controller->dialogId = did;
-	_controller->showExclude = true;
+	_controller->luxuryFilters = {
+		.dialogId = did,
+		.showExclude = true,
+	};
 	_controller->showSettings(LuxuryFiltersList::Id());
 }
 

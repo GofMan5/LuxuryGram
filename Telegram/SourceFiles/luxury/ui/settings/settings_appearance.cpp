@@ -16,6 +16,7 @@
 #include "luxury/ui/settings/settings_luxury_utils.h"
 #include "luxury/ui/settings/settings_main.h"
 #include "inline_bots/bot_attach_web_view.h"
+#include "core/application.h"
 #include "main/main_session.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common.h"
@@ -26,6 +27,8 @@
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "ui/painter.h"
+#include "ui/power_saving.h"
+#include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/wrap/padding_wrap.h"
 #include "ui/wrap/vertical_layout.h"
@@ -189,6 +192,30 @@ void BuildAppearance(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	auto *settings = &LuxurySettings::getInstance();
 
 	builder.addSubsectionTitle(tr::luxury_CategoryAppearance());
+
+	// The same switch as Settings > Advanced > Power Saving > Interface
+	// animations, mirrored here because that is where nobody looks for it.
+	// It stays bound to the shared flag, so both screens always agree.
+	const auto animations = builder.addButton({
+		.id = u"luxury/interfaceAnimations"_q,
+		.title = tr::lng_settings_power_ui(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = PowerSaving::OnValue(
+			PowerSaving::kAnimations
+		) | rpl::map([](bool saving) { return !saving; }),
+	});
+	if (animations) {
+		animations->toggledValue(
+		) | rpl::filter([](bool enabled) {
+			return (enabled == PowerSaving::On(PowerSaving::kAnimations));
+		}) | rpl::on_next([](bool enabled) {
+			const auto flags = PowerSaving::Current();
+			PowerSaving::Set(enabled
+				? (flags & ~PowerSaving::kAnimations)
+				: (flags | PowerSaving::kAnimations));
+			Core::App().saveSettingsDelayed();
+		}, animations->lifetime());
+	}
 
 	luxury.addSettingToggle({
 		.id = u"luxury/materialSwitches"_q,
@@ -409,10 +436,6 @@ void LuxuryAppearance::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMeta.build);
 	Ui::ResizeFitChild(this, content);
-}
-
-Type LuxuryAppearanceId() {
-	return LuxuryAppearance::Id();
 }
 
 } // namespace Settings

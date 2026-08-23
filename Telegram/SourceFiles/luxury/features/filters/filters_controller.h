@@ -24,6 +24,10 @@ void toggleFilteredMessagesShown(not_null<PeerData*> peer);
 
 void invalidate(not_null<HistoryItem*> item);
 
+// Forgets everything remembered for a session that is going away: both the
+// per-message results and the "show hidden here" toggles.
+void invalidateSession(uint64 sessionId);
+
 struct ReversiblePattern
 {
 	std::shared_ptr<icu::RegexPattern> pattern;

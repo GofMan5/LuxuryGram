@@ -219,6 +219,8 @@ void Application::closeAdditionalWindows() {
 }
 
 Application::~Application() {
+	LuxurySettings::saveIfScheduled();
+
 	if (_saveSettingsTimer && _saveSettingsTimer->isActive()) {
 		Local::writeSettings();
 	}

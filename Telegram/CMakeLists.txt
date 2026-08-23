@@ -195,6 +195,7 @@ set(luxurygram_files
         luxury/ui/components/saved_music.h
         luxury/libs/json.hpp
         luxury/libs/json_ext.hpp
+        luxury/libs/json_fwd.hpp
         luxury/libs/sqlite/sqlite3.c
         luxury/libs/sqlite/sqlite3.h
         luxury/libs/sqlite/sqlite_orm.h
@@ -209,6 +210,7 @@ set(luxurygram_files
         luxury/features/streamer_mode/streamer_mode.h
         luxury/features/message_shot/message_shot.cpp
         luxury/features/message_shot/message_shot.h
+        luxury/features/message_shot/message_shot_render.h
         luxury/features/message_shot/message_shot_theme_state.cpp
         luxury/features/message_shot/message_shot_theme_state.h
         luxury/features/forward/luxury_forward.cpp
