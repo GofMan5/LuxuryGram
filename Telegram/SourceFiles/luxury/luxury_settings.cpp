@@ -27,6 +27,7 @@
 #include <QApplication>
 #include <QFile>
 #include <QSaveFile>
+#include <QThread>
 
 #include <charconv>
 
@@ -93,9 +94,17 @@ void writeSettings() {
 // Single-shot, so it has already cancelled itself by the time it fires. Bound
 // to whichever thread asks for it first, which is the main one: load() runs
 // from Local::readSettings() and ends in validate() calling save().
-base::Timer &saveTimer() {
-	static base::Timer timer([] { writeSettings(); });
-	return timer;
+struct SaveTimer {
+	base::Timer timer{ [] { writeSettings(); } };
+	// base::Timer inherits QObject privately, so it cannot be asked which
+	// thread owns it. Recording the thread beside it is the same answer, and
+	// the two are created together so they cannot disagree.
+	QThread *thread = QThread::currentThread();
+};
+
+SaveTimer &saveTimer() {
+	static SaveTimer result;
+	return result;
 }
 
 void repaintApp() {
@@ -494,18 +503,18 @@ void LuxurySettings::save() {
 	// Every setter calls this, and some of them fire per mouse move, so a
 	// synchronous 4 KB dump plus file rename per call used to show up as
 	// stutter while dragging a slider. Coalesce into one write instead.
-	auto &timer = saveTimer();
-	if (timer.thread() != QThread::currentThread()) {
+	auto &saver = saveTimer();
+	if (saver.thread != QThread::currentThread()) {
 		// A timer owned by another thread cannot be started from here, and
 		// dropping the write is not an option, so pay for it on the spot.
 		writeSettings();
 		return;
 	}
-	timer.callOnce(kSaveDelay);
+	saver.timer.callOnce(kSaveDelay);
 }
 
 void LuxurySettings::saveIfScheduled() {
-	auto &timer = saveTimer();
+	auto &timer = saveTimer().timer;
 	if (timer.isActive()) {
 		timer.cancel();
 		writeSettings();
