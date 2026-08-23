@@ -271,14 +271,6 @@ void markReadAfterAction(not_null<History*> history) {
 	}
 }
 
-QString formatTTL(int time, bool isDoc) {
-	if (time == 0x7FFFFFFF) {
-		return isDoc ? tr::luxury_OnePlayTTL(tr::now) : tr::luxury_OneViewTTL(tr::now);
-	}
-
-	return QString("%1s").arg(time);
-}
-
 QString getDCName(int dc) {
 	const auto getName = [=]
 	{
@@ -552,7 +544,7 @@ bool isMessageSavable(const not_null<HistoryItem*> item) {
 
 void processMessageDelete(not_null<HistoryItem*> item) {
 	if (!isMessageSavable(item)) {
-		item->destroy();
+		item->history()->owner().destroyMessageWithCacheCleanup(item);
 	} else if (!item->isDeleted()) {
 		if (item->ttlDestroyAt() > 0) {
 			item->applyTTL(0);

@@ -110,7 +110,8 @@ A release publishes one verified LuxuryGram product version on GitHub Releases. 
 ## Code and data conventions
 
 - Follow `REVIEW.md` for C++/Qt formatting and review rules.
-- Prefer self-documenting code; do not add comments that merely narrate the next line.
+- Prefer self-documenting code; do not add comments that merely narrate the next line. Do not delete an existing comment to satisfy that rule — move it with the code it explains, and drop it only once your change makes it wrong.
+- Never discard a result with a cast. `static_cast<void>(...)` and `(void)expr` silence `[[nodiscard]]` instead of answering it; fix the design.
 - Use scalable style metrics from `.style` files for UI geometry instead of raw pixel constants in C++.
 - Put user-visible strings in the localization system instead of scattering literals through code.
 - Sequential `QDataStream` settings fields are append-only. Guard new reads with `!stream.atEnd()` and preserve meaningful defaults; prefer existing key-value preferences for simple new values.

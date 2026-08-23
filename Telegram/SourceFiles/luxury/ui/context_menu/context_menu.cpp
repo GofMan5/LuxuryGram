@@ -1072,7 +1072,6 @@ void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 			const auto media = item->media();
 			if (!media
 				|| media->ttlSeconds() > 0
-				|| item->unsupportedTTL() > 0
 				|| item->out()) {
 				return;
 			}
@@ -1103,8 +1102,10 @@ void AddBurnAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 		return;
 	}
 
-	if (!item->media() || (item->media()->ttlSeconds() <= 0 && item->unsupportedTTL() <= 0) || item->out() ||
-		!item->hasUnreadMediaFlag()) {
+	if (!item->media()
+		|| item->media()->ttlSeconds() <= 0
+		|| item->out()
+		|| !item->hasUnreadMediaFlag()) {
 		return;
 	}
 

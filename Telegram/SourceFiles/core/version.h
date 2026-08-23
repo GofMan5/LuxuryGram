@@ -23,8 +23,8 @@ constexpr auto AppNameOld = "AyuGram for Windows"_cs;
 constexpr auto AppName = "LuxuryGram Desktop"_cs;
 constexpr auto AppFile = "LuxuryGram"_cs;
 // Keep AppVersion on the upstream line for storage and update compatibility.
-constexpr auto AppVersion = 7000009;
-constexpr auto AppVersionStr = "7.0.9";
+constexpr auto AppVersion = 7001001;
+constexpr auto AppVersionStr = "7.1.1";
 // Product version is bumped only for LuxuryGram releases.
 constexpr auto LuxuryVersionStr = "1.0.1";
 // Update packages are compared by this counter instead of the upstream

@@ -379,6 +379,27 @@ rpl::producer<bool> CanPinMessagesValue(not_null<PeerData*> peer) {
 	Unexpected("Peer type in CanPinMessagesValue.");
 }
 
+rpl::producer<bool> AllowsForwardingValue(not_null<PeerData*> peer) {
+	// LuxuryGram: this has to agree with PeerData::allowsForwarding(), which is
+	// the same question asked without a producer. A private chat's noforward
+	// flag never restricts us -- copying out of a one-to-one chat is the point
+	// of the fork -- so the user branch reports the flags but always allows.
+	if (peer->isUser()) {
+		return rpl::single(true);
+	} else if (const auto chat = peer->asChat()) {
+		return PeerFlagValue(
+			chat,
+			ChatDataFlag::NoForwards
+		) | rpl::map(!rpl::mappers::_1);
+	} else if (const auto channel = peer->asChannel()) {
+		return PeerFlagValue(
+			channel,
+			ChannelDataFlag::NoForwards
+		) | rpl::map(!rpl::mappers::_1);
+	}
+	return rpl::single(true);
+}
+
 rpl::producer<bool> CanManageGroupCallValue(not_null<PeerData*> peer) {
 	const auto flag = ChatAdminRight::ManageCall;
 	if (const auto user = peer->asUser()) {

@@ -770,6 +770,7 @@ private:
 
 	void init();
 	void setupShortcuts();
+	void setupScreenshotProtection();
 	void checkOpenedFilter();
 	void suggestArchiveAndMute();
 	void activateFirstChatsFilter();

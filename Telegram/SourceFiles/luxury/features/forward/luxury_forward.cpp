@@ -443,7 +443,7 @@ bool isLuxuryForwardNeeded(const std::vector<not_null<HistoryItem*>> &items) {
 }
 
 bool isLuxuryForwardNeeded(not_null<HistoryItem*> item) {
-	if (item->isDeleted() || item->isLuxuryNoForwards() || item->unsupportedTTL() || (item->media() && item->media()->ttlSeconds())) {
+	if (item->isDeleted() || item->isLuxuryNoForwards() || (item->media() && item->media()->ttlSeconds())) {
 		return true;
 	}
 	return false;

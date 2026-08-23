@@ -34,8 +34,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
-#include "luxury/features/message_shot/message_shot.h"
-#include "luxury/ui/luxury_userpic.h"
 #include "luxury/features/filters/filters_controller.h"
 
 
@@ -637,7 +635,11 @@ void InlineList::paint(
 			p.setOpacity(1.);
 		}
 	}
-	if (!animations.empty() && !LuxuryFeatures::MessageShot::isTakingShot()) { // fix crash when taking shot
+	// Was `!isTakingShot()` here: a shot builds its context with
+	// preparePaintContext, which leaves reactionInfo null, and the effect paint
+	// below dereferenced it. Upstream now checks the pointer, which covers the
+	// shot and every other caller that does the same.
+	if (!animations.empty() && context.reactionInfo) {
 		const auto now = context.now;
 		context.reactionInfo->effectPaint = [
 			now,
