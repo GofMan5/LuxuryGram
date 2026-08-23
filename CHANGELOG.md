@@ -4,6 +4,31 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## 1.0.2
+
+### Added
+
+- Synchronized the codebase with Telegram Desktop 7.1.1, which brings welcome messages for groups and channels, buttons and file blocks in rich messages, video profile photos, a video editor with trimming and cover-frame selection, restoring of opened windows and chats on relaunch, music files in the attach menu, and the new WEB proxy type.
+- Self-destruct timers and single view for photos and videos now render natively: a covered bubble, the one-time badge, and a countdown in the viewer. LuxuryGram keeps the media after it burns when "save deleted messages" is on, so an opened one-time photo or video stays readable instead of turning into an "expired" placeholder.
+
+### Changed
+
+- Reset settings now applies every setting whose effect needs more than a stored value, and names the ones only a restart can apply instead of reporting success either way.
+- The colourful quotes and replies setting takes effect immediately; it previously needed a restart, because the choice was baked into each quote's paint cache.
+- Screenshot protection, new in Telegram Desktop 7.1, never applies to a private chat: copying out of a one-to-one conversation is what this fork is for.
+
+### Fixed
+
+- Fixed crashes from five message context-menu actions that could outlive the message or the menu they belonged to.
+- Fixed the message-shot box rendering messages that had been deleted while it was open, and fixed Save and Copy writing an empty file or wiping the clipboard when the image was rejected or the selection had gone.
+- Opening the message-shot box no longer changes your colourful quotes and replies setting, which previously stayed changed if the box was closed in a way that skipped its cleanup.
+- Fixed interface stalls from database work on the interface thread: the database is opened once instead of per statement, so no query pays for a write-ahead-log checkpoint, and the hidden-message cache is warmed on the database queue instead of by the first message repaint.
+- Fixed the shadow-ban flag surviving into the next filters list you opened.
+- Fixed a burnt one-time photo or video showing "expires in 0 seconds" in the viewer and waking the interface once a second for as long as it stayed open.
+- Fixed a button-sized gap to the left of the message field when the attach button is hidden.
+- Fixed the emoji button staying hidden after a bot keyboard closed, and reappearing when you had switched it off.
+- Fixed a message shot of a timer photo keeping the countdown label after you switched dates off for shots.
+
 ## 1.0.1
 
 ### Added

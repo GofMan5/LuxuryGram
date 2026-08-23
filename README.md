@@ -50,7 +50,7 @@ Some features operate locally and cannot change Telegram server-side behavior. A
 
 | Surface | Status |
 | --- | --- |
-| Product version | [`1.0.1`](VERSIONING.md); bumps are manual or tied to substantial updates |
+| Product version | [`1.0.2`](VERSIONING.md); bumps are manual or tied to substantial updates |
 | Source code | Public on the [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) branch |
 | Windows | Portable `x64` archive published |
 | macOS | Build guide available; no published package |
