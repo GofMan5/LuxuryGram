@@ -35,6 +35,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
 #include "luxury/features/filters/filters_controller.h"
+#include "luxury/ui/luxury_userpic.h"
 
 
 namespace HistoryView::Reactions {
