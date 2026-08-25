@@ -10,16 +10,22 @@ Usage: write_update_feed.py <released version> <output path>
 import json
 import sys
 
-PLATFORMS = {
+PACKAGES = {
     'win64': 'tx64upd{version}',
     'linux': 'tlinuxupd{version}',
 }
 
 
 def build(released):
+    # The link is joined onto the prefix with nothing in between --
+    # Local::readAutoupdatePrefix() strips the trailing slash off the stored
+    # prefix, and HttpChecker::parseResponse() does a bare concatenation -- so
+    # the leading slash here is the only separator in the resulting URL. Without
+    # it 1.0.2 fetched .../releases/download/updatestx64upd1000002, got GitHub's
+    # 404 page, and wrote it to disk as the update.
     return {
-        platform: {'stable': {'released': released, 'link': link}}
-        for platform, link in PLATFORMS.items()
+        platform: {'stable': {'released': released, 'link': '/' + package}}
+        for platform, package in PACKAGES.items()
     }
 
 
@@ -33,8 +39,13 @@ def main():
         print(f'Refusing to advertise version {released}: Packer rejects it.')
         return 1
 
+    feed = build(released)
+    for platform, entry in feed.items():
+        link = entry['stable']['link']
+        assert link.startswith('/') and '//' not in link, (platform, link)
+
     with open(sys.argv[2], 'w', encoding='utf-8', newline='\n') as f:
-        json.dump(build(released), f, indent=1)
+        json.dump(feed, f, indent=1)
         f.write('\n')
 
     print(f'Wrote {sys.argv[2]} advertising {released}.')
