@@ -45,16 +45,32 @@ void initUiSettings() {
 }
 
 void initDatabase() {
-	LuxuryDatabase::initialize();
-
-	// snapshot() builds the cache on whatever thread asks for it first, and the
-	// first asker is a message paint. Do it here instead, on the queue the
-	// database work belongs on, so nothing but the very first frame can race it.
-	if (LuxurySettings::getInstance().filtersEnabled()) {
-		LuxuryDatabase::async([] {
+	// Not on the main thread. A schema change is not a metadata edit: sqlite_orm
+	// implements it as ALTER TABLE per column, and SQLite implements each of
+	// those by rewriting every row. 1.0.2 took a 12 GB database through fourteen
+	// of them from right here -- before style::StartManager(), before any window
+	// existed -- so the process sat with no window, no error and no log line
+	// after the last one. That reads as a hang, and it got killed as one.
+	//
+	// Nothing needs it to have finished. Every database entry point either posts
+	// to this same queue, which is FIFO, or takes DatabaseMutex; initialize()
+	// only has to be first in line, not done.
+	//
+	// filtersEnabled() is read here because the settings are written from the
+	// main thread. The warm-up shares the lambda so it cannot be reordered ahead
+	// of the schema it reads: snapshot() would otherwise build the cache on
+	// whichever thread painted first, and the first painter is a message.
+	const auto warmFilters = LuxurySettings::getInstance().filtersEnabled();
+	LuxuryDatabase::async([=] {
+		LuxuryDatabase::initialize();
+		if (warmFilters) {
 			FiltersCacheController::reloadNow();
-		});
-	}
+		}
+	});
+	// ponytail: the three synchronous probes and addEditedMessage() still block
+	// on DatabaseMutex if something reaches them while a migration is running --
+	// a stall with a window up instead of a dead process, which is the trade we
+	// want. Give them a "not ready yet" path if that ever shows up in practice.
 }
 
 void initWorker() {
