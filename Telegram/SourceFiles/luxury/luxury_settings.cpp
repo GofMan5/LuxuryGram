@@ -91,9 +91,12 @@ void writeSettings() {
 	}
 }
 
-// Single-shot, so it has already cancelled itself by the time it fires. Bound
-// to whichever thread asks for it first, which is the main one: load() runs
-// from Local::readSettings() and ends in validate() calling save().
+// Single-shot, so it has already cancelled itself by the time it fires. A
+// base::Timer belongs to the thread that constructed it, and this one is
+// constructed by whichever caller reaches save() first -- in practice the
+// main thread, since every setter runs there. Nothing depends on that: save()
+// compares before it starts the timer, so a first caller on some other thread
+// only means that thread owns it and the main one writes inline instead.
 struct SaveTimer {
 	base::Timer timer{ [] { writeSettings(); } };
 	// base::Timer inherits QObject privately, so it cannot be asked which
