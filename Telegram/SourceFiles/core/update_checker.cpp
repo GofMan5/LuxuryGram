@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/timer.h"
 #include "base/bytes.h"
 #include "base/unixtime.h"
+#include "lang/lang_keys.h"
 #include "storage/localstorage.h"
 #include "core/application.h"
 #include "core/changelogs.h"
@@ -27,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_advanced.h"
 #include "settings/settings_intro.h"
 #include "ui/layers/box_content.h"
+#include "ui/text/format_values.h"
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
@@ -1763,6 +1765,64 @@ QString countAlphaVersionSignature(uint64 version) { // duplicated in packer.cpp
 	signature = signature.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
 	signature = signature.replace('-', '8').replace('_', 'B');
 	return QString::fromUtf8(signature.mid(19, 32));
+}
+
+QString UpdateDownloadText(int64 already, int64 total, bool preferPercent) {
+	if (!preferPercent) {
+		return Ui::FormatDownloadText(already, total);
+	}
+	const auto percent = (total > 0)
+		? std::clamp((already * 100) / float64(total), 0., 100.)
+		: 0.;
+	auto result = QString::number(percent, 'f', 2);
+	if (result.contains('.')) {
+		while (result.endsWith('0')) {
+			result.chop(1);
+		}
+		if (result.endsWith('.')) {
+			result.chop(1);
+		}
+	}
+	return result + '%';
+}
+
+rpl::producer<QString> UpdateStateText(QString whenIdle) {
+	auto checker = UpdateChecker();
+	// The state at subscription time, because none of the streams below replay:
+	// a download already running would otherwise show as the idle text until the
+	// next progress tick, and a ready update as the idle text forever.
+	auto initial = [&] {
+		switch (checker.state()) {
+		case UpdateChecker::State::Download:
+			return UpdateDownloadText(
+				checker.already(),
+				checker.size(),
+				checker.percent());
+		case UpdateChecker::State::Ready:
+			return tr::lng_settings_update_ready(tr::now);
+		default:
+			return whenIdle;
+		}
+	}();
+	return rpl::single(std::move(initial)) | rpl::then(rpl::merge(
+		checker.checking() | rpl::map([] {
+			return tr::lng_settings_update_checking(tr::now);
+		}),
+		checker.isLatest() | rpl::map([] {
+			return tr::lng_settings_latest_installed(tr::now);
+		}),
+		checker.progress() | rpl::map([](UpdateChecker::Progress progress) {
+			return UpdateDownloadText(
+				progress.already,
+				progress.size,
+				progress.percent);
+		}),
+		checker.failed() | rpl::map([] {
+			return tr::lng_settings_update_fail(tr::now);
+		}),
+		checker.ready() | rpl::map([] {
+			return tr::lng_settings_update_ready(tr::now);
+		})));
 }
 
 } // namespace Core

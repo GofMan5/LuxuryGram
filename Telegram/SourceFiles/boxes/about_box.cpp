@@ -47,6 +47,66 @@ rpl::producer<TextWithEntities> Text() {
 		tr::marked);
 }
 
+void AddUpdateRow(not_null<Ui::GenericBox*> box) {
+	if (Core::UpdaterDisabled()) {
+		return;
+	}
+	const auto layout = box->verticalLayout();
+	Ui::AddDivider(layout);
+
+	// One row for both actions, because which one applies is a property of the
+	// updater and not of the click. The settings section overlays a second button
+	// on the first instead, and then has to resize it to cover by hand.
+	auto title = rpl::single(rpl::empty) | rpl::then(
+		Core::UpdateChecker().ready() | rpl::to_empty
+	) | rpl::map([] {
+		return (Core::UpdateChecker().state()
+				== Core::UpdateChecker::State::Ready)
+			? tr::lng_update_telegram(tr::now)
+			: tr::lng_settings_check_now(tr::now);
+	});
+
+	// settingsUpdateToggle is the two-line row the settings section uses: title
+	// on top, state underneath at settingsUpdateStatePosition. Borrowed whole so
+	// the two places look the same.
+	const auto row = layout->add(object_ptr<Ui::SettingsButton>(
+		layout,
+		std::move(title),
+		st::settingsUpdateToggle));
+
+	// Idle text is empty: the version is already the first thing in this box, and
+	// repeating it under the button would say nothing.
+	const auto state = Ui::CreateChild<Ui::FlatLabel>(
+		row,
+		Core::UpdateStateText(QString()),
+		st::settingsUpdateState);
+	state->setAttribute(Qt::WA_TransparentForMouseEvents);
+	rpl::combine(
+		row->widthValue(),
+		state->widthValue()
+	) | rpl::on_next([=] {
+		// moveToLeft mirrors against the parent width, so it has to re-run on
+		// every resize, not once.
+		state->moveToLeft(
+			st::settingsUpdateStatePosition.x(),
+			st::settingsUpdateStatePosition.y());
+	}, state->lifetime());
+
+	row->setClickedCallback([] {
+		auto checker = Core::UpdateChecker();
+		if (checker.state() == Core::UpdateChecker::State::Ready) {
+			Core::checkReadyUpdate();
+			Core::Restart();
+			return;
+		}
+		// Without this, start() honours the eight-hour floor and returns having
+		// done nothing -- which from here is indistinguishable from a broken
+		// updater, since the state text would never leave idle.
+		cSetLastUpdateCheck(0);
+		checker.start();
+	});
+}
+
 } // namespace
 
 void AboutBox(not_null<Ui::GenericBox*> box, Window::SessionController*) {
@@ -82,6 +142,8 @@ void AboutBox(not_null<Ui::GenericBox*> box, Window::SessionController*) {
 	};
 
 	addText(Text());
+
+	AddUpdateRow(box);
 
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 	box->addLeftButton(

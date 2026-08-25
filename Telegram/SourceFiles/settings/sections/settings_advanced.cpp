@@ -56,7 +56,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/power_saving.h"
 #include "ui/rp_widget.h"
 #include "ui/screen_reader_mode.h"
-#include "ui/text/format_values.h"
 #include "ui/ui_utility.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
@@ -1125,28 +1124,10 @@ void BuildUpdateSection(SectionBuilder &builder, bool atTop) {
 				int64 ready,
 				int64 total,
 				bool preferPercent) {
-			const auto formatted = [&] {
-				if (!preferPercent) {
-					return Ui::FormatDownloadText(ready, total);
-				}
-				const auto percent = (total > 0)
-					? std::clamp((ready * 100) / float64(total), 0., 100.)
-					: 0.;
-				auto result = QString::number(percent, 'f', 2);
-				if (result.contains('.')) {
-					while (result.endsWith('0')) {
-						result.chop(1);
-					}
-					if (result.endsWith('.')) {
-						result.chop(1);
-					}
-				}
-				return result + '%';
-			}();
 			texts->fire(tr::lng_settings_downloading_update(
 				tr::now,
 				lt_progress,
-				formatted));
+				Core::UpdateDownloadText(ready, total, preferPercent)));
 			downloading->fire(true);
 		};
 		const auto setDefaultStatus = [=](
@@ -1477,28 +1458,10 @@ void SetupUpdate(not_null<Ui::VerticalLayout*> container) {
 			int64 ready,
 			int64 total,
 			bool preferPercent) {
-		const auto formatted = [&] {
-			if (!preferPercent) {
-				return Ui::FormatDownloadText(ready, total);
-			}
-			const auto percent = (total > 0)
-				? std::clamp((ready * 100) / float64(total), 0., 100.)
-				: 0.;
-			auto result = QString::number(percent, 'f', 2);
-			if (result.contains('.')) {
-				while (result.endsWith('0')) {
-					result.chop(1);
-				}
-				if (result.endsWith('.')) {
-					result.chop(1);
-				}
-			}
-			return result + '%';
-		}();
 		texts->fire(tr::lng_settings_downloading_update(
 			tr::now,
 			lt_progress,
-			formatted));
+			Core::UpdateDownloadText(ready, total, preferPercent)));
 		downloading->fire(true);
 	};
 	const auto setDefaultStatus = [=](const Core::UpdateChecker &checker) {
