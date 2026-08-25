@@ -254,6 +254,98 @@ bool moveCurrentDatabase() {
 	return true;
 }
 
+// True when the statement runs. Used only to ask whether a table or a column is
+// there: SQLite refuses to prepare a SELECT naming something that does not
+// exist, and LIMIT 0 means nothing is read even when it does.
+bool sqlAccepts(sqlite3 *db, const std::string &query) {
+	try {
+		sqlite_orm::internal::perform_void_exec(db, query);
+		return true;
+	} catch (...) {
+		return false;
+	}
+}
+
+// Bring a DeletedMessage table up to the shape make_table declares, keeping its
+// rows, before sync_schema gets a chance to do it the lossy way.
+//
+// 1.0.2 shipped a declaration missing fourteen columns and dropped them from
+// every database it opened. Those databases now have sixteen columns, and
+// against the restored declaration sync_schema puts the fourteen in
+// columnsToAdd -- where each one being NOT NULL with no default clears
+// attempt_to_preserve, so sync_table takes the drop_create_with_loss branch and
+// the rows are gone. There is no way to add a NOT NULL column without a default
+// in place: ALTER TABLE ADD COLUMN demands one, and a column that has a default
+// no longer compares equal to the declaration. So the table gets rewritten once,
+// here, in a single pass that carries the rows across.
+//
+// The literals match what a real database holds in these columns, which is
+// nothing: mediaPath is "/" everywhere and the rest are empty or zero.
+void convergeDeletedMessage(sqlite3 *db) {
+	if (!sqlAccepts(db, "SELECT 1 FROM \"DeletedMessage\" LIMIT 0")) {
+		return; // No table yet -- sync_schema creates it at the right shape.
+	}
+	if (sqlAccepts(db, "SELECT \"mediaPath\" FROM \"DeletedMessage\" LIMIT 0")) {
+		return; // Already the declared shape. This is the common path.
+	}
+	LOG(("Database: DeletedMessage is missing the 1.0.2-dropped columns, "
+		"rewriting it once to add them back."));
+	static const auto kCarried = std::string(
+		"\"fakeId\", \"userId\", \"dialogId\", \"groupedId\", \"peerId\", "
+		"\"fromId\", \"topicId\", \"messageId\", \"date\", \"flags\", "
+		"\"editDate\", \"views\", \"postAuthor\", \"entityCreateDate\", "
+		"\"text\", \"textEntities\"");
+	try {
+		sqlite_orm::internal::perform_void_exec(db, "BEGIN");
+		sqlite_orm::internal::perform_void_exec(db,
+			"CREATE TABLE \"DeletedMessage_luxury_new\" ("
+			"\"fakeId\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, "
+			"\"userId\" INTEGER NOT NULL, \"dialogId\" INTEGER NOT NULL, "
+			"\"groupedId\" INTEGER NOT NULL, \"peerId\" INTEGER NOT NULL, "
+			"\"fromId\" INTEGER NOT NULL, \"topicId\" INTEGER NOT NULL, "
+			"\"messageId\" INTEGER NOT NULL, \"date\" INTEGER NOT NULL, "
+			"\"flags\" INTEGER NOT NULL, \"editDate\" INTEGER NOT NULL, "
+			"\"views\" INTEGER NOT NULL, \"postAuthor\" TEXT NOT NULL DEFAULT '', "
+			"\"entityCreateDate\" INTEGER NOT NULL, \"text\" TEXT NOT NULL, "
+			"\"textEntities\" BLOB NOT NULL, \"fwdPostAuthor\" TEXT NOT NULL, "
+			"\"replyFlags\" INTEGER NOT NULL, \"replyMessageId\" INTEGER NOT NULL, "
+			"\"replyPeerId\" INTEGER NOT NULL, \"replyTopId\" INTEGER NOT NULL, "
+			"\"replyForumTopic\" INTEGER NOT NULL, "
+			"\"replySerialized\" BLOB NOT NULL, \"mediaPath\" TEXT NOT NULL, "
+			"\"hqThumbPath\" TEXT NOT NULL, \"documentType\" INTEGER NOT NULL, "
+			"\"documentSerialized\" BLOB NOT NULL, "
+			"\"thumbsSerialized\" BLOB NOT NULL, "
+			"\"documentAttributesSerialized\" BLOB NOT NULL, "
+			"\"mimeType\" TEXT NOT NULL)");
+		sqlite_orm::internal::perform_void_exec(db,
+			"INSERT INTO \"DeletedMessage_luxury_new\" (" + kCarried
+			+ ", \"fwdPostAuthor\", \"replyFlags\", \"replyMessageId\", "
+			"\"replyPeerId\", \"replyTopId\", \"replyForumTopic\", "
+			"\"replySerialized\", \"mediaPath\", \"hqThumbPath\", "
+			"\"documentType\", \"documentSerialized\", \"thumbsSerialized\", "
+			"\"documentAttributesSerialized\", \"mimeType\") SELECT " + kCarried
+			+ ", '', 0, 0, 0, 0, 0, x'', '/', '', 0, x'', x'', x'', '' "
+			"FROM \"DeletedMessage\"");
+		sqlite_orm::internal::perform_void_exec(db,
+			"DROP TABLE \"DeletedMessage\"");
+		sqlite_orm::internal::perform_void_exec(db,
+			"ALTER TABLE \"DeletedMessage_luxury_new\" "
+			"RENAME TO \"DeletedMessage\"");
+		sqlite_orm::internal::perform_void_exec(db, "COMMIT");
+		LOG(("Database: DeletedMessage rewritten, columns restored."));
+	} catch (const std::exception &ex) {
+		// Leave the old table alone. sync_schema would drop it with loss, so the
+		// caller turns this into the recovery path instead.
+		try {
+			sqlite_orm::internal::perform_void_exec(db, "ROLLBACK");
+		} catch (...) {
+		}
+		LOG(("Database: failed to restore DeletedMessage columns: %1"
+			).arg(ex.what()));
+		throw;
+	}
+}
+
 void initialize() {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	// A missing file means a first run: sync_schema() below builds everything at
@@ -264,8 +356,14 @@ void initialize() {
 	// re-applies synchronous/journal_mode itself, so busy_timeout has to be
 	// reinstalled on every open or the first checkpoint contention becomes
 	// SQLITE_BUSY instead of a short wait.
+	//
+	// The schema converge rides along here because this is the one hook that is
+	// guaranteed to run before any statement sync_schema issues. Both of its
+	// probes are a prepare that reads nothing, so the repeated opens before
+	// open_forever() cost almost nothing once the shape is right.
 	storage.on_open = [](sqlite3 *db) {
 		sqlite3_busy_timeout(db, kBusyTimeoutMs);
+		convergeDeletedMessage(db);
 	};
 	try {
 		// Without these, sqlite defaults to a rollback journal with
