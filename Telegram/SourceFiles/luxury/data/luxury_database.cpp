@@ -54,7 +54,33 @@ auto storage = make_storage(
 			default_value("")),
 		make_column("entityCreateDate", &DeletedMessage::entityCreateDate),
 		make_column("text", &DeletedMessage::text),
-		make_column("textEntities", &DeletedMessage::textEntities)
+		make_column("textEntities", &DeletedMessage::textEntities),
+		// Nothing reads or writes the rest. They are declared because the tables
+		// in the wild have the columns, and sqlite_orm removes any column the
+		// storage does not declare -- one ALTER TABLE DROP COLUMN each, which
+		// SQLite implements by rewriting every row. See the note in entities.h.
+		//
+		// None of them may carry default_value: calculate_remove_add_columns
+		// compares whether a default EXISTS, not what it is, so declaring one
+		// where the on-disk column has none makes the shapes unequal and buys the
+		// whole-table copy this is here to avoid. postAuthor above is the
+		// opposite case and must keep its default for exactly the same reason.
+		make_column("fwdPostAuthor", &DeletedMessage::fwdPostAuthor),
+		make_column("replyFlags", &DeletedMessage::replyFlags),
+		make_column("replyMessageId", &DeletedMessage::replyMessageId),
+		make_column("replyPeerId", &DeletedMessage::replyPeerId),
+		make_column("replyTopId", &DeletedMessage::replyTopId),
+		make_column("replyForumTopic", &DeletedMessage::replyForumTopic),
+		make_column("replySerialized", &DeletedMessage::replySerialized),
+		make_column("mediaPath", &DeletedMessage::mediaPath),
+		make_column("hqThumbPath", &DeletedMessage::hqThumbPath),
+		make_column("documentType", &DeletedMessage::documentType),
+		make_column("documentSerialized", &DeletedMessage::documentSerialized),
+		make_column("thumbsSerialized", &DeletedMessage::thumbsSerialized),
+		make_column(
+			"documentAttributesSerialized",
+			&DeletedMessage::documentAttributesSerialized),
+		make_column("mimeType", &DeletedMessage::mimeType)
 	),
 	make_table<EditedMessage>(
 		"EditedMessage",

@@ -31,8 +31,35 @@ public:
 	std::vector<char> textEntities;
 };
 
+// Every field below is dead in the sense that nothing reads or writes it -- the
+// media-preserving feature they were scaffolding for was never implemented, here
+// or upstream, and mediaPath is the literal "/" in all 31.8M rows of a real
+// database. They are declared anyway because existing DeletedMessage tables have
+// the columns, and a column the storage does not declare is one sqlite_orm drops
+// with an ALTER TABLE DROP COLUMN -- which SQLite implements by rewriting every
+// row. Dropping these fourteen took a 12 GB table through fourteen rewrites and
+// hung the client at startup for as long as it was left running.
+//
+// EditedMessage deliberately does not get them: that table is already down to
+// sixteen columns in the wild, so declaring them there would create the very
+// mismatch this avoids.
 class DeletedMessage : public LuxuryMessageBase
 {
+public:
+	std::string fwdPostAuthor;
+	int replyFlags = 0;
+	int replyMessageId = 0;
+	ID replyPeerId = 0;
+	int replyTopId = 0;
+	bool replyForumTopic = false;
+	std::vector<char> replySerialized;
+	std::string mediaPath;
+	std::string hqThumbPath;
+	int documentType = 0;
+	std::vector<char> documentSerialized;
+	std::vector<char> thumbsSerialized;
+	std::vector<char> documentAttributesSerialized;
+	std::string mimeType;
 };
 
 class EditedMessage : public LuxuryMessageBase
