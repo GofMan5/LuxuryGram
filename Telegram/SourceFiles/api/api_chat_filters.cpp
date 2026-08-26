@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_chat_filters.h"
 
+#include "api/api_errors.h"
 #include "api/api_text_entities.h"
 #include "apiwrap.h"
 #include "base/event_filter.h"
@@ -957,6 +958,12 @@ void CheckFilterInvite(
 		}
 	}, [=](const MTP::Error &error) {
 		if (error.code() != 400) {
+			// Used to return here without a word, and a folder link is only
+			// ever clicked once -- so a rate limit or a server error was
+			// indistinguishable from a click that never registered.
+			if (const auto strong = weak.get()) {
+				strong->showToast(Api::ErrorText(error));
+			}
 			return;
 		}
 		ProcessFilterInvite(weak, slug, {}, {}, {}, {}, {});

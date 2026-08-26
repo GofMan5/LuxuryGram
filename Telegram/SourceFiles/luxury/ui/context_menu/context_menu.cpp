@@ -9,6 +9,7 @@
 #include "apiwrap.h"
 #include "lang_auto.h"
 #include "mainwidget.h"
+#include "api/api_errors.h"
 #include "api/api_sending.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/luxury_state.h"
@@ -81,7 +82,9 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 	};
 }
 
-void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
+void DeleteMyMessagesAfterConfirm(
+		not_null<Window::SessionController*> controller,
+		not_null<PeerData*> peer) {
 	const auto session = &peer->session();
 
 	if (const auto channel = peer->asChannel()) {
@@ -93,13 +96,37 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 
 	struct State {
 		base::weak_ptr<Main::Session> session;
+		base::weak_ptr<Window::SessionController> controller;
 		PeerId peerId;
 		int totalDeleted = 0;
+		QString lastSkipped;
 		Fn<void(MsgId)> requestNext;
 		Fn<void(QVector<MTPint>, MsgId, bool)> removeBatch;
+
+		// This runs for minutes over hundreds of batches and used to report
+		// everything -- flood waits, unrecoverable errors, finishing -- to
+		// DEBUG_LOG only. From the outside a deletion that stopped halfway was
+		// indistinguishable from one that finished.
+		void say(const QString &text) const {
+			if (const auto strong = controller.get()) {
+				strong->showToast(text);
+			}
+		}
+
+		// "Done" after a run that deleted nothing would be a lie, and that is
+		// exactly the shape of a chat we are not allowed to delete in: every
+		// batch comes back forbidden and is skipped, the loop walks the whole
+		// history, and nothing changes. lastSkipped keeps the reason so the
+		// end can say it instead.
+		void sayFinished() const {
+			say((totalDeleted || lastSkipped.isEmpty())
+				? tr::lng_box_done(tr::now)
+				: Api::ErrorText(lastSkipped));
+		}
 	};
 	const auto state = std::make_shared<State>();
 	state->session = base::make_weak(session);
+	state->controller = base::make_weak(controller);
 	state->peerId = peer->id;
 	const auto weak = std::weak_ptr<State>(state);
 
@@ -141,6 +168,7 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 			if (!hasMore) {
 				DEBUG_LOG(("Deleted all %1 my messages in this chat")
 					.arg(state->totalDeleted));
+				state->sayFinished();
 				return;
 			}
 			const auto delay = crl::time(
@@ -153,12 +181,14 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 				const MTP::Error &error) {
 			const auto type = error.type();
 			DEBUG_LOG(("Delete batch %1 failed: %2").arg(batch).arg(type));
-			if (type.startsWith(u"FLOOD_WAIT_"_q)
-				|| type.startsWith(u"FLOOD_PREMIUM_WAIT_"_q)) {
-				const auto underscore = type.lastIndexOf('_');
-				const auto seconds = (underscore >= 0)
-					? type.mid(underscore + 1).toInt()
-					: 0;
+			// ErrorWaitSeconds() replaces two startsWith() prefix tests that also
+			// matched FLOOD_WAIT with a non-numeric tail and retried it after one
+			// second, forever. No count, no retry: it drops to the stop below.
+			if (const auto seconds = Api::ErrorWaitSeconds(type)) {
+				// Said out loud, because the deletion is about to sit still for
+				// as long as the server asks and there is nothing else on screen
+				// to explain the pause.
+				state->say(Api::ErrorText(type));
 				const auto delay = crl::time(std::max(seconds, 1) * 1000);
 				base::call_delayed(delay, [state, ids, nextFrom, hasMore] {
 					state->removeBatch(ids, nextFrom, hasMore);
@@ -171,16 +201,26 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 				DEBUG_LOG(("Skipping batch %1 (%2 ids)")
 					.arg(batch)
 					.arg(ids.size()));
+				// Not said here: on a chat we cannot delete in this fires once
+				// per batch, and a hundred toasts is worse than none. Kept for
+				// sayFinished() instead, which is the one place that knows
+				// whether anything was deleted at all.
+				state->lastSkipped = type;
 				if (hasMore) {
 					const auto delay = crl::time(
 						500 + base::RandomValue<int>() % 500);
 					base::call_delayed(delay, [state, nextFrom] {
 						state->requestNext(nextFrom);
 					});
+				} else {
+					// Last batch, and it was skipped: nothing follows to speak
+					// up, so the loop ends here.
+					state->sayFinished();
 				}
 				return;
 			}
 			DEBUG_LOG(("Stopping deletion, unrecoverable error: %1").arg(type));
+			state->say(Api::ErrorText(type));
 		};
 
 		if (const auto channel = peer->asChannel()) {
@@ -262,6 +302,11 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 				if (ids.isEmpty()) {
 					DEBUG_LOG(("Deleted all %1 my messages in this chat")
 						.arg(state->totalDeleted));
+					// The other finish is in removeBatch's done(); this one is
+					// reached when the search comes back empty -- after a full
+					// last batch, or on a chat we had nothing in. Silence here
+					// read as a click that did nothing.
+					state->sayFinished();
 					return;
 				}
 				const auto hasMore = parsed.messageIds.size() == 100 && minId;
@@ -272,7 +317,9 @@ void DeleteMyMessagesAfterConfirm(not_null<PeerData*> peer) {
 			})
 			.fail([state](const MTP::Error &error) {
 				DEBUG_LOG(("History fetch failed: %1").arg(error.type()));
+				state->say(Api::ErrorText(error));
 			})
+			.handleFloodErrors()
 			.send();
 	};
 
@@ -288,7 +335,7 @@ Fn<void()> DeleteMyMessagesHandler(not_null<Window::SessionController*> controll
 				.confirmed =
 				[=](Fn<void()> &&close)
 				{
-					DeleteMyMessagesAfterConfirm(peer);
+					DeleteMyMessagesAfterConfirm(controller, peer);
 					close();
 				},
 				.confirmText = tr::lng_box_delete(),

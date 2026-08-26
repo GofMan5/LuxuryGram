@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "apiwrap.h"
 #include "api/api_credits.h"
+#include "api/api_errors.h"
 #include "boxes/premium_limits_box.h"
 #include "core/application.h"
 #include "data/components/credits.h"
@@ -185,11 +186,18 @@ void SubmitChatInvite(
 					: tr::lng_group_request_sent_channel(tr::now);
 			} else if (type == u"USERS_TOO_MUCH"_q) {
 				return tr::lng_group_invite_no_room(tr::now);
+			} else if (Api::ErrorWaitSeconds(type)) {
+				// A rate limit is not a bad link. It also never used to reach
+				// this handler at all -- without the handleFloodErrors() below,
+				// the mtproto instance counts a flood error as handled and
+				// parks the request until the wait is over, so joining by link
+				// during a limit did nothing and said nothing.
+				return Api::ErrorText(type);
 			} else {
 				return tr::lng_group_invite_bad_link(tr::now);
 			}
 		}(), ApiWrap::kJoinErrorDuration);
-	}).send();
+	}).handleFloodErrors().send();
 }
 
 void ConfirmSubscriptionBox(
@@ -741,19 +749,18 @@ void CheckChatInvite(
 			}
 		});
 	}, [=](const MTP::Error &error) {
-		if (MTP::IsFloodError(error)) {
-			if (const auto strong = weak.get()) {
-				strong->show(Ui::MakeInformBox(tr::lng_flood_error()));
-			}
+		const auto strong = weak.get();
+		if (!strong) {
 			return;
 		}
-		if (error.code() != 400) {
-			return;
-		}
+		// hideMediaView() used to run for a bad link only. A flood box shown
+		// with the viewer still up is a box behind the viewer, which is the
+		// same as no box; and any other code returned here without a word, so
+		// an invite link that hit a server error looked like a dead link.
 		Core::App().hideMediaView();
-		if (const auto strong = weak.get()) {
-			strong->show(Ui::MakeInformBox(tr::lng_group_invite_bad_link()));
-		}
+		strong->show(Ui::MakeInformBox((error.code() == 400)
+			? tr::lng_group_invite_bad_link(tr::now)
+			: Api::ErrorText(error)));
 	});
 }
 

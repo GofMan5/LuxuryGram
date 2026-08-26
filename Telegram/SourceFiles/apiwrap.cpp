@@ -408,7 +408,7 @@ void ApiWrap::checkFilterInvite(
 	request(base::take(_checkFilterInviteRequestId)).cancel();
 	_checkFilterInviteRequestId = request(
 		MTPchatlists_CheckChatlistInvite(MTP_string(slug))
-	).done(std::move(done)).fail(std::move(fail)).send();
+	).done(std::move(done)).fail(std::move(fail)).handleFloodErrors().send();
 }
 
 void ApiWrap::savePinnedOrder(Data::Folder *folder) {
@@ -638,7 +638,10 @@ void ApiWrap::sendMessageFail(
 			show->showToast(error);
 		}
 	} else if (show) {
-		show->showToast(error);
+		// ErrorText instead of the bare type: this is the branch every
+		// unrecognised send failure lands in, and "FLOOD_WAIT_86400" told the
+		// user neither what happened nor how long it lasts.
+		show->showToast(Api::ErrorText(error));
 	}
 	if (const auto item = _session->data().message(itemId)) {
 		Assert(randomId != 0);
