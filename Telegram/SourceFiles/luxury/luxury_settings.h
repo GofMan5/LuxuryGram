@@ -249,6 +249,17 @@ public:
 	[[nodiscard]] bool isShadowBanned(const int64 id) const { return _shadowBanIds.contains(id); }
 	[[nodiscard]] const std::unordered_set<int64> &shadowBanIds() const { return _shadowBanIds; }
 
+	// Watched chats: the ones whose media is fetched as it arrives, so that a
+	// message deleted later still has its file. Keyed by getDialogIdFromPeer, the
+	// same key the deleted-message rows use. Peer ids are global in Telegram, so
+	// one set covers every account.
+	void setWatched(int64 dialogId, bool watched);
+	[[nodiscard]] bool isWatched(const int64 dialogId) const { return _watchedDialogs.contains(dialogId); }
+	[[nodiscard]] const std::unordered_set<int64> &watchedDialogs() const { return _watchedDialogs; }
+	// Checked before anything else on every incoming message, so it has to be
+	// the cheapest question the watcher can ask.
+	[[nodiscard]] bool watchAnything() const { return !_watchedDialogs.empty(); }
+
 	void validate();
 
 	[[nodiscard]] bool saveDeletedMessages() const { return _saveDeletedMessages.current(); }
@@ -628,6 +639,7 @@ private:
 	rpl::variable<bool> _saveMessagesHistory = true;
 	rpl::variable<bool> _saveForBots = false;
 	std::unordered_set<int64> _shadowBanIds;
+	std::unordered_set<int64> _watchedDialogs;
 	rpl::variable<bool> _filtersEnabled = false;
 	rpl::variable<bool> _filtersEnabledInChats = false;
 	rpl::variable<bool> _hideFromBlocked = false;

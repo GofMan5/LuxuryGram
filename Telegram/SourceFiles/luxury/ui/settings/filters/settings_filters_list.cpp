@@ -357,7 +357,7 @@ void LuxuryFiltersList::initializeShadowBan(not_null<Ui::VerticalLayout*> contai
 	auto ctrl = container->lifetime().make_state<PerDialogFiltersListController>(
 		&_controller->session(),
 		_controller,
-		true // shadowBan
+		PerDialogFiltersListController::Mode::ShadowBan
 	);
 
 	auto list = object_ptr<Ui::PaddingWrap<PeerListContent>>(

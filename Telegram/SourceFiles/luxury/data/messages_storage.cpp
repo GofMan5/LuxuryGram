@@ -7,6 +7,7 @@
 #include "luxury/data/messages_storage.h"
 
 #include "luxury/data/luxury_database.h"
+#include "luxury/features/watch/watched_media.h"
 #include "luxury/utils/luxury_mapper.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "base/unixtime.h"
@@ -125,6 +126,12 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 		return;
 	}
 
+	// After the check, not before: a row that is not written has nothing pointing
+	// at the file, so keeping it would only leave an orphan behind. Left in the
+	// prunable area instead.
+	message.mediaPath =
+		LuxuryFeatures::Watch::keepMediaForDeleted(item).toStdString();
+
 	LuxuryDatabase::async([message = std::move(message)]() mutable {
 		LuxuryDatabase::addDeletedMessage(std::move(message));
 	});
@@ -137,6 +144,8 @@ void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
 		auto message = DeletedMessage();
 		map(item, message);
 		if (!message.text.empty()) {
+			message.mediaPath =
+				LuxuryFeatures::Watch::keepMediaForDeleted(item).toStdString();
 			messages.push_back(std::move(message));
 		}
 	}

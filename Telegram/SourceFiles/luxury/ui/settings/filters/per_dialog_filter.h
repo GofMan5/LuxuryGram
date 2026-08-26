@@ -41,9 +41,17 @@ class PerDialogFiltersListController final
 	, public base::has_weak_ptr
 {
 public:
+	// One list widget, three sources of dialog ids. An enum rather than a bool
+	// per source, so there is no such thing as two of them at once.
+	enum class Mode {
+		Filters,
+		ShadowBan,
+		Watched,
+	};
+
 	explicit PerDialogFiltersListController(not_null<Main::Session*> session,
 											not_null<Window::SessionController*> controller,
-											bool shadowBan = false);
+											Mode mode = Mode::Filters);
 
 	[[nodiscard]] Main::Session &session() const override;
 
@@ -57,7 +65,7 @@ public:
 		const std::vector<RegexFilterGlobalExclusion> &exclusions);
 
 private:
-	void prepareShadowBan();
+	void prepareFromSetting(const std::unordered_set<ID> &ids);
 
 	struct FilterCounts
 	{
@@ -69,7 +77,7 @@ private:
 
 	const not_null<Main::Session*> _session;
 	not_null<Window::SessionController*> _controller;
-	bool shadowBan = false;
+	Mode _mode = Mode::Filters;
 };
 
 } // namespace Settings

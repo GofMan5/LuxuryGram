@@ -12,6 +12,7 @@
 #include "api/api_attached_stickers.h"
 #include "luxury/data/luxury_database.h"
 #include "luxury/data/messages_storage.h"
+#include "luxury/features/watch/watched_media.h"
 #include "luxury/ui/message_history/history_section.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "base/call_delayed.h"
@@ -1358,6 +1359,24 @@ void InnerWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					QGuiApplication::clipboard()->setText(text);
 				},
 				&st::menuIconCopy);
+		}
+	}
+
+	// Media a watched chat fetched before the message was deleted. Only in the
+	// deleted view: the edited view numbers its items by fakeId, which would look
+	// up somebody else's file. Revealed in the folder rather than opened -- the
+	// bytes came from whoever sent them, and launching those is their business.
+	if (!_item && view) {
+		const auto saved = LuxuryFeatures::Watch::keptFileForMessage(
+			getDialogIdFromPeer(_peer),
+			view->data()->id);
+		if (!saved.isEmpty()) {
+			_menu->addAction(tr::luxury_WatchShowSavedMedia(tr::now),
+							 [=]
+							 {
+								 File::ShowInFolder(saved);
+							 },
+							 &st::menuIconShowInFolder);
 		}
 	}
 

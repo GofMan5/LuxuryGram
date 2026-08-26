@@ -70,6 +70,10 @@ constexpr auto kMaxSettingsBytes = 4 * 1024 * 1024;
 // ponytail: desktop state is bounded; raise only for a real 64-account profile.
 constexpr auto kMaxGhostAccounts = std::size_t(64);
 constexpr auto kMaxShadowBanIds = std::size_t(65'536);
+// Watching a chat costs traffic and disk on every message it receives, so a set
+// this large is already past any use for it -- the cap is here to stop a
+// hand-edited settings file from turning into an unbounded read.
+constexpr auto kMaxWatchedDialogs = std::size_t(4'096);
 constexpr auto kMaxMarkLength = 64;
 constexpr auto kMaxFontFamilyLength = 256;
 constexpr auto kMaxThemeTitleLength = 512;
@@ -613,6 +617,21 @@ void LuxurySettings::removeShadowBan(int64 id) {
 		FiltersCacheController::dropResults();
 		save();
 	}
+}
+
+void LuxurySettings::setWatched(int64 dialogId, bool watched) {
+	if (watched) {
+		if (_watchedDialogs.size() >= kMaxWatchedDialogs
+			&& !_watchedDialogs.contains(dialogId)) {
+			return;
+		}
+		if (!_watchedDialogs.insert(dialogId).second) {
+			return;
+		}
+	} else if (!_watchedDialogs.erase(dialogId)) {
+		return;
+	}
+	save();
 }
 
 void LuxurySettings::validate() {
@@ -1267,6 +1286,7 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"saveMessagesHistory", s._saveMessagesHistory.current()},
 		{"saveForBots", s._saveForBots.current()},
 		{"shadowBanIds", s._shadowBanIds},
+		{"watchedDialogs", s._watchedDialogs},
 		{"filtersEnabled", s._filtersEnabled.current()},
 		{"filtersEnabledInChats", s._filtersEnabledInChats.current()},
 		{"hideFromBlocked", s._hideFromBlocked.current()},
@@ -1402,6 +1422,22 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 			}
 			try {
 				s._shadowBanIds.insert(value.get<int64>());
+			} catch (...) {
+			}
+		}
+	}
+	s._watchedDialogs.clear();
+	const auto watched = j.find("watchedDialogs");
+	if (watched != j.end() && watched->is_array()) {
+		for (const auto &value : *watched) {
+			if (s._watchedDialogs.size() >= kMaxWatchedDialogs) {
+				break;
+			}
+			if (!value.is_number_integer()) {
+				continue;
+			}
+			try {
+				s._watchedDialogs.insert(value.get<int64>());
 			} catch (...) {
 			}
 		}

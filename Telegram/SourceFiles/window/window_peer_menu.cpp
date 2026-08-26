@@ -1885,6 +1885,7 @@ void Filler::fillHistoryActions() {
 	addInfo();
 	LuxuryUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
 	LuxuryUi::AddOpenChannelAction(_peer, _controller, _addAction);
+	LuxuryUi::AddWatchChatAction(_peer, _controller, _addAction);
 	addViewAsTopics();
 	addManageChat();
 	addStoryArchive();
@@ -1923,6 +1924,7 @@ void Filler::fillProfileActions() {
 	addToggleTopicClosed();
 	LuxuryUi::AddOpenChannelAction(_peer, _controller, _addAction);
 	LuxuryUi::AddShadowBanAction(_peer, _addAction);
+	LuxuryUi::AddWatchChatAction(_peer, _controller, _addAction);
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();

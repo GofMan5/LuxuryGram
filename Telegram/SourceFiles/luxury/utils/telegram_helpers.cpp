@@ -531,12 +531,20 @@ int getScheduleTime(int64 sumSize) {
 
 bool isMessageSavable(const not_null<HistoryItem*> item) {
 	const auto &settings = LuxurySettings::getInstance();
+	const auto peer = item->history()->peer;
+
+	// Watching a chat is a per-chat opt-in, so it overrides both switches below.
+	// Otherwise a watched chat would fetch and keep the media and then throw away
+	// the row that is supposed to point at it.
+	if (settings.isWatched(getDialogIdFromPeer(peer))) {
+		return true;
+	}
 
 	if (!settings.saveDeletedMessages()) {
 		return false;
 	}
 
-	if (const auto possiblyBot = item->history()->peer->asUser()) {
+	if (const auto possiblyBot = peer->asUser()) {
 		return !possiblyBot->isBot() || (settings.saveForBots() && possiblyBot->isBot());
 	}
 	return true;

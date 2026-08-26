@@ -8799,6 +8799,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MessageSavingSaveForBots" = "Save in Bot Dialogs";
 "luxury_MessageSavingSavePath" = "Attachments Folder";
 "luxury_MessageSavingSavePathTitle" = "Choose folder";
+"luxury_WatchChat" = "Watch Media";
+"luxury_WatchChatStop" = "Stop Watching Media";
+"luxury_WatchChatEnabled" = "Media in this chat is downloaded as it arrives, and kept if a message is deleted.";
+"luxury_WatchChatDisabled" = "Stopped watching. Already saved attachments are kept.";
+"luxury_WatchChatLimit" = "Too many chats are watched already.";
+"luxury_WatchShowSavedMedia" = "Show Saved Attachment";
+"luxury_WatchChatsHeader" = "Watched chats";
 "luxury_SpySaveReadMarks" = "Save Read Date";
 "luxury_SpySaveReadMarksDescription" = "Locally saves data about reading messages. This will be shown if Telegram does not provide a read date.";
 "luxury_SpySaveLocalOnline" = "Save Last Seen Date";

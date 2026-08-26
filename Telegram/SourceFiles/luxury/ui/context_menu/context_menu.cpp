@@ -584,6 +584,44 @@ void AddShadowBanAction(PeerData *peerData,
 	});
 }
 
+void AddWatchChatAction(PeerData *peerData,
+						not_null<Window::SessionController*> sessionController,
+						const Window::PeerMenuCallback &addCallback) {
+	if (!peerData) {
+		return;
+	}
+
+	const auto dialogId = getDialogIdFromPeer(peerData);
+	const auto watched = LuxurySettings::getInstance().isWatched(dialogId);
+
+	addCallback({
+		.text = (watched
+					 ? tr::luxury_WatchChatStop(tr::now)
+					 : tr::luxury_WatchChat(tr::now)),
+		.handler = [=]
+		{
+			auto &settings = LuxurySettings::getInstance();
+			const auto want = !watched;
+			settings.setWatched(dialogId, want);
+
+			// Read back instead of assuming: setWatched() refuses past its cap,
+			// and a toast promising that a chat is watched when it is not is the
+			// exact kind of quiet lie this menu should not tell. Both outcomes are
+			// worth saying out loud anyway -- watching costs traffic and disk from
+			// now on, and unwatching means the next deleted attachment is gone.
+			if (settings.isWatched(dialogId) != want) {
+				sessionController->showToast(
+					tr::luxury_WatchChatLimit(tr::now));
+			} else {
+				sessionController->showToast(want
+					? tr::luxury_WatchChatEnabled(tr::now)
+					: tr::luxury_WatchChatDisabled(tr::now));
+			}
+		},
+		.icon = watched ? &st::menuIconCancel : &st::menuIconDownload,
+	});
+}
+
 void AddDeleteOwnMessagesAction(PeerData *peerData,
 								Data::ForumTopic *topic,
 								not_null<Window::SessionController*> sessionController,

@@ -235,6 +235,8 @@ set(luxurygram_files
         luxury/features/filters/filters_cache_controller.h
         luxury/features/filters/filters_utils.cpp
         luxury/features/filters/filters_utils.h
+        luxury/features/watch/watched_media.cpp
+        luxury/features/watch/watched_media.h
         luxury/data/messages_storage.cpp
         luxury/data/messages_storage.h
         luxury/data/entities.h

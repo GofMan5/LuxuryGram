@@ -15,6 +15,7 @@
 #include "boxes/peer_list_box.h"
 #include "core/application.h"
 #include "data/data_user.h"
+#include "filters/per_dialog_filter.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
@@ -22,6 +23,7 @@
 #include "settings/settings_common.h"
 #include "styles/style_luxury_icons.h"
 #include "styles/style_luxury_styles.h"
+#include "styles/style_boxes.h"
 #include "styles/style_chat.h"
 #include "styles/style_chat_helpers.h"
 #include "styles/style_layers.h"
@@ -36,6 +38,7 @@
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/widgets/menu/menu_item_base.h"
+#include "ui/wrap/padding_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
 
@@ -661,6 +664,45 @@ void BuildSpyEssentials(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	});
 }
 
+// The chats picked with "Watch Media" in a chat's own menu. There is nothing to
+// show until one is picked, so the whole block only appears once there is, and a
+// click on a row offers to stop watching it.
+void BuildWatchedChats(SectionBuilder &builder) {
+	builder.add([](const BuildContext &ctx) {
+		v::match(ctx, [&](const WidgetContext &wctx) {
+			if (!LuxurySettings::getInstance().watchAnything()) {
+				return;
+			}
+
+			const auto container = wctx.container;
+			const auto controller = wctx.controller;
+
+			AddSkip(container);
+			AddDivider(container);
+			AddSkip(container);
+			AddSubsectionTitle(container, tr::luxury_WatchChatsHeader());
+
+			auto ctrl = container->lifetime().make_state<PerDialogFiltersListController>(
+				&controller->session(),
+				controller,
+				PerDialogFiltersListController::Mode::Watched);
+
+			auto list = object_ptr<Ui::PaddingWrap<PeerListContent>>(
+				container,
+				object_ptr<PeerListContent>(
+					container,
+					ctrl),
+				QMargins(0, -st::peerListBox.padding.top(), 0, -st::peerListBox.padding.bottom()));
+			const auto content = container->add(std::move(list));
+			AddSkip(container);
+			auto delegate = container->lifetime().make_state<PeerListContentDelegateSimple>();
+			delegate->setContent(content->entity());
+			ctrl->setDelegate(delegate);
+		}, [&](const SearchContext &) {
+		});
+	});
+}
+
 void BuildOther(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	builder.addSubsectionTitle(tr::luxury_MessageSavingOtherHeader());
 
@@ -691,6 +733,8 @@ const auto kMeta = BuildHelper({
 
 	builder.addSkip();
 	BuildSpyEssentials(builder, luxury);
+
+	BuildWatchedChats(builder);
 
 	luxury.addSectionDivider();
 	BuildOther(builder, luxury);

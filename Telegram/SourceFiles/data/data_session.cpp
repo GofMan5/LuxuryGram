@@ -97,6 +97,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/luxury_settings.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/features/filters/filters_controller.h"
+#include "luxury/features/watch/watched_media.h"
 #include "luxury/utils/telegram_helpers.h"
 
 
@@ -2094,6 +2095,11 @@ rpl::producer<not_null<const ViewElement*>> Session::viewLayoutChanged() const {
 }
 
 void Session::notifyNewItemAdded(not_null<HistoryItem*> item) {
+	// The one funnel every genuinely new message goes through, open chat or not,
+	// which is what a watched chat needs: the media has to be fetched while the
+	// message still exists.
+	LuxuryFeatures::Watch::processNewMessage(item);
+
 	_newItemAdded.fire_copy(item);
 }
 

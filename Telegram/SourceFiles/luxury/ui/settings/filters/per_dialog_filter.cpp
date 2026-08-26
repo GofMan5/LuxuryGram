@@ -59,28 +59,30 @@ PaintRoundImageCallback PerDialogFiltersListRow::generatePaintUserpicCallback(bo
 
 PerDialogFiltersListController::PerDialogFiltersListController(not_null<Main::Session*> session,
 															   not_null<Window::SessionController*> controller,
-															   bool shadowBan)
+															   Mode mode)
 	: _session(session)
 	  , _controller(controller)
-	  , shadowBan(shadowBan) {
+	  , _mode(mode) {
 }
 
 Main::Session &PerDialogFiltersListController::session() const {
 	return *_session;
 }
 
-void PerDialogFiltersListController::prepareShadowBan() {
-	const auto &settings = LuxurySettings::getInstance();
-	const auto &shadowBanned = settings.shadowBanIds();
-
-	for (const auto id : shadowBanned) {
+void PerDialogFiltersListController::prepareFromSetting(
+		const std::unordered_set<ID> &ids) {
+	for (const auto id : ids) {
 		delegate()->peerListAppendRow(std::make_unique<PerDialogFiltersListRow>(id));
 	}
 }
 
 void PerDialogFiltersListController::prepare() {
-	if (shadowBan) {
-		prepareShadowBan();
+	const auto &settings = LuxurySettings::getInstance();
+	if (_mode == Mode::ShadowBan) {
+		prepareFromSetting(settings.shadowBanIds());
+		return;
+	} else if (_mode == Mode::Watched) {
+		prepareFromSetting(settings.watchedDialogs());
 		return;
 	}
 	// Two full-table reads, and prepare() runs while the section it belongs to is
@@ -150,7 +152,7 @@ void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
 	} else {
 		did = getDialogIdFromPeer(peer->peer());
 	}
-	if (shadowBan) {
+	if (_mode == Mode::ShadowBan) {
 		auto _contextMenu = new Ui::PopupMenu(nullptr, st::popupMenuWithIcons);
 		_contextMenu->setAttribute(Qt::WA_DeleteOnClose);
 
@@ -167,6 +169,26 @@ void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
 			&st::menuIconDelete);
 
 		_contextMenu->popup(QCursor::pos());
+		return;
+	} else if (_mode == Mode::Watched) {
+		auto menu = new Ui::PopupMenu(nullptr, st::popupMenuWithIcons);
+		menu->setAttribute(Qt::WA_DeleteOnClose);
+
+		menu->addAction(
+			tr::luxury_WatchChatStop(tr::now),
+			crl::guard(this, [=] {
+				LuxurySettings::getInstance().setWatched(did, false);
+				// The row is the only thing pointing at that chat here, so it goes
+				// with the setting: leaving it would say the chat is still watched.
+				if (const auto row = delegate()->peerListFindRow(
+						PeerListRowId(did))) {
+					delegate()->peerListRemoveRow(row);
+					delegate()->peerListRefreshRows();
+				}
+			}),
+			&st::menuIconDelete);
+
+		menu->popup(QCursor::pos());
 		return;
 	}
 	_controller->luxuryFilters = {
