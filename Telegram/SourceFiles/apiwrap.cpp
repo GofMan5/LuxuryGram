@@ -129,6 +129,16 @@ constexpr auto kDialogsFirstLoad = 20;
 constexpr auto kDialogsPerPage = 500;
 constexpr auto kStatsSessionKillTimeout = 10 * crl::time(1000);
 
+// Floor for reporting a flood wait that the mtproto instance parks and resends
+// on its own. Below this the wait is over before the user looks up from the
+// keyboard, and saying so would turn a normal large forward into a wall of
+// toasts.
+constexpr auto kFloodWaitReportFrom = 30;
+
+// One rate limit stalls every request to that datacentre, and each retry fires
+// the wait again. Report at most this often.
+constexpr auto kFloodWaitReportEvery = 60 * crl::time(1000);
+
 using PhotoFileLocationId = Data::PhotoFileLocationId;
 using DocumentFileLocationId = Data::DocumentFileLocationId;
 using UpdatedFileReferences = Data::UpdatedFileReferences;
@@ -252,6 +262,7 @@ ApiWrap::ApiWrap(not_null<Main::Session*> session)
 
 		_reactionsNotifySettings->reload();
 		setupSupportMode();
+		setupFloodWaitReports();
 	});
 }
 
@@ -300,6 +311,38 @@ void ApiWrap::setupSupportMode() {
 		_dialogsLoadTill = seconds ? std::max(base::unixtime::now() - seconds, 0) : 0;
 		refreshDialogsLoadBlocked();
 	}, _session->lifetime());
+}
+
+void ApiWrap::setupFloodWaitReports() {
+	instance().floodWaitSeconds(
+	) | rpl::filter([](int seconds) {
+		// A short wait is over before anyone notices -- the instance resends the
+		// request itself -- and reporting it would put a toast on every forward
+		// of a large selection. A long one is the case this exists for: the
+		// request is parked, no .fail() runs, and a message sits with a sending
+		// clock for hours.
+		return (seconds >= kFloodWaitReportFrom);
+	}) | rpl::on_next([=](int seconds) {
+		reportFloodWait(seconds);
+	}, _session->lifetime());
+}
+
+void ApiWrap::reportFloodWait(int seconds) {
+	const auto now = crl::now();
+	if (_floodWaitReportedAt
+		&& (now - _floodWaitReportedAt < kFloodWaitReportEvery)) {
+		return;
+	}
+	const auto window = Core::App().activeWindow();
+	const auto controller = window ? window->sessionController() : nullptr;
+	if (!controller || (&controller->session() != _session)) {
+		// No window of this account is up, so there is nobody to tell. Not
+		// remembered as reported either, so the next parked request still says
+		// it once a window is back.
+		return;
+	}
+	_floodWaitReportedAt = now;
+	controller->showToast(Api::FloodWaitText(seconds), kJoinErrorDuration);
 }
 
 void ApiWrap::requestChangelog(

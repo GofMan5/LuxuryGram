@@ -19,6 +19,11 @@ namespace Api {
 [[nodiscard]] int ErrorWaitSeconds(const QString &type);
 [[nodiscard]] int ErrorWaitSeconds(const MTP::Error &error);
 
+// The rate-limit sentence on its own, for the callers that know the wait but
+// never see an error: the mtproto instance handles short flood waits itself and
+// only publishes the seconds.
+[[nodiscard]] QString FloodWaitText(int seconds);
+
 // Something to show the user for an RPC error, for any handler that has nothing
 // better. Never empty: an action that fails and says nothing is indistinguishable
 // from an action that was never sent, which is the bug this exists to prevent.

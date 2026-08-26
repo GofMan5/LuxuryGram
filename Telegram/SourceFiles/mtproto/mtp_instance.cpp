@@ -100,6 +100,7 @@ public:
 
 	[[nodiscard]] auto nonPremiumDelayedRequests() const
 	-> rpl::producer<mtpRequestId>;
+	[[nodiscard]] rpl::producer<int> floodWaitSeconds() const;
 	[[nodiscard]] rpl::producer<> frozenErrorReceived() const;
 
 	void restart();
@@ -287,6 +288,7 @@ private:
 	Fn<void(ShiftedDcId shiftedDcId)> _sessionResetHandler;
 
 	rpl::event_stream<mtpRequestId> _nonPremiumDelayedRequests;
+	rpl::event_stream<int> _floodWaitSeconds;
 	rpl::event_stream<> _frozenErrorReceived;
 
 	base::Timer _checkDelayedTimer;
@@ -562,6 +564,10 @@ rpl::producer<ShiftedDcId> Instance::Private::restartsByTimeout() const {
 auto Instance::Private::nonPremiumDelayedRequests() const
 -> rpl::producer<mtpRequestId> {
 	return _nonPremiumDelayedRequests.events();
+}
+
+rpl::producer<int> Instance::Private::floodWaitSeconds() const {
+	return _floodWaitSeconds.events();
 }
 
 rpl::producer<> Instance::Private::frozenErrorReceived() const {
@@ -1533,6 +1539,18 @@ bool Instance::Private::onErrorDefault(
 			_nonPremiumDelayedRequests.fire_copy(requestId);
 		}
 
+		// The caller's .fail() will not run for this: the request is parked
+		// above and resent when the wait is over, and we return true. For a few
+		// seconds that is invisible and better than an error. For hours it is
+		// an action that stopped with nothing said and no way for the handler
+		// to say it, so the wait is published here instead.
+		//
+		// Only the flood branches: the 500-error path above also parks with a
+		// growing secs, and a server hiccup is not a rate limit.
+		if (m1.hasMatch() || m2.hasMatch()) {
+			_floodWaitSeconds.fire_copy(secs);
+		}
+
 		return true;
 	} else if ((code == 401 && type != u"AUTH_KEY_PERM_EMPTY"_q)
 		|| (badGuestDc && _badGuestDcRequests.find(requestId) == _badGuestDcRequests.cend())) {
@@ -1926,6 +1944,10 @@ rpl::producer<ShiftedDcId> Instance::restartsByTimeout() const {
 
 rpl::producer<mtpRequestId> Instance::nonPremiumDelayedRequests() const {
 	return _private->nonPremiumDelayedRequests();
+}
+
+rpl::producer<int> Instance::floodWaitSeconds() const {
+	return _private->floodWaitSeconds();
 }
 
 rpl::producer<> Instance::frozenErrorReceived() const {

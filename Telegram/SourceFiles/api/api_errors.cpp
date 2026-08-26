@@ -29,17 +29,21 @@ int ErrorWaitSeconds(const MTP::Error &error) {
 	return ErrorWaitSeconds(error.type());
 }
 
+QString FloodWaitText(int seconds) {
+	// Parenthesised rather than woven into a sentence because there is no
+	// phrase for "retry in {duration}" in the language files, and inventing one
+	// means shipping it untranslated in every language but two. FormatMuteFor
+	// picks seconds, minutes or a days/hours/minutes breakdown, so a 24-hour
+	// flood wait does not read as "86400".
+	return tr::lng_flood_error(tr::now)
+		+ u" ("_q
+		+ Ui::FormatMuteFor(seconds)
+		+ ')';
+}
+
 QString ErrorText(const QString &type) {
 	if (const auto seconds = ErrorWaitSeconds(type)) {
-		// Parenthesised rather than woven into a sentence because there is no
-		// phrase for "retry in {duration}" in the language files, and inventing
-		// one means shipping it untranslated in every language but two.
-		// FormatMuteFor picks seconds, minutes or a days/hours/minutes breakdown,
-		// so a 24-hour flood wait does not read as "86400".
-		return tr::lng_flood_error(tr::now)
-			+ u" ("_q
-			+ Ui::FormatMuteFor(seconds)
-			+ ')';
+		return FloodWaitText(seconds);
 	} else if (type == u"CHANNEL_PRIVATE"_q
 		|| type == u"CHANNEL_PUBLIC_GROUP_NA"_q
 		|| type == u"USER_BANNED_IN_CHANNEL"_q) {

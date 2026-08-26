@@ -510,6 +510,8 @@ private:
 	};
 
 	void setupSupportMode();
+	void setupFloodWaitReports();
+	void reportFloodWait(int seconds);
 	void refreshDialogsLoadBlocked();
 	void updateDialogsOffset(
 		Data::Folder *folder,
@@ -766,6 +768,11 @@ private:
 			const GlobalMediaRequest&) = default;
 	};
 	base::flat_set<GlobalMediaRequest> _globalMediaRequests;
+
+	// A rate limit parks every request to that datacentre, and each one that is
+	// retried fires the wait again. The user has to be told once, not once per
+	// request, so the last report is remembered.
+	crl::time _floodWaitReportedAt = 0;
 
 	std::unique_ptr<DialogsLoadState> _dialogsLoadState;
 	TimeId _dialogsLoadTill = 0;

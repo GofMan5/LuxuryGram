@@ -142,6 +142,12 @@ public:
 
 	[[nodiscard]] auto nonPremiumDelayedRequests() const
 		-> rpl::producer<mtpRequestId>;
+
+	// Seconds of a FLOOD_WAIT this instance is handling on its own: the request
+	// is parked and resent once the wait is over, so no .fail() handler runs
+	// and nothing downstream can tell the user how long it will take.
+	[[nodiscard]] rpl::producer<int> floodWaitSeconds() const;
+
 	[[nodiscard]] rpl::producer<> frozenErrorReceived() const;
 
 	void syncHttpUnixtime();
