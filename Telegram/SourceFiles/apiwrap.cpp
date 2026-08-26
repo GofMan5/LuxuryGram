@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_chat_participants.h"
 #include "api/api_cloud_password.h"
 #include "api/api_communities.h"
+#include "api/api_errors.h"
 #include "api/api_hash.h"
 #include "api/api_invite_links.h"
 #include "api/api_media.h"
@@ -1964,14 +1965,20 @@ void ApiWrap::joinChannel(not_null<ChannelData*> channel) {
 					} else if (type == u"USERS_TOO_MUCH"_q) {
 						return tr::lng_group_full(tr::now);
 					}
-					return QString();
+					// Everything else used to fall through as an empty string
+					// and get dropped by the isEmpty() check below, so a join
+					// that failed looked exactly like one never sent.
+					return Api::ErrorText(type);
 				}();
 				if (show && !text.isEmpty()) {
 					show->showToast(text, kJoinErrorDuration);
 				}
 			}
 			_channelAmInRequests.remove(channel);
-		}).send();
+		// Without this a FLOOD_WAIT never reaches the handler above: the mtproto
+		// instance counts it as handled and parks the request until the wait is
+		// over, so a day-long limit means nothing happens and nothing is said.
+		}).handleFloodErrors().send();
 
 		_channelAmInRequests.emplace(channel, requestId);
 
