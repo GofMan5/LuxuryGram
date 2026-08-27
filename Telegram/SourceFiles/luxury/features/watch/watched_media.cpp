@@ -220,7 +220,7 @@ void SubscribeToDownloads(not_null<Main::Session*> session) {
 		return;
 	}
 	session->downloaderTaskFinished(
-	) | rpl::start_with_next([] {
+	) | rpl::on_next([] {
 		FlushAwaitingPhotos();
 	}, session->lifetime());
 
