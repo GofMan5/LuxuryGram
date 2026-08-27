@@ -4,6 +4,30 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## 1.0.4
+
+### Changed
+
+- A watched chat now saves the message as well as its attachment. Watching used to keep the file and nothing else, so a deleted message in a watched chat left an attachment on disk that no deleted-messages view listed; the row is now written whatever the global "save deleted messages" switch says, and the chat's menu offers the deleted-messages view on that basis. Everything that decides whether a message is kept — the expiring-media notice, the one-time media that is not wiped when it burns, the download link that survives a deletion — now asks the same question, so those no longer disagree with what is actually stored.
+
+### Fixed
+
+- Fixed the stalls and crashes while stickers and custom emoji load. Every animated frame was rounded on the way to the screen, and rounding reads the pixels, which forces a full copy of the frame — so every animated sticker and custom emoji on screen deep-copied itself on every repaint. Lottie and alpha webm frames are already transparent in the corners and lose nothing by not being rounded.
+- Fixed a crash from the rounded-corner masks. A mask is handed out as a raw pointer that a video frame request can carry to a decoding thread, and changing the bubble corner radius overwrote the entry that pointer referred to. Masks are now appended rather than replaced, and the corner radius slider has a fixed range, so the pool cannot grow without bound.
+- Fixed a crash when a message scrolled out of view while its media was still loading: a media that did not report the change left the view registered as heavy, and the next sweep walked freed memory. Unloading no longer dispatches through the destroyed view to reach that one line.
+- Fixed a crash on exit caused by the "no cover" music artwork, which was cached in a way that freed it after the graphics backend it belonged to was already gone.
+- Fixed an animated frame being handed back as uninitialised memory when the frame arrived during shutdown, and fixed the same path assuming its allocation succeeded.
+- Fixed one unreadable value in the settings file costing the whole file. Reading stops at the first value of an unexpected type, which left the defaults in memory, and the next save — which happens on nearly any interaction — wrote those defaults over everything else. A mismatched value is now dropped on its own, and a file that still cannot be read is moved aside as `.broken` instead of being overwritten.
+- Fixed the proxy list hanging on "checking…" on a second account. A proxy that completes the connection and then never answers reports neither success nor failure, and the check had no time limit; it probes each account's own home data centre, which is why one account could hang while another resolved normally.
+- Fixed a watched-chat download failing quietly taking the user's download folder setting with it, and putting a retry box in front of them for a download they never started.
+- Fixed deleted messages not being saved at all in several cases: forum messages were stored without their topic and so were invisible in every topic view, an admin clearing a channel's history for everyone destroyed the loaded messages with no save at all, "delete all messages from this user" and "delete my messages" in a group saved on one branch and not on the other, and a message the storage would have refused was marked deleted on screen before it was refused.
+- Fixed messages saved before this release being invisible in a forum topic. They were written without a topic and are now shown in every topic of that forum, which is the most a row that never recorded one allows. Clearing a single topic deliberately leaves them alone rather than removing them from the other topics; clearing the whole forum from the chat list removes them.
+- Fixed a crash in the deleted-messages view when a message was clicked after the list had been rebuilt, and fixed the view holding on to a message rather than its id, which was a dangling pointer as soon as that message was destroyed.
+- Fixed the last batch of deleted messages before a quit being dropped. Database work is posted and forgotten, and nothing waited for it; the wait is bounded, so a database another process has locked cannot leave a window-less process behind either.
+- Fixed a database error on the background thread terminating the application instead of being logged, and fixed a failed migration renaming the database aside and taking every saved message with it when the real problem was usually a full disk.
+- Fixed a file still being downloaded when its message was deleted: the move that keeps it used to fail outright on Windows, so it is now retried when the download finishes, and retried on its own if nothing else is downloading.
+- Fixed the theme preview re-reading the theme file on every download progress tick, the forward sync checking the size of a file on disk on every tick as well, and the invisible-character filter scanning every message twice.
+
 ## 1.0.3
 
 ### Added
