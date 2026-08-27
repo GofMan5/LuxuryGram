@@ -4,6 +4,25 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## 1.0.3
+
+### Added
+
+- Added "Watch Media" to a chat's own menu. A watched chat downloads every attachment as it arrives, so a message deleted afterwards still has its file, and right-clicking that message in the deleted-messages view offers to show the attachment in its folder. It is per chat rather than global because watching costs traffic and disk on every message the chat receives, and the watched chats are listed in LuxuryGram settings once there is at least one. Fetched attachments waiting for a deletion are held under a 2 GB total and a 64 MB per-file budget, oldest discarded first; the ones kept for a deleted message are never discarded.
+- Added a check-for-updates button to the About box, with the same status line as settings: checking, latest version installed, downloading with progress, ready to install, or failed. It also becomes the install button once a package is ready, so a check that goes nowhere says so instead of looking like nothing happened.
+
+### Fixed
+
+- Fixed automatic updates never reaching any client. The update feed named the Windows package without a separator, so every client asked GitHub for `.../releases/download/updatestx64upd1000002`, saved the 404 page as a zero-byte file, and reported success. The separator lives in the feed rather than in the application, so 1.0.1 and 1.0.2 installations pick this up as soon as this release's feed is published and can update themselves to 1.0.3.
+- Fixed 1.0.2 refusing to start on an existing profile. It rewrote the whole deleted-messages table on the interface thread before any window appeared: on the reference machine that burned twenty minutes, grew the write-ahead log past 11 GB and took free disk space from 33.5 to 22.7 GiB, with nothing on screen to distinguish it from a hang.
+- Fixed the upgrade from a database 1.0.2 had already started on deleting the stored message history outright to make the table match.
+- Fixed the interface waiting on database work at startup: the database is now opened and migrated on its own thread, so a profile that needs a schema change shows its window immediately.
+- Fixed joining a channel or group by invite link failing silently. During a rate limit the button did nothing at all, and every unrecognised failure was reported as "This invite link is invalid or has expired" — including that rate limit, which now says how long the wait is.
+- Fixed opening an invite or folder link swallowing every failure that was not a bad request, and showing the rate-limit box behind the media viewer instead of in front of it.
+- Fixed "delete my messages" reporting rate limits, fatal errors and completion only to the debug log, and claiming it was done after a run in which nothing was deleted.
+- Fixed a failed send showing the raw `FLOOD_WAIT_86400` instead of a sentence, and fixed a rate-limit retry that could repeat once a second indefinitely.
+- Fixed a long rate limit on sending looking like a message stuck with a sending clock: waits of half a minute or more are now reported, at most once a minute.
+
 ## 1.0.2
 
 ### Added
