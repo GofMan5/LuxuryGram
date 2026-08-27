@@ -13,8 +13,6 @@
 #include <QFile>
 
 #include <array>
-#include <chrono>
-#include <condition_variable>
 #include <mutex>
 
 using namespace sqlite_orm;
@@ -143,13 +141,9 @@ crl::queue DatabaseQueue;
 bool ConvergeFailed = false;
 
 // Long enough to outlast a WAL checkpoint by another connection, short enough
-// that a stuck writer surfaces as a logged failure instead of a frozen UI.
+// that a stuck writer surfaces as a logged failure instead of a frozen UI. Also
+// what bounds the drain at quit: a task cannot park on a lock, it fails.
 constexpr auto kBusyTimeoutMs = 3000;
-
-// How long a quit waits for the queue to drain. A little over the busy timeout,
-// so a statement that is merely waiting on a lock still gets to finish or fail
-// on its own terms, and the wait is not what decides the outcome.
-constexpr auto kShutdownDrain = std::chrono::milliseconds(kBusyTimeoutMs + 2000);
 
 } // namespace
 
@@ -258,30 +252,14 @@ void shutdown() {
 	// and forgotten, so the last batch before a quit used to be dropped, and the
 	// pass could outlive the globals it writes through.
 	//
-	// Bounded, because this runs on the main thread with the windows already gone:
-	// a statement blocked on a lock another process holds would otherwise leave a
-	// process the user cannot see and cannot close. Giving up is no worse than the
-	// force-kill an unbounded wait makes them do -- sqlite recovers from either
-	// through its journal -- and it at least gets the rest of the shutdown run.
-	//
-	// Heap-allocated on purpose: after a timeout the task is still queued, and it
-	// must not signal through a frame this has already left.
-	struct Drain {
-		std::mutex mutex;
-		std::condition_variable wake;
-		bool done = false;
-	};
-	const auto drain = std::make_shared<Drain>();
-	DatabaseQueue.async([drain] {
-		auto lock = std::unique_lock(drain->mutex);
-		drain->done = true;
-		lock.unlock();
-		drain->wake.notify_one();
-	});
-	auto lock = std::unique_lock(drain->mutex);
-	if (!drain->wake.wait_for(lock, kShutdownDrain, [&] { return drain->done; })) {
-		LOG(("Database queue did not drain in time, quitting without it."));
-	}
+	// Deliberately unbounded. Giving up after a timeout is not the same as the
+	// force-kill it would be standing in for: a kill halts every thread at once,
+	// while a timeout lets this one walk on and tear down storage and the queue
+	// under a pass still inside sqlite. The ceiling is real but small -- every
+	// statement carries kBusyTimeoutMs, so a lock another process holds fails the
+	// task rather than parking it, and only the handful of rows posted just before
+	// the quit are left to run.
+	DatabaseQueue.sync([] {});
 }
 
 bool moveCurrentDatabase() {
