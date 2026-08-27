@@ -2476,6 +2476,22 @@ void Session::destroyMessageWithCacheCleanup(
 	destroyMessagesWithCacheCleanup({ item });
 }
 
+void Session::saveOrDestroyMessages(
+		const std::vector<not_null<HistoryItem*>> &items) {
+	auto toSave = std::vector<not_null<HistoryItem*>>();
+	auto toDestroy = std::vector<not_null<HistoryItem*>>();
+	toSave.reserve(items.size());
+	for (const auto &item : items) {
+		if (isMessageSavable(item)) {
+			toSave.push_back(item);
+		} else {
+			toDestroy.push_back(item);
+		}
+	}
+	processMessagesDelete(toSave);
+	destroyMessagesWithCacheCleanup(toDestroy);
+}
+
 void Session::scheduleItemPhotoCacheClear(
 		not_null<HistoryItem*> item) {
 	schedulePhotoCacheClear({ item });
@@ -3268,17 +3284,7 @@ void Session::checkTTLs() {
 		}
 		expired.insert(expired.end(), items.begin(), items.end());
 	}
-	auto toSave = std::vector<not_null<HistoryItem*>>();
-	auto toDestroy = std::vector<not_null<HistoryItem*>>();
-	for (const auto &item : expired) {
-		if (isMessageSavable(item)) {
-			toSave.push_back(item);
-		} else {
-			toDestroy.push_back(item);
-		}
-	}
-	processMessagesDelete(toSave);
-	destroyMessagesWithCacheCleanup(toDestroy);
+	saveOrDestroyMessages(expired);
 	scheduleNextTTLs();
 }
 
@@ -3396,26 +3402,19 @@ void Session::processMessagesDeleted(
 		return;
 	}
 
-	auto toSave = std::vector<not_null<HistoryItem*>>();
-	auto toDestroy = std::vector<not_null<HistoryItem*>>();
+	auto found = std::vector<not_null<HistoryItem*>>();
 	auto historiesToCheck = base::flat_set<not_null<History*>>();
 	for (const auto &messageId : data) {
 		const auto i = list ? list->find(messageId.v) : Messages::iterator();
 		if (list && i != list->end()) {
 			const auto item = i->second;
-			const auto history = item->history();
-			if (isMessageSavable(item)) {
-				toSave.push_back(item);
-			} else {
-				toDestroy.push_back(item);
-			}
-			historiesToCheck.emplace(history);
+			found.push_back(item);
+			historiesToCheck.emplace(item->history());
 		} else if (affected) {
 			affected->unknownMessageDeleted(messageId.v);
 		}
 	}
-	processMessagesDelete(toSave);
-	destroyMessagesWithCacheCleanup(toDestroy);
+	saveOrDestroyMessages(found);
 	for (const auto &history : historiesToCheck) {
 		if (!history->chatListMessageKnown()) {
 			history->requestChatListMessage();
@@ -3424,22 +3423,15 @@ void Session::processMessagesDeleted(
 }
 
 void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
-	auto toSave = std::vector<not_null<HistoryItem*>>();
-	auto toDestroy = std::vector<not_null<HistoryItem*>>();
+	auto found = std::vector<not_null<HistoryItem*>>();
 	auto historiesToCheck = base::flat_set<not_null<History*>>();
 	for (const auto &messageId : data) {
 		if (const auto item = nonChannelMessage(messageId.v)) {
-			const auto history = item->history();
-			if (isMessageSavable(item)) {
-				toSave.push_back(item);
-			} else {
-				toDestroy.push_back(item);
-			}
-			historiesToCheck.emplace(history);
+			found.push_back(item);
+			historiesToCheck.emplace(item->history());
 		}
 	}
-	processMessagesDelete(toSave);
-	destroyMessagesWithCacheCleanup(toDestroy);
+	saveOrDestroyMessages(found);
 	for (const auto &history : historiesToCheck) {
 		if (!history->chatListMessageKnown()) {
 			history->requestChatListMessage();
@@ -5620,10 +5612,12 @@ void Session::registerItemView(not_null<ViewElement*> view) {
 }
 
 void Session::unregisterItemView(not_null<ViewElement*> view) {
-	// Expects(!_heavyViewParts.contains(view));
-	if (_heavyViewParts.contains(view)) {
-		view->unloadHeavyPart(); // LuxuryGram: fix crash when using `saveDeletedMessages`
-	}
+	// ~Element has already cleared every heavy part it owns, but a media that
+	// did not report the change leaves the view registered here -- and then
+	// unloadHeavyViewParts() walks a freed pointer. Upstream asserts on it; drop
+	// the registration instead. Calling unloadHeavyPart() here, as this used to,
+	// dispatched a virtual from inside a destructor to reach this one line.
+	_heavyViewParts.remove(view);
 
 	_shownSpoilers.remove(view);
 

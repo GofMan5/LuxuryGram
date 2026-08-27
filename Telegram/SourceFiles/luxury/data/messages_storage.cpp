@@ -44,7 +44,16 @@ void map(not_null<HistoryItem*> item, LuxuryMessageBase &message) {
 	message.groupedId = item->groupId().raw();
 	message.peerId = static_cast<ID>(item->history()->peer->id.value);
 	message.fromId = static_cast<ID>(item->from()->id.value);
-	message.topicId = item->topic() ? item->topicRootId().bare : ID();
+	// isForum(), not topic(): HistoryItem::topic() is null until a ForumTopic
+	// object exists, so in a forum the user has not browsed this run the row used
+	// to be written with topicId 0. The viewer passes the open topic's root id,
+	// and the query's "or topicId == 0" disjunct is evaluated against the
+	// argument, not the column, so a 0 row never matched and the message read as
+	// never saved. topicRootId() falls back to kGeneralId, so it must stay behind
+	// the isForum() test -- an ordinary chat has no topic id at all.
+	message.topicId = item->history()->peer->isForum()
+		? item->topicRootId().bare
+		: ID();
 	message.messageId = item->id.bare;
 	message.date = item->date();
 	message.flags = LuxuryMapper::mapItemFlagsToMTPFlags(item);

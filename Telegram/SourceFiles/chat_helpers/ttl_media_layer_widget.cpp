@@ -41,7 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_dialogs.h"
 
 // LuxuryGram includes
-#include "luxury/luxury_settings.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace ChatHelpers {
@@ -198,12 +198,15 @@ PreviewWrap::PreviewWrap(
 		}
 	}, lifetime());
 
-	const auto &settings = LuxurySettings::getInstance();
+	// isMessageSavable(), not the raw switch: a watched chat keeps this media
+	// whatever the global switch says, so the copy the user is told about must be
+	// the same one the storage decides on.
+	const auto keeping = isMessageSavable(item);
 
 	{
 		const auto close = Ui::CreateChild<Ui::RoundButton>(
 			this,
-			item->out() || settings.saveDeletedMessages()
+			item->out() || keeping
 				? tr::lng_close()
 				: tr::lng_ttl_voice_close_in(),
 			st::ttlMediaButton);
@@ -236,8 +239,8 @@ PreviewWrap::PreviewWrap(
 					) | rpl::map(tr::rich),
 					tr::rich)
 			: (isRound
-				? settings.saveDeletedMessages() ? tr::luxury_ExpiringVideoMessageNote : tr::lng_ttl_round_tooltip_in
-				: settings.saveDeletedMessages() ? tr::luxury_ExpiringVoiceMessageNote : tr::lng_ttl_voice_tooltip_in)(tr::rich);
+				? keeping ? tr::luxury_ExpiringVideoMessageNote : tr::lng_ttl_round_tooltip_in
+				: keeping ? tr::luxury_ExpiringVoiceMessageNote : tr::lng_ttl_voice_tooltip_in)(tr::rich);
 		const auto tooltip = Ui::CreateChild<Ui::ImportantTooltip>(
 			this,
 			object_ptr<Ui::PaddingWrap<Ui::FlatLabel>>(

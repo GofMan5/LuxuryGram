@@ -158,7 +158,9 @@ void ThemeSelectorBox::setupContent() {
 					[=]
 					{
 						return documentView->loaded();
-					}) | rpl::on_next(
+					}) | rpl::take(
+					1 // Or every later downloader tick re-parses the theme.
+					) | rpl::on_next(
 					[=]
 					{
 						innerCallback();

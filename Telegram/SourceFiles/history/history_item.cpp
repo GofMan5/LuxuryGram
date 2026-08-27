@@ -2851,8 +2851,10 @@ void HistoryItem::clearMediaAsExpired() {
 	// destroy timer still has to be dropped -- otherwise it fires again on
 	// every check and re-enters this function forever.
 	unarmMediaDestroy();
-	const auto &settings = LuxurySettings::getInstance();
-	if (settings.saveDeletedMessages()) {
+	// isMessageSavable(), not the raw switch: a watched chat saves the row whatever
+	// the global switch says, so reading the switch alone wiped the media the row
+	// was about to point at.
+	if (isMessageSavable(this)) {
 		return;
 	}
 

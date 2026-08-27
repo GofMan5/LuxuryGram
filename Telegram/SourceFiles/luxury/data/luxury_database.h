@@ -26,6 +26,12 @@ void initialize();
 // insert could land after it and wipe the row the insert just added.
 void async(FnMut<void()> &&work);
 
+// Blocks until everything already posted has run. Called once, from application
+// teardown: nothing else joins the queue, so without it the rows posted by the
+// last delete before a quit are dropped, and a pass can still be inside an insert
+// while the globals it writes through are being destroyed.
+void shutdown();
+
 // ponytail: hasRevisions, hasFilters and hasPerDialogFilters run on the main
 // thread. Each gates a menu row or a settings block that is built in one
 // synchronous pass, so there is nothing to await into -- and each is a single

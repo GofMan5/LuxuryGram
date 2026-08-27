@@ -225,8 +225,12 @@ void loadDocumentSync(
 		rpl::single() | rpl::then(
 			strong->downloaderTaskFinished()
 		) | rpl::filter([=] {
+			// The stat is the only way to know the file is fully written, but it
+			// must not run on every downloader tick in the app: while this one is
+			// still loading, the answer cannot be yes.
 			return document->status == FileDownloadFailed
-				|| QFileInfo(path).size() == expectedSize;
+				|| (!document->loading()
+					&& QFileInfo(path).size() == expectedSize);
 		}) | rpl::take(1) | rpl::on_next([latch] {
 			latch->countDown();
 		}, *lifetime);

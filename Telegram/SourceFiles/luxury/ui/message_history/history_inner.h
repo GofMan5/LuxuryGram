@@ -52,7 +52,7 @@ public:
 		QWidget *parent,
 		not_null<Window::SessionController*> controller,
 		not_null<PeerData*> peer,
-		HistoryItem *item,
+		MsgId itemId,
 		ID topicId);
 
 	[[nodiscard]] Main::Session &session() const;
@@ -202,6 +202,12 @@ private:
 	void mouseActionFinish(const QPoint &screenPos, Qt::MouseButton button);
 	void mouseActionCancel();
 	void updateSelected();
+	// Every Element* member below, and the five process-wide Element globals, can
+	// outlive the items they name: _items is dropped by applySearch(), by
+	// saveState() and by the destructor. ~Element only calls
+	// ClickHandler::clearActive(), so a hovered or pressed Element of this section
+	// stays reachable from anywhere in the app once this widget is gone.
+	void clearDisplayPointers();
 	void performDrag();
 	int itemTop(not_null<const Element*> view) const;
 	void repaintItem(const Element *view);
@@ -265,7 +271,7 @@ private:
 
 	const not_null<Window::SessionController*> _controller;
 	const not_null<PeerData*> _peer;
-	HistoryItem *_item;
+	MsgId _itemId;
 	ID _topicId;
 	const not_null<History*> _history;
 	MTP::Sender _api;

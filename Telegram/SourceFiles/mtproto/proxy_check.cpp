@@ -7,10 +7,25 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "mtproto/proxy_check.h"
 
+#include "base/call_delayed.h"
 #include "mtproto/facade.h"
 #include "mtproto/mtproto_dc_options.h"
 
 namespace MTP {
+namespace {
+
+// A checker is not owned by a SessionPrivate, so nothing drives timedOut() for
+// it. A peer that completes the TCP handshake and then never answers the fake
+// req_pq emits neither connected() nor error(), and the caller is left in its
+// "checking" state for the rest of the process's life. The target is this
+// account's own home DC (mainDcId below), so two accounts probe different
+// endpoints through the same proxy -- which is why one account can hang here
+// while another resolves normally.
+//
+// Same budget ProxyRotationManager already uses for its own checks.
+constexpr auto kCheckTimeout = 20 * crl::time(1000);
+
+} // namespace
 
 using Connection = details::AbstractConnection;
 
@@ -76,6 +91,9 @@ void StartProxyCheck(
 		};
 		raw->connect(raw, &Connection::disconnected, failed);
 		raw->connect(raw, &Connection::error, failed);
+		// Guarded by a QPointer, so it is dropped with the connection, and every
+		// caller's fail() already ignores a check that finished.
+		base::call_delayed(kCheckTimeout, raw, failed);
 	};
 	if (proxy.type == ProxyData::Type::Mtproto) {
 		const auto secret = proxy.secretFromMtprotoPassword();

@@ -533,6 +533,16 @@ bool isMessageSavable(const not_null<HistoryItem*> item) {
 	const auto &settings = LuxurySettings::getInstance();
 	const auto peer = item->history()->peer;
 
+	// The storage keys a row on its text and drops one that has none, so an item
+	// with nothing to store must not be marked deleted either -- a marker with no
+	// row behind it is exactly what "it saved nothing" looks like. Only a couple
+	// of media types reach this: a gift box and a wallpaper have no notification
+	// text to fall back to. originalText() returns a reference, and the second
+	// call only happens once the first came back empty.
+	if (item->originalText().empty() && item->notificationText().empty()) {
+		return false;
+	}
+
 	// Watching a chat is a per-chat opt-in, so it overrides both switches below.
 	// Otherwise a watched chat would fetch and keep the media and then throw away
 	// the row that is supposed to point at it.
@@ -963,23 +973,43 @@ QString filterZalgo(const QString &text) {
 		kZalgoPattern,
 		QRegularExpression::UseUnicodePropertiesOption);
 
-	auto match = regex.match(text);
-	if (!match.hasMatch()) {
+	// This runs for every author line and every message text while the setting
+	// is on, and the answer is almost always "nothing to filter" -- which must
+	// not cost a Unicode-property regex over the whole string. Nothing the
+	// pattern matches lives below U+0300. A surrogate pair may carry a combining
+	// mark that a per-QChar look cannot see, so those still go to the regex.
+	auto suspicious = false;
+	for (const auto ch : text) {
+		const auto code = ch.unicode();
+		if (code < 0x0300) {
+			continue;
+		} else if (ch.isSurrogate()
+			|| (ch.category() == QChar::Mark_NonSpacing)
+			|| (code == 0x061C)
+			|| (code >= 0x200E && code <= 0x200F)
+			|| (code >= 0x202A && code <= 0x202E)
+			|| (code >= 0x2066 && code <= 0x2069)) {
+			suspicious = true;
+			break;
+		}
+	}
+	if (!suspicious) {
+		return text;
+	}
+
+	// hasNext() runs the first match itself, so this is one pass, not two.
+	auto it = regex.globalMatch(text);
+	if (!it.hasNext()) {
 		return text;
 	}
 
 	QString output;
 	output.reserve(text.length());
-	int lastEnd = 0;
-
-	auto it = regex.globalMatch(text);
+	auto lastEnd = 0;
 	while (it.hasNext()) {
-		match = it.next();
+		const auto match = it.next();
 		output.append(text.mid(lastEnd, match.capturedStart() - lastEnd));
-		const int matchLength = match.capturedLength();
-		for (int i = 0; i < matchLength; i++) {
-			output.append(QChar(0x2060));
-		}
+		output.append(QString(match.capturedLength(), QChar(0x2060)));
 		lastEnd = match.capturedEnd();
 	}
 	output.append(text.mid(lastEnd));

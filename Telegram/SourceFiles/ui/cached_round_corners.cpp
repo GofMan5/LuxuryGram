@@ -25,7 +25,17 @@ std::vector<CornersPixmaps> Corners;
 QImage CornersMaskLarge[4], CornersMaskSmall[4];
 rpl::lifetime PaletteChangedLifetime;
 
-std::array<std::array<QImage, 4>, kCachedCornerRadiusCount> CachedMasks;
+// Masks are handed out as raw pointers inside Images::CornersMaskRef, and a
+// FrameRequest can carry those to a video decoding thread, so an entry that
+// was published must never be rewritten or freed. A radius change therefore
+// appends a new entry and leaves the old one alive. The radius comes from a
+// slider with a fixed range, so the pool cannot grow without bound.
+struct CachedMasksEntry {
+	int radius = -1;
+	std::array<QImage, 4> masks;
+};
+std::vector<std::unique_ptr<CachedMasksEntry>> CachedMasksPool;
+std::array<const CachedMasksEntry*, kCachedCornerRadiusCount> CachedMasks{};
 
 [[nodiscard]] std::array<QImage, 4> PrepareCorners(int32 radius, const QBrush &brush, const style::color *shadow = nullptr) {
 	if (radius <= 0) {
@@ -278,11 +288,26 @@ CornersPixmaps PrepareInvertedCornerPixmaps(int radius, style::color bg) {
 	const auto index = static_cast<int>(radius);
 	Assert(index >= 0 && index < kCachedCornerRadiusCount);
 
-	if (CachedMasks[index][0].isNull()) {
-		CachedMasks[index] = Images::CornersMask(
-			CachedCornerRadiusValue(CachedCornerRadius(index)));
+	const auto value = CachedCornerRadiusValue(CachedCornerRadius(index));
+	if (CachedMasks[index] && CachedMasks[index]->radius == value) {
+		return CachedMasks[index]->masks;
 	}
-	return CachedMasks[index];
+	for (const auto &entry : CachedMasksPool) {
+		if (entry->radius == value) {
+			CachedMasks[index] = entry.get();
+			return entry->masks;
+		}
+	}
+	auto entry = std::make_unique<CachedMasksEntry>();
+	entry->radius = value;
+	if (value > 0) {
+		// Images::CornersMask(0) would paint on a null QImage: a warning per
+		// call and four null masks that never satisfy a null-keyed cache.
+		entry->masks = Images::CornersMask(value);
+	}
+	CachedMasks[index] = entry.get();
+	CachedMasksPool.push_back(std::move(entry));
+	return CachedMasks[index]->masks;
 }
 
 } // namespace Ui

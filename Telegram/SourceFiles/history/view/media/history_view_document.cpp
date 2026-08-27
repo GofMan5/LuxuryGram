@@ -46,8 +46,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_dialogs.h"
 
 // LuxuryGram includes
-#include "luxury/luxury_settings.h"
 #include "luxury/features/message_shot/message_shot.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace HistoryView {
@@ -403,8 +403,9 @@ Document::Document(
 			const auto &data = &_parent->data()->history()->owner();
 			_parent->data()->removeFromSharedMediaIndex();
 			setDocumentLinks(_data, realParent, [=] {
-				const auto &settings = LuxurySettings::getInstance();
-				if (!settings.saveDeletedMessages()) {
+				// isMessageSavable(), not the raw switch: a watched chat keeps the
+				// media whatever the global switch says.
+				if (!isMessageSavable(_parent->data())) {
 					_openl = nullptr;
 				}
 

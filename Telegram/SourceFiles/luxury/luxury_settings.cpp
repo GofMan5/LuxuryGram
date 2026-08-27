@@ -95,6 +95,36 @@ void writeSettings() {
 	}
 }
 
+// from_json() reads two hundred keys through j.value(), which throws on a type
+// mismatch rather than falling back to the default. So one hand-edited or
+// half-written value used to abort the whole load, leaving defaults in memory --
+// which the next save() then wrote over the user's file. Drop the mismatched
+// keys instead, so a broken value costs that one setting.
+//
+// The expected shape comes from a default-constructed instance, so it cannot go
+// stale as settings are added.
+void dropMismatchedKeys(json &p, const json &shape, const QString &path) {
+	if (!p.is_object() || !shape.is_object()) {
+		return;
+	}
+	for (auto i = p.begin(); i != p.end();) {
+		const auto known = shape.find(i.key());
+		const auto name = path + QString::fromStdString(i.key());
+		if (known == shape.end()) {
+			++i; // A key from a newer or older build; from_json ignores it.
+		} else if (known->is_object() && i->is_object()) {
+			dropMismatchedKeys(i.value(), *known, name + '.');
+			++i;
+		} else if (known->type() == i->type()
+			|| (known->is_number() && i->is_number())) {
+			++i;
+		} else {
+			LOG(("LuxuryGramSettings: dropping %1, unexpected type").arg(name));
+			i = p.erase(i);
+		}
+	}
+}
+
 // Single-shot, so it has already cancelled itself by the time it fires. A
 // base::Timer belongs to the thread that constructed it, and this one is
 // constructed by whichever caller reaches save() first -- in practice the
@@ -450,18 +480,34 @@ void LuxurySettings::load() {
 	if (!file.open(QIODevice::ReadOnly)) {
 		return;
 	}
+	// Every path below that gives up leaves the instance holding defaults, and
+	// the next save() -- which fires on nearly any interaction -- would write
+	// those over this file. Move it aside first: a file this could not read is
+	// still the user's to recover.
+	const auto rescue = [&] {
+		file.close();
+		const auto broken = getSettingsPath() + u".broken"_q;
+		QFile::remove(broken);
+		if (QFile::rename(getSettingsPath(), broken)) {
+			LOG(("LuxuryGramSettings: moved the unreadable file to %1"
+				).arg(broken));
+		}
+	};
 	if (file.size() > kMaxSettingsBytes) {
 		LOG(("LuxuryGramSettings: settings file exceeds size limit"));
+		rescue();
 		return;
 	}
 	const auto data = file.read(kMaxSettingsBytes + 1);
 	if (data.size() > kMaxSettingsBytes) {
 		LOG(("LuxuryGramSettings: settings file exceeds size limit"));
+		rescue();
 		return;
 	}
 
 	auto &settings = getInstance();
 
+	auto loadFailed = false;
 	try {
 		auto p = json::parse(data.constData(), data.constData() + data.size());
 
@@ -483,15 +529,21 @@ void LuxurySettings::load() {
 			LOG(("LuxuryGramSettings: migrated ghost mode settings to per-account format"));
 		}
 
-		try {
-			auto loaded = LuxurySettings();
-			from_json(p, loaded);
-			settings = std::move(loaded);
-		} catch (...) {
-			LOG(("LuxuryGramSettings: failed to parse settings file"));
-		}
+		dropMismatchedKeys(p, json(LuxurySettings()), QString());
+
+		auto loaded = LuxurySettings();
+		from_json(p, loaded);
+		settings = std::move(loaded);
+	} catch (const std::exception &ex) {
+		LOG(("LuxuryGramSettings: failed to read settings file: %1"
+			).arg(ex.what()));
+		loadFailed = true;
 	} catch (...) {
-		LOG(("LuxuryGramSettings: failed to read settings file (not json-like)"));
+		LOG(("LuxuryGramSettings: failed to read settings file"));
+		loadFailed = true;
+	}
+	if (loadFailed) {
+		rescue();
 	}
 
 	if (cGhost()) {

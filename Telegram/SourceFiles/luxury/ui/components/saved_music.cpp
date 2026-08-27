@@ -26,6 +26,7 @@
 #include "window/themes/window_theme.h"
 
 #include <QSvgRenderer>
+#include <QtCore/QCoreApplication>
 
 namespace Info::Profile {
 
@@ -73,30 +74,54 @@ struct Cover
 };
 
 QPixmap MakeNoCoverImage(const QSize &size) {
-	static QPixmap result;
-	static auto resultTheme = Window::Theme::Background()->id();
-	if (!result.isNull() && result.size() == size && resultTheme == Window::Theme::Background()->id()) {
-		return result;
+	struct Cache {
+		QPixmap pixmap;
+		QSize size;
+		uint64 theme = 0;
+	};
+	static auto cache = Cache();
+	[[maybe_unused]] static const auto cleanup = [] {
+		// A QPixmap that outlives QGuiApplication is freed against a platform
+		// backend that is already gone, which is a crash on exit for something
+		// nothing needs by then.
+		if (const auto app = QCoreApplication::instance()) {
+			QObject::connect(app, &QCoreApplication::aboutToQuit, [] {
+				cache.pixmap = QPixmap();
+			});
+		}
+		return true;
+	}();
+
+	const auto theme = Window::Theme::Background()->id();
+	if (!cache.pixmap.isNull()
+		&& cache.size == size
+		&& cache.theme == theme) {
+		return cache.pixmap;
 	}
-	resultTheme = Window::Theme::Background()->id();
 
 	auto image = QImage(size, QImage::Format_ARGB32);
+	if (image.isNull()) {
+		return QPixmap();
+	}
+	const auto bgColor = Window::Theme::IsNightMode()
+		? st::windowBoldFg->c.darker()
+		: st::windowBoldFg->c.lighter();
+	image.fill(bgColor);
 	{
 		auto p = Painter(&image);
 		auto hq = PainterHighQualityEnabler(p);
-
-		const auto bgColor = Window::Theme::IsNightMode()
-								 ? st::windowBoldFg->c.darker()
-								 : st::windowBoldFg->c.lighter();
-		image.fill(bgColor);
 
 		auto svgIcon = QSvgRenderer(u":/gui/icons/luxury/nocover.svg"_q);
 		p.setPen(st::windowBoldFg->p);
 		svgIcon.render(&p, QRect(0, 0, size.width(), size.height()));
 	}
 	const auto img = Image(std::move(image));
-	result = img.pix(size, Images::PrepareArgs{.options = Images::Option::RoundSmall});
-	return result;
+	cache.pixmap = img.pix(
+		size,
+		Images::PrepareArgs{ .options = Images::Option::RoundSmall });
+	cache.size = size;
+	cache.theme = theme;
+	return cache.pixmap;
 }
 
 } // namespace

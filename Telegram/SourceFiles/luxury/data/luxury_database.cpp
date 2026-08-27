@@ -13,6 +13,8 @@
 #include <QFile>
 
 #include <array>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
 
 using namespace sqlite_orm;
@@ -125,9 +127,29 @@ namespace {
 
 std::recursive_mutex DatabaseMutex;
 
+// One queue, so posted work runs in the order it was posted. DatabaseMutex would
+// keep it safe either way, but not correct: a clear and an insert racing on the
+// thread pool can swap.
+//
+// At namespace scope, and after storage, so it is destroyed before storage is
+// rather than after: a function-local static is constructed on first use and so
+// would be torn down first, while a pass of it may still be inside an insert.
+crl::queue DatabaseQueue;
+
+// Set when convergeDeletedMessage() could not restore the columns 1.0.2 dropped.
+// sync_schema()'s answer to a shape it cannot match is to drop the table, and the
+// recovery path moves the file aside -- either one takes every saved deleted
+// message with it, for a failure that is usually a full disk or a locked file.
+bool ConvergeFailed = false;
+
 // Long enough to outlast a WAL checkpoint by another connection, short enough
 // that a stuck writer surfaces as a logged failure instead of a frozen UI.
 constexpr auto kBusyTimeoutMs = 3000;
+
+// How long a quit waits for the queue to drain. A little over the busy timeout,
+// so a statement that is merely waiting on a lock still gets to finish or fail
+// on its own terms, and the wait is not what decides the outcome.
+constexpr auto kShutdownDrain = std::chrono::milliseconds(kBusyTimeoutMs + 2000);
 
 } // namespace
 
@@ -200,7 +222,12 @@ bool runMigrations(decltype(storage) &storage, bool freshDatabase) {
 			} catch (...) {
 				storage.rollback();
 				LOG(("Failed to apply migration for version: %1.").arg(v));
-				return LuxuryDatabase::moveCurrentDatabase();
+				// No recovery here: this used to call moveCurrentDatabase() and
+				// return its result, so a successful move reported success,
+				// sync_schema() never re-ran, and every insert for the rest of
+				// the run hit a table that did not exist. initialize() owns the
+				// one recovery path.
+				return false;
 			}
 		}
 	}
@@ -210,11 +237,51 @@ bool runMigrations(decltype(storage) &storage, bool freshDatabase) {
 namespace LuxuryDatabase {
 
 void async(FnMut<void()> &&work) {
-	// One queue, so posted work runs in the order it was posted. DatabaseMutex
-	// would keep it safe either way, but not correct: a clear and an insert racing
-	// on the thread pool can swap.
-	static auto queue = crl::queue();
-	queue.async(std::move(work));
+	DatabaseQueue.async([work = std::move(work)]() mutable {
+		// crl::queue runs this as a pool task with no join point, so an exception
+		// leaving here is std::terminate, not a caught failure. Every accessor
+		// below has its own try/catch; initialize() has code outside one, and
+		// sqlite_orm throws freely. One guard covers every post site.
+		try {
+			work();
+		} catch (const std::exception &ex) {
+			LOG(("Database task failed: %1").arg(ex.what()));
+		} catch (...) {
+			LOG(("Database task failed with an unknown exception."));
+		}
+	});
+}
+
+void shutdown() {
+	// Nothing joins the queue otherwise: ~queue marks its list dead and returns
+	// while a pass may still be inside an insert. Deleted-message rows are posted
+	// and forgotten, so the last batch before a quit used to be dropped, and the
+	// pass could outlive the globals it writes through.
+	//
+	// Bounded, because this runs on the main thread with the windows already gone:
+	// a statement blocked on a lock another process holds would otherwise leave a
+	// process the user cannot see and cannot close. Giving up is no worse than the
+	// force-kill an unbounded wait makes them do -- sqlite recovers from either
+	// through its journal -- and it at least gets the rest of the shutdown run.
+	//
+	// Heap-allocated on purpose: after a timeout the task is still queued, and it
+	// must not signal through a frame this has already left.
+	struct Drain {
+		std::mutex mutex;
+		std::condition_variable wake;
+		bool done = false;
+	};
+	const auto drain = std::make_shared<Drain>();
+	DatabaseQueue.async([drain] {
+		auto lock = std::unique_lock(drain->mutex);
+		drain->done = true;
+		lock.unlock();
+		drain->wake.notify_one();
+	});
+	auto lock = std::unique_lock(drain->mutex);
+	if (!drain->wake.wait_for(lock, kShutdownDrain, [&] { return drain->done; })) {
+		LOG(("Database queue did not drain in time, quitting without it."));
+	}
 }
 
 bool moveCurrentDatabase() {
@@ -342,6 +409,7 @@ void convergeDeletedMessage(sqlite3 *db) {
 		}
 		LOG(("Database: failed to restore DeletedMessage columns: %1"
 			).arg(ex.what()));
+		ConvergeFailed = true;
 		throw;
 	}
 }
@@ -365,32 +433,52 @@ void initialize() {
 		sqlite3_busy_timeout(db, kBusyTimeoutMs);
 		convergeDeletedMessage(db);
 	};
+	auto needRecovery = false;
 	try {
 		// Without these, sqlite defaults to a rollback journal with
 		// synchronous=FULL, which costs two fsyncs per commit. Writes happen
 		// on the main thread (one transaction per edited message), so a burst
-		// of edits used to be a burst of stalls.
+		// of edits used to be a burst of stalls. NORMAL under WAL still survives
+		// an application crash -- only an OS-level crash can lose a committed
+		// frame -- which is the failure this trade is made against.
 		storage.pragma.journal_mode(journal_mode::WAL);
 		storage.pragma.synchronous(1); // NORMAL
 
 		storage.sync_schema(true);
 
-		if (!runMigrations(storage, freshDatabase)) {
-			return;
-		}
+		needRecovery = !runMigrations(storage, freshDatabase);
 	} catch (const std::exception &ex) {
 		LOG(("Database initialization failed: %1").arg(ex.what()));
+		needRecovery = true;
+	}
+	// Outside the catch on purpose: the old code ran the whole recovery inside it,
+	// where a second throw had nowhere to go but out of this queue task, and a
+	// bare crl::queue task has no join point -- so a read-only tdata terminated
+	// the process before a window existed.
+	if (needRecovery && ConvergeFailed) {
+		// The rows are intact and a build that expects the old shape still reads
+		// them. Moving the file aside or letting sync_schema() reshape the table
+		// would both destroy every saved deleted message, for a failure that is
+		// usually transient. Give up on the feature for this launch instead.
+		LOG(("Database: leaving the file alone after a failed converge. Saved "
+			"messages are intact; restart once there is room to rewrite them."));
+		return;
+	} else if (needRecovery) {
 		if (!moveCurrentDatabase()) {
 			return;
 		}
-
-		storage.sync_schema(true);
-		// A database sync_schema just built is at the current version, not at 0.
-		// Stamping 0 here made the next launch run every migration against it,
-		// and migrateToV1 drops RegexFilter -- so any filter created after a
-		// recovery vanished on the following start.
-		if (!storage.get_pointer<SchemaVersion>(1)) {
-			storage.insert(SchemaVersion{1, kLatestSchemaVersion});
+		try {
+			storage.sync_schema(true);
+			// A database sync_schema just built is at the current version, not at
+			// 0. Stamping 0 here made the next launch run every migration against
+			// it, and migrateToV1 drops RegexFilter -- so any filter created after
+			// a recovery vanished on the following start.
+			if (!storage.get_pointer<SchemaVersion>(1)) {
+				storage.insert(SchemaVersion{1, kLatestSchemaVersion});
+			}
+		} catch (const std::exception &ex) {
+			LOG(("Database recovery failed: %1").arg(ex.what()));
+			return;
 		}
 	}
 	// By default sqlite_orm opens the file, runs the statement and closes it
@@ -488,13 +576,21 @@ void addDeletedMessages(std::vector<DeletedMessage> &&messages) {
 
 std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicId, ID minId, ID maxId, int totalLimit, const std::string &searchQuery) {
 	const auto lock = std::lock_guard(DatabaseMutex);
+	// The trailing `or topicId == 0` reads the C++ argument, not the column: it
+	// is how the caller says "every topic". The middle disjunct is the column,
+	// and it is what makes rows written before forum topics were recorded --
+	// every one of them stored with topicId 0 -- visible again. They show in
+	// every topic of that forum rather than in their own, which is the most that
+	// can be recovered from a row that never knew.
+	const auto anyTopic = (topicId == 0);
 	try {
 		if (searchQuery.empty()) {
 			return storage.get_all<DeletedMessage>(
 				where(
 					column<DeletedMessage>(&DeletedMessage::userId) == userId and
 					column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId and
-					(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0) and
+					(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or
+						column<DeletedMessage>(&DeletedMessage::topicId) == 0 or anyTopic) and
 					(column<DeletedMessage>(&DeletedMessage::messageId) > minId or minId == 0) and
 					(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0)
 				),
@@ -516,7 +612,8 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 			where(
 				column<DeletedMessage>(&DeletedMessage::userId) == userId and
 				column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId and
-				(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0) and
+				(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or
+					column<DeletedMessage>(&DeletedMessage::topicId) == 0 or anyTopic) and
 				(column<DeletedMessage>(&DeletedMessage::messageId) > minId or minId == 0) and
 				(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0) and
 				like(column<DeletedMessage>(&DeletedMessage::text), pattern, "\\")
@@ -547,12 +644,20 @@ void removeDeletedMessage(ID userId, ID dialogId, ID messageId) {
 
 void clearDeletedMessages(ID userId, ID dialogId, ID topicId) {
 	const auto lock = std::lock_guard(DatabaseMutex);
+	// Deliberately narrower than getDeletedMessages, which also matches the legacy
+	// topicId-0 rows -- the ones written before topics were recorded, shown in
+	// every topic of the forum because that is all a row that never knew its topic
+	// allows. Deleting them from here would take them out of every other topic too,
+	// silently and for good. Clearing one topic leaves them visible in it; clearing
+	// the forum from its chat-list entry passes topicId 0, and anyTopic wipes them.
+	const auto anyTopic = (topicId == 0);
 	try {
 		storage.remove_all<DeletedMessage>(
 			where(
 				column<DeletedMessage>(&DeletedMessage::userId) == userId and
 				column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId and
-				(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0)
+				(column<DeletedMessage>(&DeletedMessage::topicId) == topicId
+					or anyTopic)
 			)
 		);
 	} catch (const std::exception &ex) {

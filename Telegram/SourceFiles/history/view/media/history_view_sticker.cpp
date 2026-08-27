@@ -350,18 +350,18 @@ void Sticker::paintAnimationFrame(
 		? frame.image
 		: _lastFrameCached;
 
-	const auto rounding = Ui::BubbleRounding{
-		.topLeft = Ui::BubbleCornerRounding::Small,
-		.topRight = Ui::BubbleCornerRounding::Small,
-		.bottomLeft = Ui::BubbleCornerRounding::Small,
-		.bottomRight = Ui::BubbleCornerRounding::Small,
-	};
-	auto prepared = (!_lastFrameCached.isNull() && context.selected())
+	// No rounding here on purpose: Images::Round() calls QImage::bits(), which
+	// detaches, so rounding this frame would deep-copy the whole player frame
+	// once per paint for every animated sticker and custom emoji on screen.
+	// Lottie frames and webm frames that carry alpha are already transparent in
+	// the corners, so they lose nothing. A webm whose video has no alpha does
+	// come out square now; if that ever matters, round it once per decoded frame
+	// by setting radius/corners on WebmPlayer's Clip::FrameRequest, not here.
+	const auto prepared = (!_lastFrameCached.isNull() && context.selected())
 		? Images::Colored(
 			base::duplicate(image),
 			context.st->msgStickerOverlay()->c)
 		: image;
-	prepared = Images::Round(std::move(prepared), MediaRoundingMask(rounding));
 	const auto size = prepared.size() / style::DevicePixelRatio();
 	p.drawImage(
 		QRect(

@@ -4439,7 +4439,7 @@ void History::clear(ClearType type, bool markEmpty) {
 			&& (*_lastMessage)->isRegular())
 			? (*_lastMessage)->id
 			: MsgId(std::numeric_limits<int64>::max());
-		clearUpTill(tillId);
+		clearUpTill(tillId, false);
 		if (blocks.empty() && _lastMessage && *_lastMessage) {
 			addItemToBlock(*_lastMessage);
 		}
@@ -4463,6 +4463,10 @@ void History::clear(ClearType type, bool markEmpty) {
 }
 
 void History::clearUpTill(MsgId availableMinId) {
+	clearUpTill(availableMinId, true);
+}
+
+void History::clearUpTill(MsgId availableMinId, bool saveRemoved) {
 	auto remove = std::vector<not_null<HistoryItem*>>();
 	remove.reserve(_items.size());
 	for (const auto &item : _items) {
@@ -4476,11 +4480,17 @@ void History::clearUpTill(MsgId availableMinId) {
 			remove.push_back(item.get());
 		}
 	}
-	if (!remove.empty()) {
-		owner().notifyItemsAboutToBeDestroyed(remove);
-	}
-	for (const auto &item : remove) {
-		item->destroy();
+	if (remove.empty()) {
+	} else if (saveRemoved) {
+		// LuxuryGram: an admin clearing the channel's history for everyone, or a
+		// bumped available_min_id, used to destroy every loaded message below the
+		// cut with no save hook at all. The items are in memory and readable, so
+		// the only thing missing was the call.
+		owner().saveOrDestroyMessages(remove);
+	} else {
+		// clear() passes false: the user asked for this history to be gone, and
+		// saving it here would archive the whole loaded chat and pin its media.
+		owner().destroyMessagesWithCacheCleanup(remove);
 	}
 	requestChatListMessage();
 }

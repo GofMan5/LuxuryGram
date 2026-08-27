@@ -60,12 +60,21 @@ QImage PrepareFrame(
 	const auto needNewCache = (cache.size() != size);
 	if (needNewCache) {
 		cache = QImage(size, QImage::Format_ARGB32_Premultiplied);
+		if (cache.isNull()) {
+			// Out of memory: QPainter below would have no paint device.
+			return original;
+		}
 		cache.setDevicePixelRatio(factor);
 	}
 	if (hasAlpha && request.keepAlpha) {
 		cache.fill(Qt::transparent);
 	}
 	if (!QCoreApplication::instance()) { // fix crash on macOS on exit
+		if (needNewCache) {
+			// Nothing paints into it below, and QImage does not zero its bytes,
+			// so this would hand back a frame of uninitialised heap.
+			cache.fill(Qt::transparent);
+		}
 		return cache;
 	}
 	{

@@ -247,12 +247,12 @@ InnerWidget::InnerWidget(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller,
 	not_null<PeerData*> peer,
-	HistoryItem *item,
+	MsgId itemId,
 	ID topicId)
 	: RpWidget(parent),
 	  _controller(controller),
 	  _peer(peer),
-	  _item(item),
+	  _itemId(itemId),
 	  _topicId(topicId),
 	  _history(peer->owner().history(peer)),
 	  _api(&_peer->session().mtp()),
@@ -654,13 +654,61 @@ bool InnerWidget::elementHideTopicButton(not_null<const Element*> view) {
 	return false;
 }
 
+void InnerWidget::clearDisplayPointers() {
+	_visibleTopItem = nullptr;
+	_visibleTopFromItem = 0;
+	_scrollDateLastItem = nullptr;
+	_scrollDateLastItemTop = 0;
+	_mouseActionItem = nullptr;
+	_mouseAction = MouseAction::None;
+	_selectedItem = nullptr;
+	_selectedText = TextSelection();
+	_wasSelectedText = false;
+
+	// Only the globals that point into this widget: another section may be holding
+	// its own hovered Element, and clearing that would break its hover state.
+	const auto ours = [&](const Element *view) {
+		if (!view) {
+			return false;
+		}
+		for (const auto &item : _items) {
+			if (item.get() == view) {
+				return true;
+			}
+		}
+		return false;
+	};
+	if (ours(Element::Hovered())) {
+		Element::Hovered(nullptr);
+		ClickHandler::clearActive();
+	}
+	if (ours(Element::Pressed())) {
+		Element::Pressed(nullptr);
+		ClickHandler::unpressed();
+	}
+	if (ours(Element::HoveredLink())) {
+		Element::HoveredLink(nullptr);
+		ClickHandler::clearActive();
+	}
+	if (ours(Element::PressedLink())) {
+		Element::PressedLink(nullptr);
+		ClickHandler::unpressed();
+	}
+	if (ours(Element::Moused())) {
+		Element::Moused(nullptr);
+	}
+}
+
 void InnerWidget::saveState(not_null<SectionMemento*> memento) {
-	if (!_item) {
+	clearDisplayPointers();
+	if (!_itemId) {
 		memento->setItems({}, {}, false, true);
 		memento->setSearchQuery(base::take(_searchQuery));
 		_items.clear();
 		_messageIds.clear();
 		_itemsByData.clear();
+		// Keyed by HistoryItem*, and the clear above destroyed them.
+		_itemDates.clear();
 		_upLoaded = false;
 		_downLoaded = true;
 		return;
@@ -680,7 +728,8 @@ void InnerWidget::saveState(not_null<SectionMemento*> memento) {
 }
 
 void InnerWidget::restoreState(not_null<SectionMemento*> memento) {
-	if (!_item) {
+	clearDisplayPointers();
+	if (!_itemId) {
 		_items.clear();
 		_messageIds.clear();
 		_itemsByData.clear();
@@ -709,7 +758,7 @@ void InnerWidget::restoreState(not_null<SectionMemento*> memento) {
 }
 
 void InnerWidget::applySearch(const QString &query) {
-	if (_item) {
+	if (_itemId) {
 		return;
 	}
 	if (_searchQuery != query) {
@@ -720,6 +769,9 @@ void InnerWidget::applySearch(const QString &query) {
 		_searchQuery = query;
 		_upLoaded = false;
 		_downLoaded = true;
+		// Before the clear: updateSize() below reaches restoreScrollPosition(),
+		// which asks _visibleTopItem for its top.
+		clearDisplayPointers();
 		_items.clear();
 		_messageIds.clear();
 		_itemsByData.clear();
@@ -747,14 +799,16 @@ void InnerWidget::preloadMore(Direction direction) {
 
 	const auto reqNum = ++_loadRequestNum;
 
-	const auto item = _item;
 	const auto peer = _peer;
 	const auto topicId = _topicId;
 	const auto searchQuery = _searchQuery;
-	const auto editing = (item != nullptr);
+	// An id, not a HistoryItem*: the memento that carries this across a Back keeps
+	// it on the controller's section stack, where the item can be deleted before
+	// the section is shown again. Only the id was ever needed.
+	const auto editing = bool(_itemId);
 	const auto userId = static_cast<ID>(peer->session().uniqueId());
 	const auto dialogId = getDialogIdFromPeer(peer);
-	const auto messageId = editing ? item->id.bare : ID();
+	const auto messageId = _itemId.bare;
 
 	const auto weak = base::make_weak(this);
 
@@ -815,7 +869,7 @@ void InnerWidget::addMessages(Direction direction, const std::vector<LuxuryMessa
 	addToItems.reserve(oldItemsCount + messages.size());
 
 	for (const auto &message : messages) {
-		const auto id = _item
+		const auto id = _itemId
 							? message.fakeId // viewing edited history
 							: message.messageId; // viewing deleted messages
 		if (_messageIds.find(id) != _messageIds.end()) {
@@ -1366,7 +1420,7 @@ void InnerWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 	// deleted view: the edited view numbers its items by fakeId, which would look
 	// up somebody else's file. Revealed in the folder rather than opened -- the
 	// bytes came from whoever sent them, and launching those is their business.
-	if (!_item && view) {
+	if (!_itemId && view) {
 		const auto saved = LuxuryFeatures::Watch::keptFileForMessage(
 			getDialogIdFromPeer(_peer),
 			view->data()->id);
@@ -1830,6 +1884,13 @@ QPoint InnerWidget::mapPointToItem(QPoint point, const Element *view) const {
 	return point - QPoint(0, itemTop(view));
 }
 
-InnerWidget::~InnerWidget() = default;
+InnerWidget::~InnerWidget() {
+	// _items dies with the widget, and the five Element globals do not: they are
+	// process-wide, and ~Element only clears the ClickHandler. Closing this section
+	// with the cursor over a message used to leave them pointing into freed
+	// storage, which the next updateSelected() or tooltip anywhere dereferenced.
+	clearDisplayPointers();
+	base::take(_items);
+}
 
 } // namespace MessageHistory

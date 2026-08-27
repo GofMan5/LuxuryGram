@@ -101,4 +101,8 @@ void init() {
 	initTranslator();
 }
 
+void finish() {
+	LuxuryDatabase::shutdown();
+}
+
 }

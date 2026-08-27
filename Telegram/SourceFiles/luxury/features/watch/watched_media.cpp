@@ -8,6 +8,7 @@
 
 #include "luxury/luxury_settings.h"
 #include "luxury/utils/telegram_helpers.h"
+#include "base/call_delayed.h"
 #include "data/data_document.h"
 // save() and wanted() take a Data::FileOrigin by value, and the FullMsgId that
 // converts into one only converts where the type is complete: data_document.h
@@ -56,9 +57,23 @@ constexpr auto kMaxSuffixLength = 8;
 // because media that never loads would otherwise wait forever.
 constexpr auto kMaxAwaitingPhotos = 256;
 
-// Roughly a minute of downloader ticks. A photo still not loaded by then is one
-// that is not going to load.
-constexpr auto kMaxPhotoWaitTicks = 64;
+// A photo still not loaded by then is one that is not going to load. Measured in
+// time rather than in downloader ticks: an active chat fires those several times
+// a second, which used to drop waiting photos after a few seconds.
+constexpr auto kPhotoWaitTimeout = crl::time(60 * 1000);
+
+// How long a keep waits for the loader that still owns its file. Longer than the
+// photo timeout because this file is the whole point: its message is gone.
+constexpr auto kKeepWaitTimeout = crl::time(30 * 60 * 1000);
+
+// Bounded like the photo queue: media that never finishes must not accumulate.
+constexpr auto kMaxPendingKeeps = 256;
+
+// A deferred keep is normally retried by the next finished download. But the
+// message that was deleted may have been the last transfer in flight, and then
+// nothing in an idle app fires again -- and the file waits in pending/ until
+// PruneOldFiles() takes it. Slow on purpose: this only covers that case.
+constexpr auto kKeepRetryDelay = crl::time(30 * 1000);
 
 struct AwaitingPhoto {
 	QString path;
@@ -68,10 +83,21 @@ struct AwaitingPhoto {
 	// gone: PhotoMedia::saveToFile() reaches its PhotoData, and ~Session has
 	// already freed it by then.
 	uint64 sessionId = 0;
-	int ticks = 0;
+	crl::time deadline = 0;
+};
+
+// A file whose message was deleted while a loader we started was still writing
+// it. No session id: the file and its name are all the move needs, and it must
+// outlive the account being logged out.
+struct PendingKeep {
+	QString name;
+	crl::time deadline = 0;
 };
 
 std::vector<AwaitingPhoto> AwaitingPhotos;
+std::vector<PendingKeep> PendingKeeps;
+// One retry timer at a time: anything pushed while it is armed rides on it.
+bool PendingKeepsRetrying = false;
 base::flat_set<uint64> SubscribedSessions;
 int FetchesSincePrune = 0;
 std::atomic<bool> Pruning = false;
@@ -177,33 +203,81 @@ void PruneOldFiles() {
 				total -= entry.size();
 			}
 		}
-		if (keptSize > kMaxTotalSize && !ReportedOverBudget.exchange(true)) {
+		if (keptSize > kMaxTotalSize) {
 			// Kept files belong to messages that are already gone, so pruning
 			// them would delete the thing this exists to save. Nothing here can
 			// free them; the watched-chats list is where the user gets to.
-			LOG(("Luxury Watch: kept media is %1 MB, over the %2 MB budget."
-				).arg(keptSize / (1024 * 1024)
-				).arg(kMaxTotalSize / (1024 * 1024)));
+			if (!ReportedOverBudget.exchange(true)) {
+				LOG(("Luxury Watch: kept media is %1 MB, over the %2 MB budget."
+					).arg(keptSize / (1024 * 1024)
+					).arg(kMaxTotalSize / (1024 * 1024)));
+			}
+		} else {
+			// Said once per time it goes over, not once per process: the user
+			// can clear kept media and would never be told again otherwise.
+			ReportedOverBudget = false;
 		}
 		Pruning = false;
 	});
 }
 
-void FlushAwaitingPhotos() {
-	for (auto i = AwaitingPhotos.begin(); i != AwaitingPhotos.end();) {
-		if (i->media->loaded()) {
-			// Writes the video content of a live photo and the large image
-			// otherwise -- exactly the pair wanted() asked for.
-			if (!i->media->saveToFile(i->path)) {
-				DEBUG_LOG(("Luxury Watch: could not write %1").arg(i->path));
+// PhotoMedia and its PhotoData are main-thread only, so the bytes come out here
+// and only the write goes to a pool thread. A large photo is megabytes and this
+// runs inside a downloader tick with up to kMaxAwaitingPhotos of them queued.
+void SavePhotoAsync(
+		const std::shared_ptr<Data::PhotoMedia> &media,
+		const QString &path) {
+	constexpr auto large = Data::PhotoSize::Large;
+	// Writes the video content of a live photo and the large image otherwise --
+	// exactly the pair wanted() asked for.
+	auto bytes = media->videoContent(large);
+	if (bytes.isEmpty()) {
+		bytes = media->imageBytes(large);
+	}
+	if (!bytes.isEmpty()) {
+		crl::async([path, bytes = std::move(bytes)] {
+			auto f = QFile(path);
+			if (!f.open(QIODevice::WriteOnly)
+				|| f.write(bytes) != bytes.size()) {
+				DEBUG_LOG(("Luxury Watch: could not write %1").arg(path));
 			}
-			i = AwaitingPhotos.erase(i);
-		} else if (++i->ticks > kMaxPhotoWaitTicks) {
-			i = AwaitingPhotos.erase(i);
-		} else {
-			++i;
+		});
+		return;
+	}
+	// No stored bytes, only a decoded frame. QImage is copy-on-write and save()
+	// is const, so the pool thread reads the same buffer without detaching it.
+	auto image = media->image(large)->original();
+	if (image.isNull()) {
+		DEBUG_LOG(("Luxury Watch: nothing to write for %1").arg(path));
+		return;
+	}
+	crl::async([path, image = std::move(image)] {
+		if (!image.save(path, "JPG")) {
+			DEBUG_LOG(("Luxury Watch: could not write %1").arg(path));
+		}
+	});
+}
+
+void FlushAwaitingPhotos() {
+	// Indexed rather than iterated: SavePhotoAsync() reaches PhotoData, and an
+	// upstream change there that reaches back into the downloader would re-enter
+	// this and invalidate a live iterator.
+	const auto now = crl::now();
+	auto kept = std::vector<AwaitingPhoto>();
+	auto pending = base::take(AwaitingPhotos);
+	kept.reserve(pending.size());
+	for (auto &entry : pending) {
+		if (entry.media->loaded()) {
+			SavePhotoAsync(entry.media, entry.path);
+		} else if (now < entry.deadline) {
+			kept.push_back(std::move(entry));
 		}
 	}
+	// Anything queued while the writes were being started stays queued.
+	AwaitingPhotos.insert(
+		AwaitingPhotos.end(),
+		std::make_move_iterator(kept.begin()),
+		std::make_move_iterator(kept.end()));
 }
 
 void DropAwaitingPhotos(uint64 sessionId) {
@@ -214,6 +288,61 @@ void DropAwaitingPhotos(uint64 sessionId) {
 	}
 }
 
+[[nodiscard]] bool MoveToKept(const QString &name) {
+	if (!QDir().mkpath(KeptDir())) {
+		LOG(("Luxury Watch: could not create %1").arg(KeptDir()));
+		return false;
+	}
+	// A rename inside one directory tree, so no bytes move and this stays cheap
+	// enough for the hundreds of items a bulk delete posts at once.
+	return QFile::rename(PendingDir() + name, KeptDir() + name);
+}
+
+void FlushPendingKeeps();
+
+void RetryPendingKeepsLater() {
+	if (PendingKeepsRetrying || PendingKeeps.empty()) {
+		return;
+	}
+	PendingKeepsRetrying = true;
+	base::call_delayed(kKeepRetryDelay, [] {
+		PendingKeepsRetrying = false;
+		FlushPendingKeeps();
+	});
+}
+
+void FlushPendingKeeps() {
+	if (PendingKeeps.empty()) {
+		return;
+	}
+	const auto now = crl::now();
+	auto retry = std::vector<PendingKeep>();
+	auto pending = base::take(PendingKeeps);
+	retry.reserve(pending.size());
+	for (auto &entry : pending) {
+		if (QFile::exists(KeptDir() + entry.name)) {
+			continue;
+		} else if (!QFile::exists(PendingDir() + entry.name)) {
+			// Pruned, or the loader was cancelled and removed it. Nothing left.
+			continue;
+		} else if (MoveToKept(entry.name)) {
+			continue;
+		} else if (now < entry.deadline) {
+			// The loader still holds the file open. PruneOldFiles() leaves files
+			// younger than kPruneGraceSeconds alone, and every completion gives
+			// another attempt.
+			retry.push_back(std::move(entry));
+		} else {
+			LOG(("Luxury Watch: gave up moving %1 to kept.").arg(entry.name));
+		}
+	}
+	PendingKeeps.insert(
+		PendingKeeps.end(),
+		std::make_move_iterator(retry.begin()),
+		std::make_move_iterator(retry.end()));
+	RetryPendingKeepsLater();
+}
+
 void SubscribeToDownloads(not_null<Main::Session*> session) {
 	const auto id = session->uniqueId();
 	if (!SubscribedSessions.emplace(id).second) {
@@ -222,6 +351,7 @@ void SubscribeToDownloads(not_null<Main::Session*> session) {
 	session->downloaderTaskFinished(
 	) | rpl::on_next([] {
 		FlushAwaitingPhotos();
+		FlushPendingKeeps();
 	}, session->lifetime());
 
 	// The same account logged in again is a new Session with the same id, so the
@@ -264,7 +394,17 @@ void processNewMessage(not_null<HistoryItem*> item) {
 	}
 	const auto origin = item->fullId();
 	if (const auto document = media->document()) {
-		if (document->size > kMaxFileSize) {
+		if (document->saveToCache()) {
+			// Stickers, custom emoji, small GIFs, voice notes, wallpapers and
+			// themes. tdesktop keeps its own copy of these and resolves them
+			// through it, and save() below would additionally make our prunable
+			// path their known file location -- persisted through
+			// writeFileLocation(), so it survives a restart. A prune then leaves
+			// Sticker::setupPlayer() building a player from a path that is gone,
+			// and the sticker never draws again. Nothing is lost by skipping
+			// them: the copy that outlives the message is tdesktop's.
+			return;
+		} else if (document->size > kMaxFileSize) {
 			DEBUG_LOG(("Luxury Watch: %1 is %2 bytes, over the file limit."
 				).arg(name).arg(document->size));
 			return;
@@ -285,6 +425,9 @@ void processNewMessage(not_null<HistoryItem*> item) {
 		// leave tdesktop pointing at a file that is gone -- which it handles by
 		// downloading again, the same as any file the user moved.
 		document->save(origin, path, LoadFromCloudOrLocal, true);
+		// A delete that lands before this finishes cannot move the file, so the
+		// move waits for a completion on this signal. Idempotent per session.
+		SubscribeToDownloads(&history->session());
 	} else if (const auto photo = media->photo()) {
 		if (AwaitingPhotos.size() >= kMaxAwaitingPhotos) {
 			return;
@@ -299,6 +442,7 @@ void processNewMessage(not_null<HistoryItem*> item) {
 			path,
 			std::move(view),
 			session->uniqueId(),
+			crl::now() + kPhotoWaitTimeout,
 		});
 		SubscribeToDownloads(session);
 	} else {
@@ -322,15 +466,23 @@ QString keepMediaForDeleted(not_null<HistoryItem*> item) {
 		return name;
 	} else if (!QFile::exists(PendingDir() + name)) {
 		return QString();
-	} else if (!QDir().mkpath(KeptDir())) {
-		LOG(("Luxury Watch: could not create %1").arg(KeptDir()));
+	}
+	const auto media = item->media();
+	const auto document = media ? media->document() : nullptr;
+	if (document && document->loading()) {
+		// The loader still owns the file. Renaming it now fails outright on
+		// Windows, and on Linux moves the inode out from under the loader, which
+		// then reports a location that no longer holds what it says. Wait for a
+		// completion instead -- this is the case the feature exists for, a post
+		// deleted seconds after it arrived, so it must not be dropped.
+		if (PendingKeeps.size() < kMaxPendingKeeps
+			&& !ranges::contains(PendingKeeps, name, &PendingKeep::name)) {
+			PendingKeeps.push_back({ name, crl::now() + kKeepWaitTimeout });
+			RetryPendingKeepsLater();
+		}
 		return QString();
 	}
-	// A rename inside one directory tree, so no bytes move and this stays cheap
-	// enough for the hundreds of items a bulk delete posts at once.
-	return QFile::rename(PendingDir() + name, KeptDir() + name)
-		? name
-		: QString();
+	return MoveToKept(name) ? name : QString();
 }
 
 QString keptFileForMessage(ID dialogId, MsgId messageId) {
@@ -342,6 +494,13 @@ QString keptFileForMessage(ID dialogId, MsgId messageId) {
 		{ prefix + '*' },
 		QDir::Files);
 	return names.isEmpty() ? QString() : keptFilePath(names.front());
+}
+
+bool ownsFetchedPath(const QString &path) {
+	// PendingDir() only: a kept file was already written and is never a loader's
+	// target, and the parent tdata/ holds the temp download directory, which is
+	// where a user-chosen "Temporary folder" download really lands.
+	return path.startsWith(PendingDir());
 }
 
 } // namespace LuxuryFeatures::Watch

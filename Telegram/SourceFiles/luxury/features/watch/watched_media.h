@@ -29,4 +29,9 @@ void processNewMessage(not_null<HistoryItem*> item);
 // things the viewer does have. Empty when nothing was kept for the message.
 [[nodiscard]] QString keptFileForMessage(ID dialogId, MsgId messageId);
 
+// True for the files this fetches on its own. A failure writing one of those is
+// not the user's download failing: nobody asked for it, so it must not put a
+// modal in front of them or be read as a problem with their download path.
+[[nodiscard]] bool ownsFetchedPath(const QString &path);
+
 } // namespace LuxuryFeatures::Watch

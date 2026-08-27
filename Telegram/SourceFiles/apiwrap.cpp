@@ -1579,7 +1579,11 @@ void ApiWrap::deleteAllFromParticipant(
 			items.push_back(item);
 		}
 	}
-	_session->data().destroyMessagesWithCacheCleanup(items);
+	// LuxuryGram: this is the branch "delete all my messages" takes in a megagroup
+	// the user can delete in, and the branch an admin's "delete all from this user"
+	// takes. Both destroyed without saving, while the sibling branch of the same
+	// feature saved.
+	_session->data().saveOrDestroyMessages(items);
 
 	_session->data().sendHistoryChangeNotifications();
 

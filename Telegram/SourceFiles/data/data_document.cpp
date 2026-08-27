@@ -41,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 #include "lottie/lottie_animation.h"
 #include "boxes/abstract_box.h" // Ui::hideLayer().
+#include "luxury/features/watch/watched_media.h"
 
 #include <QtCore/QBuffer>
 #include <QtCore/QMimeType>
@@ -1330,9 +1331,16 @@ void DocumentData::handleLoaderUpdates() {
 		_owner->documentLoadProgress(this);
 	}, [=](FileLoader::Error error) {
 		using FailureReason = FileLoader::FailureReason;
-		if (error.started && _loader) {
+		const auto failedFileName = _loader
+			? _loader->fileName()
+			: QString();
+		// A background fetch (watched chats) writes into its own folder. The user
+		// did not ask for it, so a failure there must not put a modal in front of
+		// them, and must not be read as a problem with their download path.
+		const auto internal = !failedFileName.isEmpty()
+			&& LuxuryFeatures::Watch::ownsFetchedPath(failedFileName);
+		if (error.started && _loader && !internal) {
 			const auto origin = _loader->fileOrigin();
-			const auto failedFileName = _loader->fileName();
 			const auto retry = [=] {
 				Ui::hideLayer();
 				save(origin, failedFileName);
@@ -1342,7 +1350,11 @@ void DocumentData::handleLoaderUpdates() {
 				crl::guard(&session(), retry)
 			}));
 		} else if (error.failureReason == FailureReason::FileWriteFailure) {
-			if (!Core::App().settings().downloadPath().isEmpty()) {
+			// Only when the file that failed actually lived in the configured
+			// download directory: a full disk inside tdata used to throw away
+			// the user's download path setting.
+			const auto path = Core::App().settings().downloadPath();
+			if (!path.isEmpty() && failedFileName.startsWith(path)) {
 				Core::App().settings().setDownloadPathBookmark(QByteArray());
 				Core::App().settings().setDownloadPath(QString());
 				Core::App().saveSettingsDelayed();

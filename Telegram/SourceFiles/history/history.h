@@ -125,6 +125,11 @@ public:
 		ClearHistory,
 	};
 	void clear(ClearType type, bool markEmpty = false);
+	// Saves what falls below the cut as deleted messages. A bumped
+	// available_min_id is usually an admin clearing the channel for everyone, but
+	// it also carries this account clearing its own history from another device --
+	// which is still a deletion this was asked to keep. clear() is the one case
+	// that must not save: the user asked for it here, in front of them.
 	void clearUpTill(MsgId availableMinId);
 
 	void applyGroupAdminChanges(const base::flat_set<UserId> &changes);
@@ -552,6 +557,7 @@ private:
 	// when the last item from this block was detached and
 	// calls the required previousItemChanged()
 	void removeBlock(not_null<HistoryBlock*> block);
+	void clearUpTill(MsgId availableMinId, bool saveRemoved);
 	void clearSharedMedia();
 
 	not_null<HistoryItem*> insertItem(std::unique_ptr<HistoryItem> item);

@@ -289,6 +289,11 @@ Application::~Application() {
 	_domain->finish();
 	MTP::WebProxy::Transport::Shutdown();
 
+	// Every session is gone, so nothing can post to the LuxuryGram database queue
+	// any more. Drain it here: a deleted-message row is posted and forgotten, and
+	// the globals it writes through are torn down below.
+	LuxuryInfra::finish();
+
 	Local::finish();
 
 	Shortcuts::Finish();

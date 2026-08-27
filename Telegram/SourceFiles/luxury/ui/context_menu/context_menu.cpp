@@ -365,7 +365,11 @@ void AddLuxuryGramActions(PeerData *peerData,
 	const auto user = peerData->asUser();
 	const auto showFilters = settings.filtersEnabled()
 		&& (!user || user->isBot());
-	const auto saveDeletedMessages = settings.saveDeletedMessages();
+	const auto saveDeletedMessages = settings.saveDeletedMessages()
+		// Watching a chat writes rows whatever the global switch says (see
+		// isMessageSavable), so gating the viewer on the switch alone hid the rows
+		// it had just saved -- which reads as nothing having been saved at all.
+		|| settings.isWatched(getDialogIdFromPeer(peerData));
 	if (!showFilters && !saveDeletedMessages) {
 		return;
 	}
@@ -414,7 +418,7 @@ void AddLuxuryGramActions(PeerData *peerData,
 						if (const auto window = sessionController->session().tryResolveWindow()) {
 							window->showSection(std::make_shared<MessageHistory::SectionMemento>(
 								peerData,
-								nullptr,
+								MsgId(),
 								topicId));
 						}
 					},
@@ -689,7 +693,7 @@ void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 				window->showSection(
 					std::make_shared<MessageHistory::SectionMemento>(
 						item->history()->peer,
-						item,
+						item->id,
 						0));
 			}
 		},

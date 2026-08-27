@@ -439,6 +439,12 @@ public:
 	void destroyMessagesWithCacheCleanup(
 		const std::vector<not_null<HistoryItem*>> &items);
 	void destroyMessageWithCacheCleanup(not_null<HistoryItem*> item);
+	// LuxuryGram: the one place that decides, per item, between keeping it with a
+	// deleted marker and destroying it. Every path that loses messages the server
+	// says are gone must go through here, or the message is dropped with no row
+	// and no marker -- which is what "it sometimes saves nothing" was.
+	void saveOrDestroyMessages(
+		const std::vector<not_null<HistoryItem*>> &items);
 	void scheduleItemPhotoCacheClear(not_null<HistoryItem*> item);
 	void clearPhotoCache(not_null<PhotoData*> photo);
 	[[nodiscard]] auto itemsAboutToBeDestroyed() const
