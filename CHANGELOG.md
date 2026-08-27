@@ -13,7 +13,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Fixed
 
-- Fixed automatic updates never reaching any client. The update feed named the Windows package without a separator, so every client asked GitHub for `.../releases/download/updatestx64upd1000002`, saved the 404 page as a zero-byte file, and reported success. The separator lives in the feed rather than in the application, so 1.0.1 and 1.0.2 installations pick this up as soon as this release's feed is published and can update themselves to 1.0.3.
+- Fixed automatic updates never reaching any client. The update feed named each package without a separator, so every client since 1.0.1 asked GitHub for `.../releases/download/updatestx64upd1000002` and got a 404, and outside the status line in settings nothing said the check had failed. The separator lives in the feed rather than in the application, so 1.0.1 and 1.0.2 installations pick this up as soon as this release's feed is published and can update themselves to 1.0.3.
 - Fixed 1.0.2 refusing to start on an existing profile. It rewrote the whole deleted-messages table on the interface thread before any window appeared: on the reference machine that burned twenty minutes, grew the write-ahead log past 11 GB and took free disk space from 33.5 to 22.7 GiB, with nothing on screen to distinguish it from a hang.
 - Fixed the upgrade from a database 1.0.2 had already started on deleting the stored message history outright to make the table match.
 - Fixed the interface waiting on database work at startup: the database is now opened and migrated on its own thread, so a profile that needs a schema change shows its window immediately.
