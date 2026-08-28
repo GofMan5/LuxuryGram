@@ -904,13 +904,17 @@ void FieldHeader::paintEditTimeLeft(
 	}
 	const auto nameWidth = st::msgServiceNameFont->width(
 		tr::lng_edit_message(tr::now));
-	if (nameWidth + st::normalFont->spacew >= availableWidth) {
+	const auto left = nameWidth + st::normalFont->spacew;
+	// drawText() does not clip, so the whole counter has to fit. Checking only
+	// the label let the digits run past availableWidth and over the cancel
+	// button, which is what availableWidth already subtracts.
+	if (left + st::normalFont->width(editTimeLeftText) > availableWidth) {
 		return;
 	}
 	p.setFont(st::normalFont);
 	p.setPen(st::historyComposeAreaFgService);
 	p.drawText(
-		textLeft + nameWidth + st::normalFont->spacew,
+		textLeft + left,
 		st::msgReplyPadding.top() + st::msgServiceNameFont->ascent,
 		editTimeLeftText);
 }
@@ -4964,8 +4968,15 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		}
 		const auto newComposeHeight = composeFieldHeight();
 		if (oldComposeHeight != newComposeHeight) {
-			updateHeight();
-			return;
+			// Leaving early is only safe because the resize comes back here
+			// with the new size. When the total height happens to be unchanged
+			// -- the header appearing while the field grows by the same amount,
+			// which editing a long message does -- nothing is posted, and
+			// everything below this point keeps the geometry it had before,
+			// starting with the header's width and position.
+			if (updateHeight()) {
+				return;
+			}
 		}
 	}
 
@@ -5763,14 +5774,16 @@ int ComposeControls::composeFieldHeight() const {
 		: _field->height();
 }
 
-void ComposeControls::updateHeight() {
+bool ComposeControls::updateHeight() {
 	const auto height = (_header->isDisplayed() ? _header->height() : 0)
 		+ _st.padding.top()
 		+ composeFieldHeight()
 		+ _st.padding.bottom();
-	if (height != _wrap->height()) {
-		_wrap->resize(_wrap->width(), height);
+	if (height == _wrap->height()) {
+		return false;
 	}
+	_wrap->resize(_wrap->width(), height);
+	return true;
 }
 
 void ComposeControls::editMessage(

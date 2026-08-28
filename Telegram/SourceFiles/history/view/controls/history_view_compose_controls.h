@@ -373,7 +373,9 @@ private:
 	void updateMessagesTTLShown();
 	bool updateSendAsButton(std::shared_ptr<Data::GroupCall> videoStream);
 	void updateAttachBotsMenu();
-	void updateHeight();
+	// True when it resized _wrap, which comes back through
+	// updateControlsGeometry(). False means nothing was posted.
+	bool updateHeight();
 	void updateWrappingVisibility();
 	void refreshSendGiftToggle();
 	void updateControlsVisibility();
