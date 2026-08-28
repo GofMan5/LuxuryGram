@@ -11,6 +11,11 @@
 namespace LuxuryWorker {
 
 void markAsOnline(not_null<Main::Session*> session);
+
+// Re-arms the poll. The poll stops itself once no account owes an offline
+// packet, so a setting that creates one with no event behind it has to say so.
+void wake();
+
 void initialize();
 
 }

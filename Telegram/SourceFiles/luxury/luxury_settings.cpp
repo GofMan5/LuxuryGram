@@ -206,6 +206,11 @@ void GhostModeAccountSettings::setSendOfflinePacketAfterOnline(bool val) {
 	if (_sendOfflinePacketAfterOnline.current() == val) return;
 	_sendOfflinePacketAfterOnline = val;
 	LuxurySettings::save();
+	if (val) {
+		// Turning this on is itself a reason to send one, and the poll sits idle
+		// until something says so.
+		LuxuryWorker::wake();
+	}
 }
 
 void GhostModeAccountSettings::setMarkReadAfterAction(bool val) {
