@@ -58,7 +58,7 @@ void EditMarkBox::prepare() {
 	addButton(tr::lng_settings_save(),
 			  [=]
 			  {
-				  save();
+				  submit();
 			  });
 	addButton(tr::lng_cancel(),
 			  [=]
@@ -102,6 +102,6 @@ void EditMarkBox::resizeEvent(QResizeEvent *e) {
 }
 
 void EditMarkBox::save() {
-	_saveCallback(_text->getLastText());
+	_saveCallback(_text->getLastText().trimmed());
 	closeBox();
 }

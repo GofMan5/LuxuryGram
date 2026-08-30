@@ -841,7 +841,11 @@ Ui::ScrollToRequest Content::jump(int rows) {
 } // namespace
 
 LuxuryUi::FontSelectorBox::FontSelectorBox(QWidget *, Window::SessionController *controller, Fn<void(QString font)> hook)
-	: _controller(controller), _hook(hook) {
+	// Start from the font in use: OK without touching a row must keep it, not
+	// hand the hook an empty string, which is what the Reset button means.
+	: _selectedFont(LuxuryUiSettings::getMonoFont())
+	, _controller(controller)
+	, _hook(hook) {
 }
 
 void LuxuryUi::FontSelectorBox::prepare() {

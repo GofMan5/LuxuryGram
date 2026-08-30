@@ -217,9 +217,6 @@ void FillPluginInfoBox(
 					author.mid(lastEnd)
 				});
 			}
-			if (lastEnd == 0) {
-				text.append(TextWithEntities{author});
-			}
 			versionLabel->setMarkedText(
 				text,
 				Core::TextContext({

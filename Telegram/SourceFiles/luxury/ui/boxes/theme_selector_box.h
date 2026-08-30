@@ -32,4 +32,8 @@ private:
 	rpl::event_stream<QString> _themeNames;
 
 	style::palette _selectedPalette;
+	// An untouched palette is all-Initial, and palette::save() finalizes such a
+	// palette into the compiled-in default light one -- so firing it would look
+	// like the user picked the light theme.
+	bool _paletteChosen = false;
 };

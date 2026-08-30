@@ -145,6 +145,7 @@ void ThemeSelectorBox::setupContent() {
 				}
 
 				_selectedPalette = preview->instance.palette;
+				_paletteChosen = true;
 
 				auto name = theme.title;
 				_themeNames.fire(std::move(name));
@@ -179,13 +180,16 @@ void ThemeSelectorBox::setupContent() {
 									 : tr::luxury_MessageShotThemeDefault(tr::now);
 								 _themeNames.fire(QString(name));
 								 _selectedPalette = palette;
+								 _paletteChosen = true;
 							 },
 							 lifetime());
 
 	addButton(tr::luxury_MessageShotThemeApply(),
 			  [=]
 			  {
-				  _palettes.fire(std::move(_selectedPalette));
+				  if (_paletteChosen) {
+					  _palettes.fire(std::move(_selectedPalette));
+				  }
 				  closeBox();
 			  });
 
