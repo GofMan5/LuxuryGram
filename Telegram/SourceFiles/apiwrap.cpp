@@ -4287,7 +4287,15 @@ void ApiWrap::sendVoiceMessage(
 		bool video,
 		const SendAction &action) {
 	auto scheduledAction = action;
-	applyGhostScheduling(_session, scheduledAction.options, 17);
+	// A voice message answering an ephemeral bot loses MessageFlag::Ephemeral once
+	// options.scheduled is set (PrepareConfirmedFileFlags gates on it), so ghost
+	// mode would turn a self-destructing reply into an ordinary message.
+	if (!_session->ephemeralMessages().wouldSendMedia(
+			action.history->peer,
+			action.replyTo,
+			QString())) {
+		applyGhostScheduling(_session, scheduledAction.options, 17);
+	}
 	const auto caption = TextWithTags();
 	const auto to = FileLoadTaskOptions(scheduledAction);
 	_fileLoader->addTask(
@@ -4784,8 +4792,14 @@ void ApiWrap::sendRichMessage(
 void ApiWrap::sendMessage(
 		MessageToSend &&message,
 		std::optional<MsgId> localMessageId) {
-	applyGhostScheduling(_session, message.action.options);
 	const auto clearReplyTo = prependPseudoReply(message);
+	// Ghost mode turns a plain send into a scheduled one, and trySend() below
+	// drops scheduled ephemeral sends outright -- the field is already cleared by
+	// then, so the message just disappears. The compose widgets refuse this
+	// combination with a toast; a setting must not route around that refusal.
+	if (!_session->ephemeralMessages().wouldSend(message)) {
+		applyGhostScheduling(_session, message.action.options);
+	}
 
 	const auto history = message.action.history;
 	const auto peer = history->peer;

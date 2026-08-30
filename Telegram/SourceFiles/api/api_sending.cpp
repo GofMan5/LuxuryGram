@@ -200,10 +200,17 @@ void SendExistingMedia(
 			>= Data::WelcomeMessagesLimit(session)) {
 		return;
 	}
-	if (!welcomeTemplate) {
+	if (!welcomeTemplate
+		&& !session->ephemeralMessages().wouldSendMedia(
+			peer,
+			message.action.replyTo,
+			message.textWithTags.text)) {
 		// LuxuryGram: a welcome template is stored, not sent, so ghost mode's
 		// send-as-scheduled trick has nothing to hide here -- and setting
 		// options.scheduled would mark the stored template IsOrWasScheduled.
+		// An ephemeral send is skipped for the opposite reason: the flag gate
+		// below refuses MessageFlag::Ephemeral once scheduled is set, so the
+		// message would quietly go out as an ordinary one.
 		applyGhostScheduling(session, message.action.options);
 	}
 
