@@ -1561,7 +1561,8 @@ bool checkReadyUpdate() {
 		return false;
 	}
 
-	// check ready version
+	// check ready version -- against LuxuryUpdateVersion, the counter the
+	// packages are numbered by, not AppVersion which stays on the upstream line.
 	QString versionPath = readyPath + u"/tdata/version"_q;
 	{
 		QFile fVersion(versionPath);
@@ -1588,8 +1589,8 @@ bool checkReadyUpdate() {
 				ClearAll();
 				return false;
 			}
-		} else if (versionNum <= AppVersion) {
-			LOG(("Update Error: cant install version %1 having version %2").arg(versionNum).arg(AppVersion));
+		} else if (versionNum <= LuxuryUpdateVersion) {
+			LOG(("Update Error: cant install version %1 having version %2").arg(versionNum).arg(LuxuryUpdateVersion));
 			ClearAll();
 			return false;
 		}
