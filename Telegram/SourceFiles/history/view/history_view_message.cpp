@@ -74,6 +74,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+#include "luxury/luxury_ui_settings.h"
 #include "luxury/features/filters/filters_controller.h"
 #include "luxury/features/message_shot/message_shot.h"
 #include "styles/style_luxury_icons.h"
@@ -6696,7 +6697,9 @@ int Message::resizeContentGetHeight(int newWidth) {
 	_bubbleWidthLimit = (UnlimitedMessageWidth.value() && !mediaDisplayed)
 		? 0x3FFFFFF
 		: std::max({
-			st::msgMaxWidth,
+			// Settings -> Chats -> "Wide Messages Multiplier". Returns the width
+			// unchanged at 1.00, so the default layout is untouched.
+			LuxuryUiSettings::getWideMultiplied(st::msgMaxWidth, 1.),
 			monospaceMaxWidth(),
 			mediaDisplayed ? media->bubbleWidthLimit() : 0,
 		});
