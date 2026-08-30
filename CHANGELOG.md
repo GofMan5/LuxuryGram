@@ -4,6 +4,20 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Fixed
+
+- Fixed the update button leaving every installation on the version it already had. Downloading and unpacking worked; the last step, which decides whether a prepared update may be installed, compared the package against the Telegram Desktop version this fork is built on (7.1.1) instead of the LuxuryGram release counter the packages are numbered by — so `1000004 <= 7001001` held, and the ready update was deleted on every launch with nothing but a line in the log. Two of the three version gates were converted when the fork took its own counter and the third was missed, which is why no release since 1.0.1 has been able to install itself. That check lives in the installed application, so 1.0.1 through 1.0.4 cannot pick this up: install this version by hand once, and self-updates work from there on.
+- Fixed ghost mode discarding a message sent as an ephemeral bot command. Ghost mode sends as a scheduled message so no read receipt goes out, and a scheduled ephemeral send is refused outright — by which point the compose field has already been cleared, so the message simply disappeared. The compose widgets say no to that combination to your face; ghost mode no longer routes around them.
+- Fixed ghost mode taking the self-destruct off a photo, sticker, file or voice message answering an ephemeral bot: the flag that makes such a message disappear is only set when the send is not scheduled, so the message quietly stayed in the conversation as an ordinary one. Files sent through the attachment box are not covered — that box does not know which chat it is sending to.
+- Fixed "Send without Sound" playing a sound. With the setting on, choosing "Send without sound" from the send menu flipped it back to an audible send, because the setting returned the opposite of the menu choice rather than adding to it. Nothing in the menu asks for a sound back, so the setting now only ever silences.
+- Fixed the monospace font box throwing away your font. Pressing OK without picking a row passed an empty font to the setting, which is exactly what that box's Reset button does — so opening the box to look and confirming out of it reset the font and offered a restart for the privilege.
+- Fixed the message-shot theme box switching you to the light theme. Apply without choosing a theme handed over an untouched palette, and an untouched palette materialises as the built-in light one, so it arrived looking like a deliberate choice. Apply now does nothing when nothing was chosen.
+- Fixed the deleted- and edited-mark box accepting an empty mark from its Save button while refusing the same thing from the Enter key, and storing whatever spaces were left around the mark.
+- Fixed a plugin's author being printed twice in the plugin information box whenever the author was not written as a Telegram username.
+- Fixed the "Wide Messages Multiplier" slider doing nothing at all. Its value crossed into the interface layer and stopped there — nothing had ever read it — and the comparison deciding whether the multiplier differs from 1.00 truncated to a whole number, so every setting below 2.00 read as 1.00 even once something did. It now raises the limit on how wide a long text message may grow, which is what its description promises.
+
 ## 1.0.4
 
 ### Changed
