@@ -437,7 +437,11 @@ void AddLuxuryGramActions(PeerData *peerData,
 		// isMessageSavable), so gating the viewer on the switch alone hid the rows
 		// it had just saved -- which reads as nothing having been saved at all.
 		|| settings.isWatched(getDialogIdFromPeer(peerData));
-	if (!showFilters && !saveDeletedMessages) {
+	// A plain bool, not settings itself: fillSubmenu captures by [=], and
+	// capturing the settings reference would copy the singleton behind it,
+	// whose copy constructor is deleted.
+	const auto trackOnlineHistory = settings.trackOnlineHistory();
+	if (!showFilters && !saveDeletedMessages && !trackOnlineHistory) {
 		return;
 	}
 
@@ -501,7 +505,7 @@ void AddLuxuryGramActions(PeerData *peerData,
 			// Online history is users only: channels and groups have no presence
 			// to track, and bots and service accounts never transition for real
 			// (the recorder skips them too, so the viewer would stay empty).
-			const auto trackOnline = settings.trackOnlineHistory()
+			const auto trackOnline = trackOnlineHistory
 				&& user
 				&& !user->isBot()
 				&& !user->isServiceUser();
