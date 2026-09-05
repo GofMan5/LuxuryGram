@@ -92,6 +92,10 @@ void SendSimpleMedia(SendAction action, MTPInputMedia inputMedia) {
 		return;
 	}
 
+	// After the ephemeral branch above, which needs the reply intact to recognise
+	// an ephemeral bot: a target the server cannot resolve fails the whole send.
+	StripUnsendableReply(session, action.replyTo);
+
 	if (action.replyTo.messageId
 		&& !IsServerMsgId(action.replyTo.messageId.msg)
 		&& !session->data().message(action.replyTo.messageId)) {
@@ -449,15 +453,19 @@ void SendMusicSelectionBatch(
 	const auto groupId = multi ? base::RandomValue<uint64>() : uint64(0);
 
 	auto flags = NewMessageFlags(peer);
-	if (action.replyTo) {
-		flags |= MessageFlag::HasReplyInfo;
-	}
 	if (!multi
 		&& !action.options.scheduled
 		&& !action.options.shortcutId
 		&& session->ephemeralMessages().isEphemeralBotReply(
 			action.replyTo.messageId)) {
 		flags |= MessageFlag::Ephemeral;
+	}
+	// After the check above, which needs the reply intact: a target the server
+	// cannot resolve -- ephemeral, or kept alive here only because it was
+	// deleted -- fails the whole send with MESSAGE_ID_INVALID.
+	StripUnsendableReply(session, action.replyTo);
+	if (action.replyTo) {
+		flags |= MessageFlag::HasReplyInfo;
 	}
 	InnerFillMessagePostFlags(action.options, peer, flags);
 	if (action.options.scheduled) {
@@ -729,14 +737,13 @@ void SendExistingDocument(
 				message.action.replyTo.messageId.peer,
 				message.action.replyTo.topicRootId);
 		}
-	} else if (message.action.replyTo && message.action.history) {
-		if (const auto item = message.action.history->session().data().message(message.action.replyTo.messageId)) {
-			if (item->isDeleted()) {
-				message.action.replyTo.messageId = FullMsgId(
-					message.action.replyTo.messageId.peer,
-					message.action.replyTo.topicRootId);
-			}
-		}
+	} else if (message.action.history) {
+		// A sticker, video message or voice message has no caption to prepend a
+		// pseudo-reply to, so the reply can only be dropped -- and it has to be,
+		// or the whole send fails with MESSAGE_ID_INVALID.
+		StripUnsendableReply(
+			&message.action.history->session(),
+			message.action.replyTo);
 	}
 
 	const auto inputMedia = [=] {
@@ -1222,6 +1229,11 @@ struct ConfirmedLocalFile {
 				file->to.replyTo.topicRootId);
 		}
 	} else if (!isEditing && file->to.replyTo) {
+		// Deliberately not StripUnsendableReply(): a music track or a round video
+		// has no caption for a quote, so a deleted target can only be dropped, but
+		// PrepareConfirmedFileFlags() below decides MessageFlag::Ephemeral from this
+		// very reply -- dropping an ephemeral target here would send to the server
+		// what was meant to stay local.
 		if (const auto item = session->data().message(file->to.replyTo.messageId)) {
 			if (item->isDeleted()) {
 				file->to.replyTo.messageId = FullMsgId(

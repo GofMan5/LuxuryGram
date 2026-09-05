@@ -695,6 +695,27 @@ void ApiWrap::sendMessageFail(
 			if (const auto topic = item->topic()) {
 				topic->setClosed(true);
 			}
+		} else if (error == u"MESSAGE_ID_INVALID"_q) {
+			// The server has just told us the reply target does not exist.
+			// LuxuryGram keeps deleted messages as live items, and a delete update
+			// that never reached us leaves one looking alive either way, so the
+			// compose field goes on offering a target that fails every send -- the
+			// user cannot write in that chat at all. Run the same path a delete
+			// update would: the message is either dropped, which cancels the reply,
+			// or marked deleted, and then prependPseudoReply() turns it into a
+			// quote and StripUnsendableReply() drops it from the media sends.
+			if (const auto reply = item->Get<HistoryMessageReply>()) {
+				const auto replyToId = reply->messageId();
+				const auto peerId = reply->externalPeerId()
+					? reply->externalPeerId()
+					: item->history()->peer->id;
+				const auto target = IsServerMsgId(replyToId)
+					? _session->data().message(peerId, replyToId)
+					: nullptr;
+				if (target && !target->isDeleted()) {
+					processMessageDelete(target);
+				}
+			}
 		}
 	}
 }
@@ -4548,7 +4569,7 @@ void ApiWrap::sendRichMessage(
 			action.replyTo,
 			Iv::FlattenRichPageSummary(page).text);
 	if (!ephemeral) {
-		StripEphemeralReply(_session, action.replyTo);
+		StripUnsendableReply(_session, action.replyTo);
 	}
 	const auto newId = FullMsgId(
 		peer->id,
@@ -4616,7 +4637,7 @@ void ApiWrap::sendRichMessage(
 	const auto submittedPage = fullPage ? fullPage : item->richPage();
 	const auto submittedSummary = item->originalText();
 
-	StripEphemeralReply(_session, action.replyTo);
+	StripUnsendableReply(_session, action.replyTo);
 
 	const auto history = item->history();
 	const auto peer = history->peer;
@@ -5177,7 +5198,7 @@ void ApiWrap::sendInlineResult(
 		SendAction action,
 		std::optional<MsgId> localMessageId,
 		Fn<void(bool)> done) {
-	StripEphemeralReply(_session, action.replyTo);
+	StripUnsendableReply(_session, action.replyTo);
 	sendAction(action);
 
 	const auto history = action.history;

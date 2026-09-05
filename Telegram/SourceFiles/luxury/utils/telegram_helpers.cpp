@@ -533,6 +533,14 @@ bool isMessageSavable(const not_null<HistoryItem*> item) {
 	const auto &settings = LuxurySettings::getInstance();
 	const auto peer = item->history()->peer;
 
+	// First of all: under a passcode lock the client keeps receiving updates,
+	// only UI is gated, so saving would continue silently. The toggle opts out
+	// of that -- off means a delete arriving while locked is not recorded.
+	if (Core::App().passcodeLocked()
+		&& !settings.saveDeletedMessagesEvenWhenLocked()) {
+		return false;
+	}
+
 	// The storage keys a row on its text and drops one that has none, so an item
 	// with nothing to store must not be marked deleted either -- a marker with no
 	// row behind it is exactly what "it saved nothing" looks like. Only a couple

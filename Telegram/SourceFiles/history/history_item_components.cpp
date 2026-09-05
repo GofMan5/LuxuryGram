@@ -66,6 +66,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/features/filters/filters_controller.h"
+#include "luxury/features/message_shot/message_shot_render.h"
 
 namespace {
 
@@ -309,10 +310,15 @@ void HistoryMessageForwarded::create(
 			// pointer may become invalid, resulting in a crash.
 			copy->owner().requestItemRepaint(item);
 		};
-		phrase = Ui::Text::SingleCustomEmoji(
-			copy->owner().customEmojiManager().peerUserpicEmojiData(
-				copy,
-				st::fwdTextUserpicPadding));
+		// The userpic emoji is the real avatar inlined into the header, so an
+		// anonymous shot has to leave it out -- the pseudonym next to it would
+		// hide nothing.
+		if (!LuxuryFeatures::MessageShot::isAnonymousShot()) {
+			phrase = Ui::Text::SingleCustomEmoji(
+				copy->owner().customEmojiManager().peerUserpicEmojiData(
+					copy,
+					st::fwdTextUserpicPadding));
+		}
 	}
 	if (!originalPostAuthor.isEmpty()) {
 		phrase.append(

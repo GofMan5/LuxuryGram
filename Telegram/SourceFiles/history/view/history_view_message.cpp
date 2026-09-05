@@ -1054,7 +1054,11 @@ void Message::refreshRightBadge() {
 		return;
 	}
 	if (LuxuryFeatures::MessageShot::ignoreRender(
-			LuxuryFeatures::MessageShot::RenderPart::HeaderDecorations)) {
+			LuxuryFeatures::MessageShot::RenderPart::HeaderDecorations)
+		// A signature or a custom rank names the sender the same way the header
+		// does, so an anonymous shot drops the badge whatever the header
+		// decorations preference says.
+		|| LuxuryFeatures::MessageShot::isAnonymousShot()) {
 		if (Has<RightBadge>()) {
 			RemoveComponents(RightBadge::Bit());
 		}
@@ -2601,7 +2605,9 @@ void Message::paintFromName(
 		return &info->nameText();
 	}();
 	const auto &settings = LuxurySettings::getInstance();
-	const auto hidePremiumStatuses = settings.hidePremiumStatuses();
+	const auto hidePremiumStatuses = settings.hidePremiumStatuses()
+		// A custom emoji status names its owner as surely as the name does.
+		|| LuxuryFeatures::MessageShot::isAnonymousShot();
 	const auto statusWidth = _fromNameStatus && !hidePremiumStatuses
 		? st::dialogsPremiumIcon.icon.width()
 		: 0;

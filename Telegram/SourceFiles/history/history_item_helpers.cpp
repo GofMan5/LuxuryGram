@@ -717,12 +717,24 @@ bool ShowEphemeralReplyTextOnlyError(
 	return true;
 }
 
-void StripEphemeralReply(
+void StripUnsendableReply(
 		not_null<Main::Session*> session,
 		FullReplyTo &replyTo) {
 	const auto item = session->data().message(replyTo.messageId);
-	if (item && item->isEphemeral()) {
-		replyTo.messageId = FullMsgId();
+	if (!item) {
+		return;
+	} else if (item->isEphemeral() || item->isDeleted()) {
+		// An ephemeral message never had a server id, and LuxuryGram keeps a
+		// deleted one as a live HistoryItem, so the compose field goes on offering
+		// it as a reply target long after the server dropped the id -- and the send
+		// then fails as a whole with MESSAGE_ID_INVALID. Where there is text to
+		// prepend it to, prependPseudoReply() has already turned such a reply into
+		// a quote and cleared it; this catches the paths with nowhere to put one.
+		// Same rewrite SendSimpleMedia() does for a local id that went away: the
+		// topic root stays, or the message leaves its topic.
+		replyTo.messageId = replyTo.topicRootId
+			? FullMsgId(replyTo.messageId.peer, replyTo.topicRootId)
+			: FullMsgId();
 	}
 }
 

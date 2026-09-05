@@ -154,7 +154,10 @@ struct ForwardRange {
 	std::shared_ptr<ChatHelpers::Show> show,
 	not_null<Main::Session*> session,
 	FullMsgId replyToId);
-void StripEphemeralReply(
+// Drops a reply target the server cannot resolve: an ephemeral message, which
+// never had a server id, or one LuxuryGram keeps alive only because it was
+// deleted. Sending either fails the whole send with MESSAGE_ID_INVALID.
+void StripUnsendableReply(
 	not_null<Main::Session*> session,
 	FullReplyTo &replyTo);
 void ConfirmDeleteSelectedEphemeral(

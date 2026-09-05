@@ -50,6 +50,10 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 void removeDeletedMessage(ID userId, ID dialogId, ID messageId);
 void clearDeletedMessages(ID userId, ID dialogId, ID topicId);
 
+void addOnlineEvent(OnlineEvent event);
+std::vector<OnlineEvent> getOnlineEvents(ID userId, ID dialogId, int totalLimit);
+void clearOnlineEvents(ID userId, ID dialogId);
+
 std::vector<RegexFilter> getAllRegexFilters();
 std::vector<RegexFilter> getShared();
 std::vector<RegexFilter> getByDialogId(ID dialogId);

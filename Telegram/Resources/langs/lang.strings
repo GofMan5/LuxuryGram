@@ -8782,6 +8782,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SuggestGhostModeBeforeViewingStoryDescription" = "Displays an alert before opening a story, suggesting you enable Ghost Mode.";
 "luxury_SpyEssentialsHeader" = "Spy essentials";
 "luxury_SaveDeletedMessages" = "Save Deleted Messages";
+"luxury_SaveDeletedMessagesEvenWhenLocked" = "Save Deleted When Locked";
+"luxury_TrackOnlineHistory" = "Track Online History";
+"luxury_TrackOnlineEvenWhenLocked" = "Track Online When Locked";
 "luxury_SaveMessagesHistory" = "Save Edits History";
 "luxury_MessageSavingSaveMedia" = "Save Attachments";
 "luxury_MessageSavingSaveMediaHint" = "Configure chats & limits";
@@ -9033,6 +9036,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_PeekOnlineMenuText" = "Peek Online";
 "luxury_ClearDeletedMenuText" = "Clear Deleted";
 "luxury_ViewDeletedMenuText" = "View Deleted";
+"luxury_ViewOnlineHistoryMenuText" = "Online History";
+"luxury_ClearOnlineHistoryMenuText" = "Clear Online History";
+"luxury_ClearOnlineHistoryText" = "Delete the recorded online history for this chat?";
+"luxury_OnlineHistoryTitle" = "Online History";
+"luxury_OnlineHistoryEmpty" = "No online events recorded yet.";
 "luxury_ViewFiltersMenuText" = "View Filters";
 "luxury_ShowFilteredMessagesMenuText" = "Show Filtered";
 "luxury_HideFilteredMessagesMenuText" = "Hide Filtered";
@@ -9091,6 +9099,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MessageShotShowHeaderDecorations" = "Show header decorations";
 "luxury_MessageShotShowColorfulReplies" = "Show colorful replies";
 "luxury_MessageShotRevealSpoilers" = "Reveal spoilers";
+"luxury_MessageShotAnonymous" = "Anonymous";
+"luxury_MessageShotAnonymousName" = "User {index}";
 "luxury_MessageShotEmpty" = "Nothing to save: the shot is too large, or the messages are gone.";
 "luxury_MessageShotSaveFailed" = "Could not save the image.";
 "luxury_SendAsSticker" = "Send as Sticker";
@@ -9124,6 +9134,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_LikelyOfflineStatus" = "offline ?";
 "luxury_GhostModeShortcut" = "Enter with Ghost";
 "luxury_SettingsShowMessageSeconds" = "Show Message Seconds";
+"luxury_SettingsShowLastSeenSeconds" = "Show Last Seen Seconds";
 "luxury_FilterZalgo" = "Filter Zalgo";
 "luxury_ImproveLinkPreviews" = "Improve Link Previews";
 "luxury_ShowOnlyAddedEmojisAndStickers" = "Show Only Added Emojis & Stickers";

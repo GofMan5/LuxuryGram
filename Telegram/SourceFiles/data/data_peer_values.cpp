@@ -478,6 +478,29 @@ QString OnlineText(Data::LastseenStatus status, TimeId now) {
 	}
 	const auto till = status.onlineTill();
 	Assert(till > 0);
+	// LuxuryGram: exact last-seen time. The relative branches below round to
+	// minutes and hours; with the toggle on an exact till renders as the clock
+	// time with seconds instead. Approximate statuses (recently, week, month)
+	// never reach here -- OnlineTextCommon owns them, there is no exact time.
+	if (LuxurySettings::getInstance().showLastSeenSeconds()) {
+		const auto onlineFull = base::unixtime::parse(till);
+		const auto nowFull = base::unixtime::parse(now);
+		const auto onlineTime = QLocale().toString(
+			onlineFull.time(),
+			"HH:mm:ss");
+		if (onlineFull.date() == nowFull.date()) {
+			return tr::lng_status_lastseen_today(tr::now, lt_time, onlineTime);
+		} else if (onlineFull.date().addDays(1) == nowFull.date()) {
+			return tr::lng_status_lastseen_yesterday(tr::now, lt_time, onlineTime);
+		}
+		const auto date = QLocale().toString(onlineFull.date(), QLocale::ShortFormat);
+		return tr::lng_status_lastseen_date_time(
+			tr::now,
+			lt_date,
+			date,
+			lt_time,
+			onlineTime);
+	}
 	const auto minutes = (now - till) / 60;
 	if (!minutes) {
 		return tr::lng_status_lastseen_now(tr::now);

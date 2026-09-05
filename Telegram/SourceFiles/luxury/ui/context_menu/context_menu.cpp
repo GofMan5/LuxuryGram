@@ -41,12 +41,18 @@
 #include "history/view/history_view_element.h"
 #include "main/main_session.h"
 #include "main/session/send_as_peers.h"
+#include "styles/style_boxes.h"
 #include "styles/style_luxury_icons.h"
 #include "styles/style_layers.h"
+#include "styles/style_luxury_styles.h"
 #include "styles/style_menu_icons.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/choose_language_box.h"
+#include "ui/layers/generic_box.h"
+#include "ui/vertical_list.h"
+#include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
+#include "ui/widgets/scroll_area.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
@@ -80,6 +86,67 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 			.confirmStyle = &st::attentionBoxButton,
 		}));
 	};
+}
+
+void FillOnlineHistoryBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<PeerData*> peer) {
+	box->setTitle(tr::luxury_OnlineHistoryTitle());
+	box->setWidth(st::aboutWidth);
+
+	Ui::AddSkip(box->verticalLayout());
+	const auto events = LuxuryOnline::getHistory(peer, 200);
+	if (events.empty()) {
+		box->verticalLayout()->add(
+			object_ptr<Ui::FlatLabel>(
+				box->verticalLayout(),
+				tr::luxury_OnlineHistoryEmpty(),
+				st::boxLabel),
+			st::boxRowPadding);
+	} else {
+		auto lines = QStringList();
+		lines.reserve(int(events.size()));
+		for (const auto &event : events) {
+			lines.push_back(
+				formatDateTime(base::unixtime::parse(event.at))
+				+ u" — "_q
+				+ (event.online
+					? tr::lng_status_online(tr::now)
+					: tr::lng_status_offline(tr::now)));
+		}
+		const auto availableWidth = box->width()
+			- st::boxRowPadding.left()
+			- st::boxRowPadding.right();
+		const auto container = box->verticalLayout()->add(
+			object_ptr<Ui::RpWidget>(box->verticalLayout()),
+			st::boxRowPadding);
+		const auto scroll = Ui::CreateChild<Ui::ScrollArea>(
+			container,
+			st::boxScroll);
+		const auto listLabel = scroll->setOwnedWidget(
+			object_ptr<Ui::FlatLabel>(scroll, st::boxLabel));
+		listLabel->setText(lines.join(u"\n"_q));
+		listLabel->resizeToWidth(availableWidth);
+		const auto needsScroll =
+			listLabel->height() > st::maxPluginDescriptionHeight;
+		const auto scrollPad = needsScroll
+			? (st::boxScroll.width + st::lineWidth)
+			: 0;
+		if (needsScroll) {
+			listLabel->resizeToWidth(availableWidth - scrollPad);
+		}
+		const auto containerHeight = std::min(
+			listLabel->height(),
+			st::maxPluginDescriptionHeight);
+		container->resize(availableWidth, containerHeight);
+		container->sizeValue(
+		) | rpl::on_next([=](QSize size) {
+			scroll->setGeometry(0, 0, size.width(), size.height());
+			listLabel->resizeToWidth(size.width() - scrollPad);
+		}, container->lifetime());
+	}
+	Ui::AddSkip(box->verticalLayout());
+	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 }
 
 void DeleteMyMessagesAfterConfirm(
@@ -427,6 +494,41 @@ void AddLuxuryGramActions(PeerData *peerData,
 				addAction({
 					.text = tr::luxury_ClearDeletedMenuText(tr::now),
 					.handler = ClearDeletedMessagesHandler(sessionController, peerData, topicId),
+					.icon = &st::menuIconClearAttention,
+					.isAttention = true,
+				});
+			}
+			// Online history is users only: channels and groups have no presence
+			// to track, and bots and service accounts never transition for real
+			// (the recorder skips them too, so the viewer would stay empty).
+			const auto trackOnline = settings.trackOnlineHistory()
+				&& user
+				&& !user->isBot()
+				&& !user->isServiceUser();
+			if (trackOnline) {
+				if (saveDeletedMessages || showFilters || filteredToggleShown.value_or(false)) addAction({ .isSeparator = true });
+				addAction(
+					tr::luxury_ViewOnlineHistoryMenuText(tr::now),
+					[=] {
+						sessionController->show(Box(
+							FillOnlineHistoryBox,
+							not_null<PeerData*>(peerData)));
+					},
+					&st::menuIconInfo);
+				addAction({
+					.text = tr::luxury_ClearOnlineHistoryMenuText(tr::now),
+					.handler = [=] {
+						sessionController->show(Ui::MakeConfirmBox({
+							.text = tr::luxury_ClearOnlineHistoryText(tr::now),
+							.confirmed = [=](Fn<void()> &&close) {
+								LuxuryOnline::clearHistory(peerData);
+								close();
+							},
+							.confirmText = tr::luxury_ClearOnlineHistoryMenuText(tr::now),
+							.cancelText = tr::lng_cancel(),
+							.confirmStyle = &st::attentionBoxButton,
+						}));
+					},
 					.icon = &st::menuIconClearAttention,
 					.isAttention = true,
 				});

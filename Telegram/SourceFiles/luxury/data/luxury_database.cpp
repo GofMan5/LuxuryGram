@@ -118,6 +118,15 @@ auto storage = make_storage(
 		make_column("fakeId", &RegexFilterGlobalExclusion::fakeId, primary_key().autoincrement()),
 		make_column("dialogId", &RegexFilterGlobalExclusion::dialogId),
 		make_column("filterId", &RegexFilterGlobalExclusion::filterId)
+	),
+	make_table<OnlineEvent>(
+		"OnlineEvent",
+		make_column("fakeId", &OnlineEvent::fakeId, primary_key().autoincrement()),
+		make_column("userId", &OnlineEvent::userId),
+		make_column("dialogId", &OnlineEvent::dialogId),
+		make_column("peerId", &OnlineEvent::peerId),
+		make_column("online", &OnlineEvent::online),
+		make_column("at", &OnlineEvent::at)
 	)
 );
 
@@ -640,6 +649,71 @@ void clearDeletedMessages(ID userId, ID dialogId, ID topicId) {
 		);
 	} catch (const std::exception &ex) {
 		LOG(("Failed to clear deleted messages: %1").arg(ex.what()));
+	}
+}
+
+// An always-online contact would otherwise grow this table without bound, so
+// every insert prunes the peer back to the newest kMaxOnlineEventsPerPeer rows.
+// Only proven query shapes: columns() + where() + order_by() + limit() for the
+// probe (see hasRevisions), remove_all() + where() for the prune.
+constexpr auto kMaxOnlineEventsPerPeer = 200;
+
+void addOnlineEvent(OnlineEvent event) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		storage.insert(event);
+		const auto newest = storage.select(
+			columns(column<OnlineEvent>(&OnlineEvent::fakeId)),
+			where(
+				column<OnlineEvent>(&OnlineEvent::userId) == event.userId and
+				column<OnlineEvent>(&OnlineEvent::dialogId) == event.dialogId
+			),
+			order_by(column<OnlineEvent>(&OnlineEvent::fakeId)).desc(),
+			limit(kMaxOnlineEventsPerPeer + 1)
+		);
+		if (newest.size() > kMaxOnlineEventsPerPeer) {
+			const auto cutoff = std::get<0>(newest.back());
+			storage.remove_all<OnlineEvent>(
+				where(
+					column<OnlineEvent>(&OnlineEvent::userId) == event.userId and
+					column<OnlineEvent>(&OnlineEvent::dialogId) == event.dialogId and
+					column<OnlineEvent>(&OnlineEvent::fakeId) <= cutoff
+				)
+			);
+		}
+	} catch (std::exception &ex) {
+		LOG(("Failed to save online event: %1").arg(ex.what()));
+	}
+}
+
+std::vector<OnlineEvent> getOnlineEvents(ID userId, ID dialogId, int totalLimit) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		return storage.get_all<OnlineEvent>(
+			where(
+				column<OnlineEvent>(&OnlineEvent::userId) == userId and
+				column<OnlineEvent>(&OnlineEvent::dialogId) == dialogId
+			),
+			order_by(column<OnlineEvent>(&OnlineEvent::at)).desc(),
+			limit(totalLimit)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to load online events: %1").arg(ex.what()));
+		return {};
+	}
+}
+
+void clearOnlineEvents(ID userId, ID dialogId) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		storage.remove_all<OnlineEvent>(
+			where(
+				column<OnlineEvent>(&OnlineEvent::userId) == userId and
+				column<OnlineEvent>(&OnlineEvent::dialogId) == dialogId
+			)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to clear online events: %1").arg(ex.what()));
 	}
 }
 

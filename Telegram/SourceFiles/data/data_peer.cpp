@@ -55,6 +55,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_shared_media.h"
 
 // LuxuryGram includes
+#include "luxury/features/message_shot/message_shot_render.h"
 #include "luxury/ui/luxury_userpic.h"
 
 
@@ -1311,6 +1312,15 @@ const QString &PeerData::name() const {
 		return to->name();
 	} else if (const auto broadcast = monoforumBroadcast()) {
 		return broadcast->name();
+	} else if (LuxuryFeatures::MessageShot::isTakingShot()) {
+		// An anonymous message shot renames every peer it draws. Hooked here so
+		// the bubble header, the reply header and the forwarded header all read
+		// one map, and so the delegations above collapse a migrated pair into a
+		// single pseudonym.
+		if (const auto anonymous
+				= LuxuryFeatures::MessageShot::AnonymousName(this)) {
+			return *anonymous;
+		}
 	}
 	return _name;
 }

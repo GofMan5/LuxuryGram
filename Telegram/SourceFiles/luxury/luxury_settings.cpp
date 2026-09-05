@@ -376,6 +376,12 @@ void MessageShotSettings::setRevealSpoilers(bool val) {
 	LuxurySettings::save();
 }
 
+void MessageShotSettings::setAnonymous(bool val) {
+	if (_anonymous.current() == val) return;
+	_anonymous = val;
+	LuxurySettings::save();
+}
+
 bool MessageShotSettings::isCloudThemeEmpty() const {
 	return !_cloudThemeId.current()
 		&& !_cloudThemeAccessHash.current()
@@ -444,6 +450,7 @@ void to_json(nlohmann::json &j, const MessageShotSettings &s) {
 		{"showHeaderDecorations", s._showHeaderDecorations.current()},
 		{"showColorfulReplies", s._showColorfulReplies.current()},
 		{"revealSpoilers", s._revealSpoilers.current()},
+		{"anonymous", s._anonymous.current()},
 		{"embeddedThemeType", s._embeddedThemeType.current()},
 		{"embeddedThemeAccentColor", s._embeddedThemeAccentColor.current()},
 		{"cloudThemeId", s._cloudThemeId.current()},
@@ -461,6 +468,7 @@ void from_json(const nlohmann::json &j, MessageShotSettings &s) {
 	s._showHeaderDecorations = j.value("showHeaderDecorations", true);
 	s._showColorfulReplies = j.value("showColorfulReplies", true);
 	s._revealSpoilers = j.value("revealSpoilers", true);
+	s._anonymous = j.value("anonymous", false);
 	s._embeddedThemeType = j.value("embeddedThemeType", j.value("themeType", -1));
 	s._embeddedThemeAccentColor = j.value("embeddedThemeAccentColor", j.value("themeAccentColor", uint32(0)));
 	s._cloudThemeId = j.value("cloudThemeId", uint64(0));
@@ -765,6 +773,24 @@ void LuxurySettings::validate() {
 void LuxurySettings::setSaveDeletedMessages(bool val) {
 	if (_saveDeletedMessages.current() == val) return;
 	_saveDeletedMessages = val;
+	save();
+}
+
+void LuxurySettings::setSaveDeletedMessagesEvenWhenLocked(bool val) {
+	if (_saveDeletedMessagesEvenWhenLocked.current() == val) return;
+	_saveDeletedMessagesEvenWhenLocked = val;
+	save();
+}
+
+void LuxurySettings::setTrackOnlineHistory(bool val) {
+	if (_trackOnlineHistory.current() == val) return;
+	_trackOnlineHistory = val;
+	save();
+}
+
+void LuxurySettings::setTrackOnlineEvenWhenLocked(bool val) {
+	if (_trackOnlineEvenWhenLocked.current() == val) return;
+	_trackOnlineEvenWhenLocked = val;
 	save();
 }
 
@@ -1242,6 +1268,12 @@ void LuxurySettings::setShowMessageSeconds(bool val) {
 	save();
 }
 
+void LuxurySettings::setShowLastSeenSeconds(bool val) {
+	if (_showLastSeenSeconds.current() == val) return;
+	_showLastSeenSeconds = val;
+	save();
+}
+
 void LuxurySettings::setShowMessageShot(bool val) {
 	if (_showMessageShot.current() == val) return;
 	_showMessageShot = val;
@@ -1340,6 +1372,9 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"ghostModeSettings", ghostAccounts},
 		{"useGlobalGhostMode", s._useGlobalGhostMode.current()},
 		{"saveDeletedMessages", s._saveDeletedMessages.current()},
+		{"saveDeletedMessagesEvenWhenLocked", s._saveDeletedMessagesEvenWhenLocked.current()},
+		{"trackOnlineHistory", s._trackOnlineHistory.current()},
+		{"trackOnlineEvenWhenLocked", s._trackOnlineEvenWhenLocked.current()},
 		{"saveMessagesHistory", s._saveMessagesHistory.current()},
 		{"saveForBots", s._saveForBots.current()},
 		{"shadowBanIds", s._shadowBanIds},
@@ -1418,6 +1453,7 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"disableGreetingSticker", s._disableGreetingSticker.current()},
 		{"showPeerId", s._showPeerId.current()},
 		{"showMessageSeconds", s._showMessageSeconds.current()},
+		{"showLastSeenSeconds", s._showLastSeenSeconds.current()},
 		{"showMessageShot", s._showMessageShot.current()},
 		{"filterZalgo", s._filterZalgo.current()},
 		{"stickerConfirmation", s._stickerConfirmation.current()},
@@ -1465,6 +1501,9 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 
 	s._useGlobalGhostMode = j.value("useGlobalGhostMode", defaults._useGlobalGhostMode.current());
 	s._saveDeletedMessages = j.value("saveDeletedMessages", defaults._saveDeletedMessages.current());
+	s._saveDeletedMessagesEvenWhenLocked = j.value("saveDeletedMessagesEvenWhenLocked", defaults._saveDeletedMessagesEvenWhenLocked.current());
+	s._trackOnlineHistory = j.value("trackOnlineHistory", defaults._trackOnlineHistory.current());
+	s._trackOnlineEvenWhenLocked = j.value("trackOnlineEvenWhenLocked", defaults._trackOnlineEvenWhenLocked.current());
 	s._saveMessagesHistory = j.value("saveMessagesHistory", defaults._saveMessagesHistory.current());
 	s._saveForBots = j.value("saveForBots", defaults._saveForBots.current());
 	s._shadowBanIds.clear();
@@ -1573,6 +1612,7 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	s._disableGreetingSticker = j.value("disableGreetingSticker", defaults._disableGreetingSticker.current());
 	s._showPeerId = j.value("showPeerId", defaults._showPeerId.current());
 	s._showMessageSeconds = j.value("showMessageSeconds", defaults._showMessageSeconds.current());
+	s._showLastSeenSeconds = j.value("showLastSeenSeconds", defaults._showLastSeenSeconds.current());
 	s._showMessageShot = j.value("showMessageShot", defaults._showMessageShot.current());
 	s._filterZalgo = j.value("filterZalgo", defaults._filterZalgo.current());
 	s._stickerConfirmation = j.value("stickerConfirmation", defaults._stickerConfirmation.current());

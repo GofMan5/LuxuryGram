@@ -66,6 +66,22 @@ class EditedMessage : public LuxuryMessageBase
 {
 };
 
+// One row per online/offline transition of a user, written from the
+// Session::processUser hook while trackOnlineHistory is on. dialogId reuses getDialogIdFromPeer, the
+// same key the message tables use; online is 1 for "came online", 0 for "went
+// offline"; at is a unixtime. No index beyond the primary key: reads are always
+// "latest N for one peer".
+class OnlineEvent
+{
+public:
+	ID fakeId = 0;
+	ID userId = 0;
+	ID dialogId = 0;
+	ID peerId = 0;
+	bool online = false;
+	int at = 0;
+};
+
 class RegexFilter
 {
 public:

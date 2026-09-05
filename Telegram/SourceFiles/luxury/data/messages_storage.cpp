@@ -8,11 +8,14 @@
 
 #include "luxury/data/luxury_database.h"
 #include "luxury/features/watch/watched_media.h"
+#include "luxury/luxury_settings.h"
 #include "luxury/utils/luxury_mapper.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "base/unixtime.h"
+#include "core/application.h"
 #include "data/data_forum_topic.h"
 #include "data/data_session.h"
+#include "data/data_user.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
@@ -216,4 +219,65 @@ void clearDeletedMessages(not_null<PeerData*> peer, ID topicId) {
 	});
 }
 
+} // namespace LuxuryMessages
+
+namespace LuxuryOnline {
+
+void recordTransition(not_null<UserData*> user, bool online, int at) {
+	const not_null<PeerData*> peer = user;
+	const auto userId = DatabaseUserId(peer->session());
+	const auto dialogId = getDialogIdFromPeer(peer);
+	const auto peerId = static_cast<ID>(peer->id.value);
+	// Resolve everything main-thread-only here; the row itself goes through
+	// the ordered queue so rapid online/offline flaps keep their order.
+	LuxuryDatabase::async([=] {
+		auto event = OnlineEvent();
+		event.userId = userId;
+		event.dialogId = dialogId;
+		event.peerId = peerId;
+		event.online = online;
+		event.at = at;
+		LuxuryDatabase::addOnlineEvent(std::move(event));
+	});
 }
+
+std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit) {
+	return LuxuryDatabase::getOnlineEvents(
+		DatabaseUserId(peer->session()),
+		getDialogIdFromPeer(peer),
+		totalLimit);
+}
+
+// Single gate for the server-driven presence hook in Session::processUser.
+// Bots and service accounts never transition for real; a transition the
+// update already applied is compared against the pre-update state the caller
+// captured, so only genuine flaps reach the disk. Presence slices keep
+// arriving under a passcode lock -- only UI is gated there -- so recording
+// while locked is the default, and the toggle opts out of it.
+void noteServerLastseen(not_null<UserData*> user, bool wasOnline, int now) {
+	const auto &settings = LuxurySettings::getInstance();
+	if (!settings.trackOnlineHistory()) {
+		return;
+	}
+	if (user->isBot() || user->isServiceUser()) {
+		return;
+	}
+	if (Core::App().passcodeLocked()
+		&& !settings.trackOnlineEvenWhenLocked()) {
+		return;
+	}
+	if (wasOnline == user->lastseen().isOnline(now)) {
+		return;
+	}
+	recordTransition(user, user->lastseen().isOnline(now), now);
+}
+
+void clearHistory(not_null<PeerData*> peer) {
+	const auto userId = DatabaseUserId(peer->session());
+	const auto dialogId = getDialogIdFromPeer(peer);
+	LuxuryDatabase::async([=] {
+		LuxuryDatabase::clearOnlineEvents(userId, dialogId);
+	});
+}
+
+} // namespace LuxuryOnline

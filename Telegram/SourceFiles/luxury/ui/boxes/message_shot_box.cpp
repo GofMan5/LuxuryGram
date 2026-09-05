@@ -389,6 +389,23 @@ void MessageShotBox::setupContent() {
 			content->lifetime());
 	}
 
+	// Always offered: every shot has a sender to hide, so there is nothing to
+	// gate this on the way the toggles above are gated.
+	latestToggle = AddButtonWithIcon(
+		content,
+		tr::luxury_MessageShotAnonymous(),
+		st::settingsButtonNoIcon
+	);
+	latestToggle->toggleOn(rpl::single(shotSettings.anonymous())
+	)->toggledValue(
+	) | rpl::skip(1) | on_next(
+		[=](bool enabled)
+		{
+			LuxurySettings::getInstance().messageShotSettings().setAnonymous(enabled);
+			updatePreview();
+		},
+		content->lifetime());
+
 	AddSkip(content);
 
 	addButton(tr::luxury_MessageShotSave(),

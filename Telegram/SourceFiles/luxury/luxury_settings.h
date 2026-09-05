@@ -164,6 +164,7 @@ public:
 	[[nodiscard]] bool showHeaderDecorations() const { return _showHeaderDecorations.current(); }
 	[[nodiscard]] bool showColorfulReplies() const { return _showColorfulReplies.current(); }
 	[[nodiscard]] bool revealSpoilers() const { return _revealSpoilers.current(); }
+	[[nodiscard]] bool anonymous() const { return _anonymous.current(); }
 	[[nodiscard]] int embeddedThemeType() const { return _embeddedThemeType.current(); }
 	[[nodiscard]] uint32 embeddedThemeAccentColor() const { return _embeddedThemeAccentColor.current(); }
 	[[nodiscard]] uint64 cloudThemeId() const { return _cloudThemeId.current(); }
@@ -178,6 +179,7 @@ public:
 	void setShowHeaderDecorations(bool val);
 	void setShowColorfulReplies(bool val);
 	void setRevealSpoilers(bool val);
+	void setAnonymous(bool val);
 
 	void setEmbeddedTheme(int type, uint32 accentColor = 0);
 	void setCloudTheme(uint64 accountId, uint64 id, uint64 accessHash, uint64 documentId, const QString &title);
@@ -197,6 +199,9 @@ private:
 	rpl::variable<bool> _showHeaderDecorations = true;
 	rpl::variable<bool> _showColorfulReplies = true;
 	rpl::variable<bool> _revealSpoilers = true;
+	// Off by default: a shot that silently renamed everyone would be worse than
+	// no shot at all.
+	rpl::variable<bool> _anonymous = false;
 
 	rpl::variable<int> _embeddedThemeType = -1;
 	rpl::variable<uint32> _embeddedThemeAccentColor = 0;
@@ -263,6 +268,9 @@ public:
 	void validate();
 
 	[[nodiscard]] bool saveDeletedMessages() const { return _saveDeletedMessages.current(); }
+	[[nodiscard]] bool saveDeletedMessagesEvenWhenLocked() const { return _saveDeletedMessagesEvenWhenLocked.current(); }
+	[[nodiscard]] bool trackOnlineHistory() const { return _trackOnlineHistory.current(); }
+	[[nodiscard]] bool trackOnlineEvenWhenLocked() const { return _trackOnlineEvenWhenLocked.current(); }
 	[[nodiscard]] bool saveMessagesHistory() const { return _saveMessagesHistory.current(); }
 	[[nodiscard]] bool saveForBots() const { return _saveForBots.current(); }
 	[[nodiscard]] bool filtersEnabled() const { return _filtersEnabled.current(); }
@@ -339,6 +347,7 @@ public:
 	[[nodiscard]] bool disableGreetingSticker() const { return _disableGreetingSticker.current(); }
 	[[nodiscard]] PeerIdDisplay showPeerId() const { return _showPeerId.current(); }
 	[[nodiscard]] bool showMessageSeconds() const { return _showMessageSeconds.current(); }
+	[[nodiscard]] bool showLastSeenSeconds() const { return _showLastSeenSeconds.current(); }
 	[[nodiscard]] bool showMessageShot() const { return _showMessageShot.current(); }
 	[[nodiscard]] bool filterZalgo() const { return _filterZalgo.current(); }
 	[[nodiscard]] bool stickerConfirmation() const { return _stickerConfirmation.current(); }
@@ -354,6 +363,9 @@ public:
 	[[nodiscard]] bool streamerMode() const { return _streamerMode.current(); }
 
 	void setSaveDeletedMessages(bool val);
+	void setSaveDeletedMessagesEvenWhenLocked(bool val);
+	void setTrackOnlineHistory(bool val);
+	void setTrackOnlineEvenWhenLocked(bool val);
 	void setSaveMessagesHistory(bool val);
 	void setSaveForBots(bool val);
 	void setFiltersEnabled(bool val);
@@ -430,6 +442,7 @@ public:
 	void setDisableGreetingSticker(bool val);
 	void setShowPeerId(PeerIdDisplay val);
 	void setShowMessageSeconds(bool val);
+	void setShowLastSeenSeconds(bool val);
 	void setShowMessageShot(bool val);
 	void setFilterZalgo(bool val);
 	void setStickerConfirmation(bool val);
@@ -448,6 +461,12 @@ public:
 	[[nodiscard]] rpl::producer<bool> useGlobalGhostModeChanges() const { return _useGlobalGhostMode.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveDeletedMessagesValue() const { return _saveDeletedMessages.value(); }
 	[[nodiscard]] rpl::producer<bool> saveDeletedMessagesChanges() const { return _saveDeletedMessages.changes(); }
+	[[nodiscard]] rpl::producer<bool> saveDeletedMessagesEvenWhenLockedValue() const { return _saveDeletedMessagesEvenWhenLocked.value(); }
+	[[nodiscard]] rpl::producer<bool> saveDeletedMessagesEvenWhenLockedChanges() const { return _saveDeletedMessagesEvenWhenLocked.changes(); }
+	[[nodiscard]] rpl::producer<bool> trackOnlineHistoryValue() const { return _trackOnlineHistory.value(); }
+	[[nodiscard]] rpl::producer<bool> trackOnlineHistoryChanges() const { return _trackOnlineHistory.changes(); }
+	[[nodiscard]] rpl::producer<bool> trackOnlineEvenWhenLockedValue() const { return _trackOnlineEvenWhenLocked.value(); }
+	[[nodiscard]] rpl::producer<bool> trackOnlineEvenWhenLockedChanges() const { return _trackOnlineEvenWhenLocked.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveMessagesHistoryValue() const { return _saveMessagesHistory.value(); }
 	[[nodiscard]] rpl::producer<bool> saveMessagesHistoryChanges() const { return _saveMessagesHistory.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveForBotsValue() const { return _saveForBots.value(); }
@@ -600,6 +619,8 @@ public:
 	[[nodiscard]] rpl::producer<PeerIdDisplay> showPeerIdChanges() const { return _showPeerId.changes(); }
 	[[nodiscard]] rpl::producer<bool> showMessageSecondsValue() const { return _showMessageSeconds.value(); }
 	[[nodiscard]] rpl::producer<bool> showMessageSecondsChanges() const { return _showMessageSeconds.changes(); }
+	[[nodiscard]] rpl::producer<bool> showLastSeenSecondsValue() const { return _showLastSeenSeconds.value(); }
+	[[nodiscard]] rpl::producer<bool> showLastSeenSecondsChanges() const { return _showLastSeenSeconds.changes(); }
 	[[nodiscard]] rpl::producer<bool> showMessageShotValue() const { return _showMessageShot.value(); }
 	[[nodiscard]] rpl::producer<bool> showMessageShotChanges() const { return _showMessageShot.changes(); }
 	[[nodiscard]] rpl::producer<bool> filterZalgoValue() const { return _filterZalgo.value(); }
@@ -636,6 +657,9 @@ private:
 	[[nodiscard]] uint64 getOverriddenGhostUserId(uint64 userId) const { return _useGlobalGhostMode.current() ? 0 : userId; }
 
 	rpl::variable<bool> _saveDeletedMessages = true;
+	rpl::variable<bool> _saveDeletedMessagesEvenWhenLocked = true;
+	rpl::variable<bool> _trackOnlineHistory = false;
+	rpl::variable<bool> _trackOnlineEvenWhenLocked = true;
 	rpl::variable<bool> _saveMessagesHistory = true;
 	rpl::variable<bool> _saveForBots = false;
 	std::unordered_set<int64> _shadowBanIds;
@@ -714,6 +738,7 @@ private:
 	rpl::variable<bool> _disableGreetingSticker = false;
 	rpl::variable<PeerIdDisplay> _showPeerId = PeerIdDisplay::BotApi;
 	rpl::variable<bool> _showMessageSeconds = false;
+	rpl::variable<bool> _showLastSeenSeconds = false;
 	rpl::variable<bool> _showMessageShot = true;
 	rpl::variable<bool> _filterZalgo = false;
 	rpl::variable<bool> _stickerConfirmation = false;

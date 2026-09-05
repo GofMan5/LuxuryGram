@@ -1,4 +1,4 @@
-﻿// This is the source code of AyuGram for Desktop.
+// This is the source code of AyuGram for Desktop.
 //
 // We do not and cannot prevent the use of our code,
 // but be respectful and credit the original author.
@@ -40,5 +40,18 @@ std::vector<LuxuryMessageBase> getDeletedMessages(
 	const QString &searchQuery = QString());
 void removeDeletedMessage(not_null<HistoryItem*> item);
 void clearDeletedMessages(not_null<PeerData*> peer, ID topicId);
+
+}
+
+namespace LuxuryOnline {
+
+// Transitions are posted through LuxuryDatabase::async like the deleted-message
+// writes, so recording never blocks the update that triggered it. Reads are
+// synchronous: the history box is opened by an explicit click, so there is
+// something to await into.
+void recordTransition(not_null<UserData*> user, bool online, int at);
+void noteServerLastseen(not_null<UserData*> user, bool wasOnline, int now);
+std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit);
+void clearHistory(not_null<PeerData*> peer);
 
 }

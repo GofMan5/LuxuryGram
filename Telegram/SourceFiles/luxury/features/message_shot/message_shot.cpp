@@ -31,6 +31,7 @@
 #include "styles/style_luxury_styles.h"
 #include "styles/style_chat.h"
 #include "styles/style_layers.h"
+#include "ui/empty_userpic.h"
 #include "ui/painter.h"
 #include "ui/chat/chat_theme.h"
 #include "ui/effects/path_shift_gradient.h"
@@ -53,15 +54,55 @@ bool ignoreRender(RenderPart part) {
 				&& !s.showHeaderDecorations()));
 }
 
-bool isTakingShot() {
-	return takingShot;
-}
-
 bool simpleQuotesAndReplies() {
 	const auto &settings = LuxurySettings::getInstance();
 	return isTakingShot()
 		? !settings.messageShotSettings().showColorfulReplies()
 		: settings.simpleQuotesAndReplies();
+}
+
+namespace {
+
+struct AnonymousPeer {
+	QString name;
+	uint8 colorIndex = 0;
+};
+
+// Node based on purpose: AnonymousName() hands out a reference into this and
+// PeerData::name() passes it straight to its caller, so taking in the next peer
+// must not move the strings already handed out. Emptied once per shot, in
+// Make() -- see the comment there for why not per render pass.
+std::map<const PeerData*, AnonymousPeer> AnonymousPeers;
+
+[[nodiscard]] const AnonymousPeer *AnonymousEntry(
+		not_null<const PeerData*> peer) {
+	if (!isAnonymousShot()) {
+		return nullptr;
+	}
+	const auto i = AnonymousPeers.find(peer.get());
+	if (i != end(AnonymousPeers)) {
+		return &i->second;
+	}
+	const auto index = int(AnonymousPeers.size()) + 1;
+	return &AnonymousPeers.emplace(peer.get(), AnonymousPeer{
+		.name = tr::luxury_MessageShotAnonymousName(
+			tr::now,
+			lt_index,
+			QString::number(index)),
+		.colorIndex = Ui::EmptyUserpic::ColorIndex(index),
+	}).first->second;
+}
+
+} // namespace
+
+bool isAnonymousShot() {
+	return takingShot
+		&& LuxurySettings::getInstance().messageShotSettings().anonymous();
+}
+
+const QString *AnonymousName(not_null<const PeerData*> peer) {
+	const auto entry = AnonymousEntry(peer);
+	return entry ? &entry->name : nullptr;
 }
 
 bool setChoosingTheme(bool val) {
@@ -221,6 +262,12 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 		return;
 	}
 
+	// Once per shot, not once per pass: render() runs twice when media is still
+	// loading, and the Elements cache the from-name by the peer's name version,
+	// so a pass that renumbered the peers would disagree with what the first
+	// pass had already baked in.
+	AnonymousPeers.clear();
+
 	auto delegate = std::make_shared<MessageShotDelegate>(
 		box,
 		st.get(),
@@ -319,8 +366,26 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			}
 		}
 		takingShot = true;
-		const auto takingShotGuard = gsl::finally([] {
+		const auto anonymous = LuxurySettings::getInstance()
+			.messageShotSettings().anonymous();
+		const auto takingShotGuard = gsl::finally([&] {
 			takingShot = false;
+			if (anonymous) {
+				// HistoryMessageForwarded::text is cached on the item itself, so it
+				// is shared with the real chat view, and the layout pass below has
+				// just rebuilt it around a pseudonym. create() is a pure function of
+				// the item, so calling it again with the shot over restores byte for
+				// byte what was there -- widths the real view already cached
+				// included, which is why no resize has to be asked for.
+				for (const auto &message : messages) {
+					if (const auto forwarded
+							= message->Get<HistoryMessageForwarded>()) {
+						forwarded->create(
+							message->Get<HistoryMessageVia>(),
+							message);
+					}
+				}
+			}
 		});
 
 		// calculate the size of the image
@@ -331,6 +396,12 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			const auto &message = messages[i];
 			const auto view = getView(message);
 
+			if (anonymous) {
+				// The guard above puts the real forwarded header back after every
+				// pass, so every pass has to lay the message out again to get the
+				// pseudonym into it.
+				view->setPendingResize();
+			}
 			view->itemDataChanged(); // refresh reactions
 			height += view->resizeGetHeight(width);
 			if (LuxurySettings::getInstance().messageShotSettings().revealSpoilers()) {
@@ -391,8 +462,16 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			if (displayUserpic) {
 				const auto picX = st::msgMargin.left();
 				const auto picY = y + view->height() - st::msgPhotoSize;
+				const auto from = message->displayFrom();
+				const auto pseudonym = from ? AnonymousEntry(from) : nullptr;
 
-				if (const auto from = message->displayFrom()) {
+				if (pseudonym) {
+					// The header says "User 1"; the real photo would say who that is.
+					Ui::EmptyUserpic(
+						Ui::EmptyUserpic::UserpicColor(pseudonym->colorIndex),
+						pseudonym->name
+					).paintCircle(p, picX, picY, width, st::msgPhotoSize);
+				} else if (from) {
 					Dialogs::Ui::PaintUserpic(
 						p,
 						from,

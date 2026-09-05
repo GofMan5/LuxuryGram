@@ -930,8 +930,16 @@ not_null<UserData*> Session::processUser(const MTPUser &data) {
 		const auto lastseen = status
 			? LastseenFromMTP(*status, result->lastseen())
 			: Data::LastseenStatus::LongAgo(false);
+		// LuxuryGram: online-history hook. Deliberately here and not in
+		// updateLastseen: that one also serves madeAction(), the local
+		// +30s inference on every incoming message or typing event, which
+		// would record a phantom "came online" with no matching offline.
+		// Server slices are the only genuine presence source.
+		const auto now = base::unixtime::now();
+		const auto wasOnline = result->lastseen().isOnline(now);
 		if (result->updateLastseen(lastseen)) {
 			flags |= UpdateFlag::OnlineStatus;
+			LuxuryOnline::noteServerLastseen(result, wasOnline, now);
 		}
 	}
 

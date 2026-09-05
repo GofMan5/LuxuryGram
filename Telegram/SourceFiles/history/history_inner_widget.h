@@ -490,8 +490,8 @@ private:
 
 	void applyDragSelection();
 	void applyDragSelection(not_null<SelectedItems*> toItems) const;
-	void addSelectionRange(
-		not_null<SelectedItems*> toItems,
+	void collectSelectionRange(
+		std::vector<not_null<HistoryItem*>> &to,
 		not_null<History*> history,
 		int fromblock,
 		int fromitem,
@@ -667,6 +667,9 @@ private:
 	Element *_dragSelFrom = nullptr;
 	Element *_dragSelTo = nullptr;
 	bool _dragSelecting = false;
+	// Which end of the drag range the press started at, so the
+	// MaxSelectedItems cap drops what was touched last, not first.
+	bool _dragSelectingUp = false;
 	bool _wasSelectedText = false; // was some text selected in current drag action
 
 	mutable bool _lastInSelectionMode = false;

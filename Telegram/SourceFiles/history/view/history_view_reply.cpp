@@ -586,6 +586,15 @@ QString Reply::senderName(
 QString Reply::senderName(
 		not_null<PeerData*> peer,
 		bool shorten) const {
+	// An anonymous shot has one pseudonym per peer and no first name to shorten
+	// it to. Only this branch needs the check: the full name comes from
+	// PeerData::name(), which is hooked.
+	if (shorten) {
+		if (const auto anonymous
+				= LuxuryFeatures::MessageShot::AnonymousName(peer)) {
+			return *anonymous;
+		}
+	}
 	const auto user = shorten ? peer->asUser() : nullptr;
 	return user ? user->firstName : peer->name();
 }

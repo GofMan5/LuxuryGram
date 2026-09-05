@@ -5305,7 +5305,13 @@ void HistoryInner::elementStartEffect(
 auto HistoryInner::getSelectionState() const
 -> HistoryView::TopBarWidget::SelectedState {
 	auto result = HistoryView::TopBarWidget::SelectedState {};
-	for (const auto &item : _selected) {
+	// The drag range reaches _selected only on mouse release, so counting
+	// _selected alone reported the selection as it was before the drag began.
+	auto selected = _selected;
+	if (_mouseAction == MouseAction::Selecting && _dragSelFrom && _dragSelTo) {
+		applyDragSelection(&selected);
+	}
+	for (const auto &item : selected) {
 		++result.count;
 		if (item->isEphemeral() || item->canDelete()) {
 			++result.canDeleteCount;
@@ -5814,7 +5820,11 @@ void HistoryInner::updateDragSelection(Element *dragSelFrom, Element *dragSelTo,
 	_dragSelFrom = dragSelFrom;
 	_dragSelTo = dragSelTo;
 	int32 fromy = itemTop(_dragSelFrom), toy = itemTop(_dragSelTo);
-	if (fromy >= 0 && toy >= 0 && fromy > toy) {
+	// dragSelFrom is the item the press started on, so a swap here means the
+	// drag went upwards -- applyDragSelection() needs that to know which end of
+	// the range the MaxSelectedItems cap should keep.
+	_dragSelectingUp = (fromy >= 0 && toy >= 0 && fromy > toy);
+	if (_dragSelectingUp) {
 		std::swap(_dragSelFrom, _dragSelTo);
 	}
 	_dragSelecting = dragSelecting;
@@ -5823,6 +5833,11 @@ void HistoryInner::updateDragSelection(Element *dragSelFrom, Element *dragSelTo,
 		setFocus();
 	}
 	update();
+	// getSelectionState() counts the drag range as selected, but only when
+	// something asks it. Queued because updateTopBarSelection() can resize the
+	// list, and a resize calls back into mouseActionUpdate(), which is where
+	// this comes from. Runs once per range change, not per mouse move.
+	InvokeQueued(this, [=] { _widget->updateTopBarSelection(); });
 }
 
 int HistoryInner::historyHeight() const {
@@ -6081,7 +6096,11 @@ void HistoryInner::changeSelection(
 		&& goodForSelection(toItems, item, total)
 		&& total <= MaxSelectedItems) {
 		addToSelection(toItems, item);
-	} else {
+	} else if (!add) {
+		// A Select that cannot go through leaves the selection alone. It used to
+		// fall through to the remove below, so dragging past the
+		// MaxSelectedItems cap, or over a message a filter had hidden, took an
+		// already selected message back out.
 		removeFromSelection(toItems, item);
 	}
 }
@@ -6108,9 +6127,14 @@ void HistoryInner::changeSelectionAsGroup(
 		}
 		return (total <= MaxSelectedItems);
 	}();
-	if (action == SelectAction::Select && canSelect) {
-		for (const auto &other : group->items) {
-			addToSelection(toItems, other);
+	if (action == SelectAction::Select) {
+		// Same as in changeSelection(): an album that cannot be selected -- the
+		// cap is reached, or one of its parts is hidden -- is left as it is
+		// rather than deselected.
+		if (canSelect) {
+			for (const auto &other : group->items) {
+				addToSelection(toItems, other);
+			}
 		}
 	} else {
 		for (const auto &other : group->items) {
@@ -6360,23 +6384,25 @@ void HistoryInner::blockSenderAsGroup(FullMsgId itemId) {
 	blockSenderItem(itemId);
 }
 
-void HistoryInner::addSelectionRange(
-		not_null<SelectedItems*> toItems,
+void HistoryInner::collectSelectionRange(
+		std::vector<not_null<HistoryItem*>> &to,
 		not_null<History*> history,
 		int fromblock,
 		int fromitem,
 		int toblock,
 		int toitem) const {
-	if (fromblock >= 0 && fromitem >= 0 && toblock >= 0 && toitem >= 0) {
-		for (; fromblock <= toblock; ++fromblock) {
-			auto block = history->blocks[fromblock].get();
-			for (int cnt = (fromblock < toblock) ? block->messages.size() : (toitem + 1); fromitem < cnt; ++fromitem) {
-				auto item = block->messages[fromitem]->data();
-				changeSelectionAsGroup(toItems, item, SelectAction::Select);
-			}
-			if (toItems->size() >= MaxSelectedItems) break;
-			fromitem = 0;
+	if (fromblock < 0 || fromitem < 0 || toblock < 0 || toitem < 0) {
+		return;
+	}
+	for (; fromblock <= toblock; ++fromblock) {
+		const auto block = history->blocks[fromblock].get();
+		const auto till = (fromblock < toblock)
+			? int(block->messages.size())
+			: (toitem + 1);
+		for (; fromitem < till; ++fromitem) {
+			to.push_back(block->messages[fromitem]->data());
 		}
+		fromitem = 0;
 	}
 }
 
@@ -6415,14 +6441,15 @@ void HistoryInner::applyDragSelection(
 				|| _history->blocks[0]->messages.empty())
 			? -1
 			: 0;
+		auto items = std::vector<not_null<HistoryItem*>>();
 		if (_migrated) {
 			if (_dragSelFrom->history() == _migrated) {
 				if (_dragSelTo->history() == _migrated) {
-					addSelectionRange(toItems, _migrated, fromblock, fromitem, toblock, toitem);
+					collectSelectionRange(items, _migrated, fromblock, fromitem, toblock, toitem);
 					toblock = -1;
 					toitem = -1;
 				} else {
-					addSelectionRange(toItems, _migrated, fromblock, fromitem, _migrated->blocks.size() - 1, _migrated->blocks.back()->messages.size() - 1);
+					collectSelectionRange(items, _migrated, fromblock, fromitem, _migrated->blocks.size() - 1, _migrated->blocks.back()->messages.size() - 1);
 				}
 				fromblock = 0;
 				fromitem = 0;
@@ -6431,7 +6458,20 @@ void HistoryInner::applyDragSelection(
 				toitem = -1;
 			}
 		}
-		addSelectionRange(toItems, _history, fromblock, fromitem, toblock, toitem);
+		collectSelectionRange(items, _history, fromblock, fromitem, toblock, toitem);
+		// MaxSelectedItems is a hard cap, so whichever end of the range is
+		// walked first is the end that survives it. The range is always stored
+		// oldest-first, so a drag upwards used to throw away exactly the
+		// messages the user had selected first.
+		if (_dragSelectingUp) {
+			ranges::reverse(items);
+		}
+		for (const auto &item : items) {
+			if (toItems->size() >= MaxSelectedItems) {
+				break;
+			}
+			changeSelectionAsGroup(toItems, item, SelectAction::Select);
+		}
 	} else {
 		auto toRemove = std::vector<not_null<HistoryItem*>>();
 		for (const auto &item : *toItems) {

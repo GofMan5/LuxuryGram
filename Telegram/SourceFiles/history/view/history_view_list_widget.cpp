@@ -1629,24 +1629,22 @@ void ListWidget::repaintScrollDateCallback() {
 }
 
 auto ListWidget::collectSelectedItems() const -> SelectedItems {
-	auto transformation = [&](const auto &item) {
-		const auto &[itemId, selection] = item;
+	// The drag range reaches _selected only on mouse release, so counting
+	// _selected alone reported the selection as it was before the drag began.
+	auto selected = _selected;
+	if (_mouseAction == MouseAction::Selecting && !_dragSelected.empty()) {
+		applyDragSelection(selected);
+	}
+	auto items = SelectedItems();
+	items.reserve(selected.size());
+	for (const auto &[itemId, selection] : selected) {
 		auto result = SelectedItem(itemId);
 		result.canDelete = selection.canDelete;
 		result.canForward = selection.canForward;
 		result.canSendNow = selection.canSendNow;
 		result.canReschedule = selection.canReschedule;
 		result.ephemeral = selection.ephemeral;
-		return result;
-	};
-	auto items = SelectedItems();
-	if (hasSelectedItems()) {
-		items.reserve(_selected.size());
-		std::transform(
-			_selected.begin(),
-			_selected.end(),
-			std::back_inserter(items),
-			transformation);
+		items.push_back(result);
 	}
 	return items;
 }
@@ -1833,9 +1831,14 @@ void ListWidget::changeSelectionAsGroup(
 		}
 		return true;
 	}();
-	if (action == SelectAction::Select && canSelect) {
-		for (const auto &other : group->items) {
-			addToSelection(applyTo, other);
+	if (action == SelectAction::Select) {
+		// An album that cannot be selected -- MaxSelectedItems is reached, or one
+		// of its parts is not selectable -- is left as it is. This used to fall
+		// through to the remove below and take an already selected album out.
+		if (canSelect) {
+			for (const auto &other : group->items) {
+				addToSelection(applyTo, other);
+			}
 		}
 	} else {
 		for (const auto &other : group->items) {
@@ -3457,14 +3460,32 @@ void ListWidget::applyDragSelection() {
 void ListWidget::applyDragSelection(SelectedMap &applyTo) const {
 	if (_dragSelectAction == DragSelectAction::Selecting) {
 		auto already = int(applyTo.size());
-		for (const auto &itemId : _dragSelected) {
+		// _dragSelected is ordered oldest-first and MaxSelectedItems is a hard
+		// cap, so walking it in order kept the far end of the range and dropped
+		// exactly the messages a drag upwards had selected first.
+		const auto add = [&](FullMsgId itemId) {
 			if (applyTo.size() >= MaxSelectedItems) {
-				break;
+				return false;
 			} else if (!applyTo.contains(itemId)) {
 				if (const auto item = session().data().message(itemId)) {
 					if (isGoodForSelection(applyTo, item, already)) {
 						addToSelection(applyTo, item);
 					}
+				}
+			}
+			return true;
+		};
+		if (_dragSelectDirectionUp) {
+			for (auto i = _dragSelected.crbegin(),
+					e = _dragSelected.crend(); i != e; ++i) {
+				if (!add(*i)) {
+					break;
+				}
+			}
+		} else {
+			for (const auto &itemId : _dragSelected) {
+				if (!add(itemId)) {
+					break;
 				}
 			}
 		}
@@ -4690,6 +4711,9 @@ void ListWidget::updateDragSelection(
 
 	ensureDragSelectAction(from, till);
 	update();
+	// collectSelectedItems() counts the drag range as selected, but only when
+	// something asks it. This runs once per range change, not per mouse move.
+	pushSelectedItems();
 }
 
 void ListWidget::ensureDragSelectAction(
@@ -4716,6 +4740,7 @@ void ListWidget::clearDragSelection() {
 	if (!_dragSelected.empty()) {
 		_dragSelected.clear();
 		update();
+		pushSelectedItems();
 	}
 }
 

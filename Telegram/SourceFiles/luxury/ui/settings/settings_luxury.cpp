@@ -648,6 +648,24 @@ void BuildSpyEssentials(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.setter = &LuxurySettings::setSaveDeletedMessages,
 	});
 	luxury.addSettingToggle({
+		.id = u"luxury/saveDeletedMessagesEvenWhenLocked"_q,
+		.title = tr::luxury_SaveDeletedMessagesEvenWhenLocked(),
+		.getter = &LuxurySettings::saveDeletedMessagesEvenWhenLocked,
+		.setter = &LuxurySettings::setSaveDeletedMessagesEvenWhenLocked,
+	});
+	luxury.addSettingToggle({
+		.id = u"luxury/trackOnlineHistory"_q,
+		.title = tr::luxury_TrackOnlineHistory(),
+		.getter = &LuxurySettings::trackOnlineHistory,
+		.setter = &LuxurySettings::setTrackOnlineHistory,
+	});
+	luxury.addSettingToggle({
+		.id = u"luxury/trackOnlineEvenWhenLocked"_q,
+		.title = tr::luxury_TrackOnlineEvenWhenLocked(),
+		.getter = &LuxurySettings::trackOnlineEvenWhenLocked,
+		.setter = &LuxurySettings::setTrackOnlineEvenWhenLocked,
+	});
+	luxury.addSettingToggle({
 		.id = u"luxury/saveMessagesHistory"_q,
 		.title = tr::luxury_SaveMessagesHistory(),
 		.getter = &LuxurySettings::saveMessagesHistory,
