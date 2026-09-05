@@ -308,39 +308,6 @@ QString FindUpdateFile() {
 	return QString();
 }
 
-[[nodiscard]] std::optional<Updates::Manifest> HeldManifest() {
-	auto error = QString();
-	auto result = Updates::ParseVerifiedManifest(
-		Updates::EmbeddedManifest(),
-		Updates::EmbeddedManifestSignature(),
-		Updates::RootPublicKeyPem(),
-		&error);
-	if (!result) {
-		LOG(("Update Error: Bad embedded manifest: %1").arg(error));
-	}
-	auto manifest = QByteArray();
-	auto signature = QByteArray();
-	if (Local::readUpdateManifest(&manifest, &signature)) {
-		auto persisted = Updates::ParseVerifiedManifest(
-			manifest,
-			signature,
-			Updates::RootPublicKeyPem());
-		if (persisted && (!result || persisted->version > result->version)) {
-			result = std::move(persisted);
-		}
-	}
-	return result;
-}
-
-void AdoptManifest(const Updates::Manifest &manifest) {
-	const auto held = HeldManifest();
-	if (!held || manifest.version > held->version) {
-		LOG(("Update Info: Adopting manifest version %1."
-			).arg(manifest.version));
-		Local::writeUpdateManifest(manifest.bytes, manifest.signature);
-	}
-}
-
 QString ExtractFilename(const QString &url) {
 	const auto expression = QRegularExpression(u"/([^/\\?]+)(\\?|$)"_q);
 	if (const auto match = expression.match(url); match.hasMatch()) {
@@ -535,6 +502,39 @@ QString ExtractFilename(const QString &url) {
 		return false;
 	}
 	return true;
+}
+
+[[nodiscard]] std::optional<Updates::Manifest> HeldManifest() {
+	auto error = QString();
+	auto result = Updates::ParseVerifiedManifest(
+		Updates::EmbeddedManifest(),
+		Updates::EmbeddedManifestSignature(),
+		Updates::RootPublicKeyPem(),
+		&error);
+	if (!result) {
+		LOG(("Update Error: Bad embedded manifest: %1").arg(error));
+	}
+	auto manifest = QByteArray();
+	auto signature = QByteArray();
+	if (Local::readUpdateManifest(&manifest, &signature)) {
+		auto persisted = Updates::ParseVerifiedManifest(
+			manifest,
+			signature,
+			Updates::RootPublicKeyPem());
+		if (persisted && (!result || persisted->version > result->version)) {
+			result = std::move(persisted);
+		}
+	}
+	return result;
+}
+
+void AdoptManifest(const Updates::Manifest &manifest) {
+	const auto held = HeldManifest();
+	if (!held || manifest.version > held->version) {
+		LOG(("Update Info: Adopting manifest version %1."
+			).arg(manifest.version));
+		Local::writeUpdateManifest(manifest.bytes, manifest.signature);
+	}
 }
 
 [[nodiscard]] bool UnpackUpdateV2(
