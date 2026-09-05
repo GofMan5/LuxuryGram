@@ -4,13 +4,17 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
-## Unreleased
+## 1.0.5
 
 ### Added
 
 - Added an "Anonymous" option to the message shot. Every name in the shot — the sender's, the one in a reply header, the one in a forwarded header — is replaced by "User 1", "User 2" and so on, numbered in the order they appear, so the same person keeps the same pseudonym across the whole shot. The avatar beside the message, the avatar inlined into a forwarded header, an emoji status, and a signature or custom rank are left out as well, since each of those names a sender just as plainly. Off by default. Service messages ("N pinned a message") are the one thing it cannot cover: their text is written once when the message arrives.
 - Added an exact last-seen time. With "Show Last Seen Seconds" on, a contact's status reads as the clock time with seconds ("last seen today at 14:35:02") instead of rounding to minutes and hours. Approximate statuses ("recently", "within a week") stay as they are — the server never sends an exact time for those. Off by default.
 - Added online history. With "Track Online History" on, every time a contact comes online or goes offline is recorded with the exact time, and the chat menu gains an "Online History" view with a clear option. Only genuine server presence updates are logged — the client's own +30-second guess after an incoming message is not. The newest 200 events per contact are kept. Both this and saving deleted messages keep working behind the local passcode, each with its own "When Locked" switch to opt out.
+
+### Changed
+
+- Moved the Telegram Desktop base from 7.1.1 to 7.1.5, picking up the upstream fixes in between (popup menus, screen handling, GIF status painting). No LuxuryGram feature was removed to make room; where upstream rebuilt something the fork had patched, the patch is gone and the upstream version stands in.
 
 ### Fixed
 
