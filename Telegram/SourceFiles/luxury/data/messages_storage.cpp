@@ -21,15 +21,19 @@
 #include "history/history_item_components.h"
 #include "main/main_session.h"
 
-namespace LuxuryMessages {
-
 namespace {
 
+// Keyed by the account, like every message row: peer ids are global in
+// Telegram, so one table covers every account. Sits outside LuxuryMessages
+// so LuxuryOnline shares it -- it used to live in there, and the online
+// recorder could not see it.
 ID DatabaseUserId(const Main::Session &session) {
 	return static_cast<ID>(session.uniqueId());
 }
 
 } // namespace
+
+namespace LuxuryMessages {
 
 template<typename DerivedMessage>
 std::vector<LuxuryMessageBase> convertToBase(std::vector<DerivedMessage> messages) {
