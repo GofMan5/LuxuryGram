@@ -1,5 +1,10 @@
 name: Linux.
 
+# Same as win.yml: a newer push supersedes the older build.
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
@@ -53,6 +58,7 @@ jobs:
   linux:
     name: Rocky Linux 8
     runs-on: ubuntu-latest
+    timeout-minutes: 300
 
     strategy:
       matrix:

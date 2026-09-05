@@ -1,5 +1,11 @@
 name: Windows.
 
+# A newer push to the same branch supersedes the older one: without this,
+# rapid dev pushes stack full duplicate matrices (8 Windows builds each).
+concurrency:
+  group: win-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
@@ -50,21 +56,35 @@ on:
 
 jobs:
 
+  setup:
+    name: Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        # The full 8-job matrix runs on dev only: it exists to catch
+        # config-specific breakage before a release, and a feature push
+        # learns nothing from 8 copies of the same compile error.
+        # Branch pushes validate x64 + x64/qt6, which is where all
+        # LuxuryGram code compiles anyway.
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/dev" ]; then
+            echo 'matrix={"arch":["x64_x86","x64","arm64"],"qt":["","qt6"],"generator":["","Ninja Multi-Config"],"exclude":[{"arch":"arm64","qt":""},{"arch":"x64_x86","qt":"qt6"}]}' >> $GITHUB_OUTPUT
+          else
+            echo 'matrix={"arch":["x64"],"qt":["","qt6"],"generator":[""]}' >> $GITHUB_OUTPUT
+          fi
+
   windows:
     name: Windows
+    needs: setup
     runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
+    # A hung Qt translation unit used to burn the 6h default silently.
+    timeout-minutes: 360
 
     strategy:
       fail-fast: false
-      matrix:
-        arch: [x64_x86, x64, arm64]
-        qt: ["", qt6]
-        generator: ["", "Ninja Multi-Config"]
-        exclude:
-          - arch: arm64
-            qt: ""
-          - arch: x64_x86
-            qt: qt6
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
 
     env:
       UPLOAD_ARTIFACT: "true"
