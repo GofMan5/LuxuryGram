@@ -1088,6 +1088,14 @@ void DocumentData::permitLoadFromCloud() {
 	}
 }
 
+void DocumentData::setForbidsFileSave() {
+	_flags |= Flag::FileSaveForbidden;
+}
+
+bool DocumentData::forbidsFileSave() const {
+	return (_flags & Flag::FileSaveForbidden);
+}
+
 QString DocumentData::loadingFilePath() const {
 	return loading() ? _loader->fileName() : QString();
 }
@@ -1484,6 +1492,9 @@ bool DocumentData::saveFromDataSilent() {
 }
 
 bool DocumentData::saveFromDataChecked() {
+	if (forbidsFileSave()) {
+		return false;
+	}
 	const auto media = activeMediaView();
 	if (!media) {
 		return false;
@@ -1574,7 +1585,7 @@ Image *DocumentData::getReplyPreview(
 
 Image *DocumentData::getReplyPreview(not_null<HistoryItem*> item) {
 	const auto media = item->media();
-	const auto spoiler = media && media->hasSpoiler();
+	const auto spoiler = media && media->hasSpoilerForPreview();
 	return getReplyPreview(item->fullId(), item->history()->peer, spoiler);
 }
 

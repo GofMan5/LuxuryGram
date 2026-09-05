@@ -3,8 +3,13 @@ name: Linux.
 on:
   workflow_dispatch:
   push:
+    # '**' only, never tags: path filters do not apply to tag pushes, so a
+    # release tag would start a duplicate matrix on a commit CI already built.
+    # The '!-canary' entries keep upstream's canary branches on canary.yml.
     branches:
       - '**'
+      - '!public-canary'
+      - '!private-canary'
     paths-ignore:
       - 'docs/**'
       - '**.md'
@@ -211,3 +216,4 @@ jobs:
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: out/Debug/artifact/
+          retention-days: 1
