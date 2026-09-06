@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/unixtime.h"
 
 // LuxuryGram includes
+#include "luxury/data/messages_storage.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/utils/telegram_helpers.h"
 
@@ -90,6 +91,48 @@ std::optional<QString> OnlineTextCommon(LastseenStatus status, TimeId now) {
 		return tr::lng_status_recently(tr::now);
 	}
 	return std::nullopt;
+}
+
+QString ExactLastSeenText(QDateTime tillFull, QDateTime nowFull) {
+	const auto onlineTime = QLocale().toString(tillFull.time(), "HH:mm:ss");
+	if (tillFull.date() == nowFull.date()) {
+		return tr::lng_status_lastseen_today(tr::now, lt_time, onlineTime);
+	} else if (tillFull.date().addDays(1) == nowFull.date()) {
+		return tr::lng_status_lastseen_yesterday(tr::now, lt_time, onlineTime);
+	}
+	const auto date = QLocale().toString(tillFull.date(), QLocale::ShortFormat);
+	return tr::lng_status_lastseen_date_time(
+		tr::now,
+		lt_date,
+		date,
+		lt_time,
+		onlineTime);
+}
+
+// Tracked exact time for approximate server statuses. The server only sends
+// "recently" / "within a week" / "within a month" / hidden, which carry no
+// exact till, so OnlineTextCommon owns their words -- unless we recorded the
+// offline transition ourselves while tracking was on, in which case the exact
+// moment is known and renders like any other exact last-seen.
+std::optional<QString> TrackedOfflineText(
+		not_null<UserData*> user,
+		TimeId now) {
+	const auto showSeconds = LuxurySettings::getInstance().showLastSeenSeconds();
+	const auto trackHistory = LuxurySettings::getInstance().trackOnlineHistory();
+	if (!showSeconds || !trackHistory) {
+		return std::nullopt;
+	}
+	const auto status = user->lastseen();
+	if (status.onlineTill() != 0 || status.isOnline(now) || status.isLongAgo()) {
+		return std::nullopt;
+	}
+	const auto at = LuxuryOnline::lastOfflineAt(user);
+	if (!at) {
+		return std::nullopt;
+	}
+	return ExactLastSeenText(
+		base::unixtime::parse(*at),
+		base::unixtime::parse(now));
 }
 
 [[nodiscard]] int UniqueReactionsLimit(not_null<Main::AppConfig*> config) {
@@ -487,23 +530,9 @@ QString OnlineText(Data::LastseenStatus status, TimeId now) {
 	// time with seconds instead. Approximate statuses (recently, week, month)
 	// never reach here -- OnlineTextCommon owns them, there is no exact time.
 	if (LuxurySettings::getInstance().showLastSeenSeconds()) {
-		const auto onlineFull = base::unixtime::parse(till);
-		const auto nowFull = base::unixtime::parse(now);
-		const auto onlineTime = QLocale().toString(
-			onlineFull.time(),
-			"HH:mm:ss");
-		if (onlineFull.date() == nowFull.date()) {
-			return tr::lng_status_lastseen_today(tr::now, lt_time, onlineTime);
-		} else if (onlineFull.date().addDays(1) == nowFull.date()) {
-			return tr::lng_status_lastseen_yesterday(tr::now, lt_time, onlineTime);
-		}
-		const auto date = QLocale().toString(onlineFull.date(), QLocale::ShortFormat);
-		return tr::lng_status_lastseen_date_time(
-			tr::now,
-			lt_date,
-			date,
-			lt_time,
-			onlineTime);
+		return ExactLastSeenText(
+			base::unixtime::parse(till),
+			base::unixtime::parse(now));
 	}
 	const auto minutes = (now - till) / 60;
 	if (!minutes) {
@@ -533,12 +562,17 @@ QString OnlineText(not_null<UserData*> user, TimeId now) {
 	if (const auto special = OnlineTextSpecial(user)) {
 		return *special;
 	}
+	if (const auto tracked = TrackedOfflineText(user, now)) {
+		return *tracked;
+	}
 	return OnlineText(user->lastseen(), now);
 }
 
 QString OnlineTextFull(not_null<UserData*> user, TimeId now) {
 	if (const auto special = OnlineTextSpecial(user)) {
 		return *special;
+	} else if (const auto tracked = TrackedOfflineText(user, now)) {
+		return *tracked;
 	} else if (const auto common = OnlineTextCommon(user->lastseen(), now)) {
 		return *common;
 	}

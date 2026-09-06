@@ -51,6 +51,7 @@ namespace LuxuryOnline {
 // something to await into.
 void recordTransition(not_null<UserData*> user, bool online, int at);
 void noteServerLastseen(not_null<UserData*> user, bool wasOnline, int now);
+std::optional<int> lastOfflineAt(not_null<UserData*> user);
 std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit);
 void clearHistory(not_null<PeerData*> peer);
 

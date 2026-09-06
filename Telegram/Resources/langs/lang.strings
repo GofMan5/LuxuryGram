@@ -9053,6 +9053,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ClearOnlineHistoryText" = "Delete the recorded online history for this chat?";
 "luxury_OnlineHistoryTitle" = "Online History";
 "luxury_OnlineHistoryEmpty" = "No online events recorded yet.";
+"luxury_OnlineHistoryEarlier#one" = "+{count} earlier";
+"luxury_OnlineHistoryEarlier#other" = "+{count} earlier";
 "luxury_ViewFiltersMenuText" = "View Filters";
 "luxury_ShowFilteredMessagesMenuText" = "Show Filtered";
 "luxury_HideFilteredMessagesMenuText" = "Hide Filtered";

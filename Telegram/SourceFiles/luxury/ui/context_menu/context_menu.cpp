@@ -52,7 +52,6 @@
 #include "ui/vertical_list.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
-#include "ui/widgets/scroll_area.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
@@ -91,10 +90,17 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 void FillOnlineHistoryBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<PeerData*> peer) {
+	// One screenful of rows; the rest collapses into the "+N earlier" line
+	// below. A plain label is enough for that -- the hand-rolled scroll
+	// container it replaces sized itself off the label anyway and broke
+	// whenever the content outgrew its math.
+	constexpr auto kMaxOnlineHistoryRows = 50;
 	box->setTitle(tr::luxury_OnlineHistoryTitle());
 	box->setWidth(st::aboutWidth);
+	box->verticalLayout()->resizeToWidth(box->width());
 
 	Ui::AddSkip(box->verticalLayout());
+	// Newest first: getOnlineEvents() orders by time descending.
 	const auto events = LuxuryOnline::getHistory(peer, 200);
 	if (events.empty()) {
 		box->verticalLayout()->add(
@@ -105,8 +111,12 @@ void FillOnlineHistoryBox(
 			st::boxRowPadding);
 	} else {
 		auto lines = QStringList();
-		lines.reserve(int(events.size()));
-		for (const auto &event : events) {
+		const auto shown = std::min(
+			int(events.size()),
+			kMaxOnlineHistoryRows);
+		lines.reserve(shown + 1);
+		for (auto i = 0; i != shown; ++i) {
+			const auto &event = events[i];
 			lines.push_back(
 				formatDateTime(base::unixtime::parse(event.at))
 				+ u" — "_q
@@ -114,36 +124,18 @@ void FillOnlineHistoryBox(
 					? tr::lng_status_online(tr::now)
 					: tr::lng_status_offline(tr::now)));
 		}
-		const auto availableWidth = box->width()
-			- st::boxRowPadding.left()
-			- st::boxRowPadding.right();
-		const auto container = box->verticalLayout()->add(
-			object_ptr<Ui::RpWidget>(box->verticalLayout()),
-			st::boxRowPadding);
-		const auto scroll = Ui::CreateChild<Ui::ScrollArea>(
-			container,
-			st::boxScroll);
-		const auto listLabel = scroll->setOwnedWidget(
-			object_ptr<Ui::FlatLabel>(scroll, st::boxLabel));
-		listLabel->setText(lines.join(u"\n"_q));
-		listLabel->resizeToWidth(availableWidth);
-		const auto needsScroll =
-			listLabel->height() > st::maxPluginDescriptionHeight;
-		const auto scrollPad = needsScroll
-			? (st::boxScroll.width + st::lineWidth)
-			: 0;
-		if (needsScroll) {
-			listLabel->resizeToWidth(availableWidth - scrollPad);
+		if (int(events.size()) > shown) {
+			lines.push_back(tr::luxury_OnlineHistoryEarlier(
+				tr::now,
+				lt_count,
+				int(events.size()) - shown));
 		}
-		const auto containerHeight = std::min(
-			listLabel->height(),
-			st::maxPluginDescriptionHeight);
-		container->resize(availableWidth, containerHeight);
-		container->sizeValue(
-		) | rpl::on_next([=](QSize size) {
-			scroll->setGeometry(0, 0, size.width(), size.height());
-			listLabel->resizeToWidth(size.width() - scrollPad);
-		}, container->lifetime());
+		box->verticalLayout()->add(
+			object_ptr<Ui::FlatLabel>(
+				box->verticalLayout(),
+				lines.join(u"\n"_q),
+				st::boxLabel),
+			st::boxRowPadding);
 	}
 	Ui::AddSkip(box->verticalLayout());
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });

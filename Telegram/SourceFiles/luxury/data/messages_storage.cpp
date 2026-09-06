@@ -21,6 +21,8 @@
 #include "history/history_item_components.h"
 #include "main/main_session.h"
 
+#include <map>
+
 namespace {
 
 // Keyed by the account, like every message row: peer ids are global in
@@ -30,6 +32,15 @@ namespace {
 ID DatabaseUserId(const Main::Session &session) {
 	return static_cast<ID>(session.uniqueId());
 }
+
+// Last recorded offline unixtime per (account, dialog), feeding the exact
+// last-seen fallback for approximate server statuses. Main-thread-only: both
+// the writer (recordTransition) and the readers run on main, so no mutex --
+// the same precedent as LuxuryWorker state. Bounded and self-healing: dialogs
+// churn, so one entry is evicted once the cap would be exceeded instead of
+// growing without limit.
+constexpr auto kMaxLastOfflineEntries = 1000;
+static std::map<std::pair<ID, ID>, int> LastOffline;
 
 } // namespace
 
@@ -232,6 +243,14 @@ void recordTransition(not_null<UserData*> user, bool online, int at) {
 	const auto userId = DatabaseUserId(peer->session());
 	const auto dialogId = getDialogIdFromPeer(peer);
 	const auto peerId = static_cast<ID>(peer->id.value);
+	if (!online) {
+		const auto key = std::make_pair(userId, dialogId);
+		if (!LastOffline.contains(key)
+			&& LastOffline.size() >= kMaxLastOfflineEntries) {
+			LastOffline.erase(LastOffline.begin());
+		}
+		LastOffline[key] = at;
+	}
 	// Resolve everything main-thread-only here; the row itself goes through
 	// the ordered queue so rapid online/offline flaps keep their order.
 	LuxuryDatabase::async([=] {
@@ -243,6 +262,17 @@ void recordTransition(not_null<UserData*> user, bool online, int at) {
 		event.at = at;
 		LuxuryDatabase::addOnlineEvent(std::move(event));
 	});
+}
+
+std::optional<int> lastOfflineAt(not_null<UserData*> user) {
+	const not_null<PeerData*> peer = user;
+	const auto it = LastOffline.find({
+		DatabaseUserId(peer->session()),
+		getDialogIdFromPeer(peer),
+	});
+	return (it != LastOffline.end())
+		? std::optional<int>(it->second)
+		: std::nullopt;
 }
 
 std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit) {
