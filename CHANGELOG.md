@@ -4,6 +4,12 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- The "Online History" view now reads as sessions: every stay online is one row with its start, end and duration, a stay that is still open reads "since …", and one whose start was never recorded says "unknown start" instead of inventing a time. Only the newest 50 sessions are shown with a "+N earlier" line for the rest, and no totals are shown over that partial view.
+
 ## 1.0.5
 
 ### Added

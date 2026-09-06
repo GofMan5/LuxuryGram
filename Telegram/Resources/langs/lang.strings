@@ -9055,6 +9055,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistoryEmpty" = "No online events recorded yet.";
 "luxury_OnlineHistoryEarlier#one" = "+{count} earlier";
 "luxury_OnlineHistoryEarlier#other" = "+{count} earlier";
+"luxury_OnlineHistorySince" = "since {time}";
+"luxury_OnlineHistoryUnknownStart" = "unknown start";
 "luxury_ViewFiltersMenuText" = "View Filters";
 "luxury_ShowFilteredMessagesMenuText" = "Show Filtered";
 "luxury_HideFilteredMessagesMenuText" = "Hide Filtered";

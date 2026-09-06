@@ -49,6 +49,7 @@
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/choose_language_box.h"
 #include "ui/layers/generic_box.h"
+#include "ui/text/format_values.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
@@ -87,10 +88,75 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 	};
 }
 
+struct OnlineSession {
+	std::optional<int> start;
+	std::optional<int> end;
+};
+
+// Pairs presence transitions into stays online, oldest first. The loader
+// reports newest first, so this walks the events back to front: an online
+// followed by an offline is one stay. A repeated online only confirms the
+// stay is ongoing -- the earliest one stays the start. An offline with no
+// online in the loaded set began before tracking started or past the load
+// window and keeps an empty start instead of an invented one; a trailing
+// online with no offline yet is still open.
+std::vector<OnlineSession> PairOnlineSessions(
+		const std::vector<OnlineEvent> &events) {
+	auto result = std::vector<OnlineSession>();
+	result.reserve(events.size());
+	auto start = std::optional<int>();
+	for (auto i = events.rbegin(); i != events.rend(); ++i) {
+		if (i->online) {
+			if (!start) {
+				start = i->at;
+			}
+		} else if (start) {
+			result.push_back({ start, i->at });
+			start = std::nullopt;
+		} else {
+			result.push_back({ std::nullopt, i->at });
+		}
+	}
+	if (start) {
+		result.push_back({ start, std::nullopt });
+	}
+	return result;
+}
+
+// One row per stay: "start — end · duration", with the duration rendered like
+// a call duration. Same-second flaps and clock steps clamp at zero -- the row
+// stays, flaps are data and are never merged or dropped. A stay with no
+// recorded start shows the unknown-start label and no duration, which cannot
+// be computed without a start; a stay with no end yet reads "since ...".
+QString OnlineSessionRowText(const OnlineSession &session) {
+	if (!session.end) {
+		// Open by construction only with a start set (see above).
+		const auto start = formatDateTime(
+			base::unixtime::parse(*session.start));
+		return start
+			+ u" — … · "_q
+			+ tr::luxury_OnlineHistorySince(tr::now, lt_time, start);
+	}
+	const auto end = formatDateTime(base::unixtime::parse(*session.end));
+	if (!session.start) {
+		return tr::luxury_OnlineHistoryUnknownStart(tr::now)
+			+ u" — "_q
+			+ end;
+	}
+	const auto seconds = std::max<qint64>(
+		0,
+		qint64(*session.end) - qint64(*session.start));
+	return formatDateTime(base::unixtime::parse(*session.start))
+		+ u" — "_q
+		+ end
+		+ u" · "_q
+		+ Ui::FormatDurationText(seconds);
+}
+
 void FillOnlineHistoryBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<PeerData*> peer) {
-	// One screenful of rows; the rest collapses into the "+N earlier" line
+	// One screenful of session rows; the rest collapses into the "+N earlier" line
 	// below. A plain label is enough for that -- the hand-rolled scroll
 	// container it replaces sized itself off the label anyway and broke
 	// whenever the content outgrew its math.
@@ -100,7 +166,9 @@ void FillOnlineHistoryBox(
 	box->verticalLayout()->resizeToWidth(box->width());
 
 	Ui::AddSkip(box->verticalLayout());
-	// Newest first: getOnlineEvents() orders by time descending.
+	// Newest first from the loader; the pairing below walks them oldest
+	// first, and the rows below read the sessions back newest first. No
+	// totals: anything summed here would cover only the truncated view.
 	const auto events = LuxuryOnline::getHistory(peer, 200);
 	if (events.empty()) {
 		box->verticalLayout()->add(
@@ -110,25 +178,19 @@ void FillOnlineHistoryBox(
 				st::boxLabel),
 			st::boxRowPadding);
 	} else {
+		const auto sessions = PairOnlineSessions(events);
+		const auto total = int(sessions.size());
+		const auto shown = std::min(total, kMaxOnlineHistoryRows);
 		auto lines = QStringList();
-		const auto shown = std::min(
-			int(events.size()),
-			kMaxOnlineHistoryRows);
 		lines.reserve(shown + 1);
 		for (auto i = 0; i != shown; ++i) {
-			const auto &event = events[i];
-			lines.push_back(
-				formatDateTime(base::unixtime::parse(event.at))
-				+ u" — "_q
-				+ (event.online
-					? tr::lng_status_online(tr::now)
-					: tr::lng_status_offline(tr::now)));
+			lines.push_back(OnlineSessionRowText(sessions[total - 1 - i]));
 		}
-		if (int(events.size()) > shown) {
+		if (total > shown) {
 			lines.push_back(tr::luxury_OnlineHistoryEarlier(
 				tr::now,
 				lt_count,
-				int(events.size()) - shown));
+				total - shown));
 		}
 		box->verticalLayout()->add(
 			object_ptr<Ui::FlatLabel>(
