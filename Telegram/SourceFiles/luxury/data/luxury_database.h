@@ -54,6 +54,11 @@ void addOnlineEvent(OnlineEvent event);
 std::vector<OnlineEvent> getOnlineEvents(ID userId, ID dialogId, int totalLimit);
 void clearOnlineEvents(ID userId, ID dialogId);
 
+void addWatchEvent(WatchEvent event);
+bool hasWatchEvent(ID userId, ID dialogId, ID messageId, int kind);
+std::vector<WatchEvent> getWatchEvents(ID userId, ID dialogId, int totalLimit);
+void clearWatchEvents(ID userId, ID dialogId);
+
 std::vector<RegexFilter> getAllRegexFilters();
 std::vector<RegexFilter> getShared();
 std::vector<RegexFilter> getByDialogId(ID dialogId);

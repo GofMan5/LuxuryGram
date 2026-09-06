@@ -657,6 +657,12 @@ not_null<UserData*> Session::processUser(const MTPUser &data) {
 	const auto result = user(data.match([](const auto &data) {
 		return data.vid().v;
 	}));
+	// LuxuryGram: watch-hook before-state, compared after the update below.
+	// wasLoaded gates it so the first sync never rows up as a change.
+	const auto oldName = result->name();
+	const auto oldUsername = result->username();
+	const auto oldPhotoId = result->userpicPhotoId();
+	const auto wasLoaded = result->isLoaded();
 	auto minimal = false;
 	const MTPUserStatus *status = nullptr;
 	const MTPUserStatus emptyStatus = MTP_userStatusEmpty();
@@ -942,6 +948,40 @@ not_null<UserData*> Session::processUser(const MTPUser &data) {
 		if (result->updateLastseen(lastseen)) {
 			flags |= UpdateFlag::OnlineStatus;
 			LuxuryOnline::noteServerLastseen(result, wasOnline, now);
+		}
+		// LuxuryGram: profile-change hook. Minimal slices carry partial data
+		// and the first sync has no before-state, so both stay out. Bio would
+		// need its own userFull fetch (the user slice carries no about) and
+		// premium flips are unreliable -- both stay out by design.
+		if (wasLoaded) {
+			if (result->name() != oldName) {
+				LuxuryOnline::noteProfileChange(
+					result,
+					WatchKind::NameChanged,
+					oldName,
+					result->name(),
+					now);
+			}
+			if (result->username() != oldUsername) {
+				LuxuryOnline::noteProfileChange(
+					result,
+					WatchKind::UsernameChanged,
+					oldUsername,
+					result->username(),
+					now);
+			}
+			// A removal is not an update: only a real new photo rows up.
+			const auto photoId = result->userpicPhotoId();
+			if (photoId != oldPhotoId
+				&& photoId != PhotoId(0)
+				&& photoId != PeerData::kUnknownPhotoId) {
+				LuxuryOnline::noteProfileChange(
+					result,
+					WatchKind::PhotoUpdated,
+					QString(),
+					QString(),
+					now);
+			}
 		}
 	}
 

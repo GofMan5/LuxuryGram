@@ -84,6 +84,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+#include "luxury/data/messages_storage.h"
 #include "luxury/features/filters/filters_controller.h"
 #include "luxury/features/message_shot/message_shot.h"
 #include "luxury/utils/telegram_helpers.h"
@@ -189,6 +190,31 @@ template <typename T>
 			Lang::FormatCountDecimal(std::abs(amount)));
 	}
 	return { Ui::FillAmountAndCurrency(amount, currency) };
+}
+
+// Display label for a star-gift service message: the gift name when the
+// action carries one, else the stars count the message itself shows.
+[[nodiscard]] QString StarGiftLabel(
+		const MTPDmessageActionStarGift &action) {
+	const auto title = action.vgift().match(
+		[&](const MTPDstarGift &gift) {
+			return qs(gift.vtitle().value_or_empty());
+		},
+		[&](const MTPDstarGiftUnique &gift) {
+			return qs(gift.vtitle());
+		});
+	if (!title.isEmpty()) {
+		return title;
+	}
+	const auto stars = action.vgift().match(
+		[&](const MTPDstarGift &gift) {
+			return int(gift.vstars().v)
+				+ int(gift.vupgrade_stars().value_or_empty());
+		},
+		[](const MTPDstarGiftUnique &) {
+			return 0;
+		});
+	return tr::lng_action_gift_for_stars(tr::now, lt_count, stars);
 }
 
 [[nodiscard]] bool IsNavigableForInstantViewMedia(
@@ -8020,6 +8046,14 @@ void HistoryItem::processAction(const MTPMessageAction &action) {
 				.count = data.vdays().v,
 				.type = Data::GiftType::Premium,
 			});
+		LuxuryOnline::noteGift(
+			_history->peer,
+			_from,
+			AmountAndStarCurrency(
+				data.vamount().v,
+				qs(data.vcurrency())).text,
+			id.bare,
+			date());
 	}, [&](const MTPDmessageActionSuggestProfilePhoto &data) {
 		data.vphoto().match([&](const MTPDphoto &photo) {
 			_flags |= MessageFlag::IsUserpicSuggestion;
@@ -8077,18 +8111,45 @@ void HistoryItem::processAction(const MTPMessageAction &action) {
 				.viaGiveaway = data.is_via_giveaway(),
 				.unclaimed = data.is_unclaimed(),
 			});
+		// Giveaway codes name a channel, not a tracked user giving a gift.
+		if (!data.vboost_peer()) {
+			LuxuryOnline::noteGift(
+				_history->peer,
+				_from,
+				AmountAndStarCurrency(
+					data.vamount().value_or_empty(),
+					qs(data.vcurrency().value_or_empty())).text,
+				id.bare,
+				date());
+		}
 	}, [&](const MTPDmessageActionGiftStars &data) {
 		_media = std::make_unique<Data::MediaGiftBox>(
 			this,
 			_from,
 			Data::GiftType::Credits,
 			data.vstars().v);
+		LuxuryOnline::noteGift(
+			_history->peer,
+			_from,
+			AmountAndStarCurrency(
+				data.vamount().v,
+				qs(data.vcurrency())).text,
+			id.bare,
+			date());
 	}, [&](const MTPDmessageActionGiftTon &data) {
 		_media = std::make_unique<Data::MediaGiftBox>(
 			this,
 			_from,
 			Data::GiftType::Ton,
 			data.vcrypto_amount().v);
+		LuxuryOnline::noteGift(
+			_history->peer,
+			_from,
+			AmountAndStarCurrency(
+				data.vamount().v,
+				qs(data.vcurrency())).text,
+			id.bare,
+			date());
 	}, [&](const MTPDmessageActionPrizeStars &data) {
 		_media = std::make_unique<Data::MediaGiftBox>(
 			this,
@@ -8188,6 +8249,12 @@ void HistoryItem::processAction(const MTPMessageAction &action) {
 			this,
 			_from,
 			std::move(fields));
+		LuxuryOnline::noteGift(
+			_history->peer,
+			_from,
+			StarGiftLabel(data),
+			id.bare,
+			date());
 	}, [&](const MTPDmessageActionStarGiftUnique &data) {
 		const auto service = _from->isServiceUser();
 		const auto from = data.vfrom_id()
@@ -8265,6 +8332,12 @@ void HistoryItem::processAction(const MTPMessageAction &action) {
 			this,
 			_from,
 			std::move(fields));
+		LuxuryOnline::noteGift(
+			_history->peer,
+			_from,
+			qs(data.vgift().c_starGiftUnique().vtitle()),
+			id.bare,
+			date());
 	}, [&](const MTPDmessageActionSuggestBirthday &data) {
 		const auto &fields = data.vbirthday().data();
 		_media = std::make_unique<Data::MediaGiftBox>(

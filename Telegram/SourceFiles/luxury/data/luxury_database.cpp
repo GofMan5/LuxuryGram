@@ -127,6 +127,19 @@ auto storage = make_storage(
 		make_column("peerId", &OnlineEvent::peerId),
 		make_column("online", &OnlineEvent::online),
 		make_column("at", &OnlineEvent::at)
+	),
+	make_table<WatchEvent>(
+		"WatchEvent",
+		make_column("fakeId", &WatchEvent::fakeId, primary_key().autoincrement()),
+		make_column("userId", &WatchEvent::userId),
+		make_column("dialogId", &WatchEvent::dialogId),
+		make_column("peerId", &WatchEvent::peerId),
+		make_column("otherPeerId", &WatchEvent::otherPeerId),
+		make_column("kind", &WatchEvent::kind),
+		make_column("messageId", &WatchEvent::messageId),
+		make_column("at", &WatchEvent::at),
+		make_column("title", &WatchEvent::title),
+		make_column("extra", &WatchEvent::extra)
 	)
 );
 
@@ -714,6 +727,92 @@ void clearOnlineEvents(ID userId, ID dialogId) {
 		);
 	} catch (const std::exception &ex) {
 		LOG(("Failed to clear online events: %1").arg(ex.what()));
+	}
+}
+
+// Same per-peer cap as the online table: a watched contact's gifts and edits
+// would otherwise grow this table without bound. Same proven query shapes.
+constexpr auto kMaxWatchEventsPerPeer = 200;
+
+void addWatchEvent(WatchEvent event) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		storage.insert(event);
+		const auto newest = storage.select(
+			columns(column<WatchEvent>(&WatchEvent::fakeId)),
+			where(
+				column<WatchEvent>(&WatchEvent::userId) == event.userId and
+				column<WatchEvent>(&WatchEvent::dialogId) == event.dialogId
+			),
+			order_by(column<WatchEvent>(&WatchEvent::fakeId)).desc(),
+			limit(kMaxWatchEventsPerPeer + 1)
+		);
+		if (newest.size() > kMaxWatchEventsPerPeer) {
+			const auto cutoff = std::get<0>(newest.back());
+			storage.remove_all<WatchEvent>(
+				where(
+					column<WatchEvent>(&WatchEvent::userId) == event.userId and
+					column<WatchEvent>(&WatchEvent::dialogId) == event.dialogId and
+					column<WatchEvent>(&WatchEvent::fakeId) <= cutoff
+				)
+			);
+		}
+	} catch (std::exception &ex) {
+		LOG(("Failed to save watch event: %1").arg(ex.what()));
+	}
+}
+
+// Gift service messages are re-materialized on every restart and history
+// reload, so recording probes first: without it every old gift would row up
+// again. Runs inside the same ordered queue as the insert, so the pair is
+// atomic -- the hasRevisions shape, one indexed SELECT LIMIT 1.
+bool hasWatchEvent(ID userId, ID dialogId, ID messageId, int kind) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		return !storage.select(
+			columns(column<WatchEvent>(&WatchEvent::fakeId)),
+			where(
+				column<WatchEvent>(&WatchEvent::userId) == userId and
+				column<WatchEvent>(&WatchEvent::dialogId) == dialogId and
+				column<WatchEvent>(&WatchEvent::messageId) == messageId and
+				column<WatchEvent>(&WatchEvent::kind) == kind
+			),
+			limit(1)
+		).empty();
+	} catch (std::exception &ex) {
+		LOG(("Failed to check watch event: %1").arg(ex.what()));
+		return false;
+	}
+}
+
+std::vector<WatchEvent> getWatchEvents(ID userId, ID dialogId, int totalLimit) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		return storage.get_all<WatchEvent>(
+			where(
+				column<WatchEvent>(&WatchEvent::userId) == userId and
+				column<WatchEvent>(&WatchEvent::dialogId) == dialogId
+			),
+			order_by(column<WatchEvent>(&WatchEvent::at)).desc(),
+			limit(totalLimit)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to load watch events: %1").arg(ex.what()));
+		return {};
+	}
+}
+
+void clearWatchEvents(ID userId, ID dialogId) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		storage.remove_all<WatchEvent>(
+			where(
+				column<WatchEvent>(&WatchEvent::userId) == userId and
+				column<WatchEvent>(&WatchEvent::dialogId) == dialogId
+			)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to clear watch events: %1").arg(ex.what()));
 	}
 }
 

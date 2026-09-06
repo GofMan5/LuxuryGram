@@ -55,4 +55,23 @@ std::optional<int> lastOfflineAt(not_null<UserData*> user);
 std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit);
 void clearHistory(not_null<PeerData*> peer);
 
+// Gifts and profile changes share the watch table and the viewer section.
+// noteGift keys the service message so reloads and restarts do not row up
+// twice; anonymous gifts (service sender) keep otherPeerId 0. Profile rows
+// carry no message and need no probe: the caller only calls on a genuine
+// pre/post diff, which a reprocessed slice no longer has.
+void noteGift(
+	not_null<PeerData*> historyPeer,
+	not_null<PeerData*> from,
+	const QString &label,
+	ID messageId,
+	int at);
+void noteProfileChange(
+	not_null<UserData*> user,
+	WatchKind kind,
+	const QString &oldText,
+	const QString &newText,
+	int at);
+std::vector<WatchEvent> getWatchEvents(not_null<PeerData*> peer, int totalLimit);
+
 }

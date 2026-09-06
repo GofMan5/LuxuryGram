@@ -33,6 +33,17 @@ ID DatabaseUserId(const Main::Session &session) {
 	return static_cast<ID>(session.uniqueId());
 }
 
+// The master switch plus the passcode-lock opt-out, shared by the presence,
+// gift and profile recorders: recording while locked is the default, the
+// toggle opts out of it. Bots, service accounts and flap compares stay with
+// the individual callers -- only this shape is common.
+bool WatchGate() {
+	const auto &settings = LuxurySettings::getInstance();
+	return settings.trackOnlineHistory()
+		&& !(Core::App().passcodeLocked()
+			&& !settings.trackOnlineEvenWhenLocked());
+}
+
 // Last recorded offline unixtime per (account, dialog), feeding the exact
 // last-seen fallback for approximate server statuses. Main-thread-only: both
 // the writer (recordTransition) and the readers run on main, so no mutex --
@@ -285,19 +296,12 @@ std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit) {
 // Single gate for the server-driven presence hook in Session::processUser.
 // Bots and service accounts never transition for real; a transition the
 // update already applied is compared against the pre-update state the caller
-// captured, so only genuine flaps reach the disk. Presence slices keep
-// arriving under a passcode lock -- only UI is gated there -- so recording
-// while locked is the default, and the toggle opts out of it.
+// captured, so only genuine flaps reach the disk.
 void noteServerLastseen(not_null<UserData*> user, bool wasOnline, int now) {
-	const auto &settings = LuxurySettings::getInstance();
-	if (!settings.trackOnlineHistory()) {
+	if (!WatchGate()) {
 		return;
 	}
 	if (user->isBot() || user->isServiceUser()) {
-		return;
-	}
-	if (Core::App().passcodeLocked()
-		&& !settings.trackOnlineEvenWhenLocked()) {
 		return;
 	}
 	if (wasOnline == user->lastseen().isOnline(now)) {
@@ -306,11 +310,94 @@ void noteServerLastseen(not_null<UserData*> user, bool wasOnline, int now) {
 	recordTransition(user, user->lastseen().isOnline(now), now);
 }
 
+void noteGift(
+		not_null<PeerData*> historyPeer,
+		not_null<PeerData*> from,
+		const QString &label,
+		ID messageId,
+		int at) {
+	if (!WatchGate()) {
+		return;
+	}
+	const auto tracked = historyPeer->asUser();
+	if (!tracked || tracked->isBot() || tracked->isServiceUser()) {
+		return;
+	}
+	const auto sent = from->isSelf();
+	const auto kind = static_cast<int>(sent
+		? WatchKind::GiftSent
+		: WatchKind::GiftReceived);
+	const auto userId = DatabaseUserId(historyPeer->session());
+	const auto dialogId = getDialogIdFromPeer(historyPeer);
+	const auto peerId = static_cast<ID>(tracked->id.value);
+	const auto otherPeerId = from->isServiceUser()
+		? ID(0)
+		: static_cast<ID>(from->id.value);
+	const auto title = label.toStdString();
+	// Probe and insert ride one ordered block, so a reload racing a fresh
+	// gift cannot slip a duplicate between them.
+	LuxuryDatabase::async([=] {
+		if (LuxuryDatabase::hasWatchEvent(userId, dialogId, messageId, kind)) {
+			return;
+		}
+		auto event = WatchEvent();
+		event.userId = userId;
+		event.dialogId = dialogId;
+		event.peerId = peerId;
+		event.otherPeerId = otherPeerId;
+		event.kind = kind;
+		event.messageId = messageId;
+		event.at = at;
+		event.title = title;
+		LuxuryDatabase::addWatchEvent(std::move(event));
+	});
+}
+
+void noteProfileChange(
+		not_null<UserData*> user,
+		WatchKind kind,
+		const QString &oldText,
+		const QString &newText,
+		int at) {
+	if (!WatchGate()) {
+		return;
+	}
+	if (user->isBot() || user->isServiceUser()) {
+		return;
+	}
+	const not_null<PeerData*> peer = user;
+	const auto userId = DatabaseUserId(peer->session());
+	const auto dialogId = getDialogIdFromPeer(peer);
+	const auto peerId = static_cast<ID>(peer->id.value);
+	const auto kindInt = static_cast<int>(kind);
+	const auto oldLabel = oldText.toStdString();
+	const auto newLabel = newText.toStdString();
+	LuxuryDatabase::async([=] {
+		auto event = WatchEvent();
+		event.userId = userId;
+		event.dialogId = dialogId;
+		event.peerId = peerId;
+		event.kind = kindInt;
+		event.at = at;
+		event.title = oldLabel;
+		event.extra = newLabel;
+		LuxuryDatabase::addWatchEvent(std::move(event));
+	});
+}
+
+std::vector<WatchEvent> getWatchEvents(not_null<PeerData*> peer, int totalLimit) {
+	return LuxuryDatabase::getWatchEvents(
+		DatabaseUserId(peer->session()),
+		getDialogIdFromPeer(peer),
+		totalLimit);
+}
+
 void clearHistory(not_null<PeerData*> peer) {
 	const auto userId = DatabaseUserId(peer->session());
 	const auto dialogId = getDialogIdFromPeer(peer);
 	LuxuryDatabase::async([=] {
 		LuxuryDatabase::clearOnlineEvents(userId, dialogId);
+		LuxuryDatabase::clearWatchEvents(userId, dialogId);
 	});
 }
 

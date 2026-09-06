@@ -153,6 +153,67 @@ QString OnlineSessionRowText(const OnlineSession &session) {
 		+ Ui::FormatDurationText(seconds);
 }
 
+// One row per watched event: gifts name the giver and the stored label,
+// profile edits name the old and new values. Peer names resolve when the box
+// opens -- never stored, they change, which is the point. An unresolvable
+// giver reads as anonymous, never as a blank.
+QString WatchEventRowText(
+		const WatchEvent &event,
+		not_null<PeerData*> peer) {
+	const auto date = formatDateTime(base::unixtime::parse(event.at));
+	const auto prefix = date + u" — "_q;
+	switch (static_cast<WatchKind>(event.kind)) {
+	case WatchKind::GiftSent:
+		return prefix
+			+ tr::luxury_WatchGiftSent(
+				tr::now,
+				lt_cost,
+				QString::fromStdString(event.title),
+				lt_user,
+				peer->name());
+	case WatchKind::GiftReceived: {
+		const auto cost = QString::fromStdString(event.title);
+		const auto giver = event.otherPeerId
+			? peer->session().data().peerLoaded(
+				static_cast<PeerId>(event.otherPeerId))
+			: nullptr;
+		return prefix
+			+ (giver
+				? tr::luxury_WatchGiftReceived(
+					tr::now,
+					lt_user,
+					giver->name(),
+					lt_cost,
+					cost)
+				: tr::luxury_WatchGiftReceivedAnonymous(
+					tr::now,
+					lt_cost,
+					cost));
+	}
+	case WatchKind::NameChanged:
+		return prefix
+			+ tr::luxury_WatchNameChanged(tr::now)
+			+ u": "_q
+			+ QString::fromStdString(event.title)
+			+ u" → "_q
+			+ QString::fromStdString(event.extra);
+	case WatchKind::UsernameChanged: {
+		const auto oldName = QString::fromStdString(event.title);
+		const auto newName = QString::fromStdString(event.extra);
+		return prefix
+			+ tr::luxury_WatchUsernameChanged(tr::now)
+			+ u": "_q
+			+ (oldName.isEmpty() ? u"—"_q : u"@"_q + oldName)
+			+ u" → "_q
+			+ (newName.isEmpty() ? u"—"_q : u"@"_q + newName);
+	}
+	case WatchKind::PhotoUpdated:
+		return prefix + tr::luxury_WatchPhotoUpdated(tr::now);
+	default:
+		return prefix;
+	}
+}
+
 void FillOnlineHistoryBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<PeerData*> peer) {
@@ -161,16 +222,22 @@ void FillOnlineHistoryBox(
 	// container it replaces sized itself off the label anyway and broke
 	// whenever the content outgrew its math.
 	constexpr auto kMaxOnlineHistoryRows = 50;
+	constexpr auto kMaxWatchEventRows = 30;
 	box->setTitle(tr::luxury_OnlineHistoryTitle());
 	box->setWidth(st::aboutWidth);
 	box->verticalLayout()->resizeToWidth(box->width());
 
 	Ui::AddSkip(box->verticalLayout());
-	// Newest first from the loader; the pairing below walks them oldest
-	// first, and the rows below read the sessions back newest first. No
-	// totals: anything summed here would cover only the truncated view.
+	// Newest first from the loaders; the pairing below walks them oldest
+	// first, and the rows below read the sessions back newest first. The one
+	// "+N earlier" line covers both sections: no totals anywhere, anything
+	// summed here would cover only the truncated view.
 	const auto events = LuxuryOnline::getHistory(peer, 200);
-	if (events.empty()) {
+	const auto watches = LuxuryOnline::getWatchEvents(peer, 200);
+	const auto sessions = PairOnlineSessions(events);
+	auto sessionOverflow = 0;
+	auto watchOverflow = 0;
+	if (sessions.empty() && watches.empty()) {
 		box->verticalLayout()->add(
 			object_ptr<Ui::FlatLabel>(
 				box->verticalLayout(),
@@ -178,26 +245,71 @@ void FillOnlineHistoryBox(
 				st::boxLabel),
 			st::boxRowPadding);
 	} else {
-		const auto sessions = PairOnlineSessions(events);
-		const auto total = int(sessions.size());
-		const auto shown = std::min(total, kMaxOnlineHistoryRows);
-		auto lines = QStringList();
-		lines.reserve(shown + 1);
-		for (auto i = 0; i != shown; ++i) {
-			lines.push_back(OnlineSessionRowText(sessions[total - 1 - i]));
+		Ui::AddSubsectionTitle(
+			box->verticalLayout(),
+			tr::luxury_OnlineHistorySessions());
+		if (sessions.empty()) {
+			box->verticalLayout()->add(
+				object_ptr<Ui::FlatLabel>(
+					box->verticalLayout(),
+					tr::luxury_OnlineHistorySessionsEmpty(),
+					st::boxLabel),
+				st::boxRowPadding);
+		} else {
+			const auto total = int(sessions.size());
+			const auto shown = std::min(total, kMaxOnlineHistoryRows);
+			sessionOverflow = total - shown;
+			auto lines = QStringList();
+			lines.reserve(shown);
+			for (auto i = 0; i != shown; ++i) {
+				lines.push_back(OnlineSessionRowText(sessions[total - 1 - i]));
+			}
+			box->verticalLayout()->add(
+				object_ptr<Ui::FlatLabel>(
+					box->verticalLayout(),
+					lines.join(u"\n"_q),
+					st::boxLabel),
+				st::boxRowPadding);
 		}
-		if (total > shown) {
-			lines.push_back(tr::luxury_OnlineHistoryEarlier(
-				tr::now,
-				lt_count,
-				total - shown));
+		Ui::AddSubsectionTitle(
+			box->verticalLayout(),
+			tr::luxury_OnlineHistoryEvents());
+		if (watches.empty()) {
+			box->verticalLayout()->add(
+				object_ptr<Ui::FlatLabel>(
+					box->verticalLayout(),
+					tr::luxury_OnlineHistoryEventsEmpty(),
+					st::boxLabel),
+				st::boxRowPadding);
+		} else {
+			const auto total = int(watches.size());
+			const auto shown = std::min(total, kMaxWatchEventRows);
+			watchOverflow = total - shown;
+			auto lines = QStringList();
+			lines.reserve(shown);
+			for (auto i = 0; i != shown; ++i) {
+				lines.push_back(WatchEventRowText(
+					watches[total - 1 - i],
+					peer));
+			}
+			box->verticalLayout()->add(
+				object_ptr<Ui::FlatLabel>(
+					box->verticalLayout(),
+					lines.join(u"\n"_q),
+					st::boxLabel),
+				st::boxRowPadding);
 		}
-		box->verticalLayout()->add(
-			object_ptr<Ui::FlatLabel>(
-				box->verticalLayout(),
-				lines.join(u"\n"_q),
-				st::boxLabel),
-			st::boxRowPadding);
+		if (sessionOverflow + watchOverflow > 0) {
+			box->verticalLayout()->add(
+				object_ptr<Ui::FlatLabel>(
+					box->verticalLayout(),
+					tr::luxury_OnlineHistoryEarlier(
+						tr::now,
+						lt_count,
+						sessionOverflow + watchOverflow),
+					st::boxLabel),
+				st::boxRowPadding);
+		}
 	}
 	Ui::AddSkip(box->verticalLayout());
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });

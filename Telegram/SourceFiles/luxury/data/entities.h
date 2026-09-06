@@ -82,6 +82,39 @@ public:
 	int at = 0;
 };
 
+// Gifts and profile changes share one table because the viewer shows them in
+// one interleaved "Events" section under one cap: two tables would need a
+// merge read plus two caps that could starve each other, for queries that are
+// otherwise identical to the OnlineEvent ones. kind is a plain int, not the
+// enum below, so sqlite_orm never has to map it. messageId keys the gift
+// service message for reload dedup (a restart re-materializes old gifts);
+// profile rows have none. title holds the gift label, the old name or the old
+// username; extra holds the new name or username. Display names are never
+// resolved here -- they change, which is the point, so the viewer resolves
+// them when it opens.
+enum class WatchKind : int {
+	GiftSent = 1,
+	GiftReceived = 2,
+	NameChanged = 3,
+	UsernameChanged = 4,
+	PhotoUpdated = 5,
+};
+
+class WatchEvent
+{
+public:
+	ID fakeId = 0;
+	ID userId = 0;
+	ID dialogId = 0;
+	ID peerId = 0;
+	ID otherPeerId = 0;
+	int kind = 0;
+	ID messageId = 0;
+	int at = 0;
+	std::string title;
+	std::string extra;
+};
+
 class RegexFilter
 {
 public:

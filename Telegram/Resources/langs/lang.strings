@@ -9057,6 +9057,16 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistoryEarlier#other" = "+{count} earlier";
 "luxury_OnlineHistorySince" = "since {time}";
 "luxury_OnlineHistoryUnknownStart" = "unknown start";
+"luxury_OnlineHistorySessions" = "Sessions";
+"luxury_OnlineHistoryEvents" = "Events";
+"luxury_OnlineHistorySessionsEmpty" = "No online sessions recorded yet.";
+"luxury_OnlineHistoryEventsEmpty" = "No events recorded yet.";
+"luxury_WatchGiftSent" = "You sent a gift for {cost} to {user}";
+"luxury_WatchGiftReceived" = "{user} sent you a gift for {cost}";
+"luxury_WatchGiftReceivedAnonymous" = "Unknown user sent you a gift for {cost}";
+"luxury_WatchNameChanged" = "Changed their name";
+"luxury_WatchUsernameChanged" = "Changed their username";
+"luxury_WatchPhotoUpdated" = "Updated their profile photo";
 "luxury_ViewFiltersMenuText" = "View Filters";
 "luxury_ShowFilteredMessagesMenuText" = "Show Filtered";
 "luxury_HideFilteredMessagesMenuText" = "Hide Filtered";

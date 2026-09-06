@@ -9,6 +9,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 ### Added
 
 - The "Online History" view now reads as sessions: every stay online is one row with its start, end and duration, a stay that is still open reads "since …", and one whose start was never recorded says "unknown start" instead of inventing a time. Only the newest 50 sessions are shown with a "+N earlier" line for the rest, and no totals are shown over that partial view.
+- The "Online History" view gains an "Events" section under the sessions: gifts the contact gave or received (with the gift label) and their display-name, username and profile-photo changes, newest first, with the "+N earlier" line shared across both sections. Only the newest 30 events are shown, and nothing is totaled over the partial view.
 
 ## 1.0.5
 
