@@ -6,6 +6,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ## Unreleased
 
+### Fixed
+
+- Translation and filter import failures now say what happened: a failed message in a batch translation is named (with how many siblings translated) instead of failing silently, unsupported filter backups are reported as unsupported instead of "no changes", and overlong or uncompilable filter patterns are named and skipped.
+
 ### Added
 
 - The "Online History" view now reads as sessions: every stay online is one row with its start, end and duration, a stay that is still open reads "since …", and one whose start was never recorded says "unknown start" instead of inventing a time. Only the newest 50 sessions are shown with a "+N earlier" line for the rest, and no totals are shown over that partial view.

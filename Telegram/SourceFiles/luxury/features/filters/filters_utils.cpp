@@ -52,6 +52,37 @@ constexpr auto BACKUP_VERSION = 2;
 constexpr auto kMaxFilterBackupBytes = 4 * 1024 * 1024;
 constexpr auto kMaxFilterBackupEntries = 4096;
 constexpr auto kFilterNetworkTimeout = 15 * 1000;
+constexpr auto kMaxToastPatternLength = 64;
+
+// Rejection reasons that prepareChanges can only report as "no changes":
+// checked up front so the toast tells the truth instead of claiming sameness.
+bool BackupExceedsEntryLimit(const QJsonObject &root) {
+	return root.value("filters").toArray().size() > kMaxFilterBackupEntries
+		|| root.value("exclusions").toArray().size() > kMaxFilterBackupEntries
+		|| root.value("removeFiltersById").toArray().size() > kMaxFilterBackupEntries
+		|| root.value("removeExclusions").toArray().size() > kMaxFilterBackupEntries
+		|| root.value("peers").toObject().size() > kMaxFilterBackupEntries;
+}
+
+QString TruncatedPattern(const QString &pattern) {
+	return (pattern.size() > kMaxToastPatternLength)
+		? pattern.left(kMaxToastPatternLength) + u"…"_q
+		: pattern;
+}
+
+// Same flags the cache rebuild compiles with: anything rejected here would
+// be dropped silently there, so the import names it instead of storing a
+// pattern that can never match.
+bool CompilesPattern(const QString &text, bool caseInsensitive) {
+	int flags = UREGEX_MULTILINE;
+	if (caseInsensitive) flags |= UREGEX_CASE_INSENSITIVE;
+
+	auto status = U_ZERO_ERROR;
+	return icu::RegexPattern::compile(
+		icu::UnicodeString::fromUTF8(text.toStdString()),
+		flags,
+		status) != nullptr;
+}
 
 enum class PeerResolveHintType {
 	Username,
@@ -452,7 +483,15 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 		LOG(("FilterUtils: not an object received in JSON"));
 		return;
 	}
-	auto changes = prepareChanges(document.object());
+	const auto root = document.object();
+	if (root.value("version").toInt() > BACKUP_VERSION
+		|| BackupExceedsEntryLimit(root)) {
+		Ui::Toast::Show(tr::luxury_FiltersToastFailUnsupported(tr::now));
+		LOG(("FilterUtils: unsupported backup version or too many entries."));
+		return;
+	}
+	auto changes = prepareChanges(root);
+
 
 	if (!HasChanges(changes)) {
 		Ui::Toast::Show(tr::luxury_FiltersToastFailNoChanges(tr::now));
@@ -811,11 +850,7 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	const auto removeExclusionsJson = root.value("removeExclusions").toArray();
 	const auto peers = root.value("peers").toObject();
 	// ponytail: bound imported collections; raise only if real backups exceed 4096 entries.
-	if (filters.size() > kMaxFilterBackupEntries
-		|| exclusions.size() > kMaxFilterBackupEntries
-		|| removeFilters.size() > kMaxFilterBackupEntries
-		|| removeExclusionsJson.size() > kMaxFilterBackupEntries
-		|| peers.size() > kMaxFilterBackupEntries) {
+	if (BackupExceedsEntryLimit(root)) {
 		LOG(("FilterUtils: backup contains too many entries."));
 		return {};
 	}
@@ -861,8 +896,23 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 
 				regex.reversed = filter.value("reversed").toBool();
 				const auto text = filter.value("text").toString();
-				if (text.isEmpty()
-					|| text.size() > FiltersCacheController::kMaxPatternLength) {
+				if (text.isEmpty()) {
+					continue;
+				}
+				if (text.size() > FiltersCacheController::kMaxPatternLength) {
+					Ui::Toast::Show(
+						tr::luxury_RegexFiltersPatternTooLong(tr::now)
+						+ u": "_q
+						+ TruncatedPattern(text));
+					LOG(("FilterUtils: pattern exceeds length limit, skipped."));
+					continue;
+				}
+				if (!CompilesPattern(text, regex.caseInsensitive)) {
+					Ui::Toast::Show(
+						tr::luxury_RegexFiltersAddError(tr::now)
+						+ u": "_q
+						+ TruncatedPattern(text));
+					LOG(("FilterUtils: pattern does not compile, skipped."));
 					continue;
 				}
 				regex.text = text.toStdString();

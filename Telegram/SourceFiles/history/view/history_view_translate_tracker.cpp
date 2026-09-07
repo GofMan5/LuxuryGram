@@ -20,11 +20,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_element.h"
 #include "iv/iv_rich_page.h"
 #include "lang/translate_provider.h"
+#include "lang_auto.h"
 #include "main/main_session.h"
 #include "spellcheck/platform/platform_language.h"
+#include "ui/toast/toast.h"
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+
+#include <memory>
 
 
 namespace HistoryView {
@@ -35,6 +39,17 @@ constexpr auto kEnoughForTranslation = 6;
 constexpr auto kMaxCheckInBunch = 100;
 constexpr auto kRequestLengthLimit = 24 * 1024;
 constexpr auto kRequestCountLimit = 20;
+constexpr auto kTranslateFailSnippetLength = 64;
+
+// First line of a message that did not translate, for the batch-failure
+// toast: names which message failed when the provider drops the whole batch.
+QString TranslateFailSnippet(const QString &text) {
+	auto flat = text;
+	flat.replace(u'\n', u' ');
+	return (flat.size() > kTranslateFailSnippetLength)
+		? flat.left(kTranslateFailSnippetLength) + u"…"_q
+		: flat;
+}
 
 } // namespace
 
@@ -348,6 +363,15 @@ void TranslateTracker::requestSome() {
 	}
 	_requestInProcess = true;
 	const auto requestToken = ++_requestToken;
+	// Per-item truth for the failure toast: the batch outcome itself is
+	// untouched (every item still reports whatever the provider returned),
+	// these only remember what to say if any item failed.
+	struct BatchOutcome {
+		int failed = 0;
+		int succeeded = 0;
+		QString failedSnippet;
+	};
+	const auto outcome = std::make_shared<BatchOutcome>();
 	_provider->requestBatch(
 		std::move(requests),
 		to,
@@ -363,6 +387,15 @@ void TranslateTracker::requestSome() {
 				item->translationDone(
 					to,
 					result.text.value_or(TextWithEntities()));
+				if (result.error == Ui::TranslateProviderError::None) {
+					++outcome->succeeded;
+				} else {
+					if (outcome->failedSnippet.isEmpty()) {
+						outcome->failedSnippet = TranslateFailSnippet(
+							item->originalText().text);
+					}
+					++outcome->failed;
+				}
 			}
 		},
 		[=] {
@@ -371,6 +404,19 @@ void TranslateTracker::requestSome() {
 			}
 			_requestInProcess = false;
 			_requested.clear();
+			if (outcome->failed > 0 && !outcome->failedSnippet.isEmpty()) {
+				const auto text = tr::luxury_TranslateBatchFailed(
+					tr::now,
+					lt_text,
+					outcome->failedSnippet);
+				Ui::Toast::Show(outcome->succeeded > 0
+					? text + u" · "_q
+						+ tr::luxury_TranslateBatchOthersDone(
+							tr::now,
+							lt_count,
+							outcome->succeeded)
+					: text);
+			}
 			requestSome();
 		});
 }
