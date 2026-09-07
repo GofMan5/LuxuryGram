@@ -4,6 +4,13 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- Gathered "Show Last Seen Seconds", "Track Online History" and the two "When Locked" companions into a new "Luxury Extra" settings section. The toggles themselves are unchanged.
+- Exact last-seen times now name how long ago that was, e.g. "last seen today at 14:35:02 (1 ч 10 мин 10 с ago)".
+
 ## 1.0.6
 
 ### Fixed

@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_peer_values.h"
 
 #include "lang/lang_keys.h"
+#include "lang_auto.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_user.h"
@@ -93,12 +94,38 @@ std::optional<QString> OnlineTextCommon(LastseenStatus status, TimeId now) {
 	return std::nullopt;
 }
 
+QString LastSeenAgoElapsed(qint64 elapsed) {
+	elapsed = std::max(elapsed, qint64(0));
+	if (elapsed >= 3600) {
+		return QString::number(elapsed / 3600)
+			+ u" ч "_q
+			+ QString::number((elapsed % 3600) / 60)
+			+ u" мин "_q
+			+ QString::number(elapsed % 60)
+			+ u" с"_q;
+	} else if (elapsed >= 60) {
+		return QString::number(elapsed / 60)
+			+ u" мин "_q
+			+ QString::number(elapsed % 60)
+			+ u" с"_q;
+	}
+	return QString::number(elapsed) + u" с"_q;
+}
+
 QString ExactLastSeenText(QDateTime tillFull, QDateTime nowFull) {
 	const auto onlineTime = QLocale().toString(tillFull.time(), "HH:mm:ss");
+	const auto ago = tr::luxury_LastSeenAgo(
+		tr::now,
+		lt_elapsed,
+		LastSeenAgoElapsed(tillFull.secsTo(nowFull)));
 	if (tillFull.date() == nowFull.date()) {
-		return tr::lng_status_lastseen_today(tr::now, lt_time, onlineTime);
+		return tr::lng_status_lastseen_today(tr::now, lt_time, onlineTime)
+			+ u" "_q
+			+ ago;
 	} else if (tillFull.date().addDays(1) == nowFull.date()) {
-		return tr::lng_status_lastseen_yesterday(tr::now, lt_time, onlineTime);
+		return tr::lng_status_lastseen_yesterday(tr::now, lt_time, onlineTime)
+			+ u" "_q
+			+ ago;
 	}
 	const auto date = QLocale().toString(tillFull.date(), QLocale::ShortFormat);
 	return tr::lng_status_lastseen_date_time(
@@ -106,7 +133,9 @@ QString ExactLastSeenText(QDateTime tillFull, QDateTime nowFull) {
 		lt_date,
 		date,
 		lt_time,
-		onlineTime);
+		onlineTime)
+		+ u" "_q
+		+ ago;
 }
 
 // Tracked exact time for approximate server statuses. The server only sends

@@ -648,10 +648,30 @@ void BuildSpyEssentials(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.setter = &LuxurySettings::setSaveDeletedMessages,
 	});
 	luxury.addSettingToggle({
-		.id = u"luxury/saveDeletedMessagesEvenWhenLocked"_q,
-		.title = tr::luxury_SaveDeletedMessagesEvenWhenLocked(),
-		.getter = &LuxurySettings::saveDeletedMessagesEvenWhenLocked,
-		.setter = &LuxurySettings::setSaveDeletedMessagesEvenWhenLocked,
+		.id = u"luxury/saveMessagesHistory"_q,
+		.title = tr::luxury_SaveMessagesHistory(),
+		.getter = &LuxurySettings::saveMessagesHistory,
+		.setter = &LuxurySettings::setSaveMessagesHistory,
+	});
+
+	luxury.addSectionDivider();
+
+	luxury.addSettingToggle({
+		.id = u"luxury/saveForBots"_q,
+		.title = tr::luxury_MessageSavingSaveForBots(),
+		.getter = &LuxurySettings::saveForBots,
+		.setter = &LuxurySettings::setSaveForBots,
+	});
+}
+
+void BuildLuxuryExtra(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
+	builder.addSubsectionTitle(tr::luxury_ExtraHeader());
+
+	luxury.addSettingToggle({
+		.id = u"luxury/showLastSeenSeconds"_q,
+		.title = tr::luxury_SettingsShowLastSeenSeconds(),
+		.getter = &LuxurySettings::showLastSeenSeconds,
+		.setter = &LuxurySettings::setShowLastSeenSeconds,
 	});
 	luxury.addSettingToggle({
 		.id = u"luxury/trackOnlineHistory"_q,
@@ -666,19 +686,10 @@ void BuildSpyEssentials(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.setter = &LuxurySettings::setTrackOnlineEvenWhenLocked,
 	});
 	luxury.addSettingToggle({
-		.id = u"luxury/saveMessagesHistory"_q,
-		.title = tr::luxury_SaveMessagesHistory(),
-		.getter = &LuxurySettings::saveMessagesHistory,
-		.setter = &LuxurySettings::setSaveMessagesHistory,
-	});
-
-	luxury.addSectionDivider();
-
-	luxury.addSettingToggle({
-		.id = u"luxury/saveForBots"_q,
-		.title = tr::luxury_MessageSavingSaveForBots(),
-		.getter = &LuxurySettings::saveForBots,
-		.setter = &LuxurySettings::setSaveForBots,
+		.id = u"luxury/saveDeletedMessagesEvenWhenLocked"_q,
+		.title = tr::luxury_SaveDeletedMessagesEvenWhenLocked(),
+		.getter = &LuxurySettings::saveDeletedMessagesEvenWhenLocked,
+		.setter = &LuxurySettings::setSaveDeletedMessagesEvenWhenLocked,
 	});
 }
 
@@ -751,6 +762,9 @@ const auto kMeta = BuildHelper({
 
 	builder.addSkip();
 	BuildSpyEssentials(builder, luxury);
+
+	builder.addSkip();
+	BuildLuxuryExtra(builder, luxury);
 
 	BuildWatchedChats(builder);
 

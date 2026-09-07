@@ -9054,6 +9054,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_GhostModeShortcut" = "Enter with Ghost";
 "luxury_SettingsShowMessageSeconds" = "Show Message Seconds";
 "luxury_SettingsShowLastSeenSeconds" = "Show Last Seen Seconds";
+"luxury_ExtraHeader" = "Luxury Extra";
+"luxury_LastSeenAgo" = "({elapsed} ago)";
 "luxury_FilterZalgo" = "Filter Zalgo";
 "luxury_ImproveLinkPreviews" = "Improve Link Previews";
 "luxury_ShowOnlyAddedEmojisAndStickers" = "Show Only Added Emojis & Stickers";

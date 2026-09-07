@@ -288,12 +288,6 @@ void BuildQoLToggles(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.getter = &LuxurySettings::showMessageSeconds,
 		.setter = &LuxurySettings::setShowMessageSeconds,
 	});
-	luxury.addSettingToggle({
-		.id = u"luxury/showLastSeenSeconds"_q,
-		.title = tr::luxury_SettingsShowLastSeenSeconds(),
-		.getter = &LuxurySettings::showLastSeenSeconds,
-		.setter = &LuxurySettings::setShowLastSeenSeconds,
-	});
 
 	BuildShowPeerId(builder);
 
