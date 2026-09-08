@@ -4,6 +4,12 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## 1.0.8
+
+### Fixed
+
+- Exact last-seen times now tick every second while shown instead of freezing until the next minute.
+
 ## 1.0.7
 
 ### Added
