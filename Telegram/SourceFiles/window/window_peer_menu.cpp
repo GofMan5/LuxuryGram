@@ -1974,6 +1974,9 @@ void Filler::fillProfileActions() {
 	LuxuryUi::AddOpenChannelAction(_peer, _controller, _addAction);
 	LuxuryUi::AddShadowBanAction(_peer, _addAction);
 	LuxuryUi::AddWatchChatAction(_peer, _controller, _addAction);
+	// LuxuryGram submenu (deleted/online history viewers): also reachable
+	// from the profile menu, not only the chat header menu.
+	LuxuryUi::AddLuxuryGramActions(_peer, _thread, _controller, _addAction);
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();
