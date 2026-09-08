@@ -138,6 +138,27 @@ QString ExactLastSeenText(QDateTime tillFull, QDateTime nowFull) {
 		+ ago;
 }
 
+// Gate for the tracked-approximate fallback below: both toggles on and an
+// approximate server status (no exact till, not online now, not long-ago),
+// never a bot/service account, with a recorded offline moment. No text is
+// built here so timeout and rendering share one condition.
+bool HasTrackedOfflineMoment(
+		not_null<UserData*> user,
+		LastseenStatus status,
+		TimeId now) {
+	if (!LuxurySettings::getInstance().showLastSeenSeconds()
+		|| !LuxurySettings::getInstance().trackOnlineHistory()) {
+		return false;
+	}
+	if (user->isBot() || user->isServiceUser()) {
+		return false;
+	}
+	if (status.onlineTill() != 0 || status.isOnline(now) || status.isLongAgo()) {
+		return false;
+	}
+	return LuxuryOnline::lastOfflineAt(user).has_value();
+}
+
 // Tracked exact time for approximate server statuses. The server only sends
 // "recently" / "within a week" / "within a month" / hidden, which carry no
 // exact till, so OnlineTextCommon owns their words -- unless we recorded the
@@ -146,13 +167,7 @@ QString ExactLastSeenText(QDateTime tillFull, QDateTime nowFull) {
 std::optional<QString> TrackedOfflineText(
 		not_null<UserData*> user,
 		TimeId now) {
-	const auto showSeconds = LuxurySettings::getInstance().showLastSeenSeconds();
-	const auto trackHistory = LuxurySettings::getInstance().trackOnlineHistory();
-	if (!showSeconds || !trackHistory) {
-		return std::nullopt;
-	}
-	const auto status = user->lastseen();
-	if (status.onlineTill() != 0 || status.isOnline(now) || status.isLongAgo()) {
+	if (!HasTrackedOfflineMoment(user, user->lastseen(), now)) {
 		return std::nullopt;
 	}
 	const auto at = LuxuryOnline::lastOfflineAt(user);
@@ -535,6 +550,14 @@ TimeId SortByOnlineValue(not_null<UserData*> user, TimeId now) {
 crl::time OnlineChangeTimeout(Data::LastseenStatus status, TimeId now) {
 	const auto result = OnlinePhraseChangeInSeconds(status, now);
 	Assert(result >= 0);
+	if (LuxurySettings::getInstance().showLastSeenSeconds()
+		&& !status.isOnline(now)
+		&& status.onlineTill() > 0) {
+		// Exact last-seen renders with seconds plus a live ago-suffix, so
+		// the phrase timeout would freeze both -- tick at the 1s floor.
+		// Online users keep the long timeout: "online" never goes stale.
+		return kMinOnlineChangeTimeout;
+	}
 	return std::clamp(
 		result * crl::time(1000),
 		kMinOnlineChangeTimeout,
@@ -544,6 +567,8 @@ crl::time OnlineChangeTimeout(Data::LastseenStatus status, TimeId now) {
 crl::time OnlineChangeTimeout(not_null<UserData*> user, TimeId now) {
 	if (user->isServiceUser() || user->isBot()) {
 		return kMaxOnlineChangeTimeout;
+	} else if (HasTrackedOfflineMoment(user, user->lastseen(), now)) {
+		return kMinOnlineChangeTimeout;
 	}
 	return OnlineChangeTimeout(user->lastseen(), now);
 }

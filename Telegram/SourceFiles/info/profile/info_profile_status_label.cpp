@@ -141,7 +141,7 @@ void StatusLabel::refresh() {
 			const auto updateIn = Data::OnlineChangeTimeout(
 				user,
 				currentTime);
-			if (showOnline) {
+			if (showOnline || updateIn <= crl::time(1000)) {
 				_refreshTimer.callOnce(updateIn);
 			}
 			return MaybeHiddenPrefixed(
