@@ -4,7 +4,7 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
-## Unreleased
+## 1.0.9
 
 ### Added
 
