@@ -1805,7 +1805,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_UserMessagesMenuText", "Сообщения пользователя" },
 	{ "luxury_VoiceConfirmation", "Голосовые сообщения" },
 	{ "luxury_WatchChatsHeader", "Отслеживаемые чаты" },
-}
+};
 
 void applyIfRussian(not_null<Lang::Instance*> instance, const QString &id) {
 	if (id != QLatin1String("ru")) {
