@@ -686,6 +686,12 @@ void BuildLuxuryExtra(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.setter = &LuxurySettings::setTrackOnlineEvenWhenLocked,
 	});
 	luxury.addSettingToggle({
+		.id = u"luxury/disableChatSelectionLimit"_q,
+		.title = tr::luxury_DisableChatSelectionLimit(),
+		.getter = &LuxurySettings::disableChatSelectionLimit,
+		.setter = &LuxurySettings::setDisableChatSelectionLimit,
+	});
+	luxury.addSettingToggle({
 		.id = u"luxury/saveDeletedMessagesEvenWhenLocked"_q,
 		.title = tr::luxury_SaveDeletedMessagesEvenWhenLocked(),
 		.getter = &LuxurySettings::saveDeletedMessagesEvenWhenLocked,

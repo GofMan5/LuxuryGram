@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "lang/lang_instance.h"
+#include "luxury/luxury_settings.h"
 
 #include "core/application.h"
 #include "storage/serialize_common.h"
@@ -300,6 +301,11 @@ void Instance::reset(const Language &data) {
 	}
 	ranges::fill(_nonDefaultSet, 0);
 	updateChoosingStickerReplacement();
+
+	// LuxuryGram: Russian overlay for our own keys (server packs never
+	// carry them). EN originals were restored above; applyValue reuses the
+	// tested path, _idChanges below refreshes every subscriber at once.
+	LuxuryRussian::applyIfRussian(not_null<Lang::Instance*>(this), _id);
 
 	_idChanges.fire_copy(_id);
 }

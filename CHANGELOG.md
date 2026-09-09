@@ -4,6 +4,13 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- New "No Selection Limit" switch in Luxury Extra: lifts the 100-message selection cap in chats. Off by default; attaching still caps at 100.
+- Settings are now translated to Russian: with the Russian language on, every LuxuryGram settings row reads Russian instead of falling back to English.
+
 ## 1.0.8
 
 ### Fixed

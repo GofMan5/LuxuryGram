@@ -8789,6 +8789,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SaveDeletedMessagesEvenWhenLocked" = "Save Deleted When Locked";
 "luxury_TrackOnlineHistory" = "Track Online History";
 "luxury_TrackOnlineEvenWhenLocked" = "Track Online When Locked";
+"luxury_DisableChatSelectionLimit" = "No Selection Limit";
 "luxury_SaveMessagesHistory" = "Save Edits History";
 "luxury_MessageSavingOtherHeader" = "Other";
 "luxury_MessageSavingSaveForBots" = "Save in Bot Dialogs";

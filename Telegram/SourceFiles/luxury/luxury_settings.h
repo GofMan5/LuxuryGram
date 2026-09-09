@@ -271,6 +271,7 @@ public:
 	[[nodiscard]] bool saveDeletedMessagesEvenWhenLocked() const { return _saveDeletedMessagesEvenWhenLocked.current(); }
 	[[nodiscard]] bool trackOnlineHistory() const { return _trackOnlineHistory.current(); }
 	[[nodiscard]] bool trackOnlineEvenWhenLocked() const { return _trackOnlineEvenWhenLocked.current(); }
+	[[nodiscard]] bool disableChatSelectionLimit() const { return _disableChatSelectionLimit.current(); }
 	[[nodiscard]] bool saveMessagesHistory() const { return _saveMessagesHistory.current(); }
 	[[nodiscard]] bool saveForBots() const { return _saveForBots.current(); }
 	[[nodiscard]] bool filtersEnabled() const { return _filtersEnabled.current(); }
@@ -366,6 +367,7 @@ public:
 	void setSaveDeletedMessagesEvenWhenLocked(bool val);
 	void setTrackOnlineHistory(bool val);
 	void setTrackOnlineEvenWhenLocked(bool val);
+	void setDisableChatSelectionLimit(bool val);
 	void setSaveMessagesHistory(bool val);
 	void setSaveForBots(bool val);
 	void setFiltersEnabled(bool val);
@@ -467,6 +469,8 @@ public:
 	[[nodiscard]] rpl::producer<bool> trackOnlineHistoryChanges() const { return _trackOnlineHistory.changes(); }
 	[[nodiscard]] rpl::producer<bool> trackOnlineEvenWhenLockedValue() const { return _trackOnlineEvenWhenLocked.value(); }
 	[[nodiscard]] rpl::producer<bool> trackOnlineEvenWhenLockedChanges() const { return _trackOnlineEvenWhenLocked.changes(); }
+	[[nodiscard]] rpl::producer<bool> disableChatSelectionLimitValue() const { return _disableChatSelectionLimit.value(); }
+	[[nodiscard]] rpl::producer<bool> disableChatSelectionLimitChanges() const { return _disableChatSelectionLimit.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveMessagesHistoryValue() const { return _saveMessagesHistory.value(); }
 	[[nodiscard]] rpl::producer<bool> saveMessagesHistoryChanges() const { return _saveMessagesHistory.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveForBotsValue() const { return _saveForBots.value(); }
@@ -660,6 +664,7 @@ private:
 	rpl::variable<bool> _saveDeletedMessagesEvenWhenLocked = true;
 	rpl::variable<bool> _trackOnlineHistory = false;
 	rpl::variable<bool> _trackOnlineEvenWhenLocked = true;
+	rpl::variable<bool> _disableChatSelectionLimit = false;
 	rpl::variable<bool> _saveMessagesHistory = true;
 	rpl::variable<bool> _saveForBots = false;
 	std::unordered_set<int64> _shadowBanIds;
@@ -761,3 +766,15 @@ private:
 
 void to_json(nlohmann::json &j, const LuxurySettings &s);
 void from_json(const nlohmann::json &j, LuxurySettings &s);
+
+namespace Lang {
+class Instance;
+} // namespace Lang
+
+namespace LuxuryRussian {
+
+// Applies the Russian overlay for settings-visible luxury_* keys when the
+// switched-to language is Russian. No-op for every other language.
+void applyIfRussian(not_null<Lang::Instance*> instance, const QString &id);
+
+} // namespace LuxuryRussian
