@@ -1797,7 +1797,7 @@ bool ListWidget::isGoodForSelection(
 	if (!applyTo.contains(item->fullId())) {
 		++totalCount;
 	}
-	return (totalCount <= MaxSelectedItems);
+	return (totalCount <= LuxuryMaxSelectedItems());
 }
 
 bool ListWidget::addToSelection(
@@ -1871,7 +1871,7 @@ void ListWidget::changeSelectionAsGroup(
 		return true;
 	}();
 	if (action == SelectAction::Select) {
-		// An album that cannot be selected -- MaxSelectedItems is reached, or one
+		// An album that cannot be selected -- LuxuryMaxSelectedItems() is reached, or one
 		// of its parts is not selectable -- is left as it is. This used to fall
 		// through to the remove below and take an already selected album out.
 		if (canSelect) {
@@ -2047,7 +2047,7 @@ std::vector<not_null<HistoryItem*>> ListWidget::selectionUpTo(
 	}
 	const auto startItem = topToBottom ? nearestItem : toItem.get();
 	const auto endItem = topToBottom ? toItem.get() : nearestItem;
-	const auto left = MaxSelectedItems
+	const auto left = LuxuryMaxSelectedItems()
 		- int(_selected.size())
 		+ (topToBottom ? 0 : 1);
 	return collectBetween(startItem, endItem, left);
@@ -3501,11 +3501,11 @@ void ListWidget::applyDragSelection() {
 void ListWidget::applyDragSelection(SelectedMap &applyTo) const {
 	if (_dragSelectAction == DragSelectAction::Selecting) {
 		auto already = int(applyTo.size());
-		// _dragSelected is ordered oldest-first and MaxSelectedItems is a hard
+		// _dragSelected is ordered oldest-first and LuxuryMaxSelectedItems() is a hard
 		// cap, so walking it in order kept the far end of the range and dropped
 		// exactly the messages a drag upwards had selected first.
 		const auto add = [&](FullMsgId itemId) {
-			if (applyTo.size() >= MaxSelectedItems) {
+			if (applyTo.size() >= LuxuryMaxSelectedItems()) {
 				return false;
 			} else if (!applyTo.contains(itemId)) {
 				if (const auto item = session().data().message(itemId)) {

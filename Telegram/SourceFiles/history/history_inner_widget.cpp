@@ -3304,7 +3304,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				}
 				const auto start = (topToBottom ? nearestItem : toItem);
 				const auto end = (topToBottom ? toItem : nearestItem);
-				const auto left = MaxSelectedItems
+				const auto left = LuxuryMaxSelectedItems()
 					- selectedState.count
 					+ (topToBottom ? 0 : 1);
 				if (collectBetween(start, end, left).empty()) {
@@ -5819,7 +5819,7 @@ void HistoryInner::updateDragSelection(Element *dragSelFrom, Element *dragSelTo,
 	int32 fromy = itemTop(_dragSelFrom), toy = itemTop(_dragSelTo);
 	// dragSelFrom is the item the press started on, so a swap here means the
 	// drag went upwards -- applyDragSelection() needs that to know which end of
-	// the range the MaxSelectedItems cap should keep.
+	// the range the LuxuryMaxSelectedItems() cap should keep.
 	_dragSelectingUp = (fromy >= 0 && toy >= 0 && fromy > toy);
 	if (_dragSelectingUp) {
 		std::swap(_dragSelFrom, _dragSelTo);
@@ -6091,12 +6091,12 @@ void HistoryInner::changeSelection(
 	const auto add = (action == SelectAction::Select);
 	if (add
 		&& goodForSelection(toItems, item, total)
-		&& total <= MaxSelectedItems) {
+		&& total <= LuxuryMaxSelectedItems()) {
 		addToSelection(toItems, item);
 	} else if (!add) {
 		// A Select that cannot go through leaves the selection alone. It used to
 		// fall through to the remove below, so dragging past the
-		// MaxSelectedItems cap, or over a message a filter had hidden, took an
+		// LuxuryMaxSelectedItems() cap, or over a message a filter had hidden, took an
 		// already selected message back out.
 		removeFromSelection(toItems, item);
 	}
@@ -6122,7 +6122,7 @@ void HistoryInner::changeSelectionAsGroup(
 				return false;
 			}
 		}
-		return (total <= MaxSelectedItems);
+		return (total <= LuxuryMaxSelectedItems());
 	}();
 	if (action == SelectAction::Select) {
 		// Same as in changeSelection(): an album that cannot be selected -- the
@@ -6456,7 +6456,7 @@ void HistoryInner::applyDragSelection(
 			}
 		}
 		collectSelectionRange(items, _history, fromblock, fromitem, toblock, toitem);
-		// MaxSelectedItems is a hard cap, so whichever end of the range is
+		// LuxuryMaxSelectedItems() is a hard cap, so whichever end of the range is
 		// walked first is the end that survives it. The range is always stored
 		// oldest-first, so a drag upwards used to throw away exactly the
 		// messages the user had selected first.
@@ -6464,7 +6464,7 @@ void HistoryInner::applyDragSelection(
 			ranges::reverse(items);
 		}
 		for (const auto &item : items) {
-			if (toItems->size() >= MaxSelectedItems) {
+			if (toItems->size() >= LuxuryMaxSelectedItems()) {
 				break;
 			}
 			changeSelectionAsGroup(toItems, item, SelectAction::Select);

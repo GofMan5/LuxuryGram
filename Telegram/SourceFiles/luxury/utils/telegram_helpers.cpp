@@ -14,6 +14,7 @@
 #include "luxury/luxury_worker.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/features/filters/filters_controller.h"
+#include "config.h"
 #include "core/core_settings.h"
 #include "core/application.h"
 #include "base/call_delayed.h"
@@ -52,6 +53,7 @@
 #include <atomic>
 #include <functional>
 #include <latch>
+#include <limits>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 
@@ -521,6 +523,12 @@ QString getPeerDC(not_null<PeerData*> peer) {
 	}
 
 	return {};
+}
+
+int LuxuryMaxSelectedItems() {
+	return LuxurySettings::getInstance().disableChatSelectionLimit()
+		? std::numeric_limits<int>::max()
+		: MaxSelectedItems;
 }
 
 int getScheduleTime(int64 sumSize) {
