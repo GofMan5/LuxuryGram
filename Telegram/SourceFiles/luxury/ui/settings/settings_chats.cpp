@@ -44,14 +44,6 @@ void BuildStickersAndEmoji(SectionBuilder &builder, LuxurySectionBuilder &luxury
 		.setter = &LuxurySettings::setShowOnlyAddedEmojisAndStickers,
 	});
 
-	luxury.addSettingToggle({
-		.id = u"luxury/unlimitedRecentStickers"_q,
-		.altIds = { u"luxury/recentStickersCount"_q },
-		.title = tr::luxury_SettingsUnlimitedRecentStickers(),
-		.getter = &LuxurySettings::unlimitedRecentStickers,
-		.setter = &LuxurySettings::setUnlimitedRecentStickers,
-	});
-
 	luxury.addCollapsibleToggle({
 		.id = u"luxury/hideReactions"_q,
 		.title = tr::luxury_HideReactions(),

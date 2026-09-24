@@ -224,6 +224,9 @@ public:
 		std::shared_ptr<ChatHelpers::Show> show,
 		not_null<DocumentData*> document,
 		bool faved);
+	// Moves an already-faved sticker to the front of the favorites.
+	// No-op when the sticker is not faved or already first.
+	void moveFavedToFront(not_null<DocumentData*> document);
 
 	void setsReceived(const QVector<MTPStickerSet> &data, uint64 hash);
 	void masksReceived(const QVector<MTPStickerSet> &data, uint64 hash);

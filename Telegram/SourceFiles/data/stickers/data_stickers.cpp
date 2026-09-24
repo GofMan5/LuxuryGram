@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/text_utilities.h"
 #include "lang/lang_keys.h"
 #include "data/data_premium_limits.h"
+#include "luxury/luxury_settings.h"
 #include "boxes/premium_limits_box.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -522,6 +523,9 @@ bool Stickers::isFaved(not_null<const DocumentData*> document) const {
 void Stickers::checkFavedLimit(
 		StickersSet &set,
 		std::shared_ptr<ChatHelpers::Show> show) {
+	if (LuxurySettings::getInstance().unlimitedFavedStickers()) {
+		return;
+	}
 	const auto session = &_owner->session();
 	const auto limits = Data::PremiumLimits(session);
 	if (set.stickers.size() <= limits.stickersFavedCurrent()) {
@@ -666,6 +670,23 @@ void Stickers::setIsNotFaved(not_null<DocumentData*> document) {
 	RemoveFromSet(setsRef(), document, FavedSetId);
 	session().local().writeFavedStickers();
 	notifyUpdated(StickersType::Stickers);
+}
+
+void Stickers::moveFavedToFront(not_null<DocumentData*> document) {
+	auto &sets = setsRef();
+	const auto it = sets.find(FavedSetId);
+	if (it == sets.end()) {
+		return;
+	}
+	const auto set = it->second.get();
+	const auto index = set->stickers.indexOf(document);
+	if (index <= 0) {
+		return;
+	}
+	moveFavedToFront(*set, index);
+	session().local().writeFavedStickers();
+	notifyUpdated(StickersType::Stickers);
+	notifyStickerSetInstalled(FavedSetId);
 }
 
 void Stickers::setFaved(

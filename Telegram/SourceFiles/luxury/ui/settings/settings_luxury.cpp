@@ -697,6 +697,19 @@ void BuildLuxuryExtra(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.getter = &LuxurySettings::saveDeletedMessagesEvenWhenLocked,
 		.setter = &LuxurySettings::setSaveDeletedMessagesEvenWhenLocked,
 	});
+	luxury.addSettingToggle({
+		.id = u"luxury/unlimitedRecentStickers"_q,
+		.altIds = { u"luxury/recentStickersCount"_q },
+		.title = tr::luxury_SettingsUnlimitedRecentStickers(),
+		.getter = &LuxurySettings::unlimitedRecentStickers,
+		.setter = &LuxurySettings::setUnlimitedRecentStickers,
+	});
+	luxury.addSettingToggle({
+		.id = u"luxury/unlimitedFavedStickers"_q,
+		.title = tr::luxury_SettingsUnlimitedFavedStickers(),
+		.getter = &LuxurySettings::unlimitedFavedStickers,
+		.setter = &LuxurySettings::setUnlimitedFavedStickers,
+	});
 }
 
 // The chats picked with "Watch Media" in a chat's own menu. There is nothing to

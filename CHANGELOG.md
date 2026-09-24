@@ -4,6 +4,18 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- Favorite stickers can now be reordered: right-clicking one in the Favorites row offers "Move to Front".
+- Luxury Extra gains an "Unlimited Favorite Stickers" switch that lifts the 5-sticker cap (10 with Premium) on favorites. The "Unlimited Recent Stickers" switch moved there from Chats, so both sticker limits live in one place.
+
+### Fixed
+
+- The Links rows in LuxuryGram settings are named after where they lead (Repository, Issues, Contributing) instead of Channel, Chats and Translate.
+- Russian settings translations now cover the message-filter rows, the watched-chats menu, the sticker-limit switches and the Links rows, which previously fell back to English.
+
 ## 1.0.9
 
 ### Added

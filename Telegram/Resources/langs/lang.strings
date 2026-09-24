@@ -8815,9 +8815,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_DisableGreetingSticker" = "Disable Greeting Sticker";
 "luxury_TranslationProvider" = "Translation Provider";
 "luxury_LinksHeader" = "Links";
-"luxury_LinksChannel" = "Channel";
-"luxury_LinksChats" = "Chats";
-"luxury_LinksTranslate" = "Translate";
+"luxury_LinksRepository" = "Repository";
+"luxury_LinksIssues" = "Issues";
+"luxury_LinksContributing" = "Contributing";
 "luxury_LinksDocumentation" = "Documentation";
 "luxury_CategoriesHeader" = "Categories";
 "luxury_CrashReporting" = "Crash Reporting";
@@ -8848,6 +8848,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SettingsShowMessageShot" = "Show Message Shot";
 "luxury_SettingsShowMessageShotDescription" = "Allows taking a screenshot of the selected messages.";
 "luxury_SettingsUnlimitedRecentStickers" = "Unlimited Recent Stickers";
+"luxury_SettingsUnlimitedFavedStickers" = "Unlimited Favorite Stickers";
+"luxury_StickersMoveToFront" = "Move to Front";
 "luxury_MaterialSwitches" = "MD3 Switch Style";
 "luxury_RemoveMessageTail" = "Remove Message Tail";
 "luxury_HideShareButton" = "Hide Side \"Share\" Button";

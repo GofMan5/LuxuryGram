@@ -2636,6 +2636,21 @@ base::unique_qptr<Ui::PopupMenu> StickersListWidget::fillContextMenu(
 		toggleFavedSticker,
 		isFaved ? &icons->menuUnfave : &icons->menuFave);
 
+	// Reorder favorites: the shown faved section mirrors the data order,
+	// and display filtering only removes entries, so a shown index past
+	// zero is always past zero in the data set too -- the action below
+	// can always move something.
+	if (isFaved
+		&& set.id == Data::Stickers::FavedSetId
+		&& sticker->index > 0) {
+		menu->addAction(
+			tr::luxury_StickersMoveToFront(tr::now),
+			[=] {
+				document->owner().stickers().moveFavedToFront(document);
+			},
+			&st::menuIconReorder);
+	}
+
 	if (_features.openStickerSets) {
 		menu->addAction(tr::lng_context_pack_info(tr::now), [=, id = set.id] {
 			showStickerSetBox(document, id);

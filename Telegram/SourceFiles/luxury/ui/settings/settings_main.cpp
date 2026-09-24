@@ -139,7 +139,7 @@ void BuildLinks(SectionBuilder &builder) {
 
 	builder.addButton({
 		.id = u"luxury/repository"_q,
-		.title = tr::luxury_LinksChannel(),
+		.title = tr::luxury_LinksRepository(),
 		.icon = { &st::menuIconChannel },
 		.label = rpl::single(QString("GitHub")),
 		.onClick = [=] {
@@ -149,7 +149,7 @@ void BuildLinks(SectionBuilder &builder) {
 	});
 	builder.addButton({
 		.id = u"luxury/issues"_q,
-		.title = tr::luxury_LinksChats(),
+		.title = tr::luxury_LinksIssues(),
 		.icon = { &st::menuIconChats },
 		.label = rpl::single(QString("Issues")),
 		.onClick = [=] {
@@ -159,7 +159,7 @@ void BuildLinks(SectionBuilder &builder) {
 	});
 	builder.addButton({
 		.id = u"luxury/contributing"_q,
-		.title = tr::luxury_LinksTranslate(),
+		.title = tr::luxury_LinksContributing(),
 		.icon = { &st::menuIconTranslate },
 		.label = rpl::single(QString("Contributing")),
 		.onClick = [=] {

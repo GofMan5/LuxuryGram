@@ -1013,6 +1013,12 @@ void LuxurySettings::setUnlimitedRecentStickers(bool val) {
 	save();
 }
 
+void LuxurySettings::setUnlimitedFavedStickers(bool val) {
+	if (_unlimitedFavedStickers.current() == val) return;
+	_unlimitedFavedStickers = val;
+	save();
+}
+
 void LuxurySettings::setShowReactionsPanelInContextMenu(ContextMenuVisibility val) {
 	if (_showReactionsPanelInContextMenu.current() == val) return;
 	_showReactionsPanelInContextMenu = val;
@@ -1418,6 +1424,7 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"deletedMark", s._deletedMark.current()},
 		{"editedMark", s._editedMark.current()},
 		{"unlimitedRecentStickers", s._unlimitedRecentStickers.current()},
+		{"unlimitedFavedStickers", s._unlimitedFavedStickers.current()},
 		{"showReactionsPanelInContextMenu", s._showReactionsPanelInContextMenu.current()},
 		{"showViewsPanelInContextMenu", s._showViewsPanelInContextMenu.current()},
 		{"showHideMessageInContextMenu", s._showHideMessageInContextMenu.current()},
@@ -1578,6 +1585,7 @@ s._disableChatSelectionLimit = j.value("disableChatSelectionLimit", defaults._di
 	s._deletedMark = j.value("deletedMark", defaults._deletedMark.current());
 	s._editedMark = j.value("editedMark", defaults._editedMark.current());
 	s._unlimitedRecentStickers = j.value("unlimitedRecentStickers", defaults._unlimitedRecentStickers.current());
+	s._unlimitedFavedStickers = j.value("unlimitedFavedStickers", defaults._unlimitedFavedStickers.current());
 	s._showReactionsPanelInContextMenu = j.value("showReactionsPanelInContextMenu", defaults._showReactionsPanelInContextMenu.current());
 	s._showViewsPanelInContextMenu = j.value("showViewsPanelInContextMenu", defaults._showViewsPanelInContextMenu.current());
 	s._showHideMessageInContextMenu = j.value("showHideMessageInContextMenu", defaults._showHideMessageInContextMenu.current());
@@ -1652,6 +1660,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_AvatarCorners", "Углы аватаров" },
 	{ "luxury_AvatarCornersCircle", "Круглые" },
 	{ "luxury_AvatarCornersSquare", "Квадратные" },
+	{ "luxury_CaseInsensitiveExpression", "Без учёта регистра" },
 	{ "luxury_CategoriesHeader", "Категории" },
 	{ "luxury_CategoryAppearance", "Внешний вид" },
 	{ "luxury_CategoryChats", "Чаты" },
@@ -1685,6 +1694,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_DrawerElementsHeader", "Элементы шторки" },
 	{ "luxury_EditedMarkText", "Пометка изменений" },
 	{ "luxury_EditsHistoryMenuText", "История" },
+	{ "luxury_EnableExpression", "Включить фильтр" },
 	{ "luxury_EnableGhostModeTray", "Включить гост-режим" },
 	{ "luxury_EnableStreamerModeTray", "Включить режим стримера" },
 	{ "luxury_ExpireMediaContextMenuText", "Сжечь" },
@@ -1719,11 +1729,11 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_HideSimilarChannelsTab", "Скрыть вкладку похожих каналов" },
 	{ "luxury_ImproveLinkPreviews", "Улучшить превью ссылок" },
 	{ "luxury_LReadMessages", "Читать локально" },
-	{ "luxury_LinksChannel", "Канал" },
-	{ "luxury_LinksChats", "Чаты" },
+	{ "luxury_LinksContributing", "Контрибьютинг" },
 	{ "luxury_LinksDocumentation", "Документация" },
 	{ "luxury_LinksHeader", "Ссылки" },
-	{ "luxury_LinksTranslate", "Перевод" },
+	{ "luxury_LinksIssues", "Задачи" },
+	{ "luxury_LinksRepository", "Репозиторий" },
 	{ "luxury_LocalPremium", "Локальный Telegram Premium" },
 	{ "luxury_LuxuryPreferences", "Настройки LuxuryGram" },
 	{ "luxury_MarkReadAfterAction", "Читать при действии" },
@@ -1743,10 +1753,22 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_MonospaceFont", "Моноширинный шрифт" },
 	{ "luxury_QuickAdminShortcuts", "Быстрые админ-кнопки" },
 	{ "luxury_ReadUntilMenuText", "Прочитать сообщение" },
+	{ "luxury_RegexFilterBulletinAction", "В текущий чат" },
+	{ "luxury_RegexFilterBulletinText", "Фильтр добавлен в **общие фильтры**." },
 	{ "luxury_RegexFilterQuickAdd", "Добавить фильтр" },
 	{ "luxury_RegexFilters", "Фильтры сообщений" },
+	{ "luxury_RegexFiltersAdd", "Добавить фильтр" },
+	{ "luxury_RegexFiltersAmount#one", "{count} фильтр" },
+	{ "luxury_RegexFiltersAmount#other", "{count} фильтров" },
+	{ "luxury_RegexFiltersEdit", "Изменить фильтр" },
 	{ "luxury_RegexFiltersEnable", "Включить фильтры" },
 	{ "luxury_RegexFiltersEnableSharedInChats", "Общие фильтры в чатах" },
+	{ "luxury_RegexFiltersExcluded", "Исключённые фильтры" },
+	{ "luxury_RegexFiltersExcludedAmount#one", "{count} исключение" },
+	{ "luxury_RegexFiltersExcludedAmount#other", "{count} исключений" },
+	{ "luxury_RegexFiltersHeader", "Фильтры" },
+	{ "luxury_RegexFiltersListEmpty", "Фильтров пока нет." },
+	{ "luxury_RegexFiltersPlaceholder", "Выражение" },
 	{ "luxury_RegexFiltersShared", "Общие фильтры" },
 	{ "luxury_RegisterURLScheme", "Зарегистрировать URL-схему" },
 	{ "luxury_RemoveMessageTail", "Убирать хвост сообщений" },
@@ -1754,6 +1776,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_ReplaceMarksWithIcons", "Заменить на иконки" },
 	{ "luxury_ResetSettings", "Сбросить настройки" },
 	{ "luxury_ResetSettingsConfirmation", "Сбросить **все** настройки LuxuryGram к значениям по умолчанию?" },
+	{ "luxury_ReversedExpression", "Инверсия" },
 	{ "luxury_RoundConfirmation", "Круглые видео" },
 	{ "luxury_SReadMessages", "Читать на сервере" },
 	{ "luxury_SaveDeletedMessages", "Сохранять удалённые" },
@@ -1785,6 +1808,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_SettingsShowMessageShotDescription", "Позволяет делать снимок выбранных сообщений." },
 	{ "luxury_SettingsSpoofWebviewAsAndroid", "Притворяться Android" },
 	{ "luxury_SettingsUnlimitedRecentStickers", "Неограниченные недавние стикеры" },
+	{ "luxury_SettingsUnlimitedFavedStickers", "Неограниченные избранные стикеры" },
 	{ "luxury_SettingsWideMultiplier", "Множитель ширины сообщений" },
 	{ "luxury_SettingsWideMultiplierDescription", "Меняйте ширину сообщений для широких мониторов." },
 	{ "luxury_ShowOnlyAddedEmojisAndStickers", "Только добавленные эмодзи и стикеры" },
@@ -1804,6 +1828,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_UseScheduledMessagesDescription", "Автоматически откладывает исходящие примерно на 12 секунд (медиа — дольше). С этой функцией вы не появляетесь в сети.\\nНе используйте на нестабильной сети." },
 	{ "luxury_UserMessagesMenuText", "Сообщения пользователя" },
 	{ "luxury_VoiceConfirmation", "Голосовые сообщения" },
+	{ "luxury_WatchChatStop", "Не отслеживать" },
 	{ "luxury_WatchChatsHeader", "Отслеживаемые чаты" },
 };
 
