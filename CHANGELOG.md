@@ -10,6 +10,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 - Favorite stickers can also be reordered with a middle-click, which moves the clicked sticker straight to the front. The Chats sticker settings now say that this exists.
 
+### Fixed
+
+- Unlimited favorite stickers no longer shrink back to 5 on restart or on the hourly sync: extra favorites and their order are merged over the server list instead of being replaced by it. Extras live on this device.
+
 ## 1.0.10
 
 ### Added

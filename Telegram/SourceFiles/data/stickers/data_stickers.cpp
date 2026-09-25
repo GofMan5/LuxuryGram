@@ -870,10 +870,27 @@ void Stickers::specialSetReceived(
 		const QVector<MTPStickerPack> &packs,
 		const QVector<MTPint> &usageDates) {
 	auto &sets = setsRef();
+
+	// Unlimited favorites live beyond the server cap: the server keeps
+	// sending its capped list, so without a merge every sync (launch and
+	// hourly) would shrink the local set and reset its order back to 5.
+	const auto keepUnlimitedFaved = (setId == FavedSetId)
+		&& LuxurySettings::getInstance().unlimitedFavedStickers();
+	auto keepFavedStickers = StickersPack();
+	auto keepFavedEmoji = base::flat_map<EmojiPtr, StickersPack>();
+	if (keepUnlimitedFaved) {
+		if (const auto it = sets.find(FavedSetId);
+			it != sets.cend() && !it->second->stickers.isEmpty()) {
+			keepFavedStickers = it->second->stickers;
+			keepFavedEmoji = it->second->emoji;
+		}
+	}
+
 	auto it = sets.find(setId);
 
 	if (items.isEmpty()) {
-		if (it != sets.cend()) {
+		if (it != sets.cend()
+			&& (setId != FavedSetId || keepFavedStickers.isEmpty())) {
 			sets.erase(it);
 		}
 	} else {
@@ -973,8 +990,38 @@ void Stickers::specialSetReceived(
 		session().local().writeRecentMasks();
 	} break;
 	case FavedSetId: {
+		if (!keepFavedStickers.isEmpty()) {
+			if (const auto merged = sets.find(FavedSetId);
+				merged != sets.end()) {
+				const auto set = merged->second.get();
+				// Server-newcomers (faved on another device) go first,
+				// everything local keeps its order: extras survive the
+				// sync and manual reorder survives with them.
+				auto stickers = StickersPack();
+				stickers.reserve(
+					set->stickers.size() + keepFavedStickers.size());
+				for (const auto document : set->stickers) {
+					if (!keepFavedStickers.contains(document)) {
+						stickers.push_back(document);
+					}
+				}
+				for (const auto document : keepFavedStickers) {
+					stickers.push_back(document);
+				}
+				auto &emoji = set->emoji;
+				for (auto &[ptr, list] : keepFavedEmoji) {
+					auto &target = emoji[ptr];
+					for (const auto document : list) {
+						if (!target.contains(document)) {
+							target.push_back(document);
+						}
+					}
+				}
+				set->stickers = std::move(stickers);
+			}
+		}
 		const auto counted = Api::CountFavedStickersHash(&session());
-		if (counted != hash) {
+		if (counted != hash && !keepUnlimitedFaved) {
 			LOG(("API Error: "
 				"received faved stickers hash %1 while counted hash is %2"
 				).arg(hash

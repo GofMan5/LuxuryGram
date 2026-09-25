@@ -8849,7 +8849,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SettingsShowMessageShotDescription" = "Allows taking a screenshot of the selected messages.";
 "luxury_SettingsUnlimitedRecentStickers" = "Unlimited Recent Stickers";
 "luxury_SettingsUnlimitedFavedStickers" = "Unlimited Favorite Stickers";
-"luxury_SettingsFavedReorderHint" = "Right-click a favorite sticker for Move to Front; middle-click moves it instantly.";
+"luxury_SettingsFavedReorderHint" = "Right-click a favorite sticker for Move to Front; middle-click moves it instantly. Unlimited favorites live on this device.";
 "luxury_StickersMoveToFront" = "Move to Front";
 "luxury_MaterialSwitches" = "MD3 Switch Style";
 "luxury_RemoveMessageTail" = "Remove Message Tail";
