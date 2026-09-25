@@ -44,6 +44,10 @@ void BuildStickersAndEmoji(SectionBuilder &builder, LuxurySectionBuilder &luxury
 		.setter = &LuxurySettings::setShowOnlyAddedEmojisAndStickers,
 	});
 
+	builder.addSkip();
+	builder.addDividerText(tr::luxury_SettingsFavedReorderHint());
+	builder.addSkip();
+
 	luxury.addCollapsibleToggle({
 		.id = u"luxury/hideReactions"_q,
 		.title = tr::luxury_HideReactions(),

@@ -1809,6 +1809,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_SettingsSpoofWebviewAsAndroid", "Притворяться Android" },
 	{ "luxury_SettingsUnlimitedRecentStickers", "Неограниченные недавние стикеры" },
 	{ "luxury_SettingsUnlimitedFavedStickers", "Неограниченные избранные стикеры" },
+	{ "luxury_SettingsFavedReorderHint", "Клик правой кнопкой по избранному стикеру — «Move to Front»; клик средней кнопкой перемещает сразу." },
 	{ "luxury_SettingsWideMultiplier", "Множитель ширины сообщений" },
 	{ "luxury_SettingsWideMultiplierDescription", "Меняйте ширину сообщений для широких мониторов." },
 	{ "luxury_ShowOnlyAddedEmojisAndStickers", "Только добавленные эмодзи и стикеры" },

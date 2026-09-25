@@ -2398,6 +2398,25 @@ QRect StickersListWidget::removeButtonRect(const SectionInfo &info) const {
 }
 
 void StickersListWidget::mousePressEvent(QMouseEvent *e) {
+	if (e->button() == Qt::MiddleButton) {
+		// Middle-click a favorite to bring it to the front.
+		_lastMousePosition = e->globalPos();
+		updateSelected();
+		if (const auto sticker = std::get_if<OverSticker>(&_selected)) {
+			const auto &sets = shownSets();
+			if (sticker->section >= 0
+				&& sticker->section < sets.size()
+				&& sets[sticker->section].id == Data::Stickers::FavedSetId
+				&& sticker->index > 0
+				&& sticker->index
+					< sets[sticker->section].stickers.size()) {
+				const auto document = sets[sticker->section]
+					.stickers[sticker->index].document;
+				document->owner().stickers().moveFavedToFront(document);
+			}
+		}
+		return;
+	}
 	if (e->button() != Qt::LeftButton) {
 		return;
 	}

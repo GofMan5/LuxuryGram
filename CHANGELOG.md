@@ -4,6 +4,12 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- Favorite stickers can also be reordered with a middle-click, which moves the clicked sticker straight to the front. The Chats sticker settings now say that this exists.
+
 ## 1.0.10
 
 ### Added
