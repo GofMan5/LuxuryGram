@@ -37,6 +37,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/text_options.h"
 #include "ui/painter.h"
 #include "ui/unread_badge.h"
+#include "ui/controls/button_context_menu.h"
 #include "ui/ui_utility.h"
 #include "window/window_adaptive.h"
 #include "window/window_session_controller.h"
@@ -70,15 +71,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_info.h"
 
 #include <QtGui/QWindow>
-
-// LuxuryGram includes
-#include "luxury/luxury_settings.h"
-#include "boxes/peers/edit_participants_box.h"
-#include "data/data_chat_filters.h"
-#include "history/admin_log/history_admin_log_section.h"
-#include "styles/style_luxury_styles.h"
-#include "styles/style_luxury_icons.h"
-
 
 namespace HistoryView {
 namespace {
@@ -129,7 +121,6 @@ TopBarWidget::TopBarWidget(
 , _forward(this, tr::lng_selected_forward(), st::defaultActiveButton)
 , _sendNow(this, tr::lng_selected_send_now(), st::defaultActiveButton)
 , _delete(this, tr::lng_selected_delete(), st::defaultActiveButton)
-, _messageShot(this, tr::luxury_MessageShotTopBarText(), st::defaultActiveButton)
 , _back(this, st::historyTopBarBack)
 , _cancelChoose(this, st::topBarCloseChoose)
 , _call(this, st::topBarCall)
@@ -137,8 +128,6 @@ TopBarWidget::TopBarWidget(
 , _search(this, st::topBarSearch)
 , _infoToggle(this, st::topBarInfo)
 , _menuToggle(this, st::topBarMenuToggle)
-, _recentActions(this, st::topBarRecentActions)
-, _admins(this, st::topBarAdmins)
 , _titlePeerText(st::windowMinWidth / 3)
 , _onlineUpdater([=] { updateOnlineDisplay(); }) {
 	setAttribute(Qt::WA_OpaquePaintEvent);
@@ -147,7 +136,6 @@ TopBarWidget::TopBarWidget(
 	_forward->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 	_sendNow->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 	_delete->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
-	_messageShot->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 
 	Lang::Updated(
 	) | rpl::on_next([=] {
@@ -160,8 +148,6 @@ TopBarWidget::TopBarWidget(
 	_sendNow->setWidthChangedCallback([=] { updateControlsGeometry(); });
 	_delete->setClickedCallback([=] { _deleteSelection.fire({}); });
 	_delete->setWidthChangedCallback([=] { updateControlsGeometry(); });
-	_messageShot->setClickedCallback([=] { _messageShotSelection.fire({}); });
-	_messageShot->setWidthChangedCallback([=] { updateControlsGeometry(); });
 	_clear->setClickedCallback([=] { _clearSelection.fire({}); });
 	_call->setClickedCallback([=] { call({}); });
 	_call->setAcceptBoth(true, true);
@@ -174,26 +160,6 @@ TopBarWidget::TopBarWidget(
 	_menuToggle->addClickHandler([=](auto) { showPeerMenu(); });
 	_menuToggle->setAcceptBoth(true, true);
 	_infoToggle->setClickedCallback([=] { toggleInfoSection(); });
-
-	_recentActions->setClickedCallback([=]
-	{
-		const auto channel = _activeChat.key.peer()->asChannel();
-		_controller->showSection(std::make_shared<AdminLog::SectionMemento>(channel));
-	});
-	_admins->setClickedCallback([=]
-	{
-		ParticipantsBoxController::Start(
-			controller,
-			_activeChat.key.peer(),
-			ParticipantsBoxController::Role::Admins
-		);
-	});
-
-	LuxurySettings::getInstance().quickAdminShortcutsChanges(
-	) | rpl::on_next([=](bool) {
-		updateControlsVisibility();
-	}, lifetime());
-
 	_back->setAcceptBoth();
 	_back->addClickHandler([=](Qt::MouseButton) {
 		InvokeQueued(_back.data(), [=] { backClicked(); });
@@ -403,16 +369,29 @@ bool TopBarWidget::createMenu(
 			: st::defaultPopupMenu);
 	_menu->setDestroyedCallback([
 			weak = base::make_weak(this),
-			weakButton = base::make_weak(button),
 			menu = _menu.get()] {
 		if (weak && weak->_menu == menu) {
-			if (weakButton) {
-				weakButton->setForceRippled(false);
-			}
+			weak->unrippleMenuButton();
 		}
 	});
+	_menuButton = button;
 	button->setForceRippled(true);
+	Ui::KeepHoveredWhileShown(button, _menu.get());
 	return true;
+}
+
+void TopBarWidget::unrippleMenuButton() {
+	if (const auto button = _menuButton.get()) {
+		button->setForceRippled(false);
+		Ui::SendSynteticMouseEvent(button, QEvent::MouseMove, Qt::NoButton);
+	}
+}
+
+void TopBarWidget::closeMenu() {
+	if (_menu) {
+		_menu = nullptr;
+		unrippleMenuButton();
+	}
 }
 
 void TopBarWidget::showPeerMenu() {
@@ -423,7 +402,7 @@ void TopBarWidget::showPeerMenu() {
 	const auto addAction = Ui::Menu::CreateAddActionCallback(_menu);
 	Window::FillDialogsEntryMenu(_controller, _activeChat, addAction);
 	if (_menu->empty()) {
-		_menu = nullptr;
+		closeMenu();
 	} else {
 		_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
 		_menu->popup(Ui::PopupMenu::ConstrainToParentScreen(
@@ -880,14 +859,7 @@ void TopBarWidget::infoClicked() {
 
 void TopBarWidget::backClicked() {
 	if (_activeChat.key.folder()) {
-		const auto &settings = LuxurySettings::getInstance();
-		if (settings.hideAllChatsFolder()) {
-			const auto filters = &_controller->session().data().chatsFilters();
-			const auto lookupId = filters->lookupId(_controller->session().premium() ? 0 : 1);
-			_controller->setActiveChatsFilter(lookupId);
-		} else {
-			_controller->closeFolder();
-		}
+		_controller->closeFolder();
 	} else if (_activeChat.section == Section::ChatsList
 		&& _activeChat.key.history()
 		&& _activeChat.key.history()->isForum()) {
@@ -985,10 +957,7 @@ void TopBarWidget::setActiveChat(
 	}
 	updateUnreadBadge();
 	refreshInfoButton();
-	if (_menu) {
-		_menuToggle->setForceRippled(false);
-		_menu = nullptr;
-	}
+	closeMenu();
 	updateOnlineDisplay();
 	updateControlsVisibility();
 	refreshUnreadBadge();
@@ -1175,16 +1144,16 @@ void TopBarWidget::updateControlsGeometry() {
 	auto buttonsWidth = (_forward->isHidden() ? 0 : _forward->contentWidth())
 		+ (_sendNow->isHidden() ? 0 : _sendNow->contentWidth())
 		+ (_delete->isHidden() ? 0 : _delete->contentWidth())
-		+ (_messageShot->isHidden() ? 0 : _messageShot->contentWidth())
 		+ _clear->width();
 	buttonsWidth += buttonsLeft + st::topBarActionSkip * 3;
 
-	auto widthLeft = qMin(width() - buttonsWidth, -2 * st::defaultActiveButton.width);
-	auto buttonFullWidth = qMin(-(widthLeft / 2), 0);
+	auto widthLeft = std::min(
+		width() - buttonsWidth,
+		-2 * st::defaultActiveButton.width);
+	auto buttonFullWidth = std::min(-(widthLeft / 2), 0);
 	_forward->setFullWidth(buttonFullWidth);
 	_sendNow->setFullWidth(buttonFullWidth);
 	_delete->setFullWidth(buttonFullWidth);
-	_messageShot->setFullWidth(buttonFullWidth);
 
 	selectedButtonsTop += (height() - _forward->height()) / 2;
 
@@ -1199,11 +1168,6 @@ void TopBarWidget::updateControlsGeometry() {
 	}
 
 	_delete->moveToLeft(buttonsLeft, selectedButtonsTop);
-	if (!_delete->isHidden()) {
-		buttonsLeft += _delete->width() + st::topBarActionSkip;
-	}
-
-	_messageShot->moveToLeft(buttonsLeft, selectedButtonsTop);
 	{
 		const auto large = st::topBarActionButtonLargeRadius;
 		const auto &buttonSt = st::defaultActiveButton;
@@ -1214,7 +1178,6 @@ void TopBarWidget::updateControlsGeometry() {
 			_forward.data(),
 			_sendNow.data(),
 			_delete.data(),
-			_messageShot.data(),
 		};
 		auto first = (Ui::RoundButton*)(nullptr);
 		auto last = (Ui::RoundButton*)(nullptr);
@@ -1313,16 +1276,6 @@ void TopBarWidget::updateControlsGeometry() {
 		_groupCall->moveToRight(_rightTaken, otherButtonsTop);
 		_rightTaken += _call->width();
 	}
-
-	_recentActions->moveToRight(_rightTaken, otherButtonsTop);
-	if (!_recentActions->isHidden()) {
-		_rightTaken += _recentActions->width();
-	}
-	_admins->moveToRight(_rightTaken, otherButtonsTop);
-	if (!_admins->isHidden()) {
-		_rightTaken += _admins->width();
-	}
-
 	_search->moveToRight(_rightTaken, otherButtonsTop);
 	if (!_search->isHidden()) {
 		_rightTaken += _search->width() + st::topBarCallSkip;
@@ -1354,13 +1307,9 @@ void TopBarWidget::updateControlsVisibility() {
 		hideChildren();
 		return;
 	}
-
-	const auto &settings = LuxurySettings::getInstance();
-
 	const auto visible = showSelectedState() || _selectedShown.animating();
 	_clear->setVisible(visible);
 	_delete->setVisible(_canDelete && visible);
-	_messageShot->setVisible(settings.showMessageShot() && visible);
 	_forward->setVisible(_canForward && visible);
 	_sendNow->setVisible(_canSendNow && visible);
 
@@ -1440,47 +1389,6 @@ void TopBarWidget::updateControlsVisibility() {
 		&& !isOneColumn
 		&& _controller->canShowThirdSection()
 		&& !_chooseForReportReason);
-
-	const auto showRecentActions = [&]
-	{
-		const auto &settings = LuxurySettings::getInstance();
-		if (!settings.quickAdminShortcuts()) {
-			return false;
-		}
-		if (_activeChat.section == Section::ChatsList) {
-			return false;
-		}
-		if (const auto peer = _activeChat.key.peer()) {
-			if (peer->isMegagroup() || peer->isChannel()) {
-				const auto channel = peer->asChannel();
-				return channel->hasAdminRights() || channel->amCreator();
-			}
-		}
-		return false;
-	}();
-	_recentActions->setVisible(showRecentActions);
-	const auto showAdmins = [&]
-	{
-		const auto &settings = LuxurySettings::getInstance();
-		if (!settings.quickAdminShortcuts()) {
-			return false;
-		}
-		if (_activeChat.section == Section::ChatsList) {
-			return false;
-		}
-		if (const auto peer = _activeChat.key.peer()) {
-			if (peer->isMegagroup()) {
-				return true;
-			}
-			if (peer->isChannel()) {
-				const auto channel = peer->asChannel();
-				return channel->hasAdminRights() || channel->amCreator();
-			}
-		}
-		return false;
-	}();
-	_admins->setVisible(showAdmins);
-
 	const auto callsEnabled = [&] {
 		if (const auto peer = _activeChat.key.peer()) {
 			if (const auto user = peer->asUser()) {
@@ -1549,19 +1457,15 @@ void TopBarWidget::updateMembersShowArea() {
 }
 
 bool TopBarWidget::showSelectedState() const {
-	const auto &settings = LuxurySettings::getInstance();
-
 	return (_selectedCount > 0)
-		&& (_canDelete || _canForward || _canSendNow || settings.showMessageShot());
+		&& (_canDelete || _canForward || _canSendNow);
 }
 
 void TopBarWidget::showSelected(SelectedState state) {
-	const auto &settings = LuxurySettings::getInstance();
-
 	auto canDelete = (state.count > 0 && state.count == state.canDeleteCount);
 	auto canForward = (state.count > 0 && state.count == state.canForwardCount);
 	auto canSendNow = (state.count > 0 && state.count == state.canSendNowCount);
-	auto count = (!canDelete && !canForward && !canSendNow && !settings.showMessageShot()) ? 0 : state.count;
+	auto count = (!canDelete && !canForward && !canSendNow) ? 0 : state.count;
 	if (_selectedCount == count
 		&& _canDelete == canDelete
 		&& _canForward == canForward
@@ -1588,12 +1492,10 @@ void TopBarWidget::showSelected(SelectedState state) {
 		_forward->setNumbersText(_selectedCount);
 		_sendNow->setNumbersText(_selectedCount);
 		_delete->setNumbersText(_selectedCount);
-		_messageShot->setNumbersText(_selectedCount);
 		if (!wasSelectedState) {
 			_forward->finishNumbersAnimation();
 			_sendNow->finishNumbersAnimation();
 			_delete->finishNumbersAnimation();
-			_messageShot->finishNumbersAnimation();
 		}
 	}
 	if (visibilityChanged

@@ -1909,7 +1909,7 @@ RecentStickerPack &Stickers::getRecentPack() const {
 			const auto document = owner().document(preloaded.first);
 			if (!document || !document->sticker()) continue;
 
-			recent.push_back(qMakePair(document, preloaded.second));
+			recent.push_back({ document, preloaded.second });
 		}
 	}
 	return cRefRecentStickers();

@@ -90,11 +90,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QAction>
 
-// LuxuryGram includes
-#include "luxury/features/message_shot/message_shot.h"
-#include "window/themes/window_theme_preview.h"
-
-
 namespace Settings {
 namespace {
 
@@ -288,15 +283,11 @@ void ColorsPalette::show(Type type) {
 	}
 	list.insert(list.begin(), scheme->accentColor);
 	const auto &settings = Core::App().settings();
-	const auto messageShotSelected = LuxuryFeatures::MessageShot::isChoosingTheme()
-		? LuxuryFeatures::MessageShot::getSelectedColorFromDefault()
-		: std::optional<QColor>();
-	const auto color = messageShotSelected.has_value()
-		? messageShotSelected
-		: (settings.systemAccentColorEnabled()
-			? Window::Theme::SystemAccentColor()
-			: settings.themesAccentColors().get(type));
-	const auto current = color.value_or(scheme->accentColor);
+	const auto color = settings.themesAccentColors().get(type);
+	const auto current = (settings.systemAccentColorEnabled()
+		? Window::Theme::SystemAccentColor()
+		: std::optional<QColor>()).value_or(
+			color.value_or(scheme->accentColor));
 	const auto i = ranges::find(list, current);
 	if (i == end(list)) {
 		list.back() = current;
@@ -550,9 +541,9 @@ int BackgroundRow::resizeGetHeight(int newWidth) {
 	auto linkLeft = st::settingsBackgroundThumb + st::settingsThumbSkip;
 	auto linkWidth = newWidth - linkLeft;
 	_chooseFromGallery->resizeToWidth(
-		qMin(linkWidth, _chooseFromGallery->naturalWidth()));
+		std::min(linkWidth, _chooseFromGallery->naturalWidth()));
 	_chooseFromFile->resizeToWidth(
-		qMin(linkWidth, _chooseFromFile->naturalWidth()));
+		std::min(linkWidth, _chooseFromFile->naturalWidth()));
 	_chooseFromGallery->moveToLeft(linkLeft, linkTop, newWidth);
 	linkTop += _chooseFromGallery->height() + st::settingsFromFileTop;
 	_chooseFromFile->moveToLeft(linkLeft, linkTop, newWidth);
@@ -2382,38 +2373,7 @@ void SetupDefaultThemes(
 		st::settingsCheckboxPadding);
 	systemAccentWrap->setDuration(0);
 
-	const auto updateMessageShotPalette = [=](const QString &path)
-	{
-		if (path.isEmpty()) { // for Default theme (otherwise doesn't dispaly name properly)
-			style::palette embeddedPalette;
-			const auto color = LuxuryFeatures::MessageShot::getSelectedColorFromDefault();
-			Window::Theme::PreparePaletteCallback(false, color)(embeddedPalette);
-			LuxuryFeatures::MessageShot::setPalette(embeddedPalette);
-			return;
-		}
-		if (const auto color = LuxuryFeatures::MessageShot::getSelectedColorFromDefault()) {
-			const auto type = LuxuryFeatures::MessageShot::getSelectedFromDefault();
-			const auto scheme = ranges::find(kSchemesList, type, &Scheme::type);
-			if (scheme != end(kSchemesList)) {
-				const auto colorizer = ColorizerFrom(*scheme, *color);
-				auto instance = Window::Theme::Instance();
-				if (Window::Theme::LoadFromFile(path, &instance, nullptr, nullptr, colorizer)) {
-					LuxuryFeatures::MessageShot::setPalette(instance.palette);
-					return;
-				}
-			}
-		}
-		const Data::CloudTheme theme;
-		if (const auto preview = PreviewFromFile(QByteArray(), path, theme)) {
-			LuxuryFeatures::MessageShot::setPalette(preview->instance.palette);
-		}
-	};
-
 	const auto chosen = [] {
-		if (LuxuryFeatures::MessageShot::isChoosingTheme()) {
-			return LuxuryFeatures::MessageShot::getSelectedFromDefault();
-		}
-
 		const auto &object = Background()->themeObject();
 		if (object.cloud.id) {
 			return Type(-1);
@@ -2451,12 +2411,6 @@ void SetupDefaultThemes(
 	const auto schemeClicked = [=](
 			const Scheme &scheme,
 			Qt::KeyboardModifiers modifiers) {
-		if (LuxuryFeatures::MessageShot::isChoosingTheme()) {
-			LuxuryFeatures::MessageShot::setDefaultSelected(scheme.type);
-			updateMessageShotPalette(scheme.path);
-			return;
-		}
-
 		apply(scheme);
 	};
 
@@ -2503,16 +2457,6 @@ void SetupDefaultThemes(
 			? Window::Theme::SystemAccentColor()
 			: settings.themesAccentColors().get(type);
 		if (i != end(checks)) {
-			if (LuxuryFeatures::MessageShot::isChoosingTheme()) {
-				if (const auto color = LuxuryFeatures::MessageShot::getSelectedColorFromDefault()) {
-					const auto colorizer = ColorizerFrom(*scheme, color.value());
-					i->second->setColors(ColorsFromScheme(*scheme, colorizer));
-				} else {
-					i->second->setColors(ColorsFromScheme(*scheme));
-				}
-				return;
-			}
-
 			if (color) {
 				const auto colorizer = ColorizerFrom(*scheme, *color);
 				i->second->setColors(ColorsFromScheme(*scheme, colorizer));
@@ -2526,22 +2470,7 @@ void SetupDefaultThemes(
 			IsSystemAccentColorSupported() && (type != Type(-1)),
 			anim::type::instant);
 	};
-	group->setChangedCallback([=](Type type) {
-		if (LuxuryFeatures::MessageShot::isChoosingTheme()) {
-			palette->show(type);
-			refreshColorizer(type);
-			group->setValue(type);
-			LuxuryFeatures::MessageShot::setDefaultSelected(type);
-
-			const auto scheme = ranges::find(kSchemesList, type, &Scheme::type);
-			if (scheme == end(kSchemesList)) {
-				return;
-			}
-
-			updateMessageShotPalette(scheme->path);
-			return;
-		}
-
+	group->setChangedCallback([=, raw = group.get()](Type type) {
 		const auto scheme = ranges::find(
 			kSchemesList,
 			type,
@@ -2549,7 +2478,7 @@ void SetupDefaultThemes(
 		if (scheme != end(kSchemesList)) {
 			apply(*scheme);
 		} else {
-			group->setValue(chosen());
+			raw->setValue(chosen());
 		}
 	});
 	for (const auto &scheme : kSchemesList) {
@@ -2634,36 +2563,8 @@ void SetupDefaultThemes(
 		}
 	}, block->lifetime());
 
-	if (LuxuryFeatures::MessageShot::isChoosingTheme()) {
-		palette->selected() | rpl::on_next(
-			[=](QColor color)
-			{
-				LuxuryFeatures::MessageShot::setDefaultSelectedColor(color);
-				refreshColorizer(LuxuryFeatures::MessageShot::getSelectedFromDefault());
-
-				const auto type = chosen();
-				const auto scheme = ranges::find(kSchemesList, type, &Scheme::type);
-				if (scheme == end(kSchemesList)) {
-					return;
-				}
-
-				updateMessageShotPalette(scheme->path);
-			},
-			container->lifetime());
-
-		LuxuryFeatures::MessageShot::resetDefaultSelectedEvents() | rpl::on_next([=]
-			{
-				refreshColorizer(LuxuryFeatures::MessageShot::getSelectedFromDefault()); // hide colorizer
-				group->setValue(Type(-1));
-			},
-			container->lifetime());
-	}
-
 	palette->selected(
 	) | rpl::on_next([=](QColor color) {
-		if (LuxuryFeatures::MessageShot::isChoosingTheme()) {
-			return;
-		}
 		if (Background()->editingTheme()) {
 			window->show(Ui::MakeInformBox(
 				tr::lng_theme_editor_cant_change_theme()));

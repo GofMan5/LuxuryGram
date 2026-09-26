@@ -145,6 +145,7 @@ namespace {
 }
 
 constexpr auto kRetainedLeafFieldLimit = 50;
+constexpr auto kTooltipDelay = 1000;
 thread_local Widget *PreservingExternalFieldRestore = nullptr;
 using ToolbarFormatAction = Widget::ToolbarFormatAction;
 using ToolbarLinkMode = Widget::ToolbarLinkMode;
@@ -964,6 +965,18 @@ using PreparedMutationKind = State::PreparedMutationKind;
 #endif // Qt >= 6.0
 }
 
+[[nodiscard]] QString RowButtonTooltip(
+		const Markdown::MarkdownArticleHitTestResult &hit) {
+	if (hit.buttonRow.index < 0) {
+		return QString();
+	} else if (const auto link = hit.state.link) {
+		if (const auto text = link->tooltip(); !text.isEmpty()) {
+			return text;
+		}
+	}
+	return hit.customTooltip;
+}
+
 } // namespace
 
 Widget::Widget(
@@ -986,6 +999,7 @@ Widget::Widget(
 , _mediaUploadState(std::move(services.mediaUploadState))
 , _cancelMediaUpload(std::move(services.cancelMediaUpload))
 , _addMediaAndGroupWithBlock(std::move(services.addMediaAndGroupWithBlock))
+, _submit(std::move(services.submit))
 , _peer(peer)
 , _state(std::move(state))
 , _showLimitToast(std::move(showLimitToast))
@@ -1094,6 +1108,8 @@ Widget::Widget(
 			&& !searchBlockedByLayer()) {
 			event->accept();
 			toggleSearch();
+			return base::EventFilterResult::Cancel;
+		} else if (handleSubmitShortcut(event)) {
 			return base::EventFilterResult::Cancel;
 		} else if (handleUndoRedoShortcutOverride(event)) {
 			return base::EventFilterResult::Cancel;
@@ -3733,7 +3749,8 @@ bool Widget::eventFilter(QObject *object, QEvent *event) {
 			const auto type = event->type();
 			if (type == QEvent::ShortcutOverride || type == QEvent::KeyPress) {
 				const auto keyEvent = static_cast<QKeyEvent*>(event);
-				if (handleFieldBlockInsertShortcut(keyEvent)
+				if (handleSubmitShortcut(keyEvent)
+					|| handleFieldBlockInsertShortcut(keyEvent)
 					|| handleStructuralBlockInsertShortcut(keyEvent)
 					|| handleBroaderFormatShortcut(keyEvent)) {
 					return true;
@@ -3782,7 +3799,8 @@ bool Widget::eventFilter(QObject *object, QEvent *event) {
 
 bool Widget::eventHook(QEvent *e) {
 	if (e->type() == QEvent::ShortcutOverride) {
-		if (handleFieldBlockInsertShortcut(
+		if (handleSubmitShortcut(static_cast<QKeyEvent*>(e))
+			|| handleFieldBlockInsertShortcut(
 				static_cast<QKeyEvent*>(e))
 			|| handleStructuralBlockInsertShortcut(
 				static_cast<QKeyEvent*>(e))
@@ -3880,6 +3898,8 @@ bool Widget::focusNextPrevChild(bool next) {
 void Widget::keyPressEvent(QKeyEvent *e) {
 	if (e->key() == Qt::Key_Escape && closeSearch()) {
 		e->accept();
+		return;
+	} else if (handleSubmitShortcut(e)) {
 		return;
 	} else if (handleUndoRedoShortcut(e)) {
 		return;
@@ -5649,6 +5669,33 @@ bool Widget::redirectImeToField() const {
 		&& (hasStructuralSelection() || _field->isHidden());
 }
 
+void Widget::leaveEventHook(QEvent *e) {
+	updateHoverTooltip(QString());
+	Ui::RpWidget::leaveEventHook(e);
+}
+
+void Widget::updateHoverTooltip(const QString &text) {
+	if (_hoverTooltip != text) {
+		_hoverTooltip = text;
+		Ui::Tooltip::Hide();
+	}
+	if (!_hoverTooltip.isEmpty()) {
+		Ui::Tooltip::Show(kTooltipDelay, this);
+	}
+}
+
+QString Widget::tooltipText() const {
+	return _hoverTooltip;
+}
+
+QPoint Widget::tooltipPos() const {
+	return QCursor::pos();
+}
+
+bool Widget::tooltipWindowActive() const {
+	return Ui::AppInFocus() && Ui::InFocusChain(window());
+}
+
 void Widget::mouseMoveEvent(QMouseEvent *e) {
 	const auto articlePoint = e->pos() - articleTopLeft();
 	if (_horizontalScrollDrag == HorizontalScrollDrag::Mouse) {
@@ -5663,9 +5710,16 @@ void Widget::mouseMoveEvent(QMouseEvent *e) {
 	}
 	if (!_articleSelectionDrag.active) {
 		auto cursor = style::cur_default;
+		auto tooltip = QString();
 		const auto controlHit = _article->editControlHitTest(articlePoint);
 		if (controlHit.valid()) {
 			cursor = style::cur_pointer;
+			using Kind = Markdown::MarkdownArticleEditControlHitKind;
+			if (controlHit.kind == Kind::ButtonEdit) {
+				tooltip = RowButtonTooltip(_article->hitTest(
+					articlePoint,
+					Ui::Text::StateRequest::Flag::LookupSymbol));
+			}
 		} else {
 			const auto editHit = _article->editHitTest(articlePoint);
 			if (simpleMediaBlockPathFromHit(editHit)
@@ -5676,8 +5730,15 @@ void Widget::mouseMoveEvent(QMouseEvent *e) {
 				const auto hit = _article->hitTest(
 					articlePoint,
 					Ui::Text::StateRequest::Flag::LookupSymbol);
-				if ((hit.valid() && hit.codeHeaderCopy)
-					|| inlineButtonEditRequestFromArticleHit(hit)) {
+				const auto inlineButton
+					= inlineButtonEditRequestFromArticleHit(hit);
+				tooltip = inlineButton
+					? Markdown::RichButtonTooltip(
+						inlineButton->data.type,
+						inlineButton->data.payload,
+						QString())
+					: RowButtonTooltip(hit);
+				if ((hit.valid() && hit.codeHeaderCopy) || inlineButton) {
 					cursor = style::cur_pointer;
 				} else if (hit.valid()
 					&& hit.direct
@@ -5686,10 +5747,12 @@ void Widget::mouseMoveEvent(QMouseEvent *e) {
 				}
 			}
 		}
+		updateHoverTooltip(tooltip);
 		setCursor(cursor);
 		Ui::RpWidget::mouseMoveEvent(e);
 		return;
 	}
+	updateHoverTooltip(QString());
 	const auto hit = _article->hitTest(
 		articlePoint,
 		Ui::Text::StateRequest::Flag::LookupSymbol);
@@ -8726,6 +8789,29 @@ bool Widget::undoLastInputRule() {
 	return true;
 }
 
+bool Widget::handleSubmitShortcut(QKeyEvent *e) {
+	const auto type = e->type();
+	if (type != QEvent::ShortcutOverride && type != QEvent::KeyPress) {
+		return false;
+	}
+	const auto key = e->key();
+	if (key != Qt::Key_Return && key != Qt::Key_Enter) {
+		return false;
+	}
+	const auto modifiers = e->modifiers()
+		& ~(Qt::KeypadModifier | Qt::GroupSwitchModifier);
+	if (modifiers != Qt::ControlModifier
+		|| !_submit
+		|| searchBlockedByLayer()) {
+		return false;
+	}
+	e->accept();
+	if (type == QEvent::KeyPress && !e->isAutoRepeat()) {
+		_submit();
+	}
+	return true;
+}
+
 bool Widget::handleFieldKey(QKeyEvent *e) {
 	if (_field->isHidden()) {
 		return false;
@@ -8912,6 +8998,11 @@ bool Widget::handleFieldKey(QKeyEvent *e) {
 			if (!handled) {
 				handled = enterStructuralSelectionFromField(down, false);
 			}
+		}
+		if (!handled && !_field->isHidden() && modifiers == Qt::NoModifier) {
+			handled = moveFieldCursor(
+				down ? QTextCursor::End : QTextCursor::Start,
+				QTextCursor::MoveAnchor);
 		}
 		if (handled) {
 			e->accept();
@@ -11425,6 +11516,11 @@ bool Widget::handleFieldMouseEvent(QEvent *event) {
 		} else {
 			_selectScroll.cancel();
 			if (bandSelectsInField) {
+				if (_fieldBandSelecting) {
+					// Nested synthetic move from the reveal scroll below.
+					mouse->accept();
+					return true;
+				}
 				const auto raw = _field->rawTextEdit();
 				const auto pointerCursor = raw->cursorForPosition(
 					raw->viewport()->mapFromGlobal(globalPoint));
@@ -11436,7 +11532,9 @@ bool Widget::handleFieldMouseEvent(QEvent *event) {
 				auto cursor = _field->textCursor();
 				if (cursor.position() != position) {
 					cursor.setPosition(position, QTextCursor::KeepAnchor);
+					_fieldBandSelecting = true;
 					_field->setTextCursor(cursor);
+					_fieldBandSelecting = false;
 				}
 				mouse->accept();
 				return true;

@@ -32,12 +32,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat.h"
 #include "styles/style_info.h"
 
-// LuxuryGram includes
-#include "luxury/luxury_settings.h"
-#include "luxury/utils/telegram_helpers.h"
-#include "styles/style_luxury_styles.h"
-
-
 namespace HistoryView {
 namespace {
 
@@ -206,64 +200,6 @@ void SetText(Ui::Text::String &text, const QString &content) {
 	text.setText(st::serviceTextStyle, content, EmptyLineOptions);
 }
 
-struct ServiceTimeMetrics {
-	int width = 0;
-	int height = 0;
-	int additionalWidth = 0;
-};
-
-[[nodiscard]] ServiceTimeMetrics ComputeServiceTimeMetrics(const QString &text) {
-	auto result = ServiceTimeMetrics();
-	if (text.isEmpty()) {
-		return result;
-	}
-	const auto &font = st::luxuryServiceTimeBadgeFont;
-	result.width = font->width(text)
-		+ 2 * st::luxuryServiceTimeBadgeHorizontalPadding;
-	result.height = font->height + 2 * st::luxuryServiceTimeBadgeVerticalPadding;
-	result.additionalWidth = std::max(
-		st::luxuryServiceTimeBadgeGap
-			+ result.width
-			+ st::luxuryServiceTimeBadgeTrailingInset
-			- st::msgServicePadding.right(),
-			0);
-	return result;
-}
-
-void PaintServiceTime(
-		Painter &p,
-		not_null<const Ui::ChatStyle*> st,
-		int left,
-		int top,
-		const QString &text,
-		const ServiceTimeMetrics &metrics) {
-	if (text.isEmpty() || !metrics.width) {
-		return;
-	}
-	const auto rect = QRect(
-		left,
-		top,
-		metrics.width,
-		metrics.height);
-	const auto bg = QColor(0x00, 0x00, 0x00, 0x1e);
-	PainterHighQualityEnabler hq(p);
-	p.setPen(Qt::NoPen);
-	p.setBrush(bg);
-	const auto radius = rect.height() / 2.;
-	p.drawRoundedRect(
-		rect,
-		radius,
-		radius);
-	p.setPen(st->msgServiceFg());
-	p.setFont(st::luxuryServiceTimeBadgeFont);
-	p.drawText(
-		rect.x() + st::luxuryServiceTimeBadgeHorizontalPadding,
-		rect.y()
-			+ st::luxuryServiceTimeBadgeVerticalPadding
-			+ st::luxuryServiceTimeBadgeFont->ascent,
-		text);
-}
-
 [[nodiscard]] Ui::BubbleRounding KeyboardRounding() {
 	return Ui::BubbleRounding{
 		.topLeft = Ui::BubbleCornerRounding::Large,
@@ -375,9 +311,8 @@ void ServiceMessagePainter::PaintComplexBubble(
 		int left,
 		int width,
 		const Ui::Text::String &text,
-		const QRect &textRect,
-		int lastLineWidthAdd) {
-	const auto lineWidths = CountLineWidths(text, textRect, lastLineWidthAdd);
+		const QRect &textRect) {
+	const auto lineWidths = CountLineWidths(text, textRect);
 
 	int y = st::msgServiceMargin.top(), previousRichWidth = 0;
 	bool previousShrink = false, forceShrink = false;
@@ -437,9 +372,8 @@ void ServiceMessagePainter::PaintComplexBubble(
 
 std::vector<int> ServiceMessagePainter::CountLineWidths(
 		const Ui::Text::String &text,
-		const QRect &textRect,
-		int lastLineWidthAdd) {
-	const auto linesCount = qMax(
+		const QRect &textRect) {
+	const auto linesCount = std::max(
 		textRect.height() / st::msgServiceFont->height,
 		1);
 	auto result = text.countLineWidths(textRect.width(), {
@@ -450,7 +384,7 @@ std::vector<int> ServiceMessagePainter::CountLineWidths(
 		+ Ui::HistoryServiceMsgInvertedRadius()
 		- Ui::HistoryServiceMsgInvertedShrink());
 	for (int i = 0, count = result.size(); i != count; ++i) {
-		auto width = qMax(result[i], 0);
+		auto width = std::max(result[i], 0);
 		if (i > 0) {
 			const auto widthBefore = result[i - 1];
 			if (width < widthBefore && width + minDelta > widthBefore) {
@@ -474,12 +408,6 @@ std::vector<int> ServiceMessagePainter::CountLineWidths(
 				}
 			}
 		}
-	}
-	if (lastLineWidthAdd > 0
-		&& result.size() > 1
-		&& result.back() > 0
-		&& result.back() < result[result.size() - 2]) {
-		result.back() += lastLineWidthAdd;
 	}
 	return result;
 }
@@ -520,22 +448,14 @@ bool Service::consumeHorizontalScroll(
 	return false;
 }
 
-namespace {
-
-[[nodiscard]] QString ServiceTimeText(
-		const Ui::Text::String &text,
-		const QDateTime &dateTime) {
-	return (!text.isEmpty() && dateTime.isValid())
-		? formatMessageTime(dateTime.time())
-		: QString();
-}
-
-} // namespace
-
 QRect Service::countGeometry() const {
 	auto result = QRect(0, 0, width(), height());
 	if (delegate()->elementChatMode() == ElementChatMode::Wide) {
-		result.setWidth(qMin(result.width(), st::msgMaxWidth + 2 * st::msgPhotoSkip + 2 * st::msgMargin.left()));
+		result.setWidth(std::min(
+			result.width(),
+			st::msgMaxWidth
+				+ 2 * st::msgPhotoSkip
+				+ 2 * st::msgMargin.left()));
 	}
 	auto margins = st::msgServiceMargin;
 	margins.setTop(marginTop());
@@ -572,9 +492,6 @@ QSize Service::performCountCurrentSize(int newWidth) {
 	}
 	const auto media = this->media();
 	const auto mediaDisplayed = media && media->isDisplayed();
-	const auto hideText = mediaDisplayed && media->hideServiceText();
-	const auto timeText = hideText ? QString() : ServiceTimeText(text(), dateTime());
-	const auto timeMetrics = ComputeServiceTimeMetrics(timeText);
 	auto contentWidth = newWidth;
 	if (delegate()->elementChatMode() == ElementChatMode::Wide) {
 		accumulate_min(contentWidth, st::msgMaxWidth + 2 * st::msgPhotoSkip + 2 * st::msgMargin.left());
@@ -583,14 +500,14 @@ QSize Service::performCountCurrentSize(int newWidth) {
 	if (contentWidth < st::msgServicePadding.left() + st::msgServicePadding.right() + 1) {
 		contentWidth = st::msgServicePadding.left() + st::msgServicePadding.right() + 1;
 	}
-	const auto nwidth = qMax(contentWidth - st::msgServicePadding.left() - st::msgServicePadding.right(), 0);
-	validateTextSkipBlock(
-		!timeText.isEmpty(),
-		timeMetrics.additionalWidth,
-		qMax(timeMetrics.height, st::msgServiceFont->height));
-	if (hideText) {
+	if (mediaDisplayed && media->hideServiceText()) {
 		newHeight += media->resizeGetHeight(newWidth) + marginBottom();
 	} else if (!text().isEmpty()) {
+		auto nwidth = std::max(
+			contentWidth
+				- st::msgServicePadding.left()
+				- st::msgServicePadding.right(),
+			0);
 		newHeight += (contentWidth >= maxWidth())
 			? minHeight()
 			: textHeightFor(nwidth);
@@ -627,6 +544,7 @@ QSize Service::performCountCurrentSize(int newWidth) {
 QSize Service::performCountOptimalSize() {
 	const auto markup = data()->inlineReplyMarkup();
 	validateText();
+	validateInlineKeyboard(markup);
 
 	if (_reactions) {
 		_reactions->initDimensions();
@@ -635,18 +553,9 @@ QSize Service::performCountOptimalSize() {
 	if (const auto media = this->media()) {
 		media->initDimensions();
 		if (media->hideServiceText()) {
-			validateTextSkipBlock(false, 0, 0);
-			validateInlineKeyboard(markup);
 			return { media->maxWidth(), media->minHeight() };
 		}
 	}
-	const auto timeText = ServiceTimeText(text(), dateTime());
-	const auto timeMetrics = ComputeServiceTimeMetrics(timeText);
-	validateTextSkipBlock(
-		!timeText.isEmpty(),
-		timeMetrics.additionalWidth,
-		qMax(timeMetrics.height, st::msgServiceFont->height));
-	validateInlineKeyboard(markup);
 	auto maxWidth = text().maxWidth() + st::msgServicePadding.left() + st::msgServicePadding.right();
 	auto minHeight = text().minHeight();
 	return { maxWidth, minHeight };
@@ -725,8 +634,6 @@ void Service::draw(Painter &p, const PaintContext &context) const {
 	const auto media = this->media();
 	const auto mediaDisplayed = media && media->isDisplayed();
 	const auto onlyMedia = (mediaDisplayed && media->hideServiceText());
-	const auto timeText = onlyMedia ? QString() : ServiceTimeText(text(), dateTime());
-	const auto timeMetrics = ComputeServiceTimeMetrics(timeText);
 
 	if (_reactions) {
 		const auto reactionsHeight = st::mediaInBubbleSkip + _reactions->height();
@@ -769,15 +676,6 @@ void Service::draw(Painter &p, const PaintContext &context) const {
 		const auto mediaSkip = mediaDisplayed ? (st::msgServiceMargin.top() + media->height()) : 0;
 		const auto trect = QRect(g.left(), g.top(), g.width(), g.height() - mediaSkip)
 			- st::msgServicePadding;
-		auto lineWidths = text().countLineWidths(trect.width());
-		for (auto &lineWidth : lineWidths) {
-			lineWidth = qMax(lineWidth, 0);
-		}
-		const auto lastLineWidthAdd = (lineWidths.size() > 1
-			&& lineWidths.back() > timeMetrics.additionalWidth
-			&& lineWidths.back() < lineWidths[lineWidths.size() - 2])
-			? st::luxuryServiceTimeBadgeLastLineWidthAdd
-			: 0;
 
 		p.translate(0, g.top() - st::msgServiceMargin.top());
 		ServiceMessagePainter::PaintComplexBubble(
@@ -786,8 +684,7 @@ void Service::draw(Painter &p, const PaintContext &context) const {
 			g.left(),
 			g.width(),
 			text(),
-			trect,
-			lastLineWidthAdd);
+			trect);
 		p.translate(0, -g.top() + st::msgServiceMargin.top());
 
 		p.setBrush(Qt::NoBrush);
@@ -806,27 +703,6 @@ void Service::draw(Painter &p, const PaintContext &context) const {
 			.fullWidthSelection = false,
 			.selection = context.selection,
 		});
-
-		if (!timeText.isEmpty() && !lineWidths.empty()) {
-			const auto lastLineWidth = lineWidths.back();
-			const auto lastTextWidth = qMax(
-				lastLineWidth - timeMetrics.additionalWidth,
-				0);
-			const auto gap = lastTextWidth ? st::luxuryServiceTimeBadgeGap : 0;
-			const auto lastLineTop = trect.y()
-				+ (int(lineWidths.size()) - 1) * st::msgServiceFont->height;
-			PaintServiceTime(
-				p,
-				context.st,
-				trect.x()
-					+ ((trect.width() - lastLineWidth) / 2)
-					+ lastTextWidth
-					+ gap,
-				lastLineTop
-					+ ((st::msgServiceFont->height - timeMetrics.height) / 2),
-				timeText,
-				timeMetrics);
-		}
 	}
 	if (mediaDisplayed) {
 		const auto left = g.left() + (g.width() - media->width()) / 2;
@@ -1002,9 +878,6 @@ EmptyPainter::EmptyPainter(not_null<History*> history)
 , _text(st::msgMinWidth) {
 	if (NeedAboutGroup(_history)) {
 		fillAboutGroup();
-	} else if (_history->peer->isUser()
-		&& LuxurySettings::getInstance().disableGreetingSticker()) {
-		SetText(_header, tr::lng_chat_intro_default_title(tr::now));
 	}
 }
 
@@ -1056,33 +929,7 @@ void EmptyPainter::paint(
 		not_null<const Ui::ChatStyle*> st,
 		int width,
 		int height) {
-	if (_phrases.empty() && _text.isEmpty() && _header.isEmpty()) {
-		return;
-	}
 	if (_phrases.empty() && _text.isEmpty()) {
-		const auto w = st::msgServiceFont->width(_header.toString())
-			+ st::msgPadding.left()
-			+ st::msgPadding.right();
-		const auto h = st::msgServiceFont->height
-			+ st::msgServicePadding.top()
-			+ st::msgServicePadding.bottom();
-		const auto rect = QRect(
-			(width - w) / 2,
-			(height - h) / 2,
-			w,
-			h);
-		ServiceMessagePainter::PaintBubble(
-			p,
-			st->msgServiceBg(),
-			st->serviceBgCornersNormal(),
-			rect);
-		p.setPen(st->msgServiceFg());
-		p.setFont(st::msgServiceFont->f);
-		p.drawTextLeft(
-			rect.left() + st::msgPadding.left(),
-			rect.top() + st::msgServicePadding.top(),
-			width,
-			_header.toString());
 		return;
 	}
 	constexpr auto kMaxTextLines = 3;

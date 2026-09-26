@@ -319,7 +319,7 @@ int PeerBadge::drawTextBadge(Painter &p, const Descriptor &descriptor) {
 	const auto rectForName = descriptor.rectForName;
 	const auto rect = QRect(
 		(rectForName.x()
-			+ qMin(
+			+ std::min(
 				descriptor.nameWidth + st::dialogsScamSkip,
 				rectForName.width() - width)),
 		rectForName.y() + (rectForName.height() - height) / 2,
@@ -343,7 +343,7 @@ int PeerBadge::drawVerifyCheck(Painter &p, const Descriptor &descriptor) {
 	const auto nameWidth = descriptor.nameWidth;
 	descriptor.verified->paint(
 		p,
-		rectForName.x() + qMin(nameWidth, rectForName.width() - iconw),
+		rectForName.x() + std::min(nameWidth, rectForName.width() - iconw),
 		rectForName.y(),
 		descriptor.outerWidth);
 	return iconw;
@@ -357,7 +357,7 @@ int PeerBadge::drawPremiumEmojiStatus(
 	const auto rectForName = descriptor.rectForName;
 	const auto iconw = descriptor.premium->width() + st::infoVerifiedCheckPosition.x();
 	const auto iconx = rectForName.x()
-		+ qMin(descriptor.nameWidth, rectForName.width() - iconw);
+		+ std::min(descriptor.nameWidth, rectForName.width() - iconw);
 	const auto icony = rectForName.y();
 	if (!_emojiStatus) {
 		_emojiStatus = std::make_unique<EmojiStatus>();
@@ -396,7 +396,7 @@ int PeerBadge::drawPremiumStar(Painter &p, const Descriptor &descriptor) {
 	const auto rectForName = descriptor.rectForName;
 	const auto iconw = descriptor.premium->width();
 	const auto iconx = rectForName.x()
-		+ qMin(descriptor.nameWidth, rectForName.width() - iconw);
+		+ std::min(descriptor.nameWidth, rectForName.width() - iconw);
 	const auto icony = rectForName.y();
 	_emojiStatus = nullptr;
 	descriptor.premium->paint(p, iconx, icony, descriptor.outerWidth);

@@ -480,6 +480,7 @@ void PaintRow(
 		? st::dialogsBgOver
 		: context.currentBg;
 	auto swipeTranslation = 0.;
+	auto swipeMirrored = false;
 	if (history
 		&& context.quickActionContext
 		&& !context.quickActionContext->ripple
@@ -487,9 +488,10 @@ void PaintRow(
 			== context.quickActionContext->data.msgBareId)) {
 		swipeTranslation = context.quickActionContext->data.exactTranslation
 			* -2;
+		swipeMirrored = !context.quickActionContext->data.inverted;
 	}
 	if (swipeTranslation) {
-		p.translate(-swipeTranslation, 0);
+		p.translate(swipeMirrored ? swipeTranslation : -swipeTranslation, 0);
 	}
 	p.fillRect(geometry, bg);
 	if (!(flags & Flag::TopicJumpRipple)) {
@@ -1024,9 +1026,11 @@ void PaintRow(
 		}
 	}
 	if (swipeTranslation) {
-		p.translate(swipeTranslation, 0);
+		p.translate(swipeMirrored ? -swipeTranslation : swipeTranslation, 0);
 		const auto swipeActionRect = QRectF(
-			rect::right(geometry) - swipeTranslation,
+			swipeMirrored
+				? geometry.x()
+				: (rect::right(geometry) - swipeTranslation),
 			geometry.y(),
 			swipeTranslation,
 			geometry.height());
@@ -1043,14 +1047,23 @@ void PaintRow(
 				* context.quickActionContext->data.reachRatio;
 			const auto offset = st::dialogsQuickActionSize
 				+ st::dialogsQuickActionSize / 2.;
-			p.drawEllipse(QPointF(geometry.width() - offset, offset), r, r);
+			p.drawEllipse(
+				QPointF(
+					swipeMirrored
+						? (geometry.x() + offset)
+						: (geometry.width() - offset),
+					offset),
+				r,
+				r);
 		}
 		const auto quickWidth = st::dialogsQuickActionSize * 3;
 		if (context.quickActionContext->icon) {
 			DrawQuickAction(
 				p,
 				QRect(
-					rect::right(geometry) - quickWidth,
+					swipeMirrored
+						? geometry.x()
+						: (rect::right(geometry) - quickWidth),
 					geometry.y(),
 					quickWidth,
 					geometry.height()),

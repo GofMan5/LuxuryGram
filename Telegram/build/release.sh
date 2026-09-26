@@ -32,6 +32,10 @@ AppVersionStrMajor="$LuxuryVersionStrMajor"
 AppVersionStrSmall="$LuxuryVersionStrSmall"
 AppVersionStr="$LuxuryVersionStr"
 
+if [ "$AppVersion" -lt 7002000 ]; then
+  Error "The v2 update format requires version 7.2 or newer."
+fi
+
 VersionForPacker="$AppVersion"
 if [ "$AlphaVersion" != "0" ]; then
   Error "No releases for closed alpha versions"

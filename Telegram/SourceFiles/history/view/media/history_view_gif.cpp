@@ -84,6 +84,13 @@ constexpr auto kSeekPreviewInterval = crl::time(100);
 
 using ::Media::ValidFrameSize;
 
+[[nodiscard]] QSize InlineFrameSize(not_null<DocumentData*> document) {
+	const auto video = document->video();
+	return (video && !video->realVideoSize.isEmpty())
+		? video->realVideoSize
+		: document->dimensions;
+}
+
 [[nodiscard]] bool IsHostedInstantViewMedia(not_null<const Element*> parent) {
 	return parent->Get<InstantViewMediaRuntime>() != nullptr;
 }
@@ -98,8 +105,8 @@ using ::Media::ValidFrameSize;
 	return (scale == 1.)
 		? size
 		: QSize(
-			std::max(qRound(size.width() * scale), 1),
-			std::max(qRound(size.height() * scale), 1));
+			std::max(int(base::SafeRound(size.width() * scale)), 1),
+			std::max(int(base::SafeRound(size.height() * scale)), 1));
 }
 
 [[nodiscard]] QSize HostedInstantViewForcedSize(
@@ -284,6 +291,9 @@ Gif::~Gif() {
 			_parent->checkHeavyPart();
 		}
 	}
+	if (_videoCoverMedia) {
+		_data->owner().keepAlive(base::take(_videoCoverMedia));
+	}
 	togglePollingStory(false);
 }
 
@@ -293,7 +303,7 @@ DocumentData *Gif::ChooseInlineQuality(
 		int maxArea,
 		::Media::VideoQuality request) {
 	const auto fits = [&](not_null<DocumentData*> quality) {
-		return ValidFrameSize(quality->dimensions, maxArea)
+		return ValidFrameSize(InlineFrameSize(quality), maxArea)
 			&& (quality == document
 				|| (quality->useStreamingLoader()
 					&& quality->canBeStreamed()
@@ -335,11 +345,12 @@ int Gif::maxInlineArea() const {
 }
 
 bool Gif::canPlayInline() const {
-	return ChooseInlineQuality(
-		_data,
-		_realParent,
-		maxInlineArea(),
-		Core::App().settings().videoQuality()) != nullptr;
+	return !_inlineOverCap
+		&& ChooseInlineQuality(
+			_data,
+			_realParent,
+			maxInlineArea(),
+			Core::App().settings().videoQuality()) != nullptr;
 }
 
 QSize Gif::sizeForAspectRatio() const {
@@ -403,7 +414,7 @@ QSize Gif::countOptimalSize() {
 	auto maxWidth = std::min(
 		std::max(scaled.width(), minWidth),
 		thumbMaxWidth);
-	auto minHeight = qMax(scaled.height(), st::minPhotoSize);
+	auto minHeight = std::max(scaled.height(), st::minPhotoSize);
 	if (!activeCurrentStreamed()) {
 		accumulate_max(
 			maxWidth,
@@ -411,7 +422,7 @@ QSize Gif::countOptimalSize() {
 				+ 2 * (st::msgDateImgDelta + st::msgDateImgPadding.x()));
 	}
 	if (_parent->hasBubble()) {
-		maxWidth = qMax(maxWidth, _parent->textualMaxWidth());
+		maxWidth = std::max(maxWidth, _parent->textualMaxWidth());
 		minHeight = adjustHeightForLessCrop(
 			scaled,
 			{ maxWidth, minHeight });
@@ -454,7 +465,7 @@ QSize Gif::countCurrentSize(int newWidth) {
 		std::max(scaled.width(), minWidthByInfo),
 		minPhotoWidth,
 		thumbMaxWidth);
-	auto newHeight = qMax(scaled.height(), st::minPhotoSize);
+	auto newHeight = std::max(scaled.height(), st::minPhotoSize);
 	if (!activeCurrentStreamed()) {
 		accumulate_max(
 			newWidth,
@@ -468,8 +479,12 @@ QSize Gif::countCurrentSize(int newWidth) {
 		if (botTop) {
 			accumulate_max(captionMaxWidth, botTop->maxWidth);
 		}
-		const auto maxWithCaption = qMin(st::msgMaxWidth, captionMaxWidth);
-		newWidth = qMin(qMax(newWidth, maxWithCaption), thumbMaxWidth);
+		const auto maxWithCaption = std::min(
+			st::msgMaxWidth,
+			captionMaxWidth);
+		newWidth = std::min(
+			std::max(newWidth, maxWithCaption),
+			thumbMaxWidth);
 		newHeight = adjustHeightForLessCrop(
 			scaled,
 			{ newWidth, newHeight });
@@ -531,9 +546,9 @@ int Gif::adjustHeightForLessCrop(QSize dimensions, QSize current) const {
 	}
 	// Allow some more vertical space for less cropping,
 	// but not more than 1.33 * existing height.
-	return qMax(
+	return std::max(
 		current.height(),
-		qMin(
+		std::min(
 			current.width() * dimensions.height() / dimensions.width(),
 			current.height() * 4 / 3));
 }
@@ -991,7 +1006,9 @@ void Gif::draw(Painter &p, const PaintContext &context) const {
 			auto innerw = rectw - (st::msgReplyPadding.left() + st::msgReplyPadding.right());
 			auto recth = 0;
 			auto forwardedHeightReal = forwarded ? forwarded->text.countHeight(innerw) : 0;
-			auto forwardedHeight = qMin(forwardedHeightReal, kMaxGifForwardedBarLines * st::msgServiceNameFont->height);
+			auto forwardedHeight = std::min(
+				forwardedHeightReal,
+				kMaxGifForwardedBarLines * st::msgServiceNameFont->height);
 			if (forwarded) {
 				recth += st::msgReplyPadding.top() + forwardedHeight;
 			} else if (via) {
@@ -1447,7 +1464,9 @@ TextState Gif::textState(QPoint point, StateRequest request) const {
 		auto innerw = rectw - (st::msgReplyPadding.left() + st::msgReplyPadding.right());
 		auto recth = 0;
 		auto forwardedHeightReal = forwarded ? forwarded->text.countHeight(innerw) : 0;
-		auto forwardedHeight = qMin(forwardedHeightReal, kMaxGifForwardedBarLines * st::msgServiceNameFont->height);
+		auto forwardedHeight = std::min(
+			forwardedHeightReal,
+			kMaxGifForwardedBarLines * st::msgServiceNameFont->height);
 		if (forwarded) {
 			recth += st::msgReplyPadding.top() + forwardedHeight;
 		} else if (via) {
@@ -2346,6 +2365,7 @@ bool Gif::hasHeavyPart() const {
 void Gif::unloadHeavyPart() {
 	stopAnimation();
 	_dataMedia = nullptr;
+	_videoCoverMedia = nullptr;
 	if (_spoiler) {
 		_spoiler->background = _spoiler->cornerCache = QImage();
 		_spoiler->animation = nullptr;
@@ -2412,7 +2432,7 @@ int Gif::surroundingHeight(
 	const auto forwardedHeightReal = forwarded
 		? forwarded->text.countHeight(innerw)
 		: 0;
-	const auto forwardedHeight = qMin(
+	const auto forwardedHeight = std::min(
 		forwardedHeightReal,
 		kMaxGifForwardedBarLines * st::msgServiceNameFont->height);
 	if (forwarded) {
@@ -2507,6 +2527,9 @@ void Gif::playAnimation(bool autoplay) {
 }
 
 void Gif::createStreamedPlayer() {
+	if (_inlineOverCap) {
+		return;
+	}
 	const auto quality = _data->initialPlaybackVideoQuality(
 		Core::App().settings().videoQuality());
 	const auto chosen = ChooseInlineQuality(
@@ -2637,10 +2660,20 @@ void Gif::repaintStreamedContent() {
 void Gif::streamingReady(::Media::Streaming::Information &&info) {
 	Expects(_streamed != nullptr);
 
-	if (!ValidFrameSize(info.video.size, maxInlineArea())) {
-		if (!info.video.size.isEmpty()) {
-			_streamed->chosen->dimensions = info.video.size;
-		}
+	const auto chosen = _streamed->chosen;
+	const auto measured = info.video.realSize;
+	const auto video = measured.isEmpty() ? nullptr : chosen->video();
+	if (video) {
+		video->realVideoSize = measured;
+	}
+	const auto effective = measured.isEmpty()
+		? InlineFrameSize(chosen)
+		: measured;
+	if (!ValidFrameSize(effective, maxInlineArea())) {
+		// A document with no VideoData can't remember the measurement,
+		// so the refusal is remembered on the element instead. Such a
+		// document never has a quality list, so nothing to step down to.
+		_inlineOverCap = !video;
 		stopAnimation();
 	} else {
 		history()->owner().requestViewResize(_parent);

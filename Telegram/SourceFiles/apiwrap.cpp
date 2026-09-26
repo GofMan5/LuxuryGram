@@ -49,6 +49,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/components/welcome_messages.h"
 #include "data/notify/data_notify_settings.h"
 #include "data/data_changes.h"
+#include "data/data_chat_participant_status.h"
 #include "data/data_drafts.h"
 #include "data/data_media_types.h"
 #include "data/data_web_page.h"
@@ -3823,6 +3824,45 @@ void ApiWrap::requestSharedMedia(
 	_sharedMediaRequests.emplace(key);
 }
 
+void ApiWrap::requestPinnedMessagesIfNeeded(
+		not_null<PeerData*> peer,
+		MsgId messageId,
+		MsgId topicRootId,
+		PeerId monoforumPeerId) {
+	if (!IsServerMsgId(messageId)) {
+		return;
+	}
+	const auto requestOne = [&](MsgId topic, PeerId mono) {
+		const auto snapshot = _session->storage().snapshot(
+			Storage::SharedMediaQuery(
+				Storage::SharedMediaKey(
+					peer->id,
+					topic,
+					mono,
+					SharedMediaType::Pinned,
+					messageId),
+				0,
+				0));
+		if (!snapshot.count || snapshot.messageIds.contains(messageId)) {
+			return;
+		}
+		requestSharedMedia(
+			peer,
+			topic,
+			mono,
+			SharedMediaType::Pinned,
+			messageId,
+			SliceType::Around);
+	};
+	requestOne(MsgId(0), PeerId(0));
+	if (topicRootId && peer->forumTopicFor(topicRootId)) {
+		requestOne(topicRootId, PeerId(0));
+	}
+	if (monoforumPeerId && peer->monoforumSublistFor(monoforumPeerId)) {
+		requestOne(MsgId(0), monoforumPeerId);
+	}
+}
+
 void ApiWrap::sharedMediaDone(
 		not_null<PeerData*> peer,
 		MsgId topicRootId,
@@ -3895,7 +3935,7 @@ void ApiWrap::sendAction(const SendAction &action) {
 			: nullptr;
 		if (topic) {
 			topic->readTillEnd();
-		} else if (sublist) {
+		} else if (sublist && sublist->parentChat()) {
 			sublist->readTillEnd();
 		} else {
 			_session->data().histories().readInbox(action.history);
@@ -4401,6 +4441,7 @@ void ApiWrap::editMedia(
 		.album = nullptr,
 		.forceFile = forceFile,
 		.sendLargePhotos = file.sendLargePhotos,
+		.archive = file.archive,
 		.idOverride = 0,
 		.displayName = file.displayName,
 	}));
@@ -4427,6 +4468,9 @@ void ApiWrap::sendFiles(
 		album = nullptr;
 	}
 	const auto to = FileLoadTaskOptions(action);
+	const auto animationAsGif = !Data::RestrictionError(
+		action.history->peer,
+		ChatRestriction::SendGifs);
 	if (album) {
 		album->options = to.options;
 	}
@@ -4475,6 +4519,8 @@ void ApiWrap::sendFiles(
 			.forceFile = forceFile,
 			.sendLargePhotos = file.sendLargePhotos,
 			.animationJob = file.animationJob,
+			.animationAsGif = animationAsGif,
+			.archive = file.archive,
 			.idOverride = 0,
 			.displayName = file.displayName,
 		}));
@@ -5633,6 +5679,7 @@ void ApiWrap::sendMultiPaidMedia(
 		}
 		if (done) done(true);
 	}, [=](const MTP::Error &error, const MTP::Response &response) {
+		_sendingAlbums.remove(groupId);
 		if (done) done(false);
 		sendMessageFail(error, peer, randomId, itemId);
 	});

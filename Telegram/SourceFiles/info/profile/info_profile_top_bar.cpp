@@ -557,6 +557,12 @@ TopBar::TopBar(
 	} else if (!_savedMessages) {
 		updateVideoUserpic();
 	}
+	rpl::merge(
+		windowActiveValue() | rpl::to_empty,
+		descriptor.controller->gifPauseLevelChanged()
+	) | rpl::on_next([=] {
+		update();
+	}, lifetime());
 
 	rpl::merge(
 		style::PaletteChanged(),
@@ -1480,7 +1486,7 @@ void TopBar::setupUserpicButton(
 						&controller->window(),
 						editorData(type),
 						choosePhotoCallback(type),
-						qvariant_cast<QImage>(data->imageData()));
+						QGuiApplication::clipboard()->image());
 				});
 				menu->addAction(
 					std::move(text)(tr::now),
@@ -2783,11 +2789,17 @@ void TopBar::paintUserpic(QPainter &p, const QRect &geometry) {
 	}
 	if (_videoUserpicPlayer && _videoUserpicPlayer->ready()) {
 		const auto size = st::infoProfileTopBarPhotoSize;
-		const auto frame = _videoUserpicPlayer->frame(Size(size), _peer);
+		const auto paused = _gifPausedChecker();
+		const auto frame = _videoUserpicPlayer->frame(
+			Size(size),
+			_peer,
+			paused);
 		if (!frame.isNull()) {
 			auto hq = PainterHighQualityEnabler(p);
 			p.drawImage(geometry, frame);
-			update();
+			if (!paused) {
+				update();
+			}
 			return;
 		}
 	}
