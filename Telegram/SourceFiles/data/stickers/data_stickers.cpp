@@ -996,23 +996,31 @@ void Stickers::specialSetReceived(
 				const auto set = merged->second.get();
 				// Server-newcomers (faved on another device) go first,
 				// everything local keeps its order: extras survive the
-				// sync and manual reorder survives with them.
+				// sync and manual reorder survives with them. Extras
+				// beyond the server cap live on this device only: they
+				// are indistinguishable from a remotely-unfaved sticker
+				// by design, and stick until unfaved locally.
 				auto stickers = StickersPack();
 				stickers.reserve(
 					set->stickers.size() + keepFavedStickers.size());
 				for (const auto document : set->stickers) {
-					if (!keepFavedStickers.contains(document)) {
-						stickers.push_back(document);
-					}
+					stickers.push_back(document);
 				}
 				for (const auto document : keepFavedStickers) {
-					stickers.push_back(document);
+					if (!stickers.contains(document)) {
+						stickers.push_back(document);
+					}
 				}
 				auto &emoji = set->emoji;
 				for (auto &[ptr, list] : keepFavedEmoji) {
 					auto &target = emoji[ptr];
 					for (const auto document : list) {
-						if (!target.contains(document)) {
+						if (target.contains(document)) {
+							continue;
+						}
+						// Keep the emoji lists in step with the merged
+						// pack: only entries that survived the merge.
+						if (stickers.contains(document)) {
 							target.push_back(document);
 						}
 					}

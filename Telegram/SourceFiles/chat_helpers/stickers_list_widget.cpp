@@ -2454,7 +2454,9 @@ QRect StickersListWidget::removeButtonRect(const SectionInfo &info) const {
 
 void StickersListWidget::mousePressEvent(QMouseEvent *e) {
 	if (e->button() == Qt::MiddleButton) {
-		// Middle-click a favorite to bring it to the front.
+		// Middle-click a favorite to bring it to the front: only the
+		// local extras tail keeps manual order across syncs, a
+		// server-listed sticker reverts to server order.
 		_lastMousePosition = e->globalPos();
 		updateSelected();
 		if (const auto sticker = std::get_if<OverSticker>(&_selected)) {

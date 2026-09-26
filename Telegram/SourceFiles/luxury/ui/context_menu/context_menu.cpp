@@ -48,6 +48,8 @@
 #include "styles/style_menu_icons.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/choose_language_box.h"
+#include "ui/widgets/discrete_sliders.h"
+#include "styles/style_settings.h"
 #include "ui/layers/generic_box.h"
 #include "ui/text/format_values.h"
 #include "ui/vertical_list.h"
@@ -217,100 +219,240 @@ QString WatchEventRowText(
 void FillOnlineHistoryBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<PeerData*> peer) {
-	// One screenful of session rows; the rest collapses into the "+N earlier" line
-	// below. A plain label is enough for that -- the hand-rolled scroll
-	// container it replaces sized itself off the label anyway and broke
-	// whenever the content outgrew its math.
+	// Tabs pick what is shown (All / Sessions / Events), the second row
+	// picks the order (Newest / Oldest / Longest -- sessions only, events
+	// have no duration). Rows render into one label per section; the rest
+	// collapses into the "+N earlier" line.
 	constexpr auto kMaxOnlineHistoryRows = 50;
 	constexpr auto kMaxWatchEventRows = 30;
 	box->setTitle(tr::luxury_OnlineHistoryTitle());
 	box->setWidth(st::aboutWidth);
 	box->verticalLayout()->resizeToWidth(box->width());
 
-	Ui::AddSkip(box->verticalLayout());
-	// Newest first from the loaders; the pairing below walks them oldest
-	// first, and the rows below read the sessions back newest first. The one
-	// "+N earlier" line covers both sections: no totals anywhere, anything
-	// summed here would cover only the truncated view.
 	const auto events = LuxuryOnline::getHistory(peer, 200);
 	const auto watches = LuxuryOnline::getWatchEvents(peer, 200);
 	const auto sessions = PairOnlineSessions(events);
-	auto sessionOverflow = 0;
-	auto watchOverflow = 0;
-	if (sessions.empty() && watches.empty()) {
-		box->verticalLayout()->add(
-			object_ptr<Ui::FlatLabel>(
-				box->verticalLayout(),
-				tr::luxury_OnlineHistoryEmpty(),
-				st::boxLabel),
-			st::boxRowPadding);
-	} else {
-		Ui::AddSubsectionTitle(
+
+	enum class Tab { All, Sessions, Events };
+	enum class Order { Newest, Oldest, Longest };
+
+	struct State {
+		Tab tab = Tab::All;
+		Order order = Order::Newest;
+		Ui::FlatLabel *sessionBody = nullptr;
+		Ui::FlatLabel *eventBody = nullptr;
+		Ui::SettingsSlider *orderSlider = nullptr;
+		int sessionOverflow = 0;
+		int watchOverflow = 0;
+	};
+	const auto state = box->lifetime().make_state<State>();
+
+	// Everything below captures only pointers/values that outlive the
+	// handlers: state (box lifetime), the label pointers (box layout),
+	// and the data by value. No [&] captures escape this function.
+
+	Ui::AddSkip(box->verticalLayout());
+
+	const auto tabSlider = box->verticalLayout()->add(
+		object_ptr<Ui::SettingsSlider>(
 			box->verticalLayout(),
-			tr::luxury_OnlineHistorySessions());
-		if (sessions.empty()) {
-			box->verticalLayout()->add(
-				object_ptr<Ui::FlatLabel>(
-					box->verticalLayout(),
-					tr::luxury_OnlineHistorySessionsEmpty(),
-					st::boxLabel),
-				st::boxRowPadding);
-		} else {
-			const auto total = int(sessions.size());
-			const auto shown = std::min(total, kMaxOnlineHistoryRows);
-			sessionOverflow = total - shown;
-			auto lines = QStringList();
-			lines.reserve(shown);
-			for (auto i = 0; i != shown; ++i) {
-				lines.push_back(OnlineSessionRowText(sessions[total - 1 - i]));
-			}
-			box->verticalLayout()->add(
-				object_ptr<Ui::FlatLabel>(
-					box->verticalLayout(),
-					lines.join(u"\n"_q),
-					st::boxLabel),
-				st::boxRowPadding);
-		}
-		Ui::AddSubsectionTitle(
+			st::defaultSettingsSlider),
+		st::boxRowPadding);
+	tabSlider->addSection(tr::luxury_OnlineHistorySortAll(tr::now));
+	tabSlider->addSection(tr::luxury_OnlineHistorySortSessions(tr::now));
+	tabSlider->addSection(tr::luxury_OnlineHistorySortEvents(tr::now));
+	tabSlider->setActiveSectionFast(0);
+
+	Ui::AddSkip(box->verticalLayout());
+
+	const auto orderSlider = box->verticalLayout()->add(
+		object_ptr<Ui::SettingsSlider>(
 			box->verticalLayout(),
-			tr::luxury_OnlineHistoryEvents());
-		if (watches.empty()) {
-			box->verticalLayout()->add(
-				object_ptr<Ui::FlatLabel>(
-					box->verticalLayout(),
-					tr::luxury_OnlineHistoryEventsEmpty(),
-					st::boxLabel),
-				st::boxRowPadding);
-		} else {
-			const auto total = int(watches.size());
-			const auto shown = std::min(total, kMaxWatchEventRows);
-			watchOverflow = total - shown;
+			st::defaultSettingsSlider),
+		st::boxRowPadding);
+	orderSlider->addSection(tr::luxury_OnlineHistorySortNewest(tr::now));
+	orderSlider->addSection(tr::luxury_OnlineHistorySortOldest(tr::now));
+	orderSlider->addSection(tr::luxury_OnlineHistorySortLongest(tr::now));
+	orderSlider->setActiveSectionFast(0);
+	state->orderSlider = orderSlider;
+
+	Ui::AddSkip(box->verticalLayout());
+
+	Ui::AddSubsectionTitle(
+		box->verticalLayout(),
+		tr::luxury_OnlineHistorySessions());
+	state->sessionBody = box->verticalLayout()->add(
+		object_ptr<Ui::FlatLabel>(
+			box->verticalLayout(),
+			QString(),
+			st::boxLabel),
+		st::boxRowPadding);
+
+	Ui::AddSubsectionTitle(
+		box->verticalLayout(),
+		tr::luxury_OnlineHistoryEvents());
+	state->eventBody = box->verticalLayout()->add(
+		object_ptr<Ui::FlatLabel>(
+			box->verticalLayout(),
+			QString(),
+			st::boxLabel),
+		st::boxRowPadding);
+
+	const auto earlierLabel = box->verticalLayout()->add(
+		object_ptr<Ui::FlatLabel>(
+			box->verticalLayout(),
+			QString(),
+			st::boxLabel),
+		st::boxRowPadding);
+	earlierLabel->hide();
+
+	// Newest first from the loaders; the pairing above walks them oldest
+	// first. getWatchEvents returns newest-first.
+	const auto sessionSorted = [=] {
+		auto list = std::vector<OnlineSession>(sessions);
+		switch (state->order) {
+		case Order::Oldest:
+			// PairOnlineSessions is oldest-first already.
+			break;
+		case Order::Longest:
+			std::sort(list.begin(), list.end(), [](
+					const OnlineSession &a,
+					const OnlineSession &b) {
+				const auto left = a.start && a.end
+					? qint64(*a.end) - qint64(*a.start)
+					: -1;
+				const auto right = b.start && b.end
+					? qint64(*b.end) - qint64(*b.start)
+					: -1;
+				return left > right;
+			});
+			break;
+		case Order::Newest:
+		default:
+			std::reverse(list.begin(), list.end());
+			break;
+		}
+		return list;
+	};
+	const auto watchSorted = [=] {
+		auto list = std::vector<WatchEvent>(watches);
+		switch (state->order) {
+		case Order::Oldest:
+			std::reverse(list.begin(), list.end());
+			break;
+		case Order::Newest:
+		case Order::Longest:
+		default:
+			// getWatchEvents returns newest-first.
+			break;
+		}
+		return list;
+	};
+
+	const auto refreshEarlier = [=] {
+		const auto hidden = state->sessionOverflow + state->watchOverflow;
+		earlierLabel->setVisible(
+			hidden > 0
+				&& (state->tab == Tab::All
+					|| (state->tab == Tab::Sessions
+						&& state->sessionOverflow > 0)
+					|| (state->tab == Tab::Events
+						&& state->watchOverflow > 0)));
+		if (hidden > 0) {
+			earlierLabel->setText(tr::luxury_OnlineHistoryEarlier(
+				tr::now,
+				lt_count,
+				state->tab == Tab::Sessions
+					? state->sessionOverflow
+					: state->tab == Tab::Events
+					? state->watchOverflow
+					: hidden));
+		}
+	};
+
+	const auto rebuild = [=] {
+		const auto sessionList = sessionSorted();
+		const auto watchList = watchSorted();
+
+		const auto sessionsVisible = state->tab != Tab::Events;
+		const auto eventsVisible = state->tab != Tab::Sessions;
+		state->sessionOverflow = 0;
+		state->watchOverflow = 0;
+
+		if (state->sessionBody) {
 			auto lines = QStringList();
-			lines.reserve(shown);
-			for (auto i = 0; i != shown; ++i) {
-				lines.push_back(WatchEventRowText(
-					watches[total - 1 - i],
-					peer));
+			if (sessionList.empty()) {
+				if (sessionsVisible) {
+					lines.push_back(
+						tr::luxury_OnlineHistorySessionsEmpty(tr::now));
+				}
+			} else {
+				const auto total = int(sessionList.size());
+				const auto shown = std::min(total, kMaxOnlineHistoryRows);
+				state->sessionOverflow = total - shown;
+				lines.reserve(shown);
+				for (auto i = 0; i != shown; ++i) {
+					lines.push_back(OnlineSessionRowText(sessionList[i]));
+				}
 			}
-			box->verticalLayout()->add(
-				object_ptr<Ui::FlatLabel>(
-					box->verticalLayout(),
-					lines.join(u"\n"_q),
-					st::boxLabel),
-				st::boxRowPadding);
+			// Empty text collapses the row to zero height, so a hidden
+			// section disappears instead of leaving a blank gap.
+			state->sessionBody->setText(lines.join(u"\n"_q));
+			state->sessionBody->setVisible(
+				sessionsVisible && !lines.isEmpty());
 		}
-		if (sessionOverflow + watchOverflow > 0) {
-			box->verticalLayout()->add(
-				object_ptr<Ui::FlatLabel>(
-					box->verticalLayout(),
-					tr::luxury_OnlineHistoryEarlier(
-						tr::now,
-						lt_count,
-						sessionOverflow + watchOverflow),
-					st::boxLabel),
-				st::boxRowPadding);
+		if (state->eventBody) {
+			auto lines = QStringList();
+			if (watchList.empty()) {
+				if (eventsVisible) {
+					lines.push_back(
+						tr::luxury_OnlineHistoryEventsEmpty(tr::now));
+				}
+			} else {
+				const auto total = int(watchList.size());
+				const auto shown = std::min(total, kMaxWatchEventRows);
+				state->watchOverflow = total - shown;
+				lines.reserve(shown);
+				for (auto i = 0; i != shown; ++i) {
+					lines.push_back(WatchEventRowText(watchList[i], peer));
+				}
+			}
+			state->eventBody->setText(lines.join(u"\n"_q));
+			state->eventBody->setVisible(
+				eventsVisible && !lines.isEmpty());
 		}
-	}
+		refreshEarlier();
+	};
+
+	tabSlider->sectionActivated(
+	) | rpl::start_with_next([=](int index) {
+		state->tab = static_cast<Tab>(index);
+		// "Longest" only makes sense for sessions; fall back to Newest
+		// when the Events tab makes it meaningless.
+		if (state->tab == Tab::Events && state->order == Order::Longest) {
+			state->order = Order::Newest;
+			state->orderSlider->setActiveSectionFast(
+				static_cast<int>(Order::Newest));
+		}
+		rebuild();
+	}, tabSlider->lifetime());
+
+	orderSlider->sectionActivated(
+	) | rpl::start_with_next([=](int index) {
+		// Selecting Longest on the Events tab is a no-op; keep Newest.
+		if (state->tab == Tab::Events
+			&& static_cast<Order>(index) == Order::Longest) {
+			state->orderSlider->setActiveSectionFast(
+				static_cast<int>(state->order));
+			return;
+		}
+		state->order = static_cast<Order>(index);
+		rebuild();
+	}, orderSlider->lifetime());
+
+	rebuild();
+	refreshEarlier();
+
 	Ui::AddSkip(box->verticalLayout());
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 }

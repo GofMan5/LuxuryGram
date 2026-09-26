@@ -4,6 +4,26 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- Synced with upstream Telegram Desktop 7.2.9 (HEIF decoding through FFmpeg, round video in topic shared media, clipboard crash fix, Windows logon fix, and more).
+- Online History is now **Watcher**: same menu item, renamed, with two tab rows — All / Sessions / Events, and Newest / Oldest / Longest sorting. Longest applies to sessions; events fall back to Newest.
+- Watcher now speaks Russian: the box, menu items and the Watched-chats rows, including gift and profile-change event texts.
+
+### Fixed
+
+- Watcher's Events section showed the oldest rows first and counted the newest into "+N earlier" — the loader returns newest-first and the box read it backwards. Rows now render newest-first.
+- Russian message-filter counts ("N фильтров") rendered an empty string for most numbers: the Russian plural needs #few/#many forms, which the override table never defined. Added.
+- A Russian tooltip showed a literal "\n" instead of a line break; it is now one sentence.
+- Unlimited favorites merge: the server list is now taken as-is and local extras are appended after it, so an extra that later shows up in the server list lands in server position instead of keeping a stale duplicate slot in the tail.
+- Russian Watcher strings cover the "+N earlier" line, including plural forms.
+
+### Known ceilings
+
+- Favorites reordered beyond the server cap keep their order on this device; the capped part of the list follows the server order after each sync. An extra favorite unfaved on another device stays until unfaved here — locally it is indistinguishable from a beyond-cap favorite.
+
 ## 1.0.11
 
 ### Added
