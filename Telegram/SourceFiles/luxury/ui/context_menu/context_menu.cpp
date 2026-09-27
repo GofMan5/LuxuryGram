@@ -425,7 +425,7 @@ void FillOnlineHistoryBox(
 	};
 
 	tabSlider->sectionActivated(
-	) | rpl::start_with_next([=](int index) {
+	) | rpl::on_next([=](int index) {
 		state->tab = static_cast<Tab>(index);
 		// "Longest" only makes sense for sessions; fall back to Newest
 		// when the Events tab makes it meaningless.
@@ -438,7 +438,7 @@ void FillOnlineHistoryBox(
 	}, tabSlider->lifetime());
 
 	orderSlider->sectionActivated(
-	) | rpl::start_with_next([=](int index) {
+	) | rpl::on_next([=](int index) {
 		// Selecting Longest on the Events tab is a no-op; keep Newest.
 		if (state->tab == Tab::Events
 			&& static_cast<Order>(index) == Order::Longest) {
