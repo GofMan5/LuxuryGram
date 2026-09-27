@@ -895,10 +895,9 @@ int WhoReactedEntryAction::contentHeight() const {
 
 void WhoReactedEntryAction::mousePressEvent(QMouseEvent *e) {
 	updateCloseHovered(e->globalPos());
-	const auto menu = static_cast<Menu::Menu*>(parentWidget());
-	if (!menu->hasMouseMoved(e->globalPos())) {
-		return;
-	}
+	// LuxuryGram: a press on the item is genuine regardless of prior
+	// pointer motion (see ItemBase::mousePressEvent); the stray-release
+	// path stays guarded in ItemBase::mouseReleaseEvent.
 	const auto closePressed = closeAffordanceActive()
 		&& (e->button() == Qt::LeftButton)
 		&& _closeRect.contains(e->pos());
@@ -935,10 +934,10 @@ void WhoReactedEntryAction::mouseMoveEvent(QMouseEvent *e) {
 }
 
 void WhoReactedEntryAction::mouseReleaseEvent(QMouseEvent *e) {
-	const auto menu = static_cast<Menu::Menu*>(parentWidget());
-	if (!menu->hasMouseMoved(e->globalPos())) {
-		return;
-	}
+	// LuxuryGram: no blanket hasMouseMoved() gate here: ItemBase::
+	// mouseReleaseEvent guards only the release-without-press path, and
+	// the close-affordance branch below is driven by _closePressed which
+	// only a genuine press sets.
 	if (!base::take(_closePressed)) {
 		const auto weak = base::make_weak(this);
 		ItemBase::mouseReleaseEvent(e);
