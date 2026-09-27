@@ -4,7 +4,7 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
-## Unreleased
+## 1.0.12
 
 ### Added
 
@@ -14,6 +14,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Fixed
 
+- Popup menu items were dead to the mouse: a click landing without a prior hover-move over the menu was dropped by an anti-jitter guard (keyboard arrows + Enter still worked). Press now always registers; only a release with no matching press — e.g. the touch tap that opened the menu — stays guarded.
 - Watcher's Events section showed the oldest rows first and counted the newest into "+N earlier" — the loader returns newest-first and the box read it backwards. Rows now render newest-first.
 - Russian message-filter counts ("N фильтров") rendered an empty string for most numbers: the Russian plural needs #few/#many forms, which the override table never defined. Added.
 - A Russian tooltip showed a literal "\n" instead of a line break; it is now one sentence.
