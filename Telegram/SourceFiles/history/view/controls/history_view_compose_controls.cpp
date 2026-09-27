@@ -40,6 +40,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/ui_integration.h"
 #include "data/components/ephemeral_messages.h"
 #include "data/notify/data_notify_settings.h"
+#include "data/data_ai_compose_tones.h"
 #include "data/data_birthday.h"
 #include "data/data_changes.h"
 #include "data/data_drafts.h"
@@ -140,6 +141,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 
+// LuxuryGram includes
+#include "luxury/luxury_settings.h"
+
+
 namespace HistoryView {
 namespace {
 
@@ -184,6 +189,13 @@ using SendActionUpdate = ComposeControls::SendActionUpdate;
 using SetHistoryArgs = ComposeControls::SetHistoryArgs;
 using VoiceRecordBar = Controls::VoiceRecordBar;
 using ForwardPanel = Controls::ForwardPanel;
+
+#define SWITCH_BUTTON(button, show_v) \
+	if (show_v) { \
+		(button)->show(); \
+	} else { \
+		(button)->hide(); \
+	}
 
 [[nodiscard]] QString FirstEmoji(const QString &s) {
 	const auto begin = s.data();
@@ -893,13 +905,17 @@ void FieldHeader::paintEditTimeLeft(
 	}
 	const auto nameWidth = st::msgServiceNameFont->width(
 		tr::lng_edit_message(tr::now));
-	if (nameWidth + st::normalFont->spacew >= availableWidth) {
+	const auto left = nameWidth + st::normalFont->spacew;
+	// drawText() does not clip, so the whole counter has to fit. Checking only
+	// the label let the digits run past availableWidth and over the cancel
+	// button, which is what availableWidth already subtracts.
+	if (left + st::normalFont->width(editTimeLeftText) > availableWidth) {
 		return;
 	}
 	p.setFont(st::normalFont);
 	p.setPen(st::historyComposeAreaFgService);
 	p.drawText(
-		textLeft + nameWidth + st::normalFont->spacew,
+		textLeft + left,
 		st::msgReplyPadding.top() + st::msgServiceNameFont->ascent,
 		editTimeLeftText);
 }
@@ -1420,18 +1436,21 @@ ComposeControls::ComposeControls(
 				_botKeyboardHide->clicks(
 				) | rpl::filter(
 					rpl::mappers::_1 == Qt::LeftButton
-				) | rpl::to_empty | rpl::start_to_stream(
-					_botKeyboardToggleClicks,
-					_botKeyboardHide->lifetime());
-				_tabbedSelectorToggle->hide();
-				orderControls();
-				updateControlsVisibility();
-				updateControlsGeometry(_wrap->size());
-			} else if (_botKeyboardHide && !has) {
-				_botKeyboardHide = nullptr;
-				_tabbedSelectorToggle->show();
-				updateControlsGeometry(_wrap->size());
-			}
+			) | rpl::to_empty | rpl::start_to_stream(
+				_botKeyboardToggleClicks,
+				_botKeyboardHide->lifetime());
+			// LuxuryGram: upstream hides the emoji toggle right here.
+			// updateControlsVisibility() owns it -- that button also
+			// answers to showEmojiButtonInMessageField -- so it reads
+			// _botKeyboardHide and a call here would only fight it.
+			orderControls();
+			updateControlsVisibility();
+			updateControlsGeometry(_wrap->size());
+		} else if (_botKeyboardHide && !has) {
+			_botKeyboardHide = nullptr;
+			updateControlsVisibility();
+			updateControlsGeometry(_wrap->size());
+		}
 		}, _wrap->lifetime());
 	}
 	if (descriptor.botCommandStartShownExtraGuard) {
@@ -1534,8 +1553,11 @@ void ComposeControls::setHistory(SetHistoryArgs &&args) {
 	updateLikeShown();
 	updateMessagesTTLShown();
 	refreshSendGiftToggle();
-	updateControlsGeometry(_wrap->size());
+	// LuxuryGram: upstream runs geometry first here. Our settings hide buttons
+	// in updateControlsVisibility(), and geometry sizes the field from
+	// isHidden(), so visibility has to settle before the width is computed.
 	updateControlsVisibility();
+	updateControlsGeometry(_wrap->size());
 	updateFieldPlaceholder();
 	updateAttachBotsMenu();
 
@@ -2932,6 +2954,40 @@ void ComposeControls::init() {
 		updateAttachBotsMenu();
 	}, _wrap->lifetime());
 
+	rpl::merge(
+		LuxurySettings::getInstance().showAttachButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showCommandsButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showEmojiButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showMicrophoneButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showAutoDeleteButtonInMessageFieldChanges() | rpl::to_empty,
+		session().data().aiComposeTones().updated() | rpl::to_empty,
+		LuxurySettings::getInstance().showAiEditorButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showAttachPopupChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showEmojiPopupChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().channelBottomButtonChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().removeMessageTailChanges() | rpl::to_empty
+	) | rpl::on_next([=] {
+		updateSendButtonType();
+		updateControlsVisibility();
+		updateControlsGeometry(_wrap->size());
+		orderControls();
+	}, _wrap->lifetime());
+
+	LuxurySettings::getInstance().translationProviderChanges(
+	) | rpl::on_next([=](TranslationProvider) {
+		if (_history) {
+			for (const auto &block : _history->blocks) {
+				for (const auto &view : block->messages) {
+					const auto item = view->data();
+					if (item->Has<HistoryMessageTranslation>()) {
+						item->removeTranslationBit();
+						_history->owner().requestItemTextRefresh(item);
+					}
+				}
+			}
+		}
+	}, _wrap->lifetime());
+
 	orderControls();
 }
 
@@ -2941,6 +2997,11 @@ void ComposeControls::orderControls() {
 }
 
 bool ComposeControls::showRecordButton() const {
+	const auto &settings = LuxurySettings::getInstance();
+	if (!settings.showMicrophoneButtonInMessageField()) {
+		return false;
+	}
+
 	return _features.recordMediaMessage
 		&& (_recordAvailability != Webrtc::RecordAvailability::None)
 		&& !_voiceRecordBar->isListenState()
@@ -3929,10 +3990,13 @@ void ComposeControls::initTabbedSelector() {
 						}
 						return;
 					}
+					const auto effectiveFrom = options.scheduled
+						? Ui::MessageSendingAnimationFrom()
+						: from;
 					_fileChosen.fire({
 						.document = document,
 						.options = options,
-						.messageSendingFrom = from,
+						.messageSendingFrom = effectiveFrom,
 						.caption = std::move(caption),
 					});
 				}));
@@ -4906,15 +4970,16 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		&& !_commentsShown->isHidden();
 	const auto giftToUser = _giftToUser
 		&& !_giftToUser->isHidden();
+	const auto attachShown = _attachToggle && !_attachToggle->isHidden();
 	const auto fieldWidth = size.width()
 		- (commentsShown
 			? (_commentsShown->width() + _st.commentsSkip)
 			: 0)
-		- ((_attachToggle || _sendAs) ? _st.padding.left() : _st.fieldLeft)
+		- ((attachShown || _sendAs) ? _st.padding.left() : _st.fieldLeft)
 		- (_botMenu.button
 			? (st::historyBotMenuSkip + _botMenu.button->width())
 			: 0)
-		- (_attachToggle ? _attachToggle->width() : 0)
+		- (attachShown ? _attachToggle->width() : 0)
 		- (_sendAs ? _sendAs->width() : 0)
 		- _st.padding.right()
 		- _send->width()
@@ -4923,7 +4988,9 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 			? 0
 			: _tabbedSelectorToggle->width())
 		- (_likeShown ? _like->width() : 0)
-		- (_botCommandShown ? _botCommandStart->width() : 0)
+		- ((_botCommandStart && !_botCommandStart->isHidden())
+			? _botCommandStart->width()
+			: 0)
 		- ((_silent && !_silent->isHidden()) ? _silent->width() : 0)
 		- ((_toggleSuggestPost && !_toggleSuggestPost->isHidden())
 			? _toggleSuggestPost->width()
@@ -4949,8 +5016,15 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		}
 		const auto newComposeHeight = composeFieldHeight();
 		if (oldComposeHeight != newComposeHeight) {
-			updateHeight();
-			return;
+			// Leaving early is only safe because the resize comes back here
+			// with the new size. When the total height happens to be unchanged
+			// -- the header appearing while the field grows by the same amount,
+			// which editing a long message does -- nothing is posted, and
+			// everything below this point keeps the geometry it had before,
+			// starting with the header's width and position.
+			if (updateHeight()) {
+				return;
+			}
 		}
 	}
 
@@ -4961,7 +5035,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		_commentsShown->moveToLeft(left, buttonsTop);
 		left += _commentsShown->width() + _st.commentsSkip;
 	}
-	left += (_attachToggle || _sendAs) ? _st.padding.left() : _st.fieldLeft;
+	left += (attachShown || _sendAs) ? _st.padding.left() : _st.fieldLeft;
 	if (_botMenu.button) {
 		const auto skip = st::historyBotMenuSkip;
 		_botMenu.button->moveToLeft(left + skip, buttonsTop + skip);
@@ -4970,7 +5044,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 	if (_replaceMedia) {
 		_replaceMedia->moveToLeft(left, buttonsTop);
 	}
-	if (_attachToggle) {
+	if (attachShown) {
 		_attachToggle->moveToLeft(left, buttonsTop);
 		left += _attachToggle->width();
 	}
@@ -5023,7 +5097,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 	}
 	if (_botCommandStart) {
 		_botCommandStart->moveToRight(right, buttonsTop);
-		if (_botCommandShown) {
+		if (!_botCommandStart->isHidden()) {
 			right += _botCommandStart->width();
 		}
 	}
@@ -5057,7 +5131,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 			right += _scheduled->width();
 		}
 	}
-	if (_ttlInfo) {
+	if (_ttlInfo && _ttlInfo->isVisible()) {
 		_ttlInfo->move(size.width() - right - _ttlInfo->width(), buttonsTop);
 	}
 	updateAiButtonGeometry();
@@ -5072,12 +5146,19 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 }
 
 void ComposeControls::updateControlsVisibility() {
+	// LuxuryGram: the show*InMessageField settings are applied here and nowhere
+	// else -- updateControlsGeometry() reads isHidden() back, so the two can
+	// never disagree about how much width a hidden button takes.
+	const auto &settings = LuxurySettings::getInstance();
+
 	const auto hide = hideExtraButtons()
 		|| isEditingMessage()
 		|| textExceedsMaxSize();
 	const auto showGiftToUser = (_mode == Mode::Normal) && !hide;
 	if (_botCommandStart) {
-		_botCommandStart->setVisible(_botCommandShown);
+		SWITCH_BUTTON(
+			_botCommandStart,
+			_botCommandShown && settings.showCommandsButtonInMessageField());
 	}
 	if (_silent) {
 		_silent->setVisible(!hide);
@@ -5089,7 +5170,8 @@ void ComposeControls::updateControlsVisibility() {
 		_editStars->show();
 	}
 	if (_ttlInfo) {
-		_ttlInfo->setVisible(!hide);
+		_ttlInfo->setVisible(
+			!hide && settings.showAutoDeleteButtonInMessageField());
 	}
 	if (_sendAs) {
 		_sendAs->show();
@@ -5101,7 +5183,9 @@ void ComposeControls::updateControlsVisibility() {
 		_botMenu.button->show();
 	}
 	if (_attachToggle) {
-		_attachToggle->setVisible(!_replaceMedia);
+		SWITCH_BUTTON(
+			_attachToggle,
+			settings.showAttachButtonInMessageField() && !_replaceMedia);
 	}
 	if (_scheduled) {
 		_scheduled->setVisible(!hide);
@@ -5118,6 +5202,10 @@ void ComposeControls::updateControlsVisibility() {
 	if (_starsReaction) {
 		_starsReaction->show();
 	}
+	// Upstream swaps the emoji toggle out for the bot-keyboard hide button.
+	SWITCH_BUTTON(
+		_tabbedSelectorToggle,
+		!_botKeyboardHide && settings.showEmojiButtonInMessageField());
 	updateAiButtonVisibility();
 	updateSendAsFileVisibility();
 	updateExpandButtonVisibility();
@@ -5735,14 +5823,16 @@ int ComposeControls::composeFieldHeight() const {
 		: _field->height();
 }
 
-void ComposeControls::updateHeight() {
+bool ComposeControls::updateHeight() {
 	const auto height = (_header->isDisplayed() ? _header->height() : 0)
 		+ _st.padding.top()
 		+ composeFieldHeight()
 		+ _st.padding.bottom();
-	if (height != _wrap->height()) {
-		_wrap->resize(_wrap->width(), height);
+	if (height == _wrap->height()) {
+		return false;
 	}
+	_wrap->resize(_wrap->width(), height);
+	return true;
 }
 
 void ComposeControls::editMessage(
