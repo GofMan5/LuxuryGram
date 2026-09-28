@@ -123,23 +123,21 @@ jobs:
             'C:\hostedtoolcache\windows\stack',
             'C:\hostedtoolcache\windows\Ruby',
             'C:\hostedtoolcache\windows\Python',
-            'C:\hostedtoolcache\windows
-ode',
+            'C:\hostedtoolcache\windows\node',
             'C:\hostedtoolcache\windows\jdk',
             'C:\hostedtoolcache\windows\php',
             'C:\Strawberry',
             'C:\mingw64',
             'C:\cabal',
-            'C:	ools',
-            'C:cpkg',
+            'C:\tools',
+            'C:\vcpkg',
             'C:\ProgramData\kind',
             'C:\ProgramData\chocolatey\lib\maven',
             'C:\ProgramData\chocolatey\lib\pulumi',
             'C:\ProgramData\chocolatey\lib\kind',
             'C:\Program Files\Amazon',
             'C:\Program Files\ImageMagick-7.1.2-Q16-HDRI',
-            'C:\Program Files
-odejs'
+            'C:\Program Files\nodejs'
           )
           foreach ($path in $paths) {
             if (Test-Path -LiteralPath $path) {
@@ -272,23 +270,21 @@ odejs'
             'C:\hostedtoolcache\windows\stack',
             'C:\hostedtoolcache\windows\Ruby',
             'C:\hostedtoolcache\windows\Python',
-            'C:\hostedtoolcache\windows
-ode',
+            'C:\hostedtoolcache\windows\node',
             'C:\hostedtoolcache\windows\jdk',
             'C:\hostedtoolcache\windows\php',
             'C:\Strawberry',
             'C:\mingw64',
             'C:\cabal',
-            'C:	ools',
-            'C:cpkg',
+            'C:\tools',
+            'C:\vcpkg',
             'C:\ProgramData\kind',
             'C:\ProgramData\chocolatey\lib\maven',
             'C:\ProgramData\chocolatey\lib\pulumi',
             'C:\ProgramData\chocolatey\lib\kind',
             'C:\Program Files\Amazon',
             'C:\Program Files\ImageMagick-7.1.2-Q16-HDRI',
-            'C:\Program Files
-odejs'
+            'C:\Program Files\nodejs'
           )
           foreach ($path in $paths) {
             if (Test-Path -LiteralPath $path) {
