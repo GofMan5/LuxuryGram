@@ -118,7 +118,28 @@ jobs:
             'C:\Program Files\MySQL',
             'C:\Program Files\PostgreSQL',
             'C:\ghcup',
-            'C:\hostedtoolcache\windows\CodeQL'
+            'C:\hostedtoolcache\windows\CodeQL',
+            'C:\hostedtoolcache\windows\go',
+            'C:\hostedtoolcache\windows\stack',
+            'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\Python',
+            'C:\hostedtoolcache\windows
+ode',
+            'C:\hostedtoolcache\windows\jdk',
+            'C:\hostedtoolcache\windows\php',
+            'C:\Strawberry',
+            'C:\mingw64',
+            'C:\cabal',
+            'C:	ools',
+            'C:cpkg',
+            'C:\ProgramData\kind',
+            'C:\ProgramData\chocolatey\lib\maven',
+            'C:\ProgramData\chocolatey\lib\pulumi',
+            'C:\ProgramData\chocolatey\lib\kind',
+            'C:\Program Files\Amazon',
+            'C:\Program Files\ImageMagick-7.1.2-Q16-HDRI',
+            'C:\Program Files
+odejs'
           )
           foreach ($path in $paths) {
             if (Test-Path -LiteralPath $path) {
@@ -246,7 +267,28 @@ jobs:
             'C:\Program Files\MySQL',
             'C:\Program Files\PostgreSQL',
             'C:\ghcup',
-            'C:\hostedtoolcache\windows\CodeQL'
+            'C:\hostedtoolcache\windows\CodeQL',
+            'C:\hostedtoolcache\windows\go',
+            'C:\hostedtoolcache\windows\stack',
+            'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\Python',
+            'C:\hostedtoolcache\windows
+ode',
+            'C:\hostedtoolcache\windows\jdk',
+            'C:\hostedtoolcache\windows\php',
+            'C:\Strawberry',
+            'C:\mingw64',
+            'C:\cabal',
+            'C:	ools',
+            'C:cpkg',
+            'C:\ProgramData\kind',
+            'C:\ProgramData\chocolatey\lib\maven',
+            'C:\ProgramData\chocolatey\lib\pulumi',
+            'C:\ProgramData\chocolatey\lib\kind',
+            'C:\Program Files\Amazon',
+            'C:\Program Files\ImageMagick-7.1.2-Q16-HDRI',
+            'C:\Program Files
+odejs'
           )
           foreach ($path in $paths) {
             if (Test-Path -LiteralPath $path) {
