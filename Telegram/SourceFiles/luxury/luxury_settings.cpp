@@ -617,6 +617,7 @@ bool LuxurySettings::reset() {
 
 	LuxuryUiSettings::setMaterialSwitches(settings.materialSwitches());
 	LuxuryUiSettings::setAvatarCorners(settings.avatarCorners());
+	LuxuryUiSettings::setMenuRadius(settings.menuRadius());
 	if (wasStreamerMode != settings.streamerMode()) {
 		LuxuryFeatures::StreamerMode::apply(settings.streamerMode());
 	}
@@ -753,6 +754,11 @@ void LuxurySettings::validate() {
 	validateRange(_messageBubbleRadius, 0, 16, defaults._messageBubbleRadius);
 	validateRange(_wideMultiplier, 0.5, 4.0, defaults._wideMultiplier);
 	validateRange(_avatarCorners, 0, LuxuryUiSettings::kMaxAvatarCorners, defaults._avatarCorners);
+	validateRange(
+		_menuRadius,
+		LuxuryUiSettings::kMinMenuRadius,
+		LuxuryUiSettings::kMaxMenuRadius,
+		defaults._menuRadius);
 	validateText(_deletedMark, kMaxMarkLength);
 	validateText(_editedMark, kMaxMarkLength);
 	validateText(_monoFont, kMaxFontFamilyLength);
@@ -1361,6 +1367,14 @@ void LuxurySettings::setAvatarCorners(int val) {
 	save();
 }
 
+void LuxurySettings::setMenuRadius(int val) {
+	if (_menuRadius.current() == val) return;
+	_menuRadius = val;
+	// Applied to every popup menu created afterwards, no restart needed.
+	LuxuryUiSettings::setMenuRadius(val);
+	save();
+}
+
 void LuxurySettings::setSingleCornerRadius(bool val) {
 	if (_singleCornerRadius.current() == val) return;
 	_singleCornerRadius = val;
@@ -1411,6 +1425,7 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"increaseWebviewHeight", s._increaseWebviewHeight.current()},
 		{"increaseWebviewWidth", s._increaseWebviewWidth.current()},
 		{"materialSwitches", s._materialSwitches.current()},
+		{"menuRadius", s._menuRadius.current()},
 		{"removeMessageTail", s._removeMessageTail.current()},
 		{"disableNotificationsDelay", s._disableNotificationsDelay.current()},
 		{"localPremium", s._localPremium.current()},
@@ -1572,6 +1587,7 @@ s._disableChatSelectionLimit = j.value("disableChatSelectionLimit", defaults._di
 	s._increaseWebviewHeight = j.value("increaseWebviewHeight", defaults._increaseWebviewHeight.current());
 	s._increaseWebviewWidth = j.value("increaseWebviewWidth", defaults._increaseWebviewWidth.current());
 	s._materialSwitches = j.value("materialSwitches", defaults._materialSwitches.current());
+	s._menuRadius = j.value("menuRadius", defaults._menuRadius.current());
 	s._removeMessageTail = j.value("removeMessageTail", defaults._removeMessageTail.current());
 	s._disableNotificationsDelay = j.value("disableNotificationsDelay", defaults._disableNotificationsDelay.current());
 	s._localPremium = j.value("localPremium", defaults._localPremium.current());
@@ -1820,6 +1836,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_SimpleQuotesAndReplies", "Отключить цветные ответы" },
 	{ "luxury_SingleCornerRadius", "Единый радиус углов" },
 	{ "luxury_SingleCornerRadiusDescription", "У форумов будет та же форма аватаров, что у чатов." },
+	{ "luxury_MenuRadius", "Радиус углов меню" },
 	{ "luxury_SpyEssentialsHeader", "Главное для шпиона" },
 	{ "luxury_StickerConfirmation", "Стикеры" },
 	{ "luxury_StreamerModeToggle", "Режим стримера" },

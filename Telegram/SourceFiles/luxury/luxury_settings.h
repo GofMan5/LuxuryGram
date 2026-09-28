@@ -361,6 +361,7 @@ public:
 	[[nodiscard]] bool improveLinkPreviews() const { return _improveLinkPreviews.current(); }
 	[[nodiscard]] bool crashReporting() const { return _crashReporting.current(); }
 	[[nodiscard]] int avatarCorners() const { return _avatarCorners.current(); }
+	[[nodiscard]] int menuRadius() const { return _menuRadius.current(); }
 	[[nodiscard]] bool singleCornerRadius() const { return _singleCornerRadius.current(); }
 	[[nodiscard]] bool streamerMode() const { return _streamerMode.current(); }
 
@@ -458,6 +459,7 @@ public:
 	void setImproveLinkPreviews(bool val);
 	void setCrashReporting(bool val);
 	void setAvatarCorners(int val);
+	void setMenuRadius(int val);
 	void setSingleCornerRadius(bool val);
 	void setStreamerMode(bool val);
 
@@ -760,6 +762,7 @@ private:
 	rpl::variable<bool> _improveLinkPreviews = false;
 	rpl::variable<bool> _crashReporting = true;
 	rpl::variable<int> _avatarCorners = 23;
+	rpl::variable<int> _menuRadius = 10;
 	rpl::variable<bool> _singleCornerRadius = false;
 	rpl::variable<bool> _streamerMode = false;
 

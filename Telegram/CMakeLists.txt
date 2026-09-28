@@ -195,6 +195,8 @@ set(luxurygram_files
         luxury/ui/components/icon_picker.h
         luxury/ui/components/avatar_corners_preview.cpp
         luxury/ui/components/avatar_corners_preview.h
+        luxury/ui/components/menu_radius_preview.cpp
+        luxury/ui/components/menu_radius_preview.h
         luxury/ui/components/message_preview.cpp
         luxury/ui/components/message_preview.h
         luxury/ui/components/saved_music.cpp

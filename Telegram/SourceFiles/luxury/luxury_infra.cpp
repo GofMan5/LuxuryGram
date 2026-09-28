@@ -41,6 +41,7 @@ void initUiSettings() {
 	LuxuryUiSettings::setWideMultiplier(settings.wideMultiplier());
 	LuxuryUiSettings::setMaterialSwitches(settings.materialSwitches());
 	LuxuryUiSettings::setAvatarCorners(settings.avatarCorners());
+	LuxuryUiSettings::setMenuRadius(settings.menuRadius());
 	Ui::SetAppliedBubbleRadius(settings.messageBubbleRadius());
 }
 

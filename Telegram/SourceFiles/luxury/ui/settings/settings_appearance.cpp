@@ -12,6 +12,7 @@
 #include "luxury/ui/boxes/font_selector.h"
 #include "luxury/ui/components/avatar_corners_preview.h"
 #include "luxury/ui/components/icon_picker.h"
+#include "luxury/ui/components/menu_radius_preview.h"
 #include "luxury/ui/settings/luxury_builder.h"
 #include "luxury/ui/settings/settings_luxury_utils.h"
 #include "luxury/ui/settings/settings_main.h"
@@ -173,6 +174,47 @@ void BuildAvatarCorners(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.onFinalChanged = [=](int val) {
 			LuxurySettings::getInstance().setAvatarCorners(val);
 			ShowRestartPrompt(controller);
+		},
+	});
+
+	builder.addSubsectionTitle({
+		.id = u"luxury/menuRadius"_q,
+		.title = tr::luxury_MenuRadius(),
+	});
+
+	auto *menuPreviewRaw = static_cast<MenuRadiusPreview*>(nullptr);
+	builder.add([&](const Builder::WidgetContext &ctx) -> SectionBuilder::WidgetToAdd {
+		auto preview = object_ptr<MenuRadiusPreview>(ctx.container);
+		menuPreviewRaw = preview.data();
+		const auto hMargin = st::settingsButtonNoIcon.padding.left();
+		return {
+			.widget = std::move(preview),
+			.margin = QMargins(hMargin, 0, hMargin, 0),
+		};
+	});
+
+	luxury.addSlider({
+		.id = u"luxury/menuRadiusSlider"_q,
+		.title = rpl::single(QString()),
+		.showTitle = false,
+		.steps = LuxuryUiSettings::kMaxMenuRadius - LuxuryUiSettings::kMinMenuRadius + 1,
+		.current = settings->menuRadius() - LuxuryUiSettings::kMinMenuRadius,
+		.indexToValue = [](int index) {
+			return index + LuxuryUiSettings::kMinMenuRadius;
+		},
+		.formatLabel = [](int value) {
+			return QString::number(value) + u" px"_q;
+		},
+		.onChanged = [=](int val) {
+			// No restart: every popup menu created after this picks
+			// the new radius up through LuxuryUiSettings.
+			LuxurySettings::getInstance().setMenuRadius(val);
+			if (menuPreviewRaw) {
+				menuPreviewRaw->update();
+			}
+		},
+		.onFinalChanged = [=](int val) {
+			LuxurySettings::getInstance().setMenuRadius(val);
 		},
 	});
 
