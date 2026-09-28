@@ -456,6 +456,7 @@ void Action::populateSubmenu() {
 
 void Action::paint(Painter &p) {
 	const auto enabled = isEnabled();
+	const auto selected = isSelected();
 	const auto shown = selectionProgress();
 	if (shown > 0. && _st.itemBgOver->c.alpha() < 255) {
 		p.fillRect(0, 0, width(), _height, _st.itemBg);
@@ -1141,7 +1142,7 @@ void WhoReactedEntryAction::paint(Painter &&p) {
 		if (_type == WhoReactedType::RefRecipientNow) {
 			auto hq = PainterHighQualityEnabler(p);
 			p.setBrush(Qt::NoBrush);
-			auto bgPen = bg->p;
+			auto bgPen = bg;
 			bgPen.setWidthF(st::lineWidth * 6.);
 			p.setPen(bgPen);
 			LuxuryUserpic::PaintShape(p, photoLeft, photoTop, photoSize);
