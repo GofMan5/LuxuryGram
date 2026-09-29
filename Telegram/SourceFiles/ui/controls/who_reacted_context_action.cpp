@@ -1142,7 +1142,7 @@ void WhoReactedEntryAction::paint(Painter &&p) {
 		if (_type == WhoReactedType::RefRecipientNow) {
 			auto hq = PainterHighQualityEnabler(p);
 			p.setBrush(Qt::NoBrush);
-			auto bgPen = bg;
+			auto bgPen = QPen(bg);
 			bgPen.setWidthF(st::lineWidth * 6.);
 			p.setPen(bgPen);
 			LuxuryUserpic::PaintShape(p, photoLeft, photoTop, photoSize);
