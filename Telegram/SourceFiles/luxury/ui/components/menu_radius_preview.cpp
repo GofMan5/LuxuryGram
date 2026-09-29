@@ -6,7 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/components/menu_radius_preview.h"
 
-#include "luxury/luxury_settings.h"
+#include "luxury/luxury_ui_settings.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/painter.h"
 #include "styles/style_widgets.h"

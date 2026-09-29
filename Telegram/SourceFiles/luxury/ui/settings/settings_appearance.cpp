@@ -202,9 +202,6 @@ void BuildAvatarCorners(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.indexToValue = [](int index) {
 			return index + LuxuryUiSettings::kMinMenuRadius;
 		},
-		.formatLabel = [](int value) {
-			return QString::number(value) + u" px"_q;
-		},
 		.onChanged = [=](int val) {
 			// No restart: every popup menu created after this picks
 			// the new radius up through LuxuryUiSettings.
@@ -215,6 +212,9 @@ void BuildAvatarCorners(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		},
 		.onFinalChanged = [=](int val) {
 			LuxurySettings::getInstance().setMenuRadius(val);
+		},
+		.formatLabel = [](int value) {
+			return QString::number(value) + u" px"_q;
 		},
 	});
 
