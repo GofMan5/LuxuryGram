@@ -8857,6 +8857,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_AvatarCornersCircle" = "Circle";
 "luxury_AvatarCornersSquare" = "Square";
 "luxury_SingleCornerRadius" = "Single Corner Radius";
+"luxury_MenuRadius" = "Menu Corner Radius";
 "luxury_SingleCornerRadiusDescription" = "Forums will have the same avatar shape as chats.";
 "luxury_HideAllChats" = "Hide \"All Chats\" Tab";
 "luxury_ChannelBottomButton" = "Channel Bottom Button";

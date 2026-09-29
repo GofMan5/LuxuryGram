@@ -243,8 +243,20 @@ void DiscreteSlider::setSelectedSection(int index) {
 		const auto to = getFinalActiveRange();
 		const auto duration = getAnimationDuration();
 		const auto updater = [this] { update(); };
-		_a_left.start(updater, from.left, to.left, duration);
-		_a_width.start(updater, from.width, to.width, duration);
+		// easeOutCubic: the bar glides out fast and settles smoothly
+		// instead of sliding linearly between sections.
+		_a_left.start(
+			updater,
+			from.left,
+			to.left,
+			duration,
+			anim::easeOutCubic);
+		_a_width.start(
+			updater,
+			from.width,
+			to.width,
+			duration,
+			anim::easeOutCubic);
 		_callbackAfterMs = crl::now() + duration;
 	}
 }
