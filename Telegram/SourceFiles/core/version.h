@@ -26,10 +26,10 @@ constexpr auto AppFile = "LuxuryGram"_cs;
 constexpr auto AppVersion = 7002009;
 constexpr auto AppVersionStr = "7.2.9";
 // Product version is bumped only for LuxuryGram releases.
-constexpr auto LuxuryVersionStr = "1.0.12";
+constexpr auto LuxuryVersionStr = "1.0.13";
 // Update packages are compared by this counter instead of the upstream
 // AppVersion, so syncing Telegram Desktop never looks like an update.
 // major * 1'000'000 + minor * 1'000 + patch
-constexpr auto LuxuryUpdateVersion = 1'000'012;
+constexpr auto LuxuryUpdateVersion = 1'000'013;
 constexpr auto AppBetaVersion = false;
 constexpr auto AppAlphaVersion = TDESKTOP_ALPHA_VERSION;
