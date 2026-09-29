@@ -198,7 +198,7 @@ void BuildAvatarCorners(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.title = rpl::single(QString()),
 		.showTitle = false,
 		.steps = LuxuryUiSettings::kMaxMenuRadius - LuxuryUiSettings::kMinMenuRadius + 1,
-		.current = settings->menuRadius() - LuxuryUiSettings::kMinMenuRadius,
+		.current = settings->menuRadius(),
 		.indexToValue = [](int index) {
 			return index + LuxuryUiSettings::kMinMenuRadius;
 		},

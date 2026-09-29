@@ -12,6 +12,8 @@
 #include "styles/style_widgets.h"
 #include "styles/style_settings.h"
 
+#include <algorithm>
+
 namespace {
 
 constexpr auto kRows = 3;
@@ -28,10 +30,6 @@ MenuRadiusPreview::MenuRadiusPreview(QWidget *parent)
 	setMouseTracking(true);
 }
 
-int MenuRadiusPreview::hoveredRow() const {
-	return _hoverRow;
-}
-
 void MenuRadiusPreview::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
@@ -39,8 +37,7 @@ void MenuRadiusPreview::paintEvent(QPaintEvent *e) {
 	const auto radius = LuxuryUiSettings::effectiveMenuRadius(
 		st::defaultPopupMenu.radius);
 	const auto rowHeight = height() / kRows;
-	const auto textFont = st::defaultPopupMenu.menu.itemStyle.font;
-	const auto barHeight = textFont->height / 3;
+	const auto barHeight = st::defaultPopupMenu.menu.itemStyle.font->height / 3;
 
 	// A miniature popup menu: one rounded plate, rows with a highlight,
 	// icon dots and text bars. The corners follow the live radius value,
@@ -53,21 +50,21 @@ void MenuRadiusPreview::paintEvent(QPaintEvent *e) {
 		_ripple->paint(p, 0, 0, width());
 		if (_ripple->empty()) {
 			_ripple.reset();
+			_rippleRadius = -1;
 		}
 	}
 
+	// Rows must stay inside the rounded plate: the painter clips to the
+	// plate path so square row highlights can never poke past the corners.
+	auto platePath = QPainterPath();
+	platePath.addRoundedRect(QRectF(rect()), radius, radius);
+	p.save();
+	p.setClipPath(platePath);
 	for (auto row = 0; row != kRows; ++row) {
 		const auto top = row * rowHeight;
 		if (row == _hoverRow) {
-			const auto inner = rect().marginsRemoved(
-				QMargins(0, top, 0, height() - top - rowHeight));
-			// Keep the row highlight inside the rounded plate: the
-			// outermost rows take the menu radius on their outer side.
 			p.setBrush(st::menuBgOver);
-			p.drawRoundedRect(
-				inner,
-				(row == 0) ? radius / 2. : 0.,
-				(row == 0) ? radius / 2. : 0.);
+			p.drawRect(rect().x(), top, width(), rowHeight);
 			p.setBrush(st::menuBg);
 		}
 
@@ -89,6 +86,7 @@ void MenuRadiusPreview::paintEvent(QPaintEvent *e) {
 			barHeight / 2.);
 		p.setBrush(st::menuBg);
 	}
+	p.restore();
 }
 
 void MenuRadiusPreview::mouseMoveEvent(QMouseEvent *e) {
@@ -104,15 +102,17 @@ void MenuRadiusPreview::mouseMoveEvent(QMouseEvent *e) {
 
 void MenuRadiusPreview::mousePressEvent(QMouseEvent *e) {
 	if (e->button() == Qt::LeftButton) {
-		if (!_ripple) {
+		const auto radius = LuxuryUiSettings::effectiveMenuRadius(
+			st::defaultPopupMenu.radius);
+		if (!_ripple || _rippleRadius != radius) {
 			auto mask = Ui::RippleAnimation::RoundRectMask(
 				size(),
-				LuxuryUiSettings::effectiveMenuRadius(
-					st::defaultPopupMenu.radius));
+				radius);
 			_ripple = std::make_unique<Ui::RippleAnimation>(
 				st::defaultRippleAnimation,
 				std::move(mask),
 				[=] { update(); });
+			_rippleRadius = radius;
 		}
 		_ripple->add(e->pos());
 	}
@@ -122,4 +122,10 @@ void MenuRadiusPreview::mouseReleaseEvent(QMouseEvent *e) {
 	if (_ripple) {
 		_ripple->lastStop();
 	}
+}
+
+void MenuRadiusPreview::leaveEvent(QEvent *e) {
+	_hoverRow = -1;
+	update();
+	RpWidget::leaveEvent(e);
 }

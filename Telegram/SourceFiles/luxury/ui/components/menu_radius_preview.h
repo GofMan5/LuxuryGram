@@ -21,12 +21,11 @@ protected:
 	void mouseMoveEvent(QMouseEvent *e) override;
 	void mousePressEvent(QMouseEvent *e) override;
 	void mouseReleaseEvent(QMouseEvent *e) override;
+	void leaveEvent(QEvent *e) override;
 
 private:
-	int hoveredRow() const;
-
 	std::unique_ptr<Ui::RippleAnimation> _ripple;
-	int _pressedRow = -1;
+	int _rippleRadius = -1;
 	int _hoverRow = -1;
 
 };

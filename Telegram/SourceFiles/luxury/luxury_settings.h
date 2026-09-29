@@ -10,10 +10,10 @@
 // translation units. The 25k-line json.hpp belongs in the .cpp files that
 // actually build or parse a json value.
 #include "luxury/libs/json_fwd.hpp"
+#include "luxury/luxury_ui_settings.h"
 #include "rpl/lifetime.h"
 #include "rpl/producer.h"
 #include "rpl/variable.h"
-
 #include <map>
 #include <unordered_set>
 
@@ -762,7 +762,7 @@ private:
 	rpl::variable<bool> _improveLinkPreviews = false;
 	rpl::variable<bool> _crashReporting = true;
 	rpl::variable<int> _avatarCorners = 23;
-	rpl::variable<int> _menuRadius = 10;
+	rpl::variable<int> _menuRadius = LuxuryUiSettings::kDefaultMenuRadius;
 	rpl::variable<bool> _singleCornerRadius = false;
 	rpl::variable<bool> _streamerMode = false;
 

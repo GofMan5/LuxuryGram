@@ -4,6 +4,21 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- New "Menu Corner Radius" setting (Appearance, 2-18 px) with a live miniature-menu preview that reshapes as you drag. No restart: every popup menu created afterwards follows the new radius.
+
+### Changed
+
+- Popup menu items now cross-fade their highlight (150 ms) instead of snapping, menu and box corners are rounder (10 px), hover highlights respond in 150 ms instead of 400, ripples are faster (300/160 ms), toast notifications fade quicker, submenu hover-aim opens 80 ms sooner, and section sliders (Watcher tabs, settings) glide with an ease-out curve.
+
+### Fixed
+
+- Popup menus were dead to the mouse on some Windows pointer stacks: presses marked "synthesized" were dropped by an upstream guard while hover and keyboard kept working. The guard is gone; the touch-press-and-hold case it protected stays guarded in the item release path.
+- A sub-threshold drag from one menu item to its neighbour could trigger the first item instead of the one under the release.
+
 ## 1.0.12
 
 ### Added
