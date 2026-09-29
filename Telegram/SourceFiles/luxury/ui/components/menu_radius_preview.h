@@ -21,7 +21,7 @@ protected:
 	void mouseMoveEvent(QMouseEvent *e) override;
 	void mousePressEvent(QMouseEvent *e) override;
 	void mouseReleaseEvent(QMouseEvent *e) override;
-	void leaveEvent(QEvent *e) override;
+	void leaveEventHook(QEvent *e) override;
 
 private:
 	std::unique_ptr<Ui::RippleAnimation> _ripple;

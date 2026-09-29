@@ -124,8 +124,8 @@ void MenuRadiusPreview::mouseReleaseEvent(QMouseEvent *e) {
 	}
 }
 
-void MenuRadiusPreview::leaveEvent(QEvent *e) {
+void MenuRadiusPreview::leaveEventHook(QEvent *e) {
 	_hoverRow = -1;
 	update();
-	RpWidget::leaveEvent(e);
+	RpWidget::leaveEventHook(e);
 }
