@@ -24,6 +24,7 @@
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "ui/widgets/discrete_sliders.h"
 #include "ui/widgets/labels.h"
+#include "ui/widgets/menu/menu.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/painter.h"
 #include "ui/qt_object_factory.h"
@@ -473,7 +474,7 @@ protected:
 private:
 	QString _chipLabel;
 	QString _dateText;
-	Text::String _text;
+	Ui::Text::String _text;
 	int _kind = 0;
 	int _chipWidth = 0;
 	int _textLeft = 0;
@@ -583,7 +584,7 @@ void ToolButton::paintEvent(QPaintEvent *e) {
 			_ripple.reset();
 		}
 	}
-	paintIcon(p, (_hovered ? st::windowTextFg : st::windowSubTextFg)->c);
+	paintIcon(p, (_hovered ? st::windowFg : st::windowSubTextFg)->c);
 }
 
 void ToolButton::paintIcon(Painter &p, const QColor &color) {
@@ -720,7 +721,7 @@ void SortControl::select(int order) {
 		toWidth,
 		kSortDuration,
 		anim::easeOutCubic);
-	_changes.fire(_selected);
+	_changes.fire_copy(_selected);
 }
 
 void SortControl::paintEvent(QPaintEvent *e) {
@@ -952,7 +953,7 @@ void SessionCard::paintCard(Painter &p) {
 		const auto &value = line ? _endValueElided : _startValueElided;
 		// Only the End line of an open session carries the accent.
 		const auto valuePen = (!line || _session.end)
-			? QPen(st::windowTextFg->c)
+			? QPen(st::windowFg->c)
 			: QPen(st::windowActiveTextFg->c);
 		const auto lineRect = style::rtlrect(
 			_lineLeft,
