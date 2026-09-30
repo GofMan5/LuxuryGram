@@ -104,6 +104,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QStandardPaths>
 #include <QtCore/QMimeDatabase>
 #include <QtGui/QGuiApplication>
+#include <QtWidgets/QApplication>
 #include <QtGui/QScreen>
 
 #include <ksandbox.h>
@@ -821,9 +822,18 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 		Ui::Integration::Instance().touchCounterIncrement();
 		[[fallthrough]];
 	case QEvent::TouchUpdate:
-	case QEvent::TouchEnd: {
 		_lastTouchProcessed = object->isWidgetType();
-	} break;
+		break;
+
+	case QEvent::TouchEnd:
+	case QEvent::TouchCancel:
+		// The touch sequence is over: stop suppressing synthesized-source
+		// mouse events. Keeping _lastTouchProcessed armed after the last
+		// touch ate later mouse presses that had nothing to do with any
+		// active touch (mouse drivers on some pointer stacks mark real
+		// mouse presses with the synthesized-from-touch source flag).
+		_lastTouchProcessed = false;
+		break;
 
 	case QEvent::MouseButtonPress:
 	case QEvent::MouseButtonRelease:
@@ -831,10 +841,24 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 	case QEvent::MouseMove: {
 		const auto ev = static_cast<QMouseEvent*>(e);
 		if (ev->source() == Qt::MouseEventSynthesizedBySystem) {
-			const auto widget = static_cast<QWidget*>(object);
-			if (_lastTouchProcessed
-				|| (object->isWidgetType()
-					&& widget->testAttribute(Qt::WA_AcceptTouchEvents))) {
+			const auto widget = object->isWidgetType()
+				? static_cast<QWidget*>(object)
+				: nullptr;
+			// A popup menu owns all mouse input while it is open: Qt
+			// delivers mouse events to it via the popup grab, and it
+			// handles synthesized and touch input itself (PopupMenu
+			// forwards touches, ItemBase guards stray releases). Eating
+			// synthesized-source presses here instead used to leave popup
+			// menus dead to the mouse on pointer stacks that mark real
+			// mouse clicks with that source flag, while hover and
+			// keyboard stayed alive.
+			const auto inPopupMenu = (QApplication::activePopupWidget()
+				!= nullptr);
+			if (!inPopupMenu
+				&& (_lastTouchProcessed
+					|| (widget
+						&& widget->testAttribute(
+							Qt::WA_AcceptTouchEvents)))) {
 				_lastMouseIgnored = true;
 				return true;
 			}

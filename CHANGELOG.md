@@ -4,6 +4,12 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Fixed
+
+- Popup menus were dead to the mouse on some Windows pointer stacks (the "…", mute and "View Deleted" menus: items highlighted under the cursor, keyboard arrows + Enter worked, clicks did nothing and the menu would only close without acting). The application-level event filter was still dropping mouse presses that Windows marked "synthesized": it no longer applies while a popup menu is open (menus own their mouse input and already guard the touch cases themselves), and it no longer stays armed after the last touch sequence ends. The 1.0.12/1.0.13 fixes removed guards *below* this filter, which is why they changed nothing.
+
 ## 1.0.13
 
 ### Added
