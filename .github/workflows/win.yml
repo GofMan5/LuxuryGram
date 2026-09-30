@@ -164,22 +164,31 @@ jobs:
             'C:\Program Files\MySQL',
             'C:\Program Files\PostgreSQL',
             'C:\ghcup',
-            'C:\hostedtoolcache\windows\CodeQL',
-            'C:\hostedtoolcache\windows\go',
-            'C:\hostedtoolcache\windows\stack',
-            'C:\hostedtoolcache\windows\Ruby',
-            'C:\Strawberry',
-            'C:\mingw64',
-            'C:\cabal',
-            'C:\tools',
-            'C:\vcpkg',
-            'C:\ProgramData\kind',
-            'C:\ProgramData\chocolatey\lib\maven',
-            'C:\ProgramData\chocolatey\lib\pulumi',
-            'C:\ProgramData\chocolatey\lib\kind',
-            'C:\Program Files\Amazon',
-            'C:\Program Files\ImageMagick-7.1.2-Q16-HDRI'
+            'C:\hostedtoolcache\windows\CodeQL'
           )
+          # The extended sweep is validated on x64 images only: there Ninja
+          # comes from VS Enterprise, and the debug builds exhaust the ~80 GiB
+          # disk. The arm64 image instead keeps Ninja in C:\Tools\Ninja (its VS
+          # Build Tools carry no CMake component) and starts with ~120 GiB
+          # free, so deleting C:\tools there only removes the build tool.
+          if ('${{ matrix.arch }}' -ne 'arm64') {
+            $paths += @(
+              'C:\hostedtoolcache\windows\go',
+              'C:\hostedtoolcache\windows\stack',
+              'C:\hostedtoolcache\windows\Ruby',
+              'C:\Strawberry',
+              'C:\mingw64',
+              'C:\cabal',
+              'C:\tools',
+              'C:\vcpkg',
+              'C:\ProgramData\kind',
+              'C:\ProgramData\chocolatey\lib\maven',
+              'C:\ProgramData\chocolatey\lib\pulumi',
+              'C:\ProgramData\chocolatey\lib\kind',
+              'C:\Program Files\Amazon',
+              'C:\Program Files\ImageMagick-7.1.2-Q16-HDRI'
+            )
+          }
           foreach ($path in $paths) {
             if (Test-Path -LiteralPath $path) {
               Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
