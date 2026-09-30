@@ -9000,7 +9000,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistoryEarlier#one" = "+{count} earlier";
 "luxury_OnlineHistoryEarlier#other" = "+{count} earlier";
 "luxury_OnlineHistorySince" = "since {time}";
-"luxury_OnlineHistoryUnknownStart" = "unknown start";
 "luxury_OnlineHistorySessions" = "Sessions";
 "luxury_OnlineHistoryEvents" = "Events";
 "luxury_OnlineHistorySessionsEmpty" = "No sessions recorded yet.";
@@ -9011,6 +9010,18 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistorySortNewest" = "Newest";
 "luxury_OnlineHistorySortOldest" = "Oldest";
 "luxury_OnlineHistorySortLongest" = "Longest";
+"luxury_OnlineHistoryStart" = "Start";
+"luxury_OnlineHistoryEnd" = "End";
+"luxury_OnlineHistoryOpen" = "Online now";
+"luxury_OnlineHistoryUnknown" = "unknown";
+"luxury_OnlineHistoryRefresh" = "Refresh";
+"luxury_OnlineHistorySettings" = "Settings";
+"luxury_OnlineHistorySettingOn" = "on";
+"luxury_OnlineHistorySettingOff" = "off";
+"luxury_OnlineHistoryKindGift" = "Gift";
+"luxury_OnlineHistoryKindName" = "Name";
+"luxury_OnlineHistoryKindUsername" = "Username";
+"luxury_OnlineHistoryKindPhoto" = "Photo";
 "luxury_WatchGiftSent" = "You sent a gift for {cost} to {user}";
 "luxury_WatchGiftReceived" = "{user} sent you a gift for {cost}";
 "luxury_WatchGiftReceivedAnonymous" = "Unknown user sent you a gift for {cost}";

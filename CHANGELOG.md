@@ -6,6 +6,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ## Unreleased
 
+### Changed
+
+- The Watcher box is redesigned as a card list: each session renders as a rounded card with a status dot (green = closed, pulsing = online right now, "?" = unknown start), Start/End timestamps and a duration chip with a clock icon; each event as a card with a kind chip (gift / name / username / photo) and its date. Sorting is now a one-click animated segmented control, and the toolbar gains a refresh button (re-reads the data, spins while at it) and a gear button that opens the tracking toggles without leaving the box. Cards animate in with a slight rise.
+
 ### Fixed
 
 - Popup menus were dead to the mouse on some Windows pointer stacks (the "…", mute and "View Deleted" menus: items highlighted under the cursor, keyboard arrows + Enter worked, clicks did nothing and the menu would only close without acting). The application-level event filter was still dropping mouse presses that Windows marked "synthesized": it no longer applies while a popup menu is open (menus own their mouse input and already guard the touch cases themselves), and it no longer stays armed after the last touch sequence ends. The 1.0.12/1.0.13 fixes removed guards *below* this filter, which is why they changed nothing.
