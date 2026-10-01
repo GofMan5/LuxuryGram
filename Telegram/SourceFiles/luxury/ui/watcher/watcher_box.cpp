@@ -458,7 +458,6 @@ public:
 	[[nodiscard]] Ui::RpWidget *gearButton() const {
 		return _toolbar->gearButton();
 	}
-	void setTabIndex(int index);
 	void setSortIndex(int index);
 	void setLastEnabled(bool enabled);
 	void startRefreshSpin();
@@ -1177,10 +1176,6 @@ WatcherHeader::WatcherHeader(QWidget *parent)
 		});
 	_toolbar = Ui::CreateChild<WatcherToolbar>(this);
 	setFixedHeight(contentHeight());
-}
-
-void WatcherHeader::setTabIndex(int index) {
-	_tabs->setIndex(index);
 }
 
 void WatcherHeader::setSortIndex(int index) {
