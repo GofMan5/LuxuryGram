@@ -73,15 +73,15 @@ A release publishes one verified LuxuryGram product version on GitHub Releases. 
 6. Point the updater at the new build, which is a deliberate second step so no client updates to an unverified release:
 
    ```
-   gh release download luxury-v<version> -p current4 -D .
-   gh release upload updates current4 --clobber
+   gh release download luxury-v<version> -p current4 -p current6 -D .
+   gh release upload updates current4 current6 --clobber
    ```
 
 7. Record run IDs, asset names with hashes, and the release URL in the task delivery record under `.ai/delivery/`.
 
 ### Updates
 
-- Clients poll `https://github.com/GofMan5/LuxuryGram/releases/download/updates/current4` and download the package it names from the same release. The `updates` release is a container, never a downloadable build: keep it out of `--latest`.
+- Clients poll `https://github.com/GofMan5/LuxuryGram/releases/download/updates/current6` (builds since 1.0.12) or `.../current4` (older builds) and download the package it names from the same release; publish both names with identical bytes. The `updates` release is a container, never a downloadable build: keep it out of `--latest`.
 - Packages are signed by `Packer` with RSA-4096 over SHA-256 and verified against `UpdatesPublicKey` in `Telegram/SourceFiles/config.h` before anything is unpacked. Never publish a package built without the key, and never weaken the verification to make a build pass.
 - The private key lives in the `LUXURY_UPDATE_PRIVATE_KEY` repository secret and is written to `Telegram/SourceFiles/_other/packer_private.h` at build time by `Telegram/build/write_packer_private.py`. That header is gitignored and must never be committed. Losing the key means shipping a new public key and asking every user to reinstall by hand.
 - Update packages are compared by `LuxuryUpdateVersion` (`major * 1000000 + minor * 1000 + patch`), not by the upstream `AppVersion`. A version bump must move both, or `release.yml` refuses to build.

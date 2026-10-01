@@ -4,6 +4,12 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Fixed
+
+- Update checks failed with "failed to check for updates" on every build since 1.0.12: the app asks GitHub for the update feed as `current6` (upstream moved the feed version from 4 to 6 in lib_base), but releases only ever published `current4`, so every check hit a 404. The feed now ships under both names and the live feed is already fixed, so the updater offers 1.0.14 on its own again.
+
 ## 1.0.14
 
 ### Changed
