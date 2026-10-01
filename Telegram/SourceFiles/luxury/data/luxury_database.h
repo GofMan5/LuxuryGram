@@ -42,6 +42,7 @@ void shutdown();
 
 void addEditedMessage(const EditedMessage &message);
 std::vector<EditedMessage> getEditedMessages(ID userId, ID dialogId, ID messageId, ID minId, ID maxId, int totalLimit);
+std::vector<EditedMessage> getEditedMessagesForDialog(ID userId, ID dialogId, int totalLimit);
 bool hasRevisions(ID userId, ID dialogId, ID messageId);
 
 void addDeletedMessage(DeletedMessage message);

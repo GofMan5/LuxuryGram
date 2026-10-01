@@ -6,6 +6,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ## Unreleased
 
+### Changed
+
+- The Watcher box is rebuilt around a pinned header: the tab bar and the toolbar stay in place while only the card list scrolls (list text no longer slides behind the tabs), the tabs are equal-width segments with an animated active pill and live per-tab counts, section titles carry counts, and empty states show a centered glyph mark instead of a bare label. The Events timeline now also merges the chat's deleted and edited messages as red "Deleted" and blue "Edited" chip cards, so everything recorded about a chat is in one place.
+
 ### Fixed
 
 - Update checks failed with "failed to check for updates" on every build since 1.0.12: the app asks GitHub for the update feed as `current6` (upstream moved the feed version from 4 to 6 in lib_base), but releases only ever published `current4`, so every check hit a 404. The feed now ships under both names and the live feed is already fixed, so the updater offers 1.0.14 on its own again.

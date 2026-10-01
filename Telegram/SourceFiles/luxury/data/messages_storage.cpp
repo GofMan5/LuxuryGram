@@ -156,6 +156,15 @@ bool hasRevisions(not_null<HistoryItem*> item) {
 	return LuxuryDatabase::hasRevisions(userId, dialogId, msgId);
 }
 
+std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
+		not_null<PeerData*> peer,
+		int totalLimit) {
+	return convertToBase(LuxuryDatabase::getEditedMessagesForDialog(
+		DatabaseUserId(peer->session()),
+		getDialogIdFromPeer(peer),
+		totalLimit));
+}
+
 void addDeletedMessage(not_null<HistoryItem*> item) {
 	DeletedMessage message;
 	map(item, message);

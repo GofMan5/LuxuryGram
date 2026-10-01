@@ -13,10 +13,10 @@
 #include "lang_auto.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/luxury_settings.h"
+#include "luxury/ui/watcher/watcher_components.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "main/main_session.h"
 #include "ui/effects/animations.h"
-#include "ui/effects/ripple_animation.h"
 #include "ui/layers/generic_box.h"
 #include "ui/style/style_core_color.h"
 #include "ui/text/format_values.h"
@@ -24,13 +24,11 @@
 #include "ui/widgets/menu/menu.h"
 #include "ui/widgets/menu/menu_add_action_callback.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
-#include "ui/widgets/discrete_sliders.h"
 #include "ui/widgets/labels.h"
-#include "ui/widgets/menu/menu.h"
 #include "ui/widgets/popup_menu.h"
+#include "ui/widgets/scroll_area.h"
 #include "ui/painter.h"
 #include "ui/qt_object_factory.h"
-#include "ui/vertical_list.h"
 #include "window/window_session_controller.h"
 
 #include "styles/style_basic.h"
@@ -46,10 +44,7 @@
 #include <optional>
 #include <vector>
 
-#include <QtGui/QPolygonF>
-
 namespace LuxuryWatcher {
-
 namespace {
 
 constexpr auto kPi = 3.14159265358979323846;
@@ -64,22 +59,27 @@ const auto kGiftFg = style::internal::OwnedColor(QColor(0x5e, 0xb5, 0xf7));
 const auto kNameFg = style::internal::OwnedColor(QColor(0x31, 0xc4, 0x8d));
 const auto kUsernameFg = style::internal::OwnedColor(QColor(0xa7, 0x8b, 0xfa));
 const auto kPhotoFg = style::internal::OwnedColor(QColor(0xf5, 0x9e, 0x0b));
+const auto kDeletedFg = style::internal::OwnedColor(QColor(0xef, 0x5b, 0x5b));
+const auto kEditedFg = style::internal::OwnedColor(QColor(0x38, 0xb6, 0xe3));
+
+// Timeline kinds beyond the stored WatchKind set: the deleted and edited
+// message tables feed the same Events timeline, so their kinds live here
+// where no database value can collide with them.
+constexpr auto kKindDeleted = 100;
+constexpr auto kKindEdited = 101;
 
 // Timing (not geometry, so plain constants are fine here).
 constexpr auto kCardAppearDuration = crl::time(150);
 constexpr auto kCardStagger = crl::time(20);
 constexpr auto kCardStaggerMax = crl::time(200);
 constexpr auto kPulseDuration = crl::time(1600);
-constexpr auto kSortDuration = crl::time(150);
-constexpr auto kSpinDuration = crl::time(600);
 
 constexpr auto kCardBgBlend = 0.04;
 constexpr auto kCardBorderAlpha = 40;
-constexpr auto kSegmentPillAlpha = 0.14;
 constexpr auto kDurationPillAlpha = 0.12;
 constexpr auto kChipAlpha = 0.18;
 constexpr auto kPulseHaloAlpha = 0.5;
-constexpr auto kDisabledLabelAlpha = 0.4;
+constexpr auto kHeaderHairlineAlpha = 60;
 
 enum class Tab {
 	All,
@@ -93,14 +93,23 @@ enum class Order {
 	Longest,
 };
 
-enum class ToolIcon {
-	Refresh,
-	Gear,
-};
-
 constexpr auto kMaxOnlineHistoryRows = 50;
 constexpr auto kMaxWatchEventRows = 30;
 constexpr auto kHistoryReadLimit = 200;
+constexpr auto kPreviewLimit = 160;
+
+struct OnlineSession {
+	std::optional<int> start;
+	std::optional<int> end;
+};
+
+// One row of the merged Events timeline: a stored watch event, or a
+// deleted/edited message rendered as one.
+struct TrackedEvent {
+	int at = 0;
+	int kind = 0;
+	QString text;
+};
 
 [[nodiscard]] QColor Blended(
 		const style::color &from,
@@ -131,87 +140,6 @@ void PaintCardShell(Painter &p, int width, int height) {
 		st::luxuryWatcherCardRadius,
 		st::luxuryWatcherCardRadius);
 }
-
-void PaintClock(
-		Painter &p,
-		const QPointF &topLeft,
-		float64 size,
-		const QColor &color) {
-	const auto pen = QPen(
-		color,
-		std::max(1., size / 7.),
-		Qt::SolidLine,
-		Qt::RoundCap,
-		Qt::RoundJoin);
-	p.setPen(pen);
-	p.setBrush(Qt::NoBrush);
-	const auto rect = QRectF(topLeft, QSizeF(size, size));
-	p.drawEllipse(rect);
-	const auto center = rect.center();
-	p.drawLine(center, QPointF(center.x(), rect.top() + size * 0.22));
-	p.drawLine(center, QPointF(center.x() + size * 0.29, center.y()));
-}
-
-void PaintRefreshGlyph(Painter &p, float64 base, const QColor &color) {
-	// A ~300 degree arc with an arrowhead at its end: the standard
-	// circular-arrow "refresh" mark, drawn instead of an icon asset.
-	const auto radius = base;
-	const auto endDegrees = 90. + 300.;
-	const auto radians = endDegrees * kPi / 180.;
-	const auto end = QPointF(
-		radius * std::cos(radians),
-		-radius * std::sin(radians));
-	// Unit tangent along the counterclockwise sweep at the arc end.
-	const auto tangent = QPointF(-std::sin(radians), -std::cos(radians));
-	const auto normal = QPointF(-tangent.y(), tangent.x());
-	const auto head = 0.42 * base;
-	const auto half = 0.28 * base;
-	p.drawArc(
-		QRectF(-radius, -radius, 2 * radius, 2 * radius),
-		90 * 16,
-		300 * 16);
-	const auto arrow = QPolygonF({
-		end + tangent * head,
-		end + normal * half,
-		end - normal * half,
-	});
-	p.setPen(Qt::NoPen);
-	p.setBrush(color);
-	p.drawConvexPolygon(arrow);
-}
-
-void PaintGearGlyph(
-		Painter &p,
-		float64 base,
-		const QColor &color,
-		float64 penWidth) {
-	// Ring, eight teeth and a center hole: a painted gear.
-	const auto ring = 0.78 * base;
-	const auto teethInner = 0.88 * base;
-	const auto teethOuter = 1.18 * base;
-	const auto hole = 0.30 * base;
-	p.drawEllipse(QPointF(0, 0), ring, ring);
-	for (auto i = 0; i != 8; ++i) {
-		const auto radians = (i * 45.) * kPi / 180.;
-		const auto c = std::cos(radians);
-		const auto s = std::sin(radians);
-		p.drawLine(
-			QPointF(teethInner * c, teethInner * s),
-			QPointF(teethOuter * c, teethOuter * s));
-	}
-	p.setPen(QPen(
-		color,
-		std::max(1., penWidth / 2.),
-		Qt::SolidLine,
-		Qt::RoundCap,
-		Qt::RoundJoin));
-	p.drawEllipse(QPointF(0, 0), hole, hole);
-}
-
-struct OnlineSession {
-	std::optional<int> start;
-	std::optional<int> end;
-};
 
 // Pairs presence transitions into stays online, oldest first. The loader
 // reports newest first, so this walks the events back to front: an online
@@ -298,7 +226,36 @@ std::vector<OnlineSession> PairOnlineSessions(
 	}
 }
 
+// A message-preview row: the plain text, flattened and length-capped so
+// a card stays a card even for a wall of text.
+[[nodiscard]] QString MessagePreview(const LuxuryMessageBase &message) {
+	auto text = QString::fromStdString(message.text);
+	text.replace(u'\n', u' ');
+	if (text.size() > kPreviewLimit) {
+		text = text.left(kPreviewLimit) + u"…"_q;
+	}
+	return text.isEmpty() ? u"—"_q : text;
+}
+
+// When the row was written beats when the message claims to have been
+// sent: the timeline cares about the moment the thing was noticed.
+[[nodiscard]] int MessageTimestamp(const LuxuryMessageBase &message) {
+	return message.entityCreateDate
+		? message.entityCreateDate
+		: message.editDate
+		? message.editDate
+		: message.date;
+}
+
 [[nodiscard]] QString ChipLabelFor(int kind) {
+	switch (kind) {
+	case kKindDeleted:
+		return tr::luxury_OnlineHistoryKindDeleted(tr::now);
+	case kKindEdited:
+		return tr::luxury_OnlineHistoryKindEdited(tr::now);
+	default:
+		break;
+	}
 	switch (static_cast<WatchKind>(kind)) {
 	case WatchKind::GiftSent:
 	case WatchKind::GiftReceived:
@@ -315,6 +272,14 @@ std::vector<OnlineSession> PairOnlineSessions(
 }
 
 [[nodiscard]] style::color ChipColorFor(int kind) {
+	switch (kind) {
+	case kKindDeleted:
+		return kDeletedFg.color();
+	case kKindEdited:
+		return kEditedFg.color();
+	default:
+		break;
+	}
 	switch (static_cast<WatchKind>(kind)) {
 	case WatchKind::GiftSent:
 	case WatchKind::GiftReceived:
@@ -329,65 +294,6 @@ std::vector<OnlineSession> PairOnlineSessions(
 		return st::windowSubTextFg;
 	}
 }
-
-class ToolButton : public Ui::RpWidget {
-public:
-	ToolButton(QWidget *parent, ToolIcon icon);
-
-	[[nodiscard]] rpl::producer<> clicks() const {
-		return _clicks.events();
-	}
-	void spin();
-
-protected:
-	void paintEvent(QPaintEvent *e) override;
-	void mousePressEvent(QMouseEvent *e) override;
-	void mouseReleaseEvent(QMouseEvent *e) override;
-	void enterEventHook(QEnterEvent *e) override;
-	void leaveEventHook(QEvent *e) override;
-
-private:
-	void paintIcon(Painter &p, const QColor &color);
-
-	ToolIcon _icon = ToolIcon::Refresh;
-	bool _hovered = false;
-	bool _pressed = false;
-	Ui::Animations::Simple _spin;
-	rpl::event_stream<> _clicks;
-	std::unique_ptr<Ui::RippleAnimation> _ripple;
-
-};
-
-class SortControl : public Ui::RpWidget {
-public:
-	SortControl(QWidget *parent);
-
-	[[nodiscard]] rpl::producer<int> changes() const {
-		return _changes.events();
-	}
-	[[nodiscard]] int contentWidth() const;
-	void setOrder(int order);
-	void setLongestEnabled(bool enabled);
-
-protected:
-	void paintEvent(QPaintEvent *e) override;
-	void mousePressEvent(QMouseEvent *e) override;
-	void enterEventHook(QEnterEvent *e) override;
-	void leaveEventHook(QEvent *e) override;
-
-private:
-	[[nodiscard]] int segmentLeft(int index) const;
-	[[nodiscard]] int segmentWidth(int index) const;
-	void select(int order);
-
-	std::array<QString, 3> _labels;
-	int _selected = 0;
-	bool _longestEnabled = true;
-	Ui::Animations::Simple _pillLeft;
-	Ui::Animations::Simple _pillWidth;
-	rpl::event_stream<int> _changes;
-
-};
 
 class WatcherToolbar : public Ui::RpWidget {
 public:
@@ -405,17 +311,17 @@ public:
 	[[nodiscard]] Ui::RpWidget *gearButton() const {
 		return _settings;
 	}
-	void setSortOrder(int order);
-	void setLongestEnabled(bool enabled);
+	void setSortIndex(int index);
+	void setLastEnabled(bool enabled);
 	void startRefreshSpin();
 
 protected:
 	int resizeGetHeight(int newWidth) override;
 
 private:
-	SortControl *_sort = nullptr;
-	ToolButton *_refresh = nullptr;
-	ToolButton *_settings = nullptr;
+	LuxuryUi::SegmentControl *_sort = nullptr;
+	LuxuryUi::ToolButton *_refresh = nullptr;
+	LuxuryUi::ToolButton *_settings = nullptr;
 
 };
 
@@ -463,11 +369,7 @@ private:
 
 class EventCard final : public WatcherCard {
 public:
-	EventCard(
-		QWidget *parent,
-		const WatchEvent &event,
-		not_null<PeerData*> peer,
-		int index);
+	EventCard(QWidget *parent, const TrackedEvent &event, int index);
 
 protected:
 	int resizeGetHeight(int newWidth) override;
@@ -491,6 +393,17 @@ public:
 	void setTab(Tab tab);
 	void setOrder(Order order);
 	void refresh();
+	[[nodiscard]] rpl::producer<std::array<int, 3>> countsChanged() const {
+		return _counts.events();
+	}
+	// The tab labels show counts, and the box is built before anyone
+	// subscribes to countsChanged(), so the first state is read directly.
+	[[nodiscard]] std::array<int, 3> counts() const {
+		const auto sessions = int(_sessions.size());
+		const auto events = int(
+			_watches.size() + _deleted.size() + _edits.size());
+		return { sessions + events, sessions, events };
+	}
 
 protected:
 	int resizeGetHeight(int newWidth) override;
@@ -499,41 +412,109 @@ private:
 	void reload();
 	void rebuild();
 	[[nodiscard]] std::vector<OnlineSession> sortedSessions() const;
-	[[nodiscard]] std::vector<WatchEvent> sortedWatches() const;
+	[[nodiscard]] std::vector<TrackedEvent> sortedEvents() const;
 	void refreshEarlier();
 
 	not_null<PeerData*> _peer;
 	std::vector<OnlineEvent> _events;
 	std::vector<WatchEvent> _watches;
+	std::vector<LuxuryMessageBase> _deleted;
+	std::vector<LuxuryMessageBase> _edits;
 	std::vector<OnlineSession> _sessions;
 	Tab _tab = Tab::All;
 	Order _order = Order::Newest;
 	int _sessionOverflow = 0;
-	int _watchOverflow = 0;
+	int _eventOverflow = 0;
 	Ui::FlatLabel *_sessionsTitle = nullptr;
 	Ui::FlatLabel *_eventsTitle = nullptr;
-	Ui::FlatLabel *_sessionEmpty = nullptr;
-	Ui::FlatLabel *_eventEmpty = nullptr;
+	LuxuryUi::EmptyBlock *_sessionEmpty = nullptr;
+	LuxuryUi::EmptyBlock *_eventEmpty = nullptr;
 	Ui::FlatLabel *_earlier = nullptr;
 	std::vector<SessionCard*> _sessionCards;
 	std::vector<EventCard*> _eventCards;
+	rpl::event_stream<std::array<int, 3>> _counts;
 
 };
 
-// Lays out one section: title, empty-state label and the cards, all inside
-// the body width with the box row padding. Returns the new vertical offset.
+// The pinned part of the box: tabs over the toolbar, an opaque plate with
+// a hairline at the bottom. The list scrolls under it and is clipped
+// below it, so nothing ever slides behind the tabs.
+class WatcherHeader : public Ui::RpWidget {
+public:
+	WatcherHeader(QWidget *parent);
+
+	[[nodiscard]] rpl::producer<int> tabChanges() const {
+		return _tabs->tabChanges();
+	}
+	[[nodiscard]] rpl::producer<int> sortChanges() const {
+		return _toolbar->sortChanges();
+	}
+	[[nodiscard]] rpl::producer<> refreshClicks() const {
+		return _toolbar->refreshClicks();
+	}
+	[[nodiscard]] rpl::producer<> settingsClicks() const {
+		return _toolbar->settingsClicks();
+	}
+	[[nodiscard]] Ui::RpWidget *gearButton() const {
+		return _toolbar->gearButton();
+	}
+	void setTabIndex(int index);
+	void setSortIndex(int index);
+	void setLastEnabled(bool enabled);
+	void startRefreshSpin();
+	void setTabCounts(std::array<int, 3> counts);
+
+protected:
+	void paintEvent(QPaintEvent *e) override;
+	void resizeEvent(QResizeEvent *e) override;
+
+private:
+	[[nodiscard]] int contentHeight() const;
+
+	LuxuryUi::TabsBar *_tabs = nullptr;
+	WatcherToolbar *_toolbar = nullptr;
+
+};
+
+// One fixed-height view: the pinned header on top, the scrolling list
+// below. Owning the scroll here is what keeps the tabs in place while the
+// list moves.
+class WatcherView : public Ui::RpWidget {
+public:
+	WatcherView(QWidget *parent, not_null<PeerData*> peer);
+
+protected:
+	void resizeEvent(QResizeEvent *e) override;
+
+private:
+	void showSettingsMenu();
+
+	WatcherHeader *_header = nullptr;
+	Ui::ScrollArea *_scroll = nullptr;
+	WatcherBody *_body = nullptr;
+	Tab _tab = Tab::All;
+	Order _order = Order::Newest;
+	base::unique_qptr<Ui::PopupMenu> _menu;
+
+};
+
+// Lays out one section: title, empty-state block and the cards, all
+// inside the body width with the box row padding. Returns the new
+// vertical offset.
 template <typename Card>
 int LayoutCards(
 		int newWidth,
 		int y,
 		Ui::FlatLabel *title,
-		Ui::FlatLabel *empty,
+		LuxuryUi::EmptyBlock *empty,
 		const std::vector<Card*> &cards) {
 	if (!title->isHidden()) {
-		const auto left = st::defaultSubsectionTitlePadding.left();
+		// The same row padding the cards use, so a title and its cards
+		// share one left edge (subsection padding is 2 px narrower).
+		const auto left = st::boxRowPadding.left();
 		const auto width = newWidth
 			- left
-			- st::defaultSubsectionTitlePadding.right();
+			- st::boxRowPadding.right();
 		title->resizeToWidth(width);
 		title->moveToLeft(left, y + st::defaultSubsectionTitlePadding.top(), newWidth);
 		y += st::defaultSubsectionTitlePadding.top()
@@ -544,8 +525,8 @@ int LayoutCards(
 		const auto left = st::boxRowPadding.left();
 		const auto width = newWidth - left - st::boxRowPadding.right();
 		empty->resizeToWidth(width);
-		empty->moveToLeft(left, y, newWidth);
-		y += empty->height();
+		empty->moveToLeft(left, y + st::luxuryWatcherCardSkip, newWidth);
+		y += 2 * st::luxuryWatcherCardSkip + empty->height();
 	}
 	const auto left = st::boxRowPadding.left();
 	const auto width = newWidth - left - st::boxRowPadding.right();
@@ -561,252 +542,31 @@ int LayoutCards(
 	return y;
 }
 
-ToolButton::ToolButton(QWidget *parent, ToolIcon icon)
-: RpWidget(parent)
-, _icon(icon) {
-	setFixedSize(st::luxuryWatcherIconSize, st::luxuryWatcherIconSize);
-	setCursor(style::cur_pointer);
-}
-
-void ToolButton::spin() {
-	_spin.start(
-		[=](float64) { update(); },
-		0.,
-		1.,
-		kSpinDuration,
-		anim::easeOutCubic);
-}
-
-void ToolButton::paintEvent(QPaintEvent *e) {
-	auto p = Painter(this);
-	auto hq = PainterHighQualityEnabler(p);
-	if (_ripple) {
-		_ripple->paint(p, 0, 0, width());
-		if (_ripple->empty()) {
-			_ripple.reset();
-		}
-	}
-	paintIcon(p, (_hovered ? st::windowFg : st::windowSubTextFg)->c);
-}
-
-void ToolButton::paintIcon(Painter &p, const QColor &color) {
-	const auto base = st::luxuryWatcherIconSize / 4.;
-	const auto penWidth = std::max(1., base / 4.);
-	p.save();
-	p.translate(QPointF(width() / 2., height() / 2.));
-	p.rotate(_spin.value(1.) * 360.);
-	p.setPen(QPen(
-		color,
-		penWidth,
-		Qt::SolidLine,
-		Qt::RoundCap,
-		Qt::RoundJoin));
-	p.setBrush(Qt::NoBrush);
-	if (_icon == ToolIcon::Refresh) {
-		PaintRefreshGlyph(p, base, color);
-	} else {
-		PaintGearGlyph(p, base, color, penWidth);
-	}
-	p.restore();
-}
-
-void ToolButton::mousePressEvent(QMouseEvent *e) {
-	if (e->button() == Qt::LeftButton) {
-		_pressed = true;
-		if (!_ripple) {
-			_ripple = std::make_unique<Ui::RippleAnimation>(
-				st::defaultRippleAnimation,
-				Ui::RippleAnimation::RoundRectMask(
-					size(),
-					st::luxuryWatcherIconSize / 2),
-				[=] { update(); });
-		}
-		_ripple->add(e->pos());
-	}
-}
-
-void ToolButton::mouseReleaseEvent(QMouseEvent *e) {
-	if (base::take(_pressed)) {
-		if (_ripple) {
-			_ripple->lastStop();
-		}
-		if (rect().contains(e->pos())) {
-			_clicks.fire({});
-		}
-	}
-}
-
-void ToolButton::enterEventHook(QEnterEvent *e) {
-	_hovered = true;
-	update();
-	RpWidget::enterEventHook(e);
-}
-
-void ToolButton::leaveEventHook(QEvent *e) {
-	_hovered = false;
-	update();
-	RpWidget::leaveEventHook(e);
-}
-
-SortControl::SortControl(QWidget *parent)
-: RpWidget(parent) {
-	_labels = {
-		tr::luxury_OnlineHistorySortNewest(tr::now),
-		tr::luxury_OnlineHistorySortOldest(tr::now),
-		tr::luxury_OnlineHistorySortLongest(tr::now),
-	};
-	resize(contentWidth(), st::luxuryWatcherSortHeight);
-	setCursor(style::cur_pointer);
-}
-
-int SortControl::contentWidth() const {
-	auto result = 0;
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		result += segmentWidth(i) + st::luxuryWatcherSortSkip;
-	}
-	return result - st::luxuryWatcherSortSkip;
-}
-
-int SortControl::segmentWidth(int index) const {
-	return st::luxuryWatcherChipFont->width(_labels[index])
-		+ st::luxuryWatcherPillPadding.left()
-		+ st::luxuryWatcherPillPadding.right();
-}
-
-int SortControl::segmentLeft(int index) const {
-	auto result = 0;
-	for (auto i = 0; i != index; ++i) {
-		result += segmentWidth(i) + st::luxuryWatcherSortSkip;
-	}
-	return result;
-}
-
-void SortControl::setOrder(int order) {
-	if (order == _selected) {
-		return;
-	}
-	_selected = order;
-	// A programmatic move is a correction, not a gesture: snap the pill.
-	_pillLeft.stop();
-	_pillWidth.stop();
-	update();
-}
-
-void SortControl::setLongestEnabled(bool enabled) {
-	if (_longestEnabled != enabled) {
-		_longestEnabled = enabled;
-		update();
-	}
-}
-
-void SortControl::select(int order) {
-	if (order == _selected) {
-		return;
-	}
-	const auto fromLeft = segmentLeft(_selected);
-	const auto fromWidth = segmentWidth(_selected);
-	_selected = order;
-	const auto toLeft = segmentLeft(_selected);
-	const auto toWidth = segmentWidth(_selected);
-	const auto updater = [=] { update(); };
-	// easeOutCubic: the pill glides out fast and settles smoothly, the
-	// same curve the section sliders use.
-	_pillLeft.start(
-		updater,
-		fromLeft,
-		toLeft,
-		kSortDuration,
-		anim::easeOutCubic);
-	_pillWidth.start(
-		updater,
-		fromWidth,
-		toWidth,
-		kSortDuration,
-		anim::easeOutCubic);
-	_changes.fire_copy(_selected);
-}
-
-void SortControl::paintEvent(QPaintEvent *e) {
-	auto p = Painter(this);
-	auto hq = PainterHighQualityEnabler(p);
-
-	const auto pillLeft = _pillLeft.value(segmentLeft(_selected));
-	const auto pillWidth = _pillWidth.value(segmentWidth(_selected));
-	auto pillColor = QColor(st::windowActiveTextFg->c);
-	pillColor.setAlphaF(kSegmentPillAlpha);
-	p.setPen(Qt::NoPen);
-	p.setBrush(pillColor);
-	p.drawRoundedRect(
-		QRectF(pillLeft, 0, pillWidth, height()),
-		height() / 2.,
-		height() / 2.);
-
-	const auto &font = st::luxuryWatcherChipFont;
-	p.setFont(font);
-	const auto textTop = (height() - font->height) / 2;
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		const auto disabled = (i == 2 && !_longestEnabled);
-		if (i == _selected) {
-			p.setPen(QPen(st::windowActiveTextFg->c));
-		} else {
-			auto inactive = QColor(st::windowSubTextFg->c);
-			if (disabled) {
-				inactive.setAlphaF(kDisabledLabelAlpha);
-			}
-			p.setPen(QPen(inactive));
-		}
-		const auto left = segmentLeft(i);
-		const auto width = segmentWidth(i);
-		const auto textWidth = font->width(_labels[i]);
-		p.drawText(
-			QPointF(left + (width - textWidth) / 2, textTop + font->ascent),
-			_labels[i]);
-	}
-}
-
-void SortControl::mousePressEvent(QMouseEvent *e) {
-	if (e->button() != Qt::LeftButton) {
-		return;
-	}
-	const auto x = e->pos().x();
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		const auto left = segmentLeft(i);
-		if (x < left + segmentWidth(i) + st::luxuryWatcherSortSkip) {
-			// "Longest" has no meaning for events and paints disabled
-			// there; the press bounces off instead of selecting it.
-			if (!(i == 2 && !_longestEnabled)) {
-				select(i);
-			}
-			return;
-		}
-	}
-}
-
-void SortControl::enterEventHook(QEnterEvent *e) {
-	update();
-	RpWidget::enterEventHook(e);
-}
-
-void SortControl::leaveEventHook(QEvent *e) {
-	update();
-	RpWidget::leaveEventHook(e);
-}
-
 WatcherToolbar::WatcherToolbar(QWidget *parent)
 : RpWidget(parent) {
-	_sort = Ui::CreateChild<SortControl>(this);
-	_refresh = Ui::CreateChild<ToolButton>(this, ToolIcon::Refresh);
+	_sort = Ui::CreateChild<LuxuryUi::SegmentControl>(
+		this,
+		std::array<QString, 3>{
+			tr::luxury_OnlineHistorySortNewest(tr::now),
+			tr::luxury_OnlineHistorySortOldest(tr::now),
+			tr::luxury_OnlineHistorySortLongest(tr::now),
+		});
+	_refresh = Ui::CreateChild<LuxuryUi::ToolButton>(
+		this,
+		LuxuryUi::ToolGlyph::Refresh);
 	_refresh->setToolTip(tr::luxury_OnlineHistoryRefresh(tr::now));
-	_settings = Ui::CreateChild<ToolButton>(this, ToolIcon::Gear);
+	_settings = Ui::CreateChild<LuxuryUi::ToolButton>(
+		this,
+		LuxuryUi::ToolGlyph::Gear);
 	_settings->setToolTip(tr::luxury_OnlineHistorySettings(tr::now));
 }
 
-void WatcherToolbar::setSortOrder(int order) {
-	_sort->setOrder(order);
+void WatcherToolbar::setSortIndex(int index) {
+	_sort->setIndex(index);
 }
 
-void WatcherToolbar::setLongestEnabled(bool enabled) {
-	_sort->setLongestEnabled(enabled);
+void WatcherToolbar::setLastEnabled(bool enabled) {
+	_sort->setLastEnabled(enabled);
 }
 
 void WatcherToolbar::startRefreshSpin() {
@@ -1052,7 +812,7 @@ void SessionCard::paintDuration(Painter &p) {
 		st::luxuryWatcherPillRadius);
 	const auto clock = st::luxuryWatcherClockSize;
 	const auto clockX = pillRect.x() + st::luxuryWatcherPillPadding.left();
-	PaintClock(
+	LuxuryUi::PaintClockGlyph(
 		p,
 		QPointF(clockX, pillRect.y() + (pillH - clock) / 2),
 		clock,
@@ -1068,8 +828,7 @@ void SessionCard::paintDuration(Painter &p) {
 
 EventCard::EventCard(
 		QWidget *parent,
-		const WatchEvent &event,
-		not_null<PeerData*> peer,
+		const TrackedEvent &event,
 		int index)
 : WatcherCard(
 		parent,
@@ -1077,7 +836,7 @@ EventCard::EventCard(
 , _kind(event.kind) {
 	_chipLabel = ChipLabelFor(_kind);
 	_dateText = formatDateTime(base::unixtime::parse(event.at));
-	_text.setText(st::boxTextStyle, WatchEventText(event, peer));
+	_text.setText(st::boxTextStyle, event.text);
 }
 
 int EventCard::resizeGetHeight(int newWidth) {
@@ -1173,14 +932,12 @@ WatcherBody::WatcherBody(QWidget *parent, not_null<PeerData*> peer)
 		this,
 		tr::luxury_OnlineHistoryEvents(),
 		st::defaultSubsectionTitle);
-	_sessionEmpty = Ui::CreateChild<Ui::FlatLabel>(
+	_sessionEmpty = Ui::CreateChild<LuxuryUi::EmptyBlock>(
 		this,
-		tr::luxury_OnlineHistorySessionsEmpty(),
-		st::luxuryWatcherEmptyLabel);
-	_eventEmpty = Ui::CreateChild<Ui::FlatLabel>(
+		tr::luxury_OnlineHistorySessionsEmpty(tr::now));
+	_eventEmpty = Ui::CreateChild<LuxuryUi::EmptyBlock>(
 		this,
-		tr::luxury_OnlineHistoryEventsEmpty(),
-		st::luxuryWatcherEmptyLabel);
+		tr::luxury_OnlineHistoryEventsEmpty(tr::now));
 	_earlier = Ui::CreateChild<Ui::FlatLabel>(
 		this,
 		QString(),
@@ -1213,7 +970,17 @@ void WatcherBody::refresh() {
 void WatcherBody::reload() {
 	_events = LuxuryOnline::getHistory(_peer, kHistoryReadLimit);
 	_watches = LuxuryOnline::getWatchEvents(_peer, kHistoryReadLimit);
+	_deleted = LuxuryMessages::getDeletedMessages(
+		_peer,
+		0,
+		0,
+		0,
+		kHistoryReadLimit);
+	_edits = LuxuryMessages::getEditedMessagesForDialog(
+		_peer,
+		kHistoryReadLimit);
 	_sessions = PairOnlineSessions(_events);
+	_counts.fire(counts());
 }
 
 std::vector<OnlineSession> WatcherBody::sortedSessions() const {
@@ -1223,7 +990,9 @@ std::vector<OnlineSession> WatcherBody::sortedSessions() const {
 		// PairOnlineSessions is oldest-first already.
 		break;
 	case Order::Longest:
-		std::sort(list.begin(), list.end(), [](
+		// A stable order: rows with no measurable duration keep their
+		// relative position across rebuilds.
+		std::stable_sort(list.begin(), list.end(), [](
 				const OnlineSession &a,
 				const OnlineSession &b) {
 			const auto left = a.start && a.end
@@ -1243,27 +1012,45 @@ std::vector<OnlineSession> WatcherBody::sortedSessions() const {
 	return list;
 }
 
-std::vector<WatchEvent> WatcherBody::sortedWatches() const {
-	auto list = std::vector<WatchEvent>(_watches);
-	switch (_order) {
-	case Order::Oldest:
+std::vector<TrackedEvent> WatcherBody::sortedEvents() const {
+	auto list = std::vector<TrackedEvent>();
+	list.reserve(_watches.size() + _deleted.size() + _edits.size());
+	for (const auto &watch : _watches) {
+		list.push_back({ watch.at, watch.kind, WatchEventText(watch, _peer) });
+	}
+	for (const auto &deleted : _deleted) {
+		list.push_back({
+			MessageTimestamp(deleted),
+			kKindDeleted,
+			MessagePreview(deleted),
+		});
+	}
+	for (const auto &edited : _edits) {
+		list.push_back({
+			MessageTimestamp(edited),
+			kKindEdited,
+			MessagePreview(edited),
+		});
+	}
+	// A stable order: same-second rows (a delete and an edit recorded in
+	// one second) keep their relative position across rebuilds.
+	std::stable_sort(list.begin(), list.end(), [](
+			const TrackedEvent &a,
+			const TrackedEvent &b) {
+		return a.at > b.at;
+	});
+	if (_order == Order::Oldest) {
 		std::reverse(list.begin(), list.end());
-		break;
-	case Order::Newest:
-	case Order::Longest:
-	default:
-		// getWatchEvents returns newest-first.
-		break;
 	}
 	return list;
 }
 
 void WatcherBody::refreshEarlier() {
-	const auto hidden = _sessionOverflow + _watchOverflow;
+	const auto hidden = _sessionOverflow + _eventOverflow;
 	const auto visible = hidden > 0
 		&& (_tab == Tab::All
 			|| (_tab == Tab::Sessions && _sessionOverflow > 0)
-			|| (_tab == Tab::Events && _watchOverflow > 0));
+			|| (_tab == Tab::Events && _eventOverflow > 0));
 	_earlier->setVisible(visible);
 	if (visible) {
 		_earlier->setText(tr::luxury_OnlineHistoryEarlier(
@@ -1272,7 +1059,7 @@ void WatcherBody::refreshEarlier() {
 			_tab == Tab::Sessions
 				? _sessionOverflow
 				: _tab == Tab::Events
-				? _watchOverflow
+				? _eventOverflow
 				: hidden));
 	}
 }
@@ -1292,15 +1079,19 @@ void WatcherBody::rebuild() {
 	_eventCards.clear();
 
 	const auto sessionList = sortedSessions();
-	const auto watchList = sortedWatches();
+	const auto eventList = sortedEvents();
 	const auto sessionsVisible = _tab != Tab::Events;
 	const auto eventsVisible = _tab != Tab::Sessions;
 	_sessionOverflow = 0;
-	_watchOverflow = 0;
+	_eventOverflow = 0;
 
 	_sessionsTitle->setVisible(sessionsVisible);
 	_eventsTitle->setVisible(eventsVisible);
 	if (sessionsVisible) {
+		_sessionsTitle->setText(
+			tr::luxury_OnlineHistorySessions(tr::now)
+			+ u" · "_q
+			+ QString::number(_sessions.size()));
 		if (sessionList.empty()) {
 			_sessionEmpty->show();
 		} else {
@@ -1319,18 +1110,22 @@ void WatcherBody::rebuild() {
 		_sessionEmpty->hide();
 	}
 	if (eventsVisible) {
-		if (watchList.empty()) {
+		_eventsTitle->setText(
+			tr::luxury_OnlineHistoryEvents(tr::now)
+			+ u" · "_q
+			+ QString::number(
+				_watches.size() + _deleted.size() + _edits.size()));
+		if (eventList.empty()) {
 			_eventEmpty->show();
 		} else {
 			_eventEmpty->hide();
-			const auto total = int(watchList.size());
+			const auto total = int(eventList.size());
 			const auto shown = std::min(total, kMaxWatchEventRows);
-			_watchOverflow = total - shown;
+			_eventOverflow = total - shown;
 			for (auto i = 0; i != shown; ++i) {
 				_eventCards.push_back(Ui::CreateChild<EventCard>(
 					this,
-					watchList[i],
-					_peer,
+					eventList[i],
 					i));
 			}
 		}
@@ -1363,125 +1158,200 @@ int WatcherBody::resizeGetHeight(int newWidth) {
 	return y;
 }
 
-void FillWatcherBox(
-		not_null<Ui::GenericBox*> box,
-		not_null<PeerData*> peer) {
-	// Tabs pick what is shown (All / Sessions / Events), the segmented
-	// control picks the order (Newest / Oldest / Longest -- sessions only,
-	// events have no duration), and the two icon buttons reload the data
-	// and open the tracking settings.
-	box->setTitle(tr::luxury_OnlineHistoryTitle());
-	box->setWidth(st::aboutWidth);
-	box->verticalLayout()->resizeToWidth(box->width());
+int WatcherHeader::contentHeight() const {
+	return st::luxuryWatcherHeaderSkip
+		+ st::luxuryWatcherTabHeight
+		+ st::luxuryWatcherHeaderSkip
+		+ std::max(st::luxuryWatcherSortHeight, st::luxuryWatcherIconSize)
+		+ st::luxuryWatcherHeaderSkip;
+}
 
-	struct BoxState {
-		Tab tab = Tab::All;
-		Order order = Order::Newest;
-		base::unique_qptr<Ui::PopupMenu> menu;
-	};
-	const auto state = box->lifetime().make_state<BoxState>();
+WatcherHeader::WatcherHeader(QWidget *parent)
+: RpWidget(parent) {
+	_tabs = Ui::CreateChild<LuxuryUi::TabsBar>(
+		this,
+		std::array<QString, 3>{
+			tr::luxury_OnlineHistorySortAll(tr::now),
+			tr::luxury_OnlineHistorySortSessions(tr::now),
+			tr::luxury_OnlineHistorySortEvents(tr::now),
+		});
+	_toolbar = Ui::CreateChild<WatcherToolbar>(this);
+	setFixedHeight(contentHeight());
+}
 
-	// Everything below captures only pointers that outlive the handlers:
-	// state (box lifetime), and the widget pointers (box layout).
+void WatcherHeader::setTabIndex(int index) {
+	_tabs->setIndex(index);
+}
 
-	Ui::AddSkip(box->verticalLayout());
+void WatcherHeader::setSortIndex(int index) {
+	_toolbar->setSortIndex(index);
+}
 
-	const auto tabSlider = box->verticalLayout()->add(
-		object_ptr<Ui::SettingsSlider>(
-			box->verticalLayout(),
-			st::defaultSettingsSlider),
-		st::boxRowPadding);
-	tabSlider->addSection(tr::luxury_OnlineHistorySortAll(tr::now));
-	tabSlider->addSection(tr::luxury_OnlineHistorySortSessions(tr::now));
-	tabSlider->addSection(tr::luxury_OnlineHistorySortEvents(tr::now));
-	tabSlider->setActiveSectionFast(0);
+void WatcherHeader::setLastEnabled(bool enabled) {
+	_toolbar->setLastEnabled(enabled);
+}
 
-	Ui::AddSkip(box->verticalLayout());
+void WatcherHeader::startRefreshSpin() {
+	_toolbar->startRefreshSpin();
+}
 
-	const auto toolbar = box->verticalLayout()->add(
-		object_ptr<WatcherToolbar>(box->verticalLayout()),
-		st::boxRowPadding);
+void WatcherHeader::setTabCounts(std::array<int, 3> counts) {
+	_tabs->setCounts(counts);
+}
 
-	Ui::AddSkip(box->verticalLayout());
+void WatcherHeader::paintEvent(QPaintEvent *e) {
+	auto p = Painter(this);
+	// An opaque plate: the list scrolls below this widget and is clipped
+	// by the view geometry, so this is belt-and-braces against any
+	// future overlap, plus the separator under the pinned part.
+	p.fillRect(rect(), st::boxBg);
+	auto hairline = st::windowShadowFg->c;
+	hairline.setAlpha(kHeaderHairlineAlpha);
+	p.fillRect(
+		0,
+		height() - st::lineWidth,
+		width(),
+		st::lineWidth,
+		hairline);
+}
 
-	// Full width: the body insets its rows itself (box row padding for
-	// cards, subsection title padding for section titles).
-	const auto body = box->verticalLayout()->add(
-		object_ptr<WatcherBody>(box->verticalLayout(), peer));
+void WatcherHeader::resizeEvent(QResizeEvent *e) {
+	RpWidget::resizeEvent(e);
+	const auto left = st::boxRowPadding.left();
+	const auto width = this->width() - left - st::boxRowPadding.right();
+	_tabs->setGeometryToLeft(
+		left,
+		st::luxuryWatcherHeaderSkip,
+		width,
+		st::luxuryWatcherTabHeight,
+		this->width());
+	// resizeToWidth (not setGeometry): the toolbar lays its children out
+	// in resizeGetHeight, which only runs through it.
+	_toolbar->resizeToWidth(width);
+	_toolbar->moveToLeft(
+		left,
+		st::luxuryWatcherHeaderSkip
+			+ st::luxuryWatcherTabHeight
+			+ st::luxuryWatcherHeaderSkip);
+}
 
-	tabSlider->sectionActivated(
+WatcherView::WatcherView(QWidget *parent, not_null<PeerData*> peer)
+: RpWidget(parent) {
+	// The pinned header plus the scrolling list never exceed this: the
+	// box grows to the title, the view and the button row, and taller
+	// lists scroll inside the view instead of growing the box.
+	setFixedHeight(st::luxuryWatcherViewHeight);
+
+	_header = Ui::CreateChild<WatcherHeader>(this);
+	_scroll = Ui::CreateChild<Ui::ScrollArea>(this, st::boxScroll);
+	_body = _scroll->setOwnedWidget(
+		object_ptr<WatcherBody>(_scroll, peer));
+
+	_header->tabChanges(
 	) | rpl::on_next([=](int index) {
-		state->tab = static_cast<Tab>(index);
+		_tab = static_cast<Tab>(index);
 		// "Longest" only makes sense for sessions; disable the segment
 		// and fall back to Newest when the Events tab makes it
 		// meaningless.
-		toolbar->setLongestEnabled(state->tab != Tab::Events);
-		if (state->tab == Tab::Events && state->order == Order::Longest) {
-			state->order = Order::Newest;
-			body->setOrder(Order::Newest);
-			toolbar->setSortOrder(static_cast<int>(Order::Newest));
+		_header->setLastEnabled(_tab != Tab::Events);
+		if (_tab == Tab::Events && _order == Order::Longest) {
+			_order = Order::Newest;
+			_body->setOrder(Order::Newest);
+			_header->setSortIndex(static_cast<int>(Order::Newest));
 		}
-		body->setTab(state->tab);
-	}, tabSlider->lifetime());
+		_body->setTab(_tab);
+		_scroll->scrollToY(0);
+	}, lifetime());
 
-	toolbar->sortChanges(
+	_header->sortChanges(
 	) | rpl::on_next([=](int index) {
 		// Selecting Longest on the Events tab is a no-op; keep Newest.
-		if (state->tab == Tab::Events
+		if (_tab == Tab::Events
 			&& static_cast<Order>(index) == Order::Longest) {
-			toolbar->setSortOrder(static_cast<int>(state->order));
+			_header->setSortIndex(static_cast<int>(_order));
 			return;
 		}
-		state->order = static_cast<Order>(index);
-		body->setOrder(state->order);
-	}, box->lifetime());
+		_order = static_cast<Order>(index);
+		_body->setOrder(_order);
+	}, lifetime());
 
-	toolbar->refreshClicks(
+	_header->refreshClicks(
 	) | rpl::on_next([=] {
 		// The read is synchronous and local, so the spin is the only
 		// feedback the refresh needs.
-		toolbar->startRefreshSpin();
-		body->refresh();
-	}, box->lifetime());
+		_header->startRefreshSpin();
+		_body->refresh();
+	}, lifetime());
 
-	toolbar->settingsClicks(
+	_header->settingsClicks(
 	) | rpl::on_next([=] {
-		state->menu = base::make_unique_q<Ui::PopupMenu>(
-			toolbar,
-			st::defaultPopupMenu);
-		const auto addAction = Ui::Menu::CreateAddActionCallback(state->menu);
-		const auto on = tr::luxury_OnlineHistorySettingOn(tr::now);
-		const auto off = tr::luxury_OnlineHistorySettingOff(tr::now);
-		const auto addToggle = [&](
-				const QString &label,
-				bool value,
-				Fn<void(bool)> setter) {
-			addAction(
-				label + u": "_q + (value ? on : off),
-				[=] { setter(!value); },
-				nullptr);
-		};
-		// LuxurySettings is a singleton with a deleted copy constructor:
-		// resolve it inside the handler, never capture a reference.
-		addToggle(
-			tr::luxury_TrackOnlineHistory(tr::now),
-			LuxurySettings::getInstance().trackOnlineHistory(),
-			[](bool value) {
-				LuxurySettings::getInstance().setTrackOnlineHistory(value);
-			});
-		addToggle(
-			tr::luxury_TrackOnlineEvenWhenLocked(tr::now),
-			LuxurySettings::getInstance().trackOnlineEvenWhenLocked(),
-			[](bool value) {
-				LuxurySettings::getInstance().setTrackOnlineEvenWhenLocked(
-					value);
-			});
-		const auto gear = toolbar->gearButton();
-		state->menu->popup(
-			gear->mapToGlobal(QPoint(0, gear->height())));
-	}, box->lifetime());
+		showSettingsMenu();
+	}, lifetime());
 
-	Ui::AddSkip(box->verticalLayout());
+	_body->countsChanged(
+	) | rpl::on_next([=](std::array<int, 3> counts) {
+		_header->setTabCounts(counts);
+	}, lifetime());
+	_header->setTabCounts(_body->counts());
+}
+
+void WatcherView::showSettingsMenu() {
+	_menu = base::make_unique_q<Ui::PopupMenu>(
+		_header,
+		st::defaultPopupMenu);
+	const auto addAction = Ui::Menu::CreateAddActionCallback(_menu);
+	const auto on = tr::luxury_OnlineHistorySettingOn(tr::now);
+	const auto off = tr::luxury_OnlineHistorySettingOff(tr::now);
+	const auto addToggle = [&](
+			const QString &label,
+			bool value,
+			Fn<void(bool)> setter) {
+		addAction(
+			label + u": "_q + (value ? on : off),
+			[=] { setter(!value); },
+			nullptr);
+	};
+	// LuxurySettings is a singleton with a deleted copy constructor:
+	// resolve it inside the handler, never capture a reference.
+	addToggle(
+		tr::luxury_TrackOnlineHistory(tr::now),
+		LuxurySettings::getInstance().trackOnlineHistory(),
+		[](bool value) {
+			LuxurySettings::getInstance().setTrackOnlineHistory(value);
+		});
+	addToggle(
+		tr::luxury_TrackOnlineEvenWhenLocked(tr::now),
+		LuxurySettings::getInstance().trackOnlineEvenWhenLocked(),
+		[](bool value) {
+			LuxurySettings::getInstance().setTrackOnlineEvenWhenLocked(value);
+		});
+	const auto gear = _header->gearButton();
+	_menu->popup(gear->mapToGlobal(QPoint(0, gear->height())));
+}
+
+void WatcherView::resizeEvent(QResizeEvent *e) {
+	RpWidget::resizeEvent(e);
+	_header->setGeometry(0, 0, width(), _header->height());
+	_scroll->setGeometry(0, _header->height(), width(), height() - _header->height());
+	// QScrollArea does not track the viewport width itself: the list is
+	// sized to the scroll width, the same convention the box scroll uses
+	// (the bar overlaps the row padding, the cards inset themselves).
+	_body->resizeToWidth(_scroll->width());
+}
+
+void FillWatcherBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<PeerData*> peer) {
+	// The view owns its pinned header (tabs over the toolbar) and its
+	// scrolling card list: the tabs stay in place while the list moves,
+	// and nothing scrolls behind them.
+	box->setTitle(tr::luxury_OnlineHistoryTitle());
+	box->setWidth(st::aboutWidth);
+
+	box->verticalLayout()->add(
+		object_ptr<WatcherView>(box->verticalLayout(), peer),
+		style::margins());
+
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 }
 

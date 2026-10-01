@@ -1879,6 +1879,8 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_OnlineHistoryKindName", "Имя" },
 	{ "luxury_OnlineHistoryKindUsername", "Юзернейм" },
 	{ "luxury_OnlineHistoryKindPhoto", "Фото" },
+	{ "luxury_OnlineHistoryKindDeleted", "Удалено" },
+	{ "luxury_OnlineHistoryKindEdited", "Изменено" },
 	{ "luxury_WatchChat", "Скачивать медиа" },
 	{ "luxury_OnlineHistoryEarlier#one", "+{count} запись раньше" },
 	{ "luxury_OnlineHistoryEarlier#few", "+{count} записи раньше" },

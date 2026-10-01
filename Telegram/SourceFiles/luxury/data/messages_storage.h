@@ -26,6 +26,9 @@ std::vector<LuxuryMessageBase> getEditedMessages(
 	ID maxId,
 	int totalLimit);
 bool hasRevisions(not_null<HistoryItem*> item);
+std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
+	not_null<PeerData*> peer,
+	int totalLimit);
 
 void addDeletedMessage(not_null<HistoryItem*> item);
 void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items);

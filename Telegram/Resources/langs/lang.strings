@@ -9022,6 +9022,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistoryKindName" = "Name";
 "luxury_OnlineHistoryKindUsername" = "Username";
 "luxury_OnlineHistoryKindPhoto" = "Photo";
+"luxury_OnlineHistoryKindDeleted" = "Deleted";
+"luxury_OnlineHistoryKindEdited" = "Edited";
 "luxury_WatchGiftSent" = "You sent a gift for {cost} to {user}";
 "luxury_WatchGiftReceived" = "{user} sent you a gift for {cost}";
 "luxury_WatchGiftReceivedAnonymous" = "Unknown user sent you a gift for {cost}";

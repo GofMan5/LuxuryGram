@@ -530,6 +530,26 @@ std::vector<EditedMessage> getEditedMessages(ID userId, ID dialogId, ID messageI
 	}
 }
 
+std::vector<EditedMessage> getEditedMessagesForDialog(ID userId, ID dialogId, int totalLimit) {
+	// The watcher reads a whole-dialog timeline, unlike the per-message
+	// revision list above: newest rows first, fakeId being the row
+	// insertion order.
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		return storage.get_all<EditedMessage>(
+			where(
+				column<EditedMessage>(&EditedMessage::userId) == userId and
+				column<EditedMessage>(&EditedMessage::dialogId) == dialogId
+			),
+			order_by(column<EditedMessage>(&EditedMessage::fakeId)).desc(),
+			limit(totalLimit)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to load edited messages: %1").arg(ex.what()));
+		return {};
+	}
+}
+
 bool hasRevisions(ID userId, ID dialogId, ID messageId) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {

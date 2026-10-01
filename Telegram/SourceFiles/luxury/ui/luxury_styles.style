@@ -113,7 +113,8 @@ luxuryServiceTimeBadgeGap: 8px;
 luxuryServiceTimeBadgeTrailingInset: 3px;
 luxuryServiceTimeBadgeLastLineWidthAdd: 9px;
 
-// Watcher box (luxury/ui/watcher/watcher_box.cpp). Geometry only: the
+// Watcher box (luxury/ui/watcher/watcher_box.cpp and
+// luxury/ui/watcher/watcher_components.cpp). Geometry only: the
 // fixed accent colors are palette-only in this style system and live in
 // the .cpp as style::internal::OwnedColor values.
 luxuryWatcherCardRadius: 10px;
@@ -130,14 +131,18 @@ luxuryWatcherSortSkip: 4px;
 luxuryWatcherIconSize: 32px;
 luxuryWatcherIconSkip: 8px;
 luxuryWatcherClockSize: 14px;
+luxuryWatcherTabHeight: 38px;
+luxuryWatcherTabSkip: 3px;
+luxuryWatcherTabFont: font(13px semibold);
+luxuryWatcherTabCountFont: font(12px);
+luxuryWatcherHeaderSkip: 8px;
+luxuryWatcherViewHeight: 420px;
+luxuryWatcherEmptyGlyphSize: 28px;
+luxuryWatcherEmptyFont: font(12px);
 luxuryWatcherChipFont: font(12px semibold);
 luxuryWatcherLabelFont: font(12px);
 luxuryWatcherValueFont: font(12px semibold);
 luxuryWatcherMarkFont: font(11px semibold);
-luxuryWatcherEmptyLabel: FlatLabel(boxLabel) {
-	textFg: windowSubTextFg;
-	align: align(center);
-}
 luxuryWatcherFootnoteLabel: FlatLabel(boxLabel) {
 	textFg: windowSubTextFg;
 }
