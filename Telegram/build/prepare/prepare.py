@@ -456,11 +456,30 @@ if customRunCommand:
         finish(1)
     finish(0)
 
+# Qt patches kept in this repository, applied on top of the desktop-app
+# patches cloned below. Keeping them here lets fixes for the Windows QPA
+# ship without waiting for upstream: drop a *.patch file into
+# Telegram/build/prepare/qtbase_<qt>/ and it is copied into the patches
+# clone before the qt stage applies the whole directory. The Windows
+# patches only ever touch the windows platform plugin sources, so copying
+# them on other host platforms is harmless.
+localQtbasePatches = scriptPath + '/qtbase_' + qt
+copyQtbasePatches = ''
+if os.path.isdir(localQtbasePatches):
+    copyQtbasePatches = (
+        'win:\n'
+        '    copy /Y "'
+        + localQtbasePatches.replace('/', '\\')
+        + '\\*.patch" "qtbase_' + qt + '"\n'
+        'mac:\n'
+        '    cp "' + localQtbasePatches + '"/*.patch qtbase_' + qt + '/\n'
+    )
+
 stage('patches', """
     git clone https://github.com/desktop-app/patches.git
     cd patches
     git checkout c6b2868d527e2d00a2438e95225a22ce9346d79f
-mac:
+""" + copyQtbasePatches + """mac:
     git clone https://github.com/desktop-app/qt6_highsierra_patches.git qt6_highsierra
     cd qt6_highsierra
     git checkout 7387476bb3b7200d3b044015696cb3c28f78593c

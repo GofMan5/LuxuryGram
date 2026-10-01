@@ -1,0 +1,54 @@
+diff --git a/src/plugins/platforms/windows/qwindowspointerhandler.cpp b/src/plugins/platforms/windows/qwindowspointerhandler.cpp
+index 6adf3c9..3678696 100644
+--- a/src/plugins/platforms/windows/qwindowspointerhandler.cpp
++++ b/src/plugins/platforms/windows/qwindowspointerhandler.cpp
+@@ -83,6 +83,18 @@ bool QWindowsPointerHandler::translatePointerEvent(QWindow *window, HWND hwnd, Q
+         if (!pointerCount)
+             return false;
+ 
++        // Track whether a touch sequence is in flight. Legacy mouse
++        // messages Windows synthesizes from touch carry the pen/touch
++        // signature, but that signature is also set on real mouse events
++        // by some drivers and pointer stacks: only treat it as meaning
++        // "synthesized duplicate" while a contact is actually in flight.
++        bool touchContact = false;
++        for (quint32 i = 0; i < pointerCount; ++i) {
++            if (touchInfo[i].pointerInfo.pointerFlags & POINTER_FLAG_INCONTACT)
++                touchContact = true;
++        }
++        m_touchActive = touchContact;
++
+         // The history count is the same for all the touchpoints in touchInfo
+         quint32 historyCount = touchInfo[0].pointerInfo.historyCount;
+         // dispatch any skipped frames if event compression is disabled by the app
+@@ -821,6 +833,18 @@ bool QWindowsPointerHandler::translateMouseEvent(QWindow *window,
+         case QT_PT_TOUCH:
+             if (QWindowsIntegration::instance()->options() & QWindowsIntegration::DontPassOsMouseEventsSynthesizedFromTouch)
+                 return false;
++            if (!m_touchActive) {
++                // The extra-info signature check is documented as
++                // unreliable: some mouse drivers and pointer stacks tag
++                // real mouse events with the pen/touch signature. With no
++                // touch sequence in flight this cannot be a synthesized
++                // duplicate, so treat it as a real mouse event, or
++                // applications that filter synthesized mouse input (as
++                // Qt's touch conventions suggest) drop every real click.
++                qCDebug(lcQpaEvents) << "treating a signature-tagged mouse"
++                    "event as real mouse input: no touch in flight";
++                break;
++            }
+             source = Qt::MouseEventSynthesizedBySystem;
+             if (!m_touchDevice.isNull())
+                 device = m_touchDevice.data();
+diff --git a/src/plugins/platforms/windows/qwindowspointerhandler.h b/src/plugins/platforms/windows/qwindowspointerhandler.h
+index 0915cf9..e795c3c 100644
+--- a/src/plugins/platforms/windows/qwindowspointerhandler.h
++++ b/src/plugins/platforms/windows/qwindowspointerhandler.h
+@@ -67,6 +67,7 @@ private:
+     QEvent::Type m_lastEventType = QEvent::None;
+     Qt::MouseButton m_lastEventButton = Qt::NoButton;
+     DWORD m_pointerType = 0;
++    bool m_touchActive = false; // the last touch frame had a contact
+     static qint64 m_nextInputDeviceId; // workaround until we know how to get system device IDs
+ };
+ 

@@ -9,6 +9,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 ### Fixed
 
 - Update checks failed with "failed to check for updates" on every build since 1.0.12: the app asks GitHub for the update feed as `current6` (upstream moved the feed version from 4 to 6 in lib_base), but releases only ever published `current4`, so every check hit a 404. The feed now ships under both names and the live feed is already fixed, so the updater offers 1.0.14 on its own again.
+- Mouse clicks in menus were still half-dead after the 1.0.14 fix on systems whose pointer stack tags real mouse input with the "synthesized from touch" signature: the first click reached a menu item (a submenu opened), but the same marking made every event ride the touch device, and after that first click hover stopped highlighting items and further clicks did nothing. The Windows Qt build now carries a patch (applied at build time) that only treats a mouse message as a synthesized touch duplicate while an actual touch is in flight — a real mouse is handled as a real mouse everywhere.
 
 ## 1.0.14
 
