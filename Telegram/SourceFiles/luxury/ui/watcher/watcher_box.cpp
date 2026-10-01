@@ -21,6 +21,8 @@
 #include "ui/style/style_core_color.h"
 #include "ui/text/format_values.h"
 #include "ui/text/text.h"
+#include "ui/widgets/menu/menu.h"
+#include "ui/widgets/menu/menu_add_action_callback.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "ui/widgets/discrete_sliders.h"
 #include "ui/widgets/labels.h"
