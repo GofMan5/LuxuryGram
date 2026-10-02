@@ -5503,7 +5503,7 @@ void HistoryItem::updateReactions(const MTPMessageReactions *reactions) {
 		auto summary = QString();
 		for (const auto &count : reactions->data().vresults().v) {
 			const auto &entry = count.data();
-			const auto reactionId = ReactionFromMTP(entry.vreaction());
+			const auto reactionId = Data::ReactionFromMTP(entry.vreaction());
 			const auto label = reactionId.paid()
 				? u"⭐"_q
 				: reactionId.custom()
