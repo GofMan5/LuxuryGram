@@ -4,6 +4,12 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Fixed
+
+- Popup menus lost hover and clicks on pointer stacks that route popup-bound mouse input unreliably: items did not highlight under the cursor, and a press closed the menu without acting. Menus now grab the mouse for the whole time they are open (the native-menu pattern), so every mouse message is delivered to the menu itself; a submenu hands the grab back to its parent when it closes.
+
 ## 1.0.15
 
 ### Changed
