@@ -394,6 +394,32 @@ void noteProfileChange(
 	});
 }
 
+void noteReactions(
+		not_null<PeerData*> peer,
+		ID messageId,
+		const QString &summary,
+		int at) {
+	if (!WatchGate() || summary.isEmpty()) {
+		return;
+	}
+	const auto userId = DatabaseUserId(peer->session());
+	const auto dialogId = getDialogIdFromPeer(peer);
+	const auto peerId = static_cast<ID>(peer->id.value);
+	const auto kind = static_cast<int>(WatchKind::ReactionsChanged);
+	const auto label = summary.toStdString();
+	LuxuryDatabase::async([=] {
+		auto event = WatchEvent();
+		event.userId = userId;
+		event.dialogId = dialogId;
+		event.peerId = peerId;
+		event.kind = kind;
+		event.messageId = messageId;
+		event.at = at;
+		event.title = label;
+		LuxuryDatabase::addWatchEvent(std::move(event));
+	});
+}
+
 std::vector<WatchEvent> getWatchEvents(not_null<PeerData*> peer, int totalLimit) {
 	return LuxuryDatabase::getWatchEvents(
 		DatabaseUserId(peer->session()),

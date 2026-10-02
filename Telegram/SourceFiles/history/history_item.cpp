@@ -58,6 +58,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_changes.h"
 #include "data/data_session.h"
 #include "data/data_message_reactions.h"
+#include "data/data_message_reaction_id.h"
 #include "data/data_folder.h"
 #include "data/data_forum.h"
 #include "data/data_forum_topic.h"
@@ -5494,6 +5495,35 @@ void HistoryItem::updateReactions(const MTPMessageReactions *reactions) {
 	const auto changed = changeReactions(reactions);
 	if (!changed) {
 		return;
+	}
+	// LuxuryGram: watch hook. A genuine change of this message's reaction
+	// state is a watchable event: the resulting counted summary is what
+	// the Watcher timeline shows.
+	if (reactions) {
+		auto summary = QString();
+		for (const auto &count : reactions->data().vresults().v) {
+			const auto &entry = count.data();
+			const auto reactionId = ReactionFromMTP(entry.vreaction());
+			const auto label = reactionId.paid()
+				? u"⭐"_q
+				: reactionId.custom()
+				? u"custom"_q
+				: reactionId.emoji();
+			if (label.isEmpty()) {
+				continue;
+			}
+			if (!summary.isEmpty()) {
+				summary += u", "_q;
+			}
+			summary += label + u" ×"_q + QString::number(entry.vcount().v);
+		}
+		if (!summary.isEmpty()) {
+			LuxuryOnline::noteReactions(
+				_history->peer,
+				id.bare,
+				summary,
+				base::unixtime::now());
+		}
 	}
 	const auto hasUnread = _reactions && _reactions->hasUnread();
 	if (hasUnread && !hadUnread) {

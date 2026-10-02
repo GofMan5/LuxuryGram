@@ -75,6 +75,14 @@ void noteProfileChange(
 	const QString &oldText,
 	const QString &newText,
 	int at);
+// Reactions: one row per genuine change of a message's reaction state,
+// keyed by the message id and carrying the resulting summary (the
+// counted emoji list). No dedup probe: every change is its own event.
+void noteReactions(
+	not_null<PeerData*> peer,
+	ID messageId,
+	const QString &summary,
+	int at);
 std::vector<WatchEvent> getWatchEvents(not_null<PeerData*> peer, int totalLimit);
 
 }

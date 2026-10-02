@@ -6,6 +6,11 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ## Unreleased
 
+### Added
+
+- The Watcher now records message reactions: every genuine change of a message's reaction state appears in the Events timeline as a pink "Reaction" card with the counted emoji summary (initial syncs don't count, only live changes).
+- Event cards with long text (deleted and edited messages) can be clicked to expand the full text and clicked again to collapse; the cards below move out of the way.
+
 ### Fixed
 
 - Popup menus lost hover and clicks on pointer stacks that route popup-bound mouse input unreliably: items did not highlight under the cursor, and a press closed the menu without acting. Menus now grab the mouse for the whole time they are open (the native-menu pattern), so every mouse message is delivered to the menu itself; a submenu hands the grab back to its parent when it closes.

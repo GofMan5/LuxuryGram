@@ -61,6 +61,7 @@ const auto kUsernameFg = style::internal::OwnedColor(QColor(0xa7, 0x8b, 0xfa));
 const auto kPhotoFg = style::internal::OwnedColor(QColor(0xf5, 0x9e, 0x0b));
 const auto kDeletedFg = style::internal::OwnedColor(QColor(0xef, 0x5b, 0x5b));
 const auto kEditedFg = style::internal::OwnedColor(QColor(0x38, 0xb6, 0xe3));
+const auto kReactionFg = style::internal::OwnedColor(QColor(0xf4, 0x7f, 0xb6));
 
 // Timeline kinds beyond the stored WatchKind set: the deleted and edited
 // message tables feed the same Events timeline, so their kinds live here
@@ -221,20 +222,30 @@ std::vector<OnlineSession> PairOnlineSessions(
 	}
 	case WatchKind::PhotoUpdated:
 		return tr::luxury_WatchPhotoUpdated(tr::now);
+	case WatchKind::ReactionsChanged:
+		return tr::luxury_WatchReactions(
+			tr::now,
+			lt_list,
+			QString::fromStdString(event.title));
 	default:
 		return QString();
 	}
 }
 
-// A message-preview row: the plain text, flattened and length-capped so
-// a card stays a card even for a wall of text.
+// A message-preview row: the plain text, flattened (newlines to spaces)
+// so a card stays a card; the collapsed card elides it further and the
+// expanded one shows it whole.
 [[nodiscard]] QString MessagePreview(const LuxuryMessageBase &message) {
 	auto text = QString::fromStdString(message.text);
 	text.replace(u'\n', u' ');
-	if (text.size() > kPreviewLimit) {
-		text = text.left(kPreviewLimit) + u"…"_q;
-	}
 	return text.isEmpty() ? u"—"_q : text;
+}
+
+// What a collapsed card shows: the flattened text capped hard.
+[[nodiscard]] QString ElidedPreview(const QString &text) {
+	return text.size() > kPreviewLimit
+		? text.left(kPreviewLimit) + u"…"_q
+		: text;
 }
 
 // When the row was written beats when the message claims to have been
@@ -266,6 +277,8 @@ std::vector<OnlineSession> PairOnlineSessions(
 		return tr::luxury_OnlineHistoryKindUsername(tr::now);
 	case WatchKind::PhotoUpdated:
 		return tr::luxury_OnlineHistoryKindPhoto(tr::now);
+	case WatchKind::ReactionsChanged:
+		return tr::luxury_OnlineHistoryKindReaction(tr::now);
 	default:
 		return QString();
 	}
@@ -290,6 +303,8 @@ std::vector<OnlineSession> PairOnlineSessions(
 		return kUsernameFg.color();
 	case WatchKind::PhotoUpdated:
 		return kPhotoFg.color();
+	case WatchKind::ReactionsChanged:
+		return kReactionFg.color();
 	default:
 		return st::windowSubTextFg;
 	}
@@ -371,14 +386,25 @@ class EventCard final : public WatcherCard {
 public:
 	EventCard(QWidget *parent, const TrackedEvent &event, int index);
 
+	// A card with a text longer than the collapsed cap can be clicked to
+	// show the whole text; the body relayouts on every toggle.
+	[[nodiscard]] rpl::producer<> toggleRequests() const {
+		return _toggles.events();
+	}
+
 protected:
 	int resizeGetHeight(int newWidth) override;
 	void paintCard(Painter &p) override;
+	void mousePressEvent(QMouseEvent *e) override;
 
 private:
 	QString _chipLabel;
 	QString _dateText;
+	Ui::Text::String _preview;
 	Ui::Text::String _text;
+	bool _expandable = false;
+	bool _expanded = false;
+	rpl::event_stream<> _toggles;
 	int _kind = 0;
 	int _chipWidth = 0;
 	int _textLeft = 0;
@@ -836,6 +862,19 @@ EventCard::EventCard(
 	_chipLabel = ChipLabelFor(_kind);
 	_dateText = formatDateTime(base::unixtime::parse(event.at));
 	_text.setText(st::boxTextStyle, event.text);
+	_preview.setText(st::boxTextStyle, ElidedPreview(event.text));
+	_expandable = event.text.size() > kPreviewLimit;
+	if (_expandable) {
+		setCursor(style::cur_pointer);
+	}
+}
+
+void EventCard::mousePressEvent(QMouseEvent *e) {
+	if (e->button() == Qt::LeftButton && _expandable) {
+		_expanded = !_expanded;
+		_toggles.fire({});
+		update();
+	}
 }
 
 int EventCard::resizeGetHeight(int newWidth) {
@@ -855,7 +894,8 @@ int EventCard::resizeGetHeight(int newWidth) {
 			- dateWidth
 			- st::luxuryWatcherCardSkip
 			- padding.right());
-	const auto textHeight = _text.countHeight(_textWidth);
+	const auto &active = _expanded ? _text : _preview;
+	const auto textHeight = active.countHeight(_textWidth);
 	const auto chipHeight = _chipWidth
 		? st::luxuryWatcherChipFont->height
 			+ st::luxuryWatcherPillPadding.top()
@@ -912,7 +952,8 @@ void EventCard::paintCard(Painter &p) {
 	}
 
 	p.setPen(st::windowFg);
-	_text.draw(p, {
+	const auto &active = _expanded ? _text : _preview;
+	active.draw(p, {
 		.position = QPoint(_textLeft, padding.top()),
 		.outerWidth = width(),
 		.availableWidth = _textWidth,
@@ -1122,10 +1163,17 @@ void WatcherBody::rebuild() {
 			const auto shown = std::min(total, kMaxWatchEventRows);
 			_eventOverflow = total - shown;
 			for (auto i = 0; i != shown; ++i) {
-				_eventCards.push_back(Ui::CreateChild<EventCard>(
+				const auto card = Ui::CreateChild<EventCard>(
 					this,
 					eventList[i],
-					i));
+					i);
+				_eventCards.push_back(card);
+				// An expanding card changes its own height: re-run the
+				// layout so the cards below it move out of the way.
+				card->toggleRequests(
+				) | rpl::on_next([=] {
+					resizeToWidth(width());
+				}, card->lifetime());
 			}
 		}
 	} else {

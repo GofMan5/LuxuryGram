@@ -98,6 +98,7 @@ enum class WatchKind : int {
 	NameChanged = 3,
 	UsernameChanged = 4,
 	PhotoUpdated = 5,
+	ReactionsChanged = 6,
 };
 
 class WatchEvent
