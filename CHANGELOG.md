@@ -4,6 +4,14 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Changed
+
+- Watcher reaction cards now show what was reacted to: the counted emoji summary on the first line and a preview of the message text on the second.
+- Watcher edit cards collapse all revisions of one message into a single card that shows the full arc — "Was: original text / Now: current text" — instead of one card per revision; the Events counts follow the grouping.
+- Collapsed event cards no longer cut texts at 160 characters: texts show in full, and only a true wall of text (over 2000 characters) stays folded behind the expand chevron.
+
 ## 1.0.17
 
 ### Changed

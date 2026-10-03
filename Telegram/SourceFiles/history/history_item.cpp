@@ -5518,10 +5518,18 @@ void HistoryItem::updateReactions(const MTPMessageReactions *reactions) {
 			summary += label + u" ×"_q + QString::number(entry.vcount().v);
 		}
 		if (!summary.isEmpty()) {
+			// The message body rides along so the timeline can show what
+			// the reactions landed on, not just the bare emoji counts.
+			auto context = originalText().text;
+			context.replace(u'\n', u' ');
+			if (context.size() > 200) {
+				context = context.left(200) + u"…"_q;
+			}
 			LuxuryOnline::noteReactions(
 				_history->peer,
 				id.bare,
 				summary,
+				context,
 				base::unixtime::now());
 		}
 	}

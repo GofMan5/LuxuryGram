@@ -9026,6 +9026,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistoryKindEdited" = "Edited";
 "luxury_OnlineHistoryKindReaction" = "Reaction";
 "luxury_WatchReactions" = "Reactions: {list}";
+"luxury_WatchEditWas" = "Was:";
+"luxury_WatchEditNow" = "Now:";
 "luxury_WatchGiftSent" = "You sent a gift for {cost} to {user}";
 "luxury_WatchGiftReceived" = "{user} sent you a gift for {cost}";
 "luxury_WatchGiftReceivedAnonymous" = "Unknown user sent you a gift for {cost}";

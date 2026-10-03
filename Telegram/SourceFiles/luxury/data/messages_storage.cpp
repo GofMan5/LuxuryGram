@@ -398,6 +398,7 @@ void noteReactions(
 		not_null<PeerData*> peer,
 		ID messageId,
 		const QString &summary,
+		const QString &context,
 		int at) {
 	if (!WatchGate() || summary.isEmpty()) {
 		return;
@@ -407,6 +408,7 @@ void noteReactions(
 	const auto peerId = static_cast<ID>(peer->id.value);
 	const auto kind = static_cast<int>(WatchKind::ReactionsChanged);
 	const auto label = summary.toStdString();
+	const auto contextLabel = context.toStdString();
 	LuxuryDatabase::async([=] {
 		auto event = WatchEvent();
 		event.userId = userId;
@@ -416,6 +418,7 @@ void noteReactions(
 		event.messageId = messageId;
 		event.at = at;
 		event.title = label;
+		event.extra = contextLabel;
 		LuxuryDatabase::addWatchEvent(std::move(event));
 	});
 }

@@ -43,7 +43,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <map>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace LuxuryWatcher {
@@ -102,7 +104,9 @@ enum class Order {
 constexpr auto kMaxOnlineHistoryRows = 50;
 constexpr auto kMaxWatchEventRows = 30;
 constexpr auto kHistoryReadLimit = 200;
-constexpr auto kPreviewLimit = 160;
+// Collapsed cards show texts whole: only an actual wall of text (a
+// deleted copypasta) stays folded behind the chevron.
+constexpr auto kPreviewLimit = 2000;
 
 struct OnlineSession {
 	std::optional<int> start;
@@ -239,11 +243,19 @@ std::vector<OnlineSession> PairOnlineSessions(
 	}
 	case WatchKind::PhotoUpdated:
 		return tr::luxury_WatchPhotoUpdated(tr::now);
-	case WatchKind::ReactionsChanged:
-		return tr::luxury_WatchReactions(
+	case WatchKind::ReactionsChanged: {
+		// The summary line names the emoji and counts; the stored message
+		// preview goes on the second line so it is clear what was
+		// reacted to.
+		const auto summary = tr::luxury_WatchReactions(
 			tr::now,
 			lt_list,
 			QString::fromStdString(event.title));
+		const auto context = QString::fromStdString(event.extra);
+		return context.isEmpty()
+			? summary
+			: summary + u"\n"_q + context;
+	}
 	default:
 		return QString();
 	}
@@ -466,10 +478,11 @@ public:
 	}
 	// The tab labels show counts, and the box is built before anyone
 	// subscribes to countsChanged(), so the first state is read directly.
+	// Edit revisions count once per edited message, not once per row.
 	[[nodiscard]] std::array<int, 3> counts() const {
 		const auto sessions = int(_sessions.size());
 		const auto events = int(
-			_watches.size() + _deleted.size() + _edits.size());
+			_watches.size() + _deleted.size() + editedGroupCount());
 		return { sessions + events, sessions, events };
 	}
 
@@ -481,6 +494,7 @@ private:
 	void rebuild();
 	[[nodiscard]] std::vector<OnlineSession> sortedSessions() const;
 	[[nodiscard]] std::vector<TrackedEvent> sortedEvents() const;
+	[[nodiscard]] int editedGroupCount() const;
 	void refreshEarlier();
 
 	not_null<PeerData*> _peer;
@@ -1139,11 +1153,37 @@ std::vector<TrackedEvent> WatcherBody::sortedEvents() const {
 			MessagePreview(deleted),
 		});
 	}
+	// Revisions of one edited message collapse into a single card that
+	// shows the whole arc: the original text and the current one. The
+	// load comes in fakeId-descending order (newest revision first), so
+	// the first visit per message is the latest revision and the last
+	// visit is the original.
+	auto latestByMessage = std::map<ID, const LuxuryMessageBase*>();
+	auto firstByMessage = std::map<ID, const LuxuryMessageBase*>();
 	for (const auto &edited : _edits) {
+		latestByMessage.try_emplace(edited.messageId, &edited);
+		firstByMessage[edited.messageId] = &edited;
+	}
+	for (const auto &[messageId, latest] : latestByMessage) {
+		const auto first = firstByMessage[messageId];
+		const auto latestText = MessagePreview(*latest);
+		auto text = QString();
+		if (first != latest) {
+			const auto firstText = MessagePreview(*first);
+			text = (firstText == latestText)
+				? latestText
+				: tr::luxury_WatchEditWas(tr::now)
+					+ u" "_q + firstText
+					+ u"\n"_q
+					+ tr::luxury_WatchEditNow(tr::now)
+					+ u" "_q + latestText;
+		} else {
+			text = latestText;
+		}
 		list.push_back({
-			MessageTimestamp(edited),
+			MessageTimestamp(*latest),
 			kKindEdited,
-			MessagePreview(edited),
+			text,
 		});
 	}
 	// A stable order: same-second rows (a delete and an edit recorded in
@@ -1157,6 +1197,14 @@ std::vector<TrackedEvent> WatcherBody::sortedEvents() const {
 		std::reverse(list.begin(), list.end());
 	}
 	return list;
+}
+
+int WatcherBody::editedGroupCount() const {
+	auto ids = std::set<ID>();
+	for (const auto &edited : _edits) {
+		ids.insert(edited.messageId);
+	}
+	return int(ids.size());
 }
 
 void WatcherBody::refreshEarlier() {
@@ -1228,7 +1276,7 @@ void WatcherBody::rebuild() {
 			tr::luxury_OnlineHistoryEvents(tr::now)
 			+ u" · "_q
 			+ QString::number(
-				_watches.size() + _deleted.size() + _edits.size()));
+				_watches.size() + _deleted.size() + editedGroupCount()));
 		if (eventList.empty()) {
 			_eventEmpty->show();
 		} else {
