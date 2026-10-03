@@ -31,6 +31,8 @@
 #include "ui/qt_object_factory.h"
 #include "window/window_session_controller.h"
 
+#include <QtGui/QPainterPath>
+
 #include "styles/style_basic.h"
 #include "styles/style_boxes.h"
 #include "styles/style_layers.h"
@@ -248,6 +250,22 @@ std::vector<OnlineSession> PairOnlineSessions(
 		: text;
 }
 
+// A timeline timestamp that stays short: bare time for today, day and
+// month added within the current year, the full date further back. The
+// long "dd.MM.yyyy at HH:mm:ss" form made every card noisy.
+[[nodiscard]] QString CompactTimestamp(int at) {
+	const auto time = base::unixtime::parse(at);
+	const auto today = QDateTime::currentDateTime().date();
+	const auto date = time.date();
+	if (date == today) {
+		return time.toString(u"HH:mm"_q);
+	}
+	const auto timePart = u" "_q + time.toString(u"HH:mm"_q);
+	return (date.year() == today.year())
+		? date.toString(u"dd.MM"_q) + timePart
+		: date.toString(u"dd.MM.yyyy"_q) + timePart;
+}
+
 // When the row was written beats when the message claims to have been
 // sent: the timeline cares about the moment the thing was noticed.
 [[nodiscard]] int MessageTimestamp(const LuxuryMessageBase &message) {
@@ -387,7 +405,8 @@ public:
 	EventCard(QWidget *parent, const TrackedEvent &event, int index);
 
 	// A card with a text longer than the collapsed cap can be clicked to
-	// show the whole text; the body relayouts on every toggle.
+	// show the whole text; the body relayouts on every toggle. The
+	// chevron in the corner marks the cards that expand.
 	[[nodiscard]] rpl::producer<> toggleRequests() const {
 		return _toggles.events();
 	}
@@ -407,7 +426,9 @@ private:
 	rpl::event_stream<> _toggles;
 	int _kind = 0;
 	int _chipWidth = 0;
-	int _textLeft = 0;
+	int _chipHeight = 0;
+	int _rowHeight = 0;
+	int _textTop = 0;
 	int _textWidth = 0;
 
 };
@@ -656,14 +677,14 @@ SessionCard::SessionCard(
 	_startLabel = tr::luxury_OnlineHistoryStart(tr::now) + u":"_q;
 	_endLabel = tr::luxury_OnlineHistoryEnd(tr::now) + u":"_q;
 	if (_session.start) {
-		_startValue = formatDateTime(base::unixtime::parse(*_session.start));
+		_startValue = CompactTimestamp(*_session.start);
 	} else {
 		_startValue = tr::luxury_OnlineHistoryUnknown(tr::now);
 	}
 	if (!_session.end) {
 		_endValue = tr::luxury_OnlineHistoryOpen(tr::now);
 	} else {
-		_endValue = formatDateTime(base::unixtime::parse(*_session.end));
+		_endValue = CompactTimestamp(*_session.end);
 	}
 	if (_session.start && _session.end) {
 		// Same-second flaps and clock steps clamp at zero -- the row
@@ -860,7 +881,7 @@ EventCard::EventCard(
 		std::min<crl::time>(index * kCardStagger, kCardStaggerMax))
 , _kind(event.kind) {
 	_chipLabel = ChipLabelFor(_kind);
-	_dateText = formatDateTime(base::unixtime::parse(event.at));
+	_dateText = CompactTimestamp(event.at);
 	_text.setText(st::boxTextStyle, event.text);
 	_preview.setText(st::boxTextStyle, ElidedPreview(event.text));
 	_expandable = event.text.size() > kPreviewLimit;
@@ -884,24 +905,23 @@ int EventCard::resizeGetHeight(int newWidth) {
 		: st::luxuryWatcherChipFont->width(_chipLabel)
 			+ st::luxuryWatcherPillPadding.left()
 			+ st::luxuryWatcherPillPadding.right();
-	const auto dateWidth = st::luxuryWatcherLabelFont->width(_dateText);
-	_textLeft = padding.left()
-		+ (_chipWidth ? _chipWidth + st::luxuryWatcherCardSkip : 0);
-	_textWidth = std::max(
-		0,
-		newWidth
-			- _textLeft
-			- dateWidth
-			- st::luxuryWatcherCardSkip
-			- padding.right());
-	const auto &active = _expanded ? _text : _preview;
-	const auto textHeight = active.countHeight(_textWidth);
-	const auto chipHeight = _chipWidth
+	_chipHeight = _chipWidth
 		? st::luxuryWatcherChipFont->height
 			+ st::luxuryWatcherPillPadding.top()
 			+ st::luxuryWatcherPillPadding.bottom()
 		: 0;
-	return padding.top() + padding.bottom() + std::max(textHeight, chipHeight);
+	// The chip and the date share one top row; the text always starts
+	// below that row at full width, so a long text is never squeezed
+	// between the chip and the date.
+	_rowHeight = std::max(_chipHeight, st::luxuryWatcherLabelFont->height);
+	_textTop = padding.top() + _rowHeight + st::luxuryWatcherCardSkip;
+	_textWidth = std::max(0, newWidth - padding.left() - padding.right());
+	const auto &active = _expanded ? _text : _preview;
+	const auto textHeight = active.countHeight(_textWidth);
+	const auto stripHeight = _expandable
+		? st::luxuryWatcherExpandGlyphHeight + st::luxuryWatcherCardSkip
+		: 0;
+	return _textTop + textHeight + stripHeight + padding.bottom();
 }
 
 void EventCard::paintCard(Painter &p) {
@@ -912,7 +932,7 @@ void EventCard::paintCard(Painter &p) {
 	const auto dateWidth = labelFont->width(_dateText);
 	const auto dateRect = style::rtlrect(
 		width() - padding.right() - dateWidth,
-		padding.top(),
+		padding.top() + (_rowHeight - labelFont->height) / 2,
 		dateWidth,
 		labelFont->height,
 		width());
@@ -924,14 +944,11 @@ void EventCard::paintCard(Painter &p) {
 
 	if (_chipWidth) {
 		const auto &font = st::luxuryWatcherChipFont;
-		const auto chipH = font->height
-			+ st::luxuryWatcherPillPadding.top()
-			+ st::luxuryWatcherPillPadding.bottom();
 		const auto chipRect = style::rtlrect(
 			padding.left(),
-			(height() - chipH) / 2,
+			padding.top() + (_rowHeight - _chipHeight) / 2,
 			_chipWidth,
-			chipH,
+			_chipHeight,
 			width());
 		const auto color = ChipColorFor(_kind);
 		auto chipBg = QColor(color->c);
@@ -947,18 +964,41 @@ void EventCard::paintCard(Painter &p) {
 		p.drawText(
 			QPointF(
 				chipRect.x() + st::luxuryWatcherPillPadding.left(),
-				chipRect.y() + (chipH - font->height) / 2 + font->ascent),
+				chipRect.y() + (_chipHeight - font->height) / 2 + font->ascent),
 			_chipLabel);
 	}
 
 	p.setPen(st::windowFg);
 	const auto &active = _expanded ? _text : _preview;
 	active.draw(p, {
-		.position = QPoint(_textLeft, padding.top()),
+		.position = QPoint(padding.left(), _textTop),
 		.outerWidth = width(),
 		.availableWidth = _textWidth,
 		.align = style::al_left,
 	});
+
+	if (_expandable) {
+		// The chevron marks the card as expandable: down while more text
+		// is hidden, up when the full text is shown.
+		const auto w = st::luxuryWatcherExpandGlyphWidth;
+		const auto h = st::luxuryWatcherExpandGlyphHeight;
+		const auto x = float64(width() - padding.right() - w);
+		const auto y = float64(height() - padding.bottom() - h);
+		auto path = QPainterPath();
+		if (_expanded) {
+			path.moveTo(x, y + h);
+			path.lineTo(x + w / 2., y);
+			path.lineTo(x + w, y + h);
+		} else {
+			path.moveTo(x, y);
+			path.lineTo(x + w / 2., y + h);
+			path.lineTo(x + w, y);
+		}
+		path.closeSubpath();
+		p.setPen(Qt::NoPen);
+		p.setBrush(st::windowSubTextFg);
+		p.drawPath(path);
+	}
 }
 
 WatcherBody::WatcherBody(QWidget *parent, not_null<PeerData*> peer)

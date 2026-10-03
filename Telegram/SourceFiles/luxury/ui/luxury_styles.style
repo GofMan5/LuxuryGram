@@ -126,6 +126,8 @@ luxuryWatcherDotSize: 10px;
 luxuryWatcherPulseDiameter: 16px;
 luxuryWatcherPillRadius: 12px;
 luxuryWatcherPillPadding: margins(8px, 4px, 8px, 4px);
+luxuryWatcherExpandGlyphWidth: 10px;
+luxuryWatcherExpandGlyphHeight: 6px;
 luxuryWatcherSortHeight: 32px;
 luxuryWatcherSortSkip: 4px;
 luxuryWatcherIconSize: 32px;

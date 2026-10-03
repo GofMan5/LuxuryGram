@@ -4,6 +4,12 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Changed
+
+- Watcher event cards use a cleaner vertical layout: the kind chip and the date share one top row, and the text sits below at full width, so long texts are no longer squeezed between the chip and the date. Cards that can expand now show a chevron in the corner, making it visible which ones open up.
+
 ## 1.0.16
 
 ### Added
