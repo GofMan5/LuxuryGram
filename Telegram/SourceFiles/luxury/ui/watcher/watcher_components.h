@@ -19,6 +19,16 @@ class RippleAnimation;
 
 namespace LuxuryUi {
 
+// The Watcher accent: a fixed neon azure, theme-independent. The dark
+// minimal look the box goes for needs exactly one saturated highlight,
+// and the theme's active-text color varies too much to be trusted with
+// it. Pills, online states, duration markers and hover glints all use
+// this one color.
+[[nodiscard]] QColor AccentColor();
+
+// A color helper: the accent (or any color) at a fixed alpha.
+[[nodiscard]] QColor WithAlpha(const QColor &color, float64 alpha);
+
 // Glyphs painted in code instead of icon assets: the refresh circular
 // arrow and the settings gear.
 enum class ToolGlyph {

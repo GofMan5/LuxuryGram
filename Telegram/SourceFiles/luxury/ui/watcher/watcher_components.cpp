@@ -27,11 +27,44 @@ constexpr auto kPi = 3.14159265358979323846;
 constexpr auto kPillDuration = crl::time(150);
 constexpr auto kSpinDuration = crl::time(600);
 
-constexpr auto kSegmentPillAlpha = 0.14;
-constexpr auto kTabPillAlpha = 0.16;
-constexpr auto kTabHoverAlpha = 0.04;
+// The accent fill/border strengths: the fill reads as a tinted glass
+// plate, the border is the neon rim that makes it glow against the dark
+// recessed track.
+constexpr auto kAccentFillAlpha = 0.16;
+constexpr auto kAccentBorderAlpha = 0.55;
+constexpr auto kAccentGlowAlpha = 0.10;
+constexpr auto kTabHoverAlpha = 0.05;
 constexpr auto kDisabledLabelAlpha = 0.4;
-constexpr auto kTabCountAlpha = 0.55;
+constexpr auto kTabCountAlpha = 0.75;
+constexpr auto kTrackAlpha = 0.22;
+constexpr auto kTrackBorderAlpha = 0.07;
+constexpr auto kToolHoverAlpha = 0.10;
+
+} // namespace
+
+QColor AccentColor() {
+	// Neon azure: saturated enough to glow on the dark surfaces, cool
+	// enough to stay readable next to the semantic chip colors.
+	return QColor(0x56, 0xc2, 0xff);
+}
+
+QColor WithAlpha(const QColor &color, float64 alpha) {
+	auto result = QColor(color);
+	result.setAlphaF(alpha);
+	return result;
+}
+
+namespace {
+
+// The recessed plate behind pill controls: a black well with a faint
+// rim, so the glowing active pill reads as raised out of it.
+[[nodiscard]] QColor TrackColor() {
+	return QColor(0, 0, 0, int(255 * kTrackAlpha));
+}
+
+[[nodiscard]] QColor TrackBorderColor() {
+	return QColor(255, 255, 255, int(255 * kTrackBorderAlpha));
+}
 
 } // namespace
 
@@ -130,13 +163,19 @@ void ToolButton::spin() {
 void ToolButton::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
+	if (_hovered) {
+		// A soft accent disc under the glyph: the hover glint.
+		p.setPen(Qt::NoPen);
+		p.setBrush(WithAlpha(AccentColor(), kToolHoverAlpha));
+		p.drawEllipse(QRectF(0, 0, width(), height()));
+	}
 	if (_ripple) {
 		_ripple->paint(p, 0, 0, width());
 		if (_ripple->empty()) {
 			_ripple.reset();
 		}
 	}
-	paintIcon(p, (_hovered ? st::windowFg : st::windowSubTextFg)->c);
+	paintIcon(p, (_hovered ? AccentColor() : st::windowSubTextFg->c));
 }
 
 void ToolButton::paintIcon(QPainter &p, const QColor &color) {
@@ -278,16 +317,32 @@ void SegmentControl::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
 
-	const auto pillLeft = _pillLeft.value(segmentLeft(_selected));
-	const auto pillWidth = _pillWidth.value(segmentWidth(_selected));
-	auto pillColor = QColor(st::windowActiveTextFg->c);
-	pillColor.setAlphaF(kSegmentPillAlpha);
-	p.setPen(Qt::NoPen);
-	p.setBrush(pillColor);
+	// The same recessed-track + neon-pill language as the tab bar, at a
+	// smaller scale.
+	p.setPen(QPen(TrackBorderColor(), st::lineWidth));
+	p.setBrush(TrackColor());
 	p.drawRoundedRect(
-		QRectF(pillLeft, 0, pillWidth, height()),
+		QRectF(0.5, 0.5, width() - 1., height() - 1.),
 		height() / 2.,
 		height() / 2.);
+
+	const auto accent = AccentColor();
+	const auto pillLeft = _pillLeft.value(segmentLeft(_selected));
+	const auto pillWidth = _pillWidth.value(segmentWidth(_selected));
+	const auto pillRect = QRectF(
+		pillLeft + 1.,
+		1.,
+		pillWidth - 2.,
+		height() - 2.);
+	p.setPen(Qt::NoPen);
+	p.setBrush(WithAlpha(accent, kAccentFillAlpha));
+	p.drawRoundedRect(pillRect, pillRect.height() / 2., pillRect.height() / 2.);
+	p.setPen(QPen(WithAlpha(accent, kAccentBorderAlpha), st::lineWidth));
+	p.setBrush(Qt::NoBrush);
+	p.drawRoundedRect(
+		pillRect.adjusted(0.5, 0.5, -0.5, -0.5),
+		pillRect.height() / 2.,
+		pillRect.height() / 2.);
 
 	const auto &font = st::luxuryWatcherChipFont;
 	p.setFont(font);
@@ -295,12 +350,11 @@ void SegmentControl::paintEvent(QPaintEvent *e) {
 	for (auto i = 0; i != int(_labels.size()); ++i) {
 		const auto disabled = (i == 2 && !_lastEnabled);
 		if (i == _selected) {
-			p.setPen(QPen(st::windowActiveTextFg->c));
+			p.setPen(QPen(accent));
 		} else {
-			auto inactive = QColor(st::windowSubTextFg->c);
-			if (disabled) {
-				inactive.setAlphaF(kDisabledLabelAlpha);
-			}
+			auto inactive = WithAlpha(
+				st::windowSubTextFg->c,
+				disabled ? kDisabledLabelAlpha : 1.);
 			p.setPen(QPen(inactive));
 		}
 		const auto left = segmentLeft(i);
@@ -404,27 +458,48 @@ void TabsBar::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
 
+	// The recessed track the pill glides inside: a dark well with a
+	// faint rim, so the active pill reads as raised and lit.
+	p.setPen(QPen(TrackBorderColor(), st::lineWidth));
+	p.setBrush(TrackColor());
+	p.drawRoundedRect(
+		QRectF(0.5, 0.5, width() - 1., height() - 1.),
+		height() / 2.,
+		height() / 2.);
+
+	const auto accent = AccentColor();
 	const auto pillLeft = _pillLeft.value(segmentLeft(_selected));
-	auto pillColor = QColor(st::windowActiveTextFg->c);
-	pillColor.setAlphaF(kTabPillAlpha);
-	p.setPen(Qt::NoPen);
-	p.setBrush(pillColor);
 	const auto pillRect = QRectF(
 		pillLeft + st::luxuryWatcherTabSkip,
 		st::luxuryWatcherTabSkip,
 		segmentWidth(_selected) - 2 * st::luxuryWatcherTabSkip,
 		height() - 2 * st::luxuryWatcherTabSkip);
-	p.drawRoundedRect(pillRect, pillRect.height() / 2., pillRect.height() / 2.);
+	// The glow: a larger, very soft accent plate under the rimmed pill.
+	p.setPen(Qt::NoPen);
+	p.setBrush(WithAlpha(accent, kAccentGlowAlpha));
+	p.drawRoundedRect(
+		pillRect.adjusted(-2, -2, 2, 2),
+		pillRect.height() / 2. + 2,
+		pillRect.height() / 2. + 2);
+	p.setBrush(WithAlpha(accent, kAccentFillAlpha));
+	p.drawRoundedRect(
+		pillRect,
+		pillRect.height() / 2.,
+		pillRect.height() / 2.);
+	p.setPen(QPen(WithAlpha(accent, kAccentBorderAlpha), st::lineWidth));
+	p.setBrush(Qt::NoBrush);
+	p.drawRoundedRect(
+		pillRect.adjusted(0.5, 0.5, -0.5, -0.5),
+		pillRect.height() / 2.,
+		pillRect.height() / 2.);
 
 	const auto &font = st::luxuryWatcherTabFont;
 	const auto &countFont = st::luxuryWatcherTabCountFont;
 	const auto textTop = (height() - font->height) / 2;
 	for (auto i = 0; i != int(_labels.size()); ++i) {
 		if (i == _hovered && i != _selected) {
-			auto hoverColor = QColor(st::windowFg->c);
-			hoverColor.setAlphaF(kTabHoverAlpha);
 			p.setPen(Qt::NoPen);
-			p.setBrush(hoverColor);
+			p.setBrush(WithAlpha(st::windowFg->c, kTabHoverAlpha));
 			p.drawRoundedRect(
 				QRectF(
 					segmentLeft(i) + st::luxuryWatcherTabSkip,
@@ -444,14 +519,12 @@ void TabsBar::paintEvent(QPaintEvent *e) {
 		const auto total = labelWidth + countWidth;
 		const auto left = segmentLeft(i) + (segmentWidth(i) - total) / 2;
 		p.setFont(font);
-		p.setPen(i == _selected ? st::windowFg : st::windowSubTextFg);
+		p.setPen(QPen(i == _selected ? accent : st::windowSubTextFg->c));
 		p.drawText(QPointF(left, textTop + font->ascent), _labels[i]);
 		if (!_counts[i].isEmpty()) {
-			auto countColor = QColor(
-				(i == _selected
-					? st::windowActiveTextFg
-					: st::windowSubTextFg)->c);
-			countColor.setAlphaF(kTabCountAlpha);
+			auto countColor = WithAlpha(
+				i == _selected ? accent : st::windowSubTextFg->c,
+				kTabCountAlpha);
 			p.setFont(countFont);
 			p.setPen(countColor);
 			const auto countTop = (height() - countFont->height) / 2;
@@ -529,25 +602,21 @@ void EmptyBlock::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
 
-	// A dim clock in a soft circle above the label: a recognizable
+	// A dim clock in a soft accent halo above the label: a recognizable
 	// "nothing recorded yet" mark without an icon asset.
 	const auto glyph = st::luxuryWatcherEmptyGlyphSize;
 	const auto circle = glyph + 2 * st::luxuryWatcherCardSkip;
-	auto haloColor = QColor(st::windowSubTextFg->c);
-	haloColor.setAlphaF(0.09);
 	p.setPen(Qt::NoPen);
-	p.setBrush(haloColor);
+	p.setBrush(WithAlpha(AccentColor(), 0.09));
 	p.drawEllipse(
 		QPointF(width() / 2., circle / 2.),
 		circle / 2.,
 		circle / 2.);
-	auto glyphColor = QColor(st::windowSubTextFg->c);
-	glyphColor.setAlphaF(0.5);
 	PaintClockGlyph(
 		p,
 		QPointF(width() / 2. - glyph / 2., circle / 2. - glyph / 2.),
 		glyph,
-		glyphColor);
+		WithAlpha(AccentColor(), 0.5));
 
 	const auto &font = st::luxuryWatcherEmptyFont;
 	p.setFont(font);

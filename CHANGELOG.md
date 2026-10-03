@@ -8,7 +8,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Changed
 
-- Watcher event cards use a cleaner vertical layout: the kind chip and the date share one top row, and the text sits below at full width, so long texts are no longer squeezed between the chip and the date. Cards that can expand now show a chevron in the corner, making it visible which ones open up.
+- The Watcher got a full visual pass: a fixed neon-azure accent now drives the active tab pill (soft glow plus a rimmed outline), the sort control, the online dot and its pulse, duration pills, card hover rims, chip outlines and the header hairline; tabs and the sort control sit in recessed dark tracks. Event cards use a cleaner vertical layout (chip and date on one top row, full-width text below, a chevron marking the cards that expand), and timestamps are compact — bare time for today, day and month within the year.
 
 ## 1.0.16
 

@@ -78,11 +78,14 @@ constexpr auto kCardStaggerMax = crl::time(200);
 constexpr auto kPulseDuration = crl::time(1600);
 
 constexpr auto kCardBgBlend = 0.04;
+constexpr auto kCardHoverLift = 0.02;
 constexpr auto kCardBorderAlpha = 40;
+constexpr auto kCardHoverBorderAlpha = 0.43;
+constexpr auto kChipBorderAlpha = 0.45;
+constexpr auto kChevronAlpha = 0.6;
 constexpr auto kDurationPillAlpha = 0.12;
 constexpr auto kChipAlpha = 0.18;
 constexpr auto kPulseHaloAlpha = 0.5;
-constexpr auto kHeaderHairlineAlpha = 60;
 
 enum class Tab {
 	All,
@@ -133,11 +136,23 @@ struct TrackedEvent {
 	return Blended(st::windowBg, st::windowFg, kCardBgBlend);
 }
 
-void PaintCardShell(Painter &p, int width, int height) {
+void PaintCardShell(Painter &p, int width, int height, bool hovered) {
 	auto border = st::windowShadowFg->c;
 	border.setAlpha(kCardBorderAlpha);
+	auto bg = CardBackgroundColor();
+	if (hovered) {
+		// The hover glint: the rim lights up in the accent and the plate
+		// lifts a touch brighter.
+		border = LuxuryUi::WithAlpha(
+			LuxuryUi::AccentColor(),
+			kCardHoverBorderAlpha);
+		bg = Blended(
+			st::windowBg,
+			st::windowFg,
+			kCardBgBlend + kCardHoverLift);
+	}
 	p.setPen(QPen(border));
-	p.setBrush(CardBackgroundColor());
+	p.setBrush(bg);
 	p.drawRoundedRect(
 		QRectF(0, 0, width, height),
 		st::luxuryWatcherCardRadius,
@@ -364,10 +379,16 @@ public:
 
 protected:
 	void paintEvent(QPaintEvent *e) override;
+	void enterEventHook(QEnterEvent *e) override;
+	void leaveEventHook(QEvent *e) override;
 	virtual void paintCard(Painter &p) = 0;
+	[[nodiscard]] bool hovered() const {
+		return _hovered;
+	}
 
 private:
 	Ui::Animations::Simple _appear;
+	bool _hovered = false;
 
 };
 
@@ -666,6 +687,18 @@ void WatcherCard::paintEvent(QPaintEvent *e) {
 	paintCard(p);
 }
 
+void WatcherCard::enterEventHook(QEnterEvent *e) {
+	_hovered = true;
+	update();
+	RpWidget::enterEventHook(e);
+}
+
+void WatcherCard::leaveEventHook(QEvent *e) {
+	_hovered = false;
+	update();
+	RpWidget::leaveEventHook(e);
+}
+
 SessionCard::SessionCard(
 		QWidget *parent,
 		const OnlineSession &session,
@@ -748,7 +781,7 @@ int SessionCard::resizeGetHeight(int newWidth) {
 }
 
 void SessionCard::paintCard(Painter &p) {
-	PaintCardShell(p, width(), height());
+	PaintCardShell(p, width(), height(), hovered());
 	paintStatus(p);
 
 	const auto &labelFont = st::luxuryWatcherLabelFont;
@@ -762,7 +795,7 @@ void SessionCard::paintCard(Painter &p) {
 		// Only the End line of an open session carries the accent.
 		const auto valuePen = (!line || _session.end)
 			? QPen(st::windowFg->c)
-			: QPen(st::windowActiveTextFg->c);
+			: QPen(LuxuryUi::AccentColor());
 		const auto lineRect = style::rtlrect(
 			_lineLeft,
 			top,
@@ -796,7 +829,9 @@ void SessionCard::paintStatus(Painter &p) {
 		width());
 	p.setPen(Qt::NoPen);
 	if (!_session.end) {
-		// Open: a dot with a halo that grows and fades on a sine loop.
+		// Open: an accent dot with a halo that grows and fades on a sine
+		// loop -- the live "online right now" beacon.
+		const auto accent = LuxuryUi::AccentColor();
 		const auto eased = 0.5 - 0.5 * std::cos(2 * kPi * _pulsePhase);
 		const auto halo = st::luxuryWatcherDotSize
 			+ (st::luxuryWatcherPulseDiameter - st::luxuryWatcherDotSize)
@@ -804,11 +839,9 @@ void SessionCard::paintStatus(Painter &p) {
 		const auto center = QPointF(
 			rect.x() + rect.width() / 2.,
 			rect.y() + rect.height() / 2.);
-		auto haloColor = QColor(st::windowActiveTextFg->c);
-		haloColor.setAlphaF(kPulseHaloAlpha * (1. - eased));
-		p.setBrush(haloColor);
+		p.setBrush(LuxuryUi::WithAlpha(accent, kPulseHaloAlpha * (1. - eased)));
 		p.drawEllipse(center, halo / 2., halo / 2.);
-		p.setBrush(st::windowActiveTextFg);
+		p.setBrush(accent);
 		p.drawEllipse(QRectF(rect));
 	} else if (!_session.start) {
 		// Unknown start: an outlined circle with a question mark.
@@ -848,10 +881,9 @@ void SessionCard::paintDuration(Painter &p) {
 		_pillWidth,
 		pillH,
 		width());
-	auto pillColor = QColor(st::windowActiveTextFg->c);
-	pillColor.setAlphaF(kDurationPillAlpha);
+	const auto accent = LuxuryUi::AccentColor();
 	p.setPen(Qt::NoPen);
-	p.setBrush(pillColor);
+	p.setBrush(LuxuryUi::WithAlpha(accent, kDurationPillAlpha));
 	p.drawRoundedRect(
 		QRectF(pillRect),
 		st::luxuryWatcherPillRadius,
@@ -862,9 +894,9 @@ void SessionCard::paintDuration(Painter &p) {
 		p,
 		QPointF(clockX, pillRect.y() + (pillH - clock) / 2),
 		clock,
-		st::windowActiveTextFg->c);
+		accent);
 	p.setFont(font);
-	p.setPen(st::windowActiveTextFg);
+	p.setPen(accent);
 	p.drawText(
 		QPointF(
 			clockX + clock + st::luxuryWatcherPillPadding.left(),
@@ -925,7 +957,7 @@ int EventCard::resizeGetHeight(int newWidth) {
 }
 
 void EventCard::paintCard(Painter &p) {
-	PaintCardShell(p, width(), height());
+	PaintCardShell(p, width(), height(), hovered());
 	const auto &padding = st::luxuryWatcherCardPadding;
 
 	const auto &labelFont = st::luxuryWatcherLabelFont;
@@ -953,7 +985,9 @@ void EventCard::paintCard(Painter &p) {
 		const auto color = ChipColorFor(_kind);
 		auto chipBg = QColor(color->c);
 		chipBg.setAlphaF(kChipAlpha);
-		p.setPen(Qt::NoPen);
+		// A rimmed chip: the fill is a soft tint, the border the same hue
+		// at strength, so the category reads even at a glance.
+		p.setPen(QPen(LuxuryUi::WithAlpha(color->c, kChipBorderAlpha)));
 		p.setBrush(chipBg);
 		p.drawRoundedRect(
 			QRectF(chipRect),
@@ -996,7 +1030,7 @@ void EventCard::paintCard(Painter &p) {
 		}
 		path.closeSubpath();
 		p.setPen(Qt::NoPen);
-		p.setBrush(st::windowSubTextFg);
+		p.setBrush(LuxuryUi::WithAlpha(LuxuryUi::AccentColor(), kChevronAlpha));
 		p.drawPath(path);
 	}
 }
@@ -1286,16 +1320,15 @@ void WatcherHeader::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	// An opaque plate: the list scrolls below this widget and is clipped
 	// by the view geometry, so this is belt-and-braces against any
-	// future overlap, plus the separator under the pinned part.
+	// future overlap, plus the separator under the pinned part. The
+	// hairline is a faint accent line -- the one neon seam of the box.
 	p.fillRect(rect(), st::boxBg);
-	auto hairline = st::windowShadowFg->c;
-	hairline.setAlpha(kHeaderHairlineAlpha);
 	p.fillRect(
 		0,
 		height() - st::lineWidth,
 		width(),
 		st::lineWidth,
-		hairline);
+		LuxuryUi::WithAlpha(LuxuryUi::AccentColor(), 0.14));
 }
 
 void WatcherHeader::resizeEvent(QResizeEvent *e) {
