@@ -4,6 +4,24 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Changed
+
+- Watcher uses a wider, theme-aware reading layout: quiet controls, selectable message text, separate before/after blocks, message identifiers and an explicit Open message action. Decorative neon rims and repeated card entrance animations are removed.
+- Long event details fold by their rendered height, not a character limit. Show full text / Collapse text are explicit buttons; line breaks are preserved and the list relayouts around the full content.
+- The inactive Longest sort option is hidden on Events. Show more records now reveals the rows that previously appeared only as an unreachable earlier-records count.
+- Watcher uses the standard box scroll area with pinned tabs and sorting, rather than a fixed-height nested scroller. Switching tabs or sort order starts at the top of the list.
+
+### Fixed
+
+- Watcher text height now uses the actual available width; long paragraphs no longer paint outside the height reserved for them.
+- Edit events no longer label a previous snapshot as the current version or collapse repeated changes into a misleading original-to-previous comparison. New edits retain both before/after texts; older records show each recoverable change and clearly identify unavailable/current-only data.
+- Reaction events retain the complete message text for new events, including line breaks; removing the last reaction is also recorded. Old records keep their saved context; missing context falls back to explicitly labelled current text when available.
+- New custom reaction records use their available emoji instead of a bare "custom" label; an unavailable emoji is identified by its document ID.
+- Watcher tabs, sorting and tools use the toolkit button input path instead of bespoke press-only activation, with visible keyboard focus and cancelled-click behavior. Keyboard activation no longer fires twice when the pointer also hovers the button.
+- Events observed in the same second retain insertion order instead of shuffling reaction/edit transitions on reload.
+
 ## 1.0.18
 
 ### Changed

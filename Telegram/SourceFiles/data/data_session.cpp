@@ -3180,7 +3180,10 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 			goto proceed;
 		}
 
-		LuxuryMessages::addEditedMessage(existing);
+		const auto afterText = edit.richPage
+			? Iv::FlattenRichPageSummary(edit.richPage).text
+			: edit.textWithEntities.text;
+		LuxuryMessages::addEditedMessage(existing, afterText);
 	}
 
 	FiltersController::invalidate(existing);

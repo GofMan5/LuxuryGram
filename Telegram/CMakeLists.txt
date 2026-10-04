@@ -175,6 +175,7 @@ set(luxurygram_files
         luxury/ui/watcher/watcher_box.h
         luxury/ui/watcher/watcher_components.cpp
         luxury/ui/watcher/watcher_components.h
+        luxury/ui/watcher/watcher_revisions.h
         luxury/ui/message_history/history_inner.cpp
         luxury/ui/message_history/history_inner.h
         luxury/ui/message_history/history_item.cpp

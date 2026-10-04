@@ -6,94 +6,122 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/watcher/watcher_components.h"
 
-#include "ui/effects/ripple_animation.h"
+#include "ui/widgets/buttons.h"
 #include "ui/painter.h"
+#include "ui/qt_object_factory.h"
+
+#include <algorithm>
+#include <cmath>
+#include <QtGui/QPolygonF>
+#include <QtGui/QtEvents>
 
 #include "styles/style_basic.h"
 #include "styles/style_luxury_styles.h"
 #include "styles/style_widgets.h"
 
-#include <algorithm>
-#include <cmath>
-
-#include <QtGui/QPolygonF>
-
 namespace LuxuryUi {
 namespace {
 
 constexpr auto kPi = 3.14159265358979323846;
-
-// Timing (not geometry, so plain constants are fine here).
-constexpr auto kPillDuration = crl::time(150);
-constexpr auto kSpinDuration = crl::time(600);
-
-// The accent fill/border strengths: the fill reads as a tinted glass
-// plate, the border is the neon rim that makes it glow against the dark
-// recessed track.
-constexpr auto kAccentFillAlpha = 0.16;
-constexpr auto kAccentBorderAlpha = 0.55;
-constexpr auto kAccentGlowAlpha = 0.10;
-constexpr auto kTabHoverAlpha = 0.05;
-constexpr auto kDisabledLabelAlpha = 0.4;
-constexpr auto kTabCountAlpha = 0.75;
-constexpr auto kTrackAlpha = 0.22;
-constexpr auto kTrackBorderAlpha = 0.07;
-constexpr auto kToolHoverAlpha = 0.10;
+constexpr auto kSpinDuration = crl::time(450);
 
 } // namespace
 
+class ChoiceButton final : public Ui::LinkButton {
+public:
+	ChoiceButton(QWidget *parent, QString text);
+	void setSelected(bool selected);
+	QAccessible::Role accessibilityRole() override {
+		return AbstractButton::accessibilityRole();
+	}
+	Ui::AccessibilityState accessibilityState() const override {
+		return {
+			.checkable = true,
+			.checked = _selected,
+			.pressed = isDown(),
+			.selectable = true,
+			.selected = _selected,
+		};
+	}
+
+protected:
+	void paintEvent(QPaintEvent *e) override;
+	void focusInEvent(QFocusEvent *e) override {
+		LinkButton::focusInEvent(e);
+		update();
+	}
+	void focusOutEvent(QFocusEvent *e) override {
+		LinkButton::focusOutEvent(e);
+		update();
+	}
+
+private:
+	bool _selected = false;
+
+};
+
+ChoiceButton::ChoiceButton(QWidget *parent, QString text)
+: LinkButton(parent, text, st::luxuryWatcherControl) {
+	setFocusPolicy(Qt::StrongFocus);
+}
+
+void ChoiceButton::setSelected(bool selected) {
+	if (_selected != selected) {
+		_selected = selected;
+		accessibilityStateChanged({ .checked = true, .selected = true });
+		update();
+	}
+}
+
+void ChoiceButton::paintEvent(QPaintEvent *e) {
+	auto p = Painter(this);
+	auto hq = PainterHighQualityEnabler(p);
+	p.setPen(Qt::NoPen);
+	p.setBrush(_selected
+		? WithAlpha(AccentColor(), 0.10)
+		: isOver() ? st::windowBgOver->c : QColor(Qt::transparent));
+	const auto inset = st::lineWidth / 2.;
+	const auto plate = QRectF(inset, inset, width() - 2 * inset,
+		height() - 2 * inset);
+	p.drawRoundedRect(plate, st::luxuryWatcherDetailRadius,
+		st::luxuryWatcherDetailRadius);
+	if (hasFocus()) {
+		p.setPen(QPen(AccentColor(), st::lineWidth));
+		p.setBrush(Qt::NoBrush);
+		p.drawRoundedRect(plate, st::luxuryWatcherDetailRadius,
+			st::luxuryWatcherDetailRadius);
+	}
+	const auto &font = st::luxuryWatcherChipFont;
+	p.setFont(font);
+	p.setPen(_selected ? AccentColor() : st::windowFg->c);
+	const auto text = font->elided(accessibilityName(),
+		std::max(0, width() - 2 * st::luxuryWatcherControlInset));
+	p.drawText(rect(), Qt::AlignCenter, text);
+}
+
 QColor AccentColor() {
-	// Neon azure: saturated enough to glow on the dark surfaces, cool
-	// enough to stay readable next to the semantic chip colors.
-	return QColor(0x56, 0xc2, 0xff);
+	return st::windowActiveTextFg->c;
 }
 
 QColor WithAlpha(const QColor &color, float64 alpha) {
-	auto result = QColor(color);
-	result.setAlphaF(alpha);
+	auto result = color;
+	result.setAlphaF(std::clamp(alpha, 0., 1.));
 	return result;
 }
 
-namespace {
-
-// The recessed plate behind pill controls: a black well with a faint
-// rim, so the glowing active pill reads as raised out of it.
-[[nodiscard]] QColor TrackColor() {
-	return QColor(0, 0, 0, int(255 * kTrackAlpha));
-}
-
-[[nodiscard]] QColor TrackBorderColor() {
-	return QColor(255, 255, 255, int(255 * kTrackBorderAlpha));
-}
-
-} // namespace
-
 void PaintRefreshGlyph(QPainter &p, float64 base, const QColor &color) {
-	// A ~300 degree arc with an arrowhead at its end: the standard
-	// circular-arrow "refresh" mark, drawn instead of an icon asset.
-	const auto radius = base;
-	const auto endDegrees = 90. + 300.;
-	const auto radians = endDegrees * kPi / 180.;
-	const auto end = QPointF(
-		radius * std::cos(radians),
-		-radius * std::sin(radians));
-	// Unit tangent along the counterclockwise sweep at the arc end.
+	const auto radians = 390. * kPi / 180.;
+	const auto end = QPointF(base * std::cos(radians), -base * std::sin(radians));
 	const auto tangent = QPointF(-std::sin(radians), -std::cos(radians));
 	const auto normal = QPointF(-tangent.y(), tangent.x());
-	const auto head = 0.42 * base;
-	const auto half = 0.28 * base;
-	p.drawArc(
-		QRectF(-radius, -radius, 2 * radius, 2 * radius),
-		90 * 16,
-		300 * 16);
-	const auto arrow = QPolygonF({
-		end + tangent * head,
-		end + normal * half,
-		end - normal * half,
-	});
+	p.drawArc(QRectF(-base, -base, 2 * base, 2 * base), 90 * 16, 300 * 16);
 	p.setPen(Qt::NoPen);
 	p.setBrush(color);
-	p.drawConvexPolygon(arrow);
+	p.drawConvexPolygon(QPolygonF({
+		end + tangent * (0.42 * base),
+		end + normal * (0.28 * base),
+		end - normal * (0.28 * base),
+	}));
 }
 
 void PaintGearGlyph(
@@ -101,41 +129,21 @@ void PaintGearGlyph(
 		float64 base,
 		const QColor &color,
 		float64 penWidth) {
-	// Ring, eight teeth and a center hole: a painted gear.
-	const auto ring = 0.78 * base;
-	const auto teethInner = 0.88 * base;
-	const auto teethOuter = 1.18 * base;
-	const auto hole = 0.30 * base;
-	p.drawEllipse(QPointF(0, 0), ring, ring);
+	p.drawEllipse(QPointF(), 0.78 * base, 0.78 * base);
 	for (auto i = 0; i != 8; ++i) {
-		const auto radians = (i * 45.) * kPi / 180.;
-		const auto c = std::cos(radians);
-		const auto s = std::sin(radians);
-		p.drawLine(
-			QPointF(teethInner * c, teethInner * s),
-			QPointF(teethOuter * c, teethOuter * s));
+		const auto radians = i * kPi / 4.;
+		const auto point = QPointF(std::cos(radians), std::sin(radians));
+		p.drawLine(point * (0.88 * base), point * (1.18 * base));
 	}
-	p.setPen(QPen(
-		color,
-		std::max(1., penWidth / 2.),
-		Qt::SolidLine,
-		Qt::RoundCap,
-		Qt::RoundJoin));
-	p.drawEllipse(QPointF(0, 0), hole, hole);
+	p.setPen(QPen(color, std::max(float64(st::lineWidth), penWidth / 2.),
+		Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+	p.drawEllipse(QPointF(), 0.30 * base, 0.30 * base);
 }
 
-void PaintClockGlyph(
-		QPainter &p,
-		const QPointF &topLeft,
-		float64 size,
+void PaintClockGlyph(QPainter &p, const QPointF &topLeft, float64 size,
 		const QColor &color) {
-	const auto pen = QPen(
-		color,
-		std::max(1., size / 7.),
-		Qt::SolidLine,
-		Qt::RoundCap,
-		Qt::RoundJoin);
-	p.setPen(pen);
+	p.setPen(QPen(color, std::max(float64(st::lineWidth), size / 7.),
+		Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
 	p.setBrush(Qt::NoBrush);
 	const auto rect = QRectF(topLeft, QSizeF(size, size));
 	p.drawEllipse(rect);
@@ -145,51 +153,56 @@ void PaintClockGlyph(
 }
 
 ToolButton::ToolButton(QWidget *parent, ToolGlyph glyph)
-: RpWidget(parent)
+: AbstractButton(parent)
 , _glyph(glyph) {
 	setFixedSize(st::luxuryWatcherIconSize, st::luxuryWatcherIconSize);
-	setCursor(style::cur_pointer);
+	setFocusPolicy(Qt::StrongFocus);
+	setClickedCallback([=] { _clicks.fire({}); });
 }
 
 void ToolButton::spin() {
-	_spin.start(
-		[=](float64) { update(); },
-		0.,
-		1.,
-		kSpinDuration,
+	_spin.start([=](float64) { update(); }, 0., 1., kSpinDuration,
 		anim::easeOutCubic);
+}
+
+void ToolButton::onStateChanged(State was, StateChangeSource source) {
+	update();
+}
+
+void ToolButton::focusInEvent(QFocusEvent *e) {
+	AbstractButton::focusInEvent(e);
+	update();
+}
+
+void ToolButton::focusOutEvent(QFocusEvent *e) {
+	AbstractButton::focusOutEvent(e);
+	update();
 }
 
 void ToolButton::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
-	if (_hovered) {
-		// A soft accent disc under the glyph: the hover glint.
-		p.setPen(Qt::NoPen);
-		p.setBrush(WithAlpha(AccentColor(), kToolHoverAlpha));
-		p.drawEllipse(QRectF(0, 0, width(), height()));
+	const auto inset = st::lineWidth / 2.;
+	const auto plate = QRectF(inset, inset, width() - 2 * inset,
+		height() - 2 * inset);
+	if (isOver() || isDown() || hasFocus()) {
+		p.setPen(hasFocus() ? QPen(AccentColor(), st::lineWidth) : QPen(Qt::NoPen));
+		p.setBrush(st::windowBgOver);
+		p.drawRoundedRect(plate, st::luxuryWatcherDetailRadius,
+			st::luxuryWatcherDetailRadius);
 	}
-	if (_ripple) {
-		_ripple->paint(p, 0, 0, width());
-		if (_ripple->empty()) {
-			_ripple.reset();
-		}
-	}
-	paintIcon(p, (_hovered ? AccentColor() : st::windowSubTextFg->c));
+	paintIcon(p, isOver() ? AccentColor() : st::windowSubTextFg->c);
 }
 
 void ToolButton::paintIcon(QPainter &p, const QColor &color) {
 	const auto base = st::luxuryWatcherIconSize / 4.;
-	const auto penWidth = std::max(1., base / 4.);
+	const auto penWidth = std::max(float64(st::lineWidth), base / 4.);
 	p.save();
-	p.translate(QPointF(width() / 2., height() / 2.));
-	p.rotate(_spin.value(1.) * 360.);
-	p.setPen(QPen(
-		color,
-		penWidth,
-		Qt::SolidLine,
-		Qt::RoundCap,
-		Qt::RoundJoin));
+	p.translate(width() / 2., height() / 2.);
+	if (_glyph == ToolGlyph::Refresh) {
+		p.rotate(_spin.value(1.) * 360.);
+	}
+	p.setPen(QPen(color, penWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
 	p.setBrush(Qt::NoBrush);
 	if (_glyph == ToolGlyph::Refresh) {
 		PaintRefreshGlyph(p, base, color);
@@ -199,438 +212,162 @@ void ToolButton::paintIcon(QPainter &p, const QColor &color) {
 	p.restore();
 }
 
-void ToolButton::mousePressEvent(QMouseEvent *e) {
-	if (e->button() == Qt::LeftButton) {
-		_pressed = true;
-		if (!_ripple) {
-			_ripple = std::make_unique<Ui::RippleAnimation>(
-				st::defaultRippleAnimation,
-				Ui::RippleAnimation::RoundRectMask(
-					size(),
-					st::luxuryWatcherIconSize / 2),
-				[=] { update(); });
-		}
-		_ripple->add(e->pos());
+ActionButton::ActionButton(QWidget *parent, const QString &text)
+: LinkButton(parent, text, st::luxuryWatcherAction) {
+	setFocusPolicy(Qt::StrongFocus);
+}
+
+void ActionButton::focusInEvent(QFocusEvent *e) {
+	LinkButton::focusInEvent(e);
+	update();
+}
+
+void ActionButton::focusOutEvent(QFocusEvent *e) {
+	LinkButton::focusOutEvent(e);
+	update();
+}
+
+void ActionButton::paintEvent(QPaintEvent *e) {
+	LinkButton::paintEvent(e);
+	if (hasFocus()) {
+		auto p = Painter(this);
+		p.setPen(QPen(AccentColor(), st::lineWidth));
+		p.drawLine(0, height() - st::lineWidth,
+			width(), height() - st::lineWidth);
 	}
 }
 
-void ToolButton::mouseReleaseEvent(QMouseEvent *e) {
-	if (base::take(_pressed)) {
-		if (_ripple) {
-			_ripple->lastStop();
-		}
-		if (rect().contains(e->pos())) {
-			_clicks.fire({});
-		}
+SegmentControl::SegmentControl(QWidget *parent, std::array<QString, 3> labels)
+: RpWidget(parent) {
+	for (auto i = 0; i != 3; ++i) {
+		_buttons[i] = Ui::CreateChild<ChoiceButton>(this, labels[i]);
+		_buttons[i]->setClickedCallback([=] {
+			setIndex(i);
+			_changes.fire_copy(i);
+		});
 	}
-}
-
-void ToolButton::enterEventHook(QEnterEvent *e) {
-	_hovered = true;
-	update();
-	RpWidget::enterEventHook(e);
-}
-
-void ToolButton::leaveEventHook(QEvent *e) {
-	_hovered = false;
-	update();
-	RpWidget::leaveEventHook(e);
-}
-
-SegmentControl::SegmentControl(
-	QWidget *parent,
-	std::array<QString, 3> labels)
-: RpWidget(parent)
-, _labels(std::move(labels)) {
-	resize(contentWidth(), st::luxuryWatcherSortHeight);
-	setCursor(style::cur_pointer);
+	setIndex(0);
 }
 
 int SegmentControl::contentWidth() const {
 	auto result = 0;
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		result += segmentWidth(i) + st::luxuryWatcherSortSkip;
+	for (auto i = 0; i != (_lastEnabled ? 3 : 2); ++i) {
+		result += _buttons[i]->naturalWidth() + st::luxuryWatcherSortSkip;
 	}
 	return result - st::luxuryWatcherSortSkip;
 }
 
-int SegmentControl::segmentWidth(int index) const {
-	return st::luxuryWatcherChipFont->width(_labels[index])
-		+ st::luxuryWatcherPillPadding.left()
-		+ st::luxuryWatcherPillPadding.right();
-}
-
-int SegmentControl::segmentLeft(int index) const {
-	auto result = 0;
-	for (auto i = 0; i != index; ++i) {
-		result += segmentWidth(i) + st::luxuryWatcherSortSkip;
-	}
-	return result;
-}
-
 void SegmentControl::setIndex(int index) {
-	if (index == _selected) {
+	if (index < 0 || index >= 3 || (index == 2 && !_lastEnabled)) {
 		return;
 	}
-	_selected = index;
-	// A programmatic move is a correction, not a gesture: snap the pill.
-	_pillLeft.stop();
-	_pillWidth.stop();
-	update();
+	for (auto i = 0; i != 3; ++i) {
+		_buttons[i]->setSelected(i == index);
+	}
 }
 
 void SegmentControl::setLastEnabled(bool enabled) {
-	if (_lastEnabled != enabled) {
-		_lastEnabled = enabled;
-		update();
+	_lastEnabled = enabled;
+	_buttons[2]->setDisabled(!enabled);
+	_buttons[2]->setVisible(enabled);
+	layoutButtons();
+}
+
+void SegmentControl::layoutButtons() {
+	const auto count = _lastEnabled ? 3 : 2;
+	const auto gap = st::luxuryWatcherSortSkip;
+	const auto available = std::max(0, width() - (count - 1) * gap);
+	auto left = 0;
+	for (auto i = 0; i != count; ++i) {
+		const auto w = available / count + (i == count - 1 ? available % count : 0);
+		_buttons[i]->setGeometryToLeft(left, 0, w, height(), width());
+		left += w + gap;
 	}
 }
 
-void SegmentControl::select(int index) {
-	if (index == _selected) {
-		return;
-	}
-	const auto fromLeft = segmentLeft(_selected);
-	const auto fromWidth = segmentWidth(_selected);
-	_selected = index;
-	const auto toLeft = segmentLeft(_selected);
-	const auto toWidth = segmentWidth(_selected);
-	const auto updater = [=] { update(); };
-	// easeOutCubic: the pill glides out fast and settles smoothly, the
-	// same curve the section sliders use.
-	_pillLeft.start(
-		updater,
-		fromLeft,
-		toLeft,
-		kPillDuration,
-		anim::easeOutCubic);
-	_pillWidth.start(
-		updater,
-		fromWidth,
-		toWidth,
-		kPillDuration,
-		anim::easeOutCubic);
-	_changes.fire_copy(_selected);
-}
-
-void SegmentControl::paintEvent(QPaintEvent *e) {
-	auto p = Painter(this);
-	auto hq = PainterHighQualityEnabler(p);
-
-	// The same recessed-track + neon-pill language as the tab bar, at a
-	// smaller scale.
-	p.setPen(QPen(TrackBorderColor(), st::lineWidth));
-	p.setBrush(TrackColor());
-	p.drawRoundedRect(
-		QRectF(0.5, 0.5, width() - 1., height() - 1.),
-		height() / 2.,
-		height() / 2.);
-
-	const auto accent = AccentColor();
-	const auto pillLeft = _pillLeft.value(segmentLeft(_selected));
-	const auto pillWidth = _pillWidth.value(segmentWidth(_selected));
-	const auto pillRect = QRectF(
-		pillLeft + 1.,
-		1.,
-		pillWidth - 2.,
-		height() - 2.);
-	p.setPen(Qt::NoPen);
-	p.setBrush(WithAlpha(accent, kAccentFillAlpha));
-	p.drawRoundedRect(pillRect, pillRect.height() / 2., pillRect.height() / 2.);
-	p.setPen(QPen(WithAlpha(accent, kAccentBorderAlpha), st::lineWidth));
-	p.setBrush(Qt::NoBrush);
-	p.drawRoundedRect(
-		pillRect.adjusted(0.5, 0.5, -0.5, -0.5),
-		pillRect.height() / 2.,
-		pillRect.height() / 2.);
-
-	const auto &font = st::luxuryWatcherChipFont;
-	p.setFont(font);
-	const auto textTop = (height() - font->height) / 2;
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		const auto disabled = (i == 2 && !_lastEnabled);
-		if (i == _selected) {
-			p.setPen(QPen(accent));
-		} else {
-			auto inactive = WithAlpha(
-				st::windowSubTextFg->c,
-				disabled ? kDisabledLabelAlpha : 1.);
-			p.setPen(QPen(inactive));
-		}
-		const auto left = segmentLeft(i);
-		const auto width = segmentWidth(i);
-		const auto textWidth = font->width(_labels[i]);
-		p.drawText(
-			QPointF(left + (width - textWidth) / 2, textTop + font->ascent),
-			_labels[i]);
-	}
-}
-
-void SegmentControl::mousePressEvent(QMouseEvent *e) {
-	if (e->button() != Qt::LeftButton) {
-		return;
-	}
-	const auto x = e->pos().x();
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		const auto left = segmentLeft(i);
-		// The skip between segments belongs to the segment before it, so
-		// the trailing gap after the last one is not a dead zone that
-		// still selects it.
-		const auto reach = left
-			+ segmentWidth(i)
-			+ (i == int(_labels.size()) - 1
-				? 0
-				: st::luxuryWatcherSortSkip);
-		if (x < reach) {
-			// The last segment can be meaningless for the current tab and
-			// paints disabled there; the press bounces off instead of
-			// selecting it.
-			if (!(i == 2 && !_lastEnabled)) {
-				select(i);
-			}
-			return;
-		}
-	}
-}
-
-void SegmentControl::enterEventHook(QEnterEvent *e) {
-	update();
-	RpWidget::enterEventHook(e);
-}
-
-void SegmentControl::leaveEventHook(QEvent *e) {
-	update();
-	RpWidget::leaveEventHook(e);
+void SegmentControl::resizeEvent(QResizeEvent *e) {
+	RpWidget::resizeEvent(e);
+	layoutButtons();
 }
 
 TabsBar::TabsBar(QWidget *parent, std::array<QString, 3> labels)
 : RpWidget(parent)
 , _labels(std::move(labels)) {
 	setFixedHeight(st::luxuryWatcherTabHeight);
-	setCursor(style::cur_pointer);
-	setMouseTracking(true);
+	for (auto i = 0; i != 3; ++i) {
+		_buttons[i] = Ui::CreateChild<ChoiceButton>(this, _labels[i]);
+		_buttons[i]->setIsPageTab(true);
+		_buttons[i]->setClickedCallback([=] {
+			setIndex(i);
+			_changes.fire_copy(i);
+		});
+	}
+	setIndex(0);
 }
 
 void TabsBar::setIndex(int index) {
-	if (index == _selected) {
+	if (index < 0 || index >= 3) {
 		return;
 	}
-	_selected = index;
-	// A programmatic move is a correction, not a gesture: snap the pill.
-	_pillLeft.stop();
-	update();
+	for (auto i = 0; i != 3; ++i) {
+		_buttons[i]->setSelected(i == index);
+	}
 }
 
 void TabsBar::setCounts(std::array<int, 3> counts) {
-	for (auto i = 0; i != int(counts.size()); ++i) {
-		_counts[i] = counts[i] > 0 ? QString::number(counts[i]) : QString();
+	for (auto i = 0; i != 3; ++i) {
+		_buttons[i]->setText(_labels[i] + (counts[i] > 0
+			? u" · "_q + QString::number(counts[i]) : QString()));
 	}
-	update();
+	layoutButtons();
 }
 
-int TabsBar::segmentWidth(int index) const {
-	return index < 2
-		? width() / 3
-		: width() - 2 * (width() / 3);
+void TabsBar::resizeEvent(QResizeEvent *e) {
+	RpWidget::resizeEvent(e);
+	layoutButtons();
 }
 
-int TabsBar::segmentLeft(int index) const {
-	return index * (width() / 3);
-}
-
-void TabsBar::select(int index) {
-	if (index == _selected) {
-		return;
+void TabsBar::layoutButtons() {
+	const auto gap = st::luxuryWatcherTabSkip;
+	const auto available = std::max(0, width() - 2 * gap);
+	auto left = 0;
+	for (auto i = 0; i != 3; ++i) {
+		const auto w = available / 3 + (i == 2 ? available % 3 : 0);
+		_buttons[i]->setGeometryToLeft(left, 0, w, height(), width());
+		left += w + gap;
 	}
-	const auto fromLeft = segmentLeft(_selected);
-	_selected = index;
-	const auto toLeft = segmentLeft(_selected);
-	_pillLeft.start(
-		[=] { update(); },
-		fromLeft,
-		toLeft,
-		kPillDuration,
-		anim::easeOutCubic);
-	_changes.fire_copy(_selected);
-}
-
-void TabsBar::paintEvent(QPaintEvent *e) {
-	auto p = Painter(this);
-	auto hq = PainterHighQualityEnabler(p);
-
-	// The recessed track the pill glides inside: a dark well with a
-	// faint rim, so the active pill reads as raised and lit.
-	p.setPen(QPen(TrackBorderColor(), st::lineWidth));
-	p.setBrush(TrackColor());
-	p.drawRoundedRect(
-		QRectF(0.5, 0.5, width() - 1., height() - 1.),
-		height() / 2.,
-		height() / 2.);
-
-	const auto accent = AccentColor();
-	const auto pillLeft = _pillLeft.value(segmentLeft(_selected));
-	const auto pillRect = QRectF(
-		pillLeft + st::luxuryWatcherTabSkip,
-		st::luxuryWatcherTabSkip,
-		segmentWidth(_selected) - 2 * st::luxuryWatcherTabSkip,
-		height() - 2 * st::luxuryWatcherTabSkip);
-	// The glow: a larger, very soft accent plate under the rimmed pill.
-	p.setPen(Qt::NoPen);
-	p.setBrush(WithAlpha(accent, kAccentGlowAlpha));
-	p.drawRoundedRect(
-		pillRect.adjusted(-2, -2, 2, 2),
-		pillRect.height() / 2. + 2,
-		pillRect.height() / 2. + 2);
-	p.setBrush(WithAlpha(accent, kAccentFillAlpha));
-	p.drawRoundedRect(
-		pillRect,
-		pillRect.height() / 2.,
-		pillRect.height() / 2.);
-	p.setPen(QPen(WithAlpha(accent, kAccentBorderAlpha), st::lineWidth));
-	p.setBrush(Qt::NoBrush);
-	p.drawRoundedRect(
-		pillRect.adjusted(0.5, 0.5, -0.5, -0.5),
-		pillRect.height() / 2.,
-		pillRect.height() / 2.);
-
-	const auto &font = st::luxuryWatcherTabFont;
-	const auto &countFont = st::luxuryWatcherTabCountFont;
-	const auto textTop = (height() - font->height) / 2;
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		if (i == _hovered && i != _selected) {
-			p.setPen(Qt::NoPen);
-			p.setBrush(WithAlpha(st::windowFg->c, kTabHoverAlpha));
-			p.drawRoundedRect(
-				QRectF(
-					segmentLeft(i) + st::luxuryWatcherTabSkip,
-					st::luxuryWatcherTabSkip,
-					segmentWidth(i) - 2 * st::luxuryWatcherTabSkip,
-					height() - 2 * st::luxuryWatcherTabSkip),
-				(height() - 2 * st::luxuryWatcherTabSkip) / 2.,
-				(height() - 2 * st::luxuryWatcherTabSkip) / 2.);
-		}
-		const auto labelWidth = font->width(_labels[i]);
-		const auto countWidth = _counts[i].isEmpty()
-			? 0
-			: countFont->spacew
-				+ countFont->width(u"·"_q)
-				+ countFont->spacew
-				+ countFont->width(_counts[i]);
-		const auto total = labelWidth + countWidth;
-		const auto left = segmentLeft(i) + (segmentWidth(i) - total) / 2;
-		p.setFont(font);
-		p.setPen(QPen(i == _selected ? accent : st::windowSubTextFg->c));
-		p.drawText(QPointF(left, textTop + font->ascent), _labels[i]);
-		if (!_counts[i].isEmpty()) {
-			auto countColor = WithAlpha(
-				i == _selected ? accent : st::windowSubTextFg->c,
-				kTabCountAlpha);
-			p.setFont(countFont);
-			p.setPen(countColor);
-			const auto countTop = (height() - countFont->height) / 2;
-			p.drawText(
-				QPointF(
-					left + labelWidth + countFont->spacew,
-					countTop + countFont->ascent),
-				u"·"_q);
-			p.drawText(
-				QPointF(
-					left
-						+ labelWidth
-						+ 2 * countFont->spacew
-						+ countFont->width(u"·"_q),
-					countTop + countFont->ascent),
-				_counts[i]);
-		}
-	}
-}
-
-void TabsBar::mousePressEvent(QMouseEvent *e) {
-	if (e->button() != Qt::LeftButton) {
-		return;
-	}
-	const auto x = e->pos().x();
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		if (x < segmentLeft(i) + segmentWidth(i)) {
-			select(i);
-			return;
-		}
-	}
-}
-
-void TabsBar::mouseMoveEvent(QMouseEvent *e) {
-	const auto x = e->pos().x();
-	auto hovered = -1;
-	for (auto i = 0; i != int(_labels.size()); ++i) {
-		if (x < segmentLeft(i) + segmentWidth(i)) {
-			hovered = i;
-			break;
-		}
-	}
-	if (hovered != _hovered) {
-		_hovered = hovered;
-		update();
-	}
-}
-
-void TabsBar::leaveEventHook(QEvent *e) {
-	_hovered = -1;
-	update();
-	RpWidget::leaveEventHook(e);
 }
 
 EmptyBlock::EmptyBlock(QWidget *parent, const QString &text)
-: RpWidget(parent)
-, _text(text) {
-	// A fixed box: the glyph circle, a skip, and one label line.
-	const auto circle = st::luxuryWatcherEmptyGlyphSize
-		+ 2 * st::luxuryWatcherCardSkip;
-	setFixedHeight(
-		circle
-		+ st::luxuryWatcherCardSkip
-		+ st::luxuryWatcherEmptyFont->height);
+: RpWidget(parent) {
+	setText(text);
 }
 
 void EmptyBlock::setText(const QString &text) {
-	if (_text != text) {
-		_text = text;
-		update();
-	}
+	_text.setText(st::boxTextStyle, text, kPlainTextOptions);
+	resizeToWidth(width());
+	update();
+}
+
+int EmptyBlock::resizeGetHeight(int newWidth) {
+	return st::luxuryWatcherEmptyGlyphSize
+		+ 2 * st::luxuryWatcherDetailSkip
+		+ _text.countHeight(std::max(1, newWidth));
 }
 
 void EmptyBlock::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
-
-	// A dim clock in a soft accent halo above the label: a recognizable
-	// "nothing recorded yet" mark without an icon asset.
 	const auto glyph = st::luxuryWatcherEmptyGlyphSize;
-	const auto circle = glyph + 2 * st::luxuryWatcherCardSkip;
-	p.setPen(Qt::NoPen);
-	p.setBrush(WithAlpha(AccentColor(), 0.09));
-	p.drawEllipse(
-		QPointF(width() / 2., circle / 2.),
-		circle / 2.,
-		circle / 2.);
-	PaintClockGlyph(
-		p,
-		QPointF(width() / 2. - glyph / 2., circle / 2. - glyph / 2.),
-		glyph,
-		WithAlpha(AccentColor(), 0.5));
-
-	const auto &font = st::luxuryWatcherEmptyFont;
-	p.setFont(font);
-	auto textColor = QColor(st::windowSubTextFg->c);
-	textColor.setAlphaF(0.75);
-	p.setPen(textColor);
-	p.drawText(
-		QRectF(
-			0,
-			circle + st::luxuryWatcherCardSkip,
-			width(),
-			font->height),
-		_text,
-		QTextOption(Qt::AlignHCenter | Qt::AlignTop));
+	PaintClockGlyph(p, QPointF((width() - glyph) / 2., 0.), glyph,
+		st::windowSubTextFg->c);
+	p.setPen(st::windowSubTextFg);
+	_text.draw(p, {
+		.position = { 0, glyph + st::luxuryWatcherDetailSkip },
+		.availableWidth = width(),
+		.align = style::al_top,
+		.clip = e->rect(),
+	});
 }
 
 } // namespace LuxuryUi

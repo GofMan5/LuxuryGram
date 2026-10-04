@@ -114,37 +114,66 @@ luxuryServiceTimeBadgeTrailingInset: 3px;
 luxuryServiceTimeBadgeLastLineWidthAdd: 9px;
 
 // Watcher box (luxury/ui/watcher/watcher_box.cpp and
-// luxury/ui/watcher/watcher_components.cpp). Geometry only: the
-// fixed accent colors are palette-only in this style system and live in
-// the .cpp as style::internal::OwnedColor values.
-luxuryWatcherCardRadius: 10px;
-luxuryWatcherCardHeight: 64px;
-luxuryWatcherCardSkip: 6px;
-luxuryWatcherCardRise: 8px;
-luxuryWatcherCardPadding: margins(12px, 8px, 12px, 8px);
+// luxury/ui/watcher/watcher_components.cpp). Scalable geometry and type;
+// surfaces and interaction colors follow the application theme.
+luxuryWatcherCardRadius: 12px;
+luxuryWatcherCardSkip: 10px;
+luxuryWatcherCardPadding: margins(16px, 14px, 16px, 14px);
+luxuryWatcherDetailSkip: 12px;
+luxuryWatcherMetaSkip: 4px;
+luxuryWatcherDetailPadding: 10px;
+luxuryWatcherDetailRadius: 6px;
+luxuryWatcherPreviewHeight: 100px;
 luxuryWatcherDotSize: 10px;
 luxuryWatcherPulseDiameter: 16px;
 luxuryWatcherPillRadius: 12px;
 luxuryWatcherPillPadding: margins(8px, 4px, 8px, 4px);
-luxuryWatcherExpandGlyphWidth: 10px;
-luxuryWatcherExpandGlyphHeight: 6px;
+
 luxuryWatcherSortHeight: 32px;
+luxuryWatcherControlInset: 10px;
 luxuryWatcherSortSkip: 4px;
 luxuryWatcherIconSize: 32px;
 luxuryWatcherIconSkip: 8px;
 luxuryWatcherClockSize: 14px;
 luxuryWatcherTabHeight: 38px;
 luxuryWatcherTabSkip: 3px;
-luxuryWatcherTabFont: font(13px semibold);
-luxuryWatcherTabCountFont: font(12px);
 luxuryWatcherHeaderSkip: 8px;
-luxuryWatcherViewHeight: 420px;
+luxuryWatcherWidth: 520px;
+luxuryWatcherViewHeight: 480px;
 luxuryWatcherEmptyGlyphSize: 28px;
-luxuryWatcherEmptyFont: font(12px);
 luxuryWatcherChipFont: font(12px semibold);
 luxuryWatcherLabelFont: font(12px);
 luxuryWatcherValueFont: font(12px semibold);
 luxuryWatcherMarkFont: font(11px semibold);
-luxuryWatcherFootnoteLabel: FlatLabel(boxLabel) {
+luxuryWatcherSummaryLabel: FlatLabel(boxLabel) {
+	minWidth: 1px;
+	maxHeight: 0px;
+	style: TextStyle(boxTextStyle) {
+		font: font(14px semibold);
+	}
+}
+luxuryWatcherValueLabel: FlatLabel(boxLabel) {
+	minWidth: 1px;
+	maxHeight: 0px;
+	style: TextStyle(boxTextStyle) {
+		font: font(14px);
+	}
+}
+luxuryWatcherMetaLabel: FlatLabel(boxLabel) {
+	minWidth: 1px;
+	maxHeight: 0px;
 	textFg: windowSubTextFg;
+	style: TextStyle(boxTextStyle) {
+		font: font(12px);
+	}
+}
+luxuryWatcherAction: LinkButton(defaultLinkButton) {
+	font: font(12px semibold);
+	overFont: font(12px semibold);
+	padding: margins(0px, 6px, 0px, 6px);
+}
+luxuryWatcherControl: LinkButton(defaultLinkButton) {
+	font: font(12px semibold);
+	overFont: font(12px semibold);
+	padding: margins(10px, 6px, 10px, 6px);
 }

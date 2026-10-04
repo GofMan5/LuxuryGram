@@ -106,7 +106,9 @@ void map(not_null<HistoryItem*> item, LuxuryMessageBase &message) {
 	message.textEntities = serializedText.second;
 }
 
-void addEditedMessage(not_null<HistoryItem *> item) {
+void addEditedMessage(
+		not_null<HistoryItem*> item,
+		const QString &afterText) {
 	EditedMessage message;
 	map(item, message);
 
@@ -122,6 +124,22 @@ void addEditedMessage(not_null<HistoryItem *> item) {
 	// right-click land before the revision it should be offering. One row, no
 	// fsync under WAL.
 	LuxuryDatabase::addEditedMessage(message);
+	if (WatchGate()) {
+		auto event = WatchEvent();
+		event.userId = message.userId;
+		event.dialogId = message.dialogId;
+		event.peerId = message.peerId;
+		event.messageId = message.messageId;
+		event.kind = static_cast<int>(WatchKind::MessageEdited);
+		// Match the snapshot's observation time so the merged timeline can
+		// omit its legacy row, while retaining the actual post-edit text.
+		event.at = message.entityCreateDate;
+		event.title = message.text;
+		event.extra = afterText.toStdString();
+		LuxuryDatabase::async([event = std::move(event)]() mutable {
+			LuxuryDatabase::addWatchEvent(std::move(event));
+		});
+	}
 }
 
 std::vector<LuxuryMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit) {
@@ -400,7 +418,7 @@ void noteReactions(
 		const QString &summary,
 		const QString &context,
 		int at) {
-	if (!WatchGate() || summary.isEmpty()) {
+	if (!WatchGate()) {
 		return;
 	}
 	const auto userId = DatabaseUserId(peer->session());

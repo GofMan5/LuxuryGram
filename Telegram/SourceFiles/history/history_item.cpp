@@ -5499,16 +5499,26 @@ void HistoryItem::updateReactions(const MTPMessageReactions *reactions) {
 	// LuxuryGram: watch hook. A genuine change of this message's reaction
 	// state is a watchable event: the resulting counted summary is what
 	// the Watcher timeline shows.
+	auto summary = QString();
 	if (reactions) {
-		auto summary = QString();
 		for (const auto &count : reactions->data().vresults().v) {
 			const auto &entry = count.data();
 			const auto reactionId = Data::ReactionFromMTP(entry.vreaction());
-			const auto label = reactionId.paid()
+			auto label = reactionId.paid()
 				? u"⭐"_q
-				: reactionId.custom()
-				? u"custom"_q
 				: reactionId.emoji();
+			if (const auto custom = reactionId.custom()) {
+				const auto document = _history->owner().document(custom);
+				if (const auto sticker = document->sticker()) {
+					label = sticker->alt;
+				}
+				if (label.isEmpty()) {
+					label = tr::luxury_WatcherCustomReaction(
+						tr::now,
+						lt_id,
+						QString::number(custom));
+				}
+			}
 			if (label.isEmpty()) {
 				continue;
 			}
@@ -5517,22 +5527,14 @@ void HistoryItem::updateReactions(const MTPMessageReactions *reactions) {
 			}
 			summary += label + u" ×"_q + QString::number(entry.vcount().v);
 		}
-		if (!summary.isEmpty()) {
-			// The message body rides along so the timeline can show what
-			// the reactions landed on, not just the bare emoji counts.
-			auto context = originalText().text;
-			context.replace(u'\n', u' ');
-			if (context.size() > 200) {
-				context = context.left(200) + u"…"_q;
-			}
-			LuxuryOnline::noteReactions(
-				_history->peer,
-				id.bare,
-				summary,
-				context,
-				base::unixtime::now());
-		}
 	}
+	const auto context = originalText().text;
+	LuxuryOnline::noteReactions(
+		_history->peer,
+		id.bare,
+		summary,
+		context.isEmpty() ? notificationText().text : context,
+		base::unixtime::now());
 	const auto hasUnread = _reactions && _reactions->hasUnread();
 	if (hasUnread && !hadUnread) {
 		_flags |= MessageFlag::HasUnreadReaction;

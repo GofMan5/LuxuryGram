@@ -88,10 +88,10 @@ public:
 // otherwise identical to the OnlineEvent ones. kind is a plain int, not the
 // enum below, so sqlite_orm never has to map it. messageId keys the gift
 // service message for reload dedup (a restart re-materializes old gifts);
-// profile rows have none. title holds the gift label, the old name or the old
-// username; extra holds the new name or username. Display names are never
-// resolved here -- they change, which is the point, so the viewer resolves
-// them when it opens.
+// profile rows have none. title holds the gift label or the old profile value;
+// extra holds the new profile value. Reaction rows store counts and message
+// text; edit rows store the before/after text. Display names resolve in the
+// viewer, not in the stored row.
 enum class WatchKind : int {
 	GiftSent = 1,
 	GiftReceived = 2,
@@ -99,6 +99,7 @@ enum class WatchKind : int {
 	UsernameChanged = 4,
 	PhotoUpdated = 5,
 	ReactionsChanged = 6,
+	MessageEdited = 7,
 };
 
 class WatchEvent

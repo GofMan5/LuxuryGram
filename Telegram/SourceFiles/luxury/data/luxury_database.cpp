@@ -813,7 +813,9 @@ std::vector<WatchEvent> getWatchEvents(ID userId, ID dialogId, int totalLimit) {
 				column<WatchEvent>(&WatchEvent::userId) == userId and
 				column<WatchEvent>(&WatchEvent::dialogId) == dialogId
 			),
-			order_by(column<WatchEvent>(&WatchEvent::at)).desc(),
+			multi_order_by(
+				order_by(column<WatchEvent>(&WatchEvent::at)).desc(),
+				order_by(column<WatchEvent>(&WatchEvent::fakeId)).desc()),
 			limit(totalLimit)
 		);
 	} catch (const std::exception &ex) {

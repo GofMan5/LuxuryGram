@@ -10,10 +10,12 @@
 #include "base/unique_qptr.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
+#include "history/history_item.h"
 #include "lang_auto.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/ui/watcher/watcher_components.h"
+#include "luxury/ui/watcher/watcher_revisions.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "main/main_session.h"
 #include "ui/effects/animations.h"
@@ -24,14 +26,21 @@
 #include "ui/widgets/menu/menu.h"
 #include "ui/widgets/menu/menu_add_action_callback.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
+#include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
-#include "ui/widgets/scroll_area.h"
 #include "ui/painter.h"
 #include "ui/qt_object_factory.h"
 #include "window/window_session_controller.h"
 
-#include <QtGui/QPainterPath>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <optional>
+#include <set>
+#include <tuple>
+#include <vector>
+#include <QtCore/QLocale>
 
 #include "styles/style_basic.h"
 #include "styles/style_boxes.h"
@@ -40,32 +49,12 @@
 #include "styles/style_settings.h"
 #include "styles/style_widgets.h"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <map>
-#include <optional>
-#include <set>
-#include <vector>
-
 namespace LuxuryWatcher {
 namespace {
 
 constexpr auto kPi = 3.14159265358979323846;
 
-// Fixed semantic accents. Literal color values are palette-only in this
-// style system (a .style module cannot define them), and adding them to
-// the shared lib_ui palette would bump the submodule for one box, so they
-// live here as owned colors instead: like Telegram's media-viewer accents
-// they are meant to stay the same in day and night themes.
 const auto kOkFg = style::internal::OwnedColor(QColor(0x31, 0xc4, 0x8d));
-const auto kGiftFg = style::internal::OwnedColor(QColor(0x5e, 0xb5, 0xf7));
-const auto kNameFg = style::internal::OwnedColor(QColor(0x31, 0xc4, 0x8d));
-const auto kUsernameFg = style::internal::OwnedColor(QColor(0xa7, 0x8b, 0xfa));
-const auto kPhotoFg = style::internal::OwnedColor(QColor(0xf5, 0x9e, 0x0b));
-const auto kDeletedFg = style::internal::OwnedColor(QColor(0xef, 0x5b, 0x5b));
-const auto kEditedFg = style::internal::OwnedColor(QColor(0x38, 0xb6, 0xe3));
-const auto kReactionFg = style::internal::OwnedColor(QColor(0xf4, 0x7f, 0xb6));
 
 // Timeline kinds beyond the stored WatchKind set: the deleted and edited
 // message tables feed the same Events timeline, so their kinds live here
@@ -74,19 +63,11 @@ constexpr auto kKindDeleted = 100;
 constexpr auto kKindEdited = 101;
 
 // Timing (not geometry, so plain constants are fine here).
-constexpr auto kCardAppearDuration = crl::time(150);
-constexpr auto kCardStagger = crl::time(20);
-constexpr auto kCardStaggerMax = crl::time(200);
 constexpr auto kPulseDuration = crl::time(1600);
 
-constexpr auto kCardBgBlend = 0.04;
-constexpr auto kCardHoverLift = 0.02;
-constexpr auto kCardBorderAlpha = 40;
-constexpr auto kCardHoverBorderAlpha = 0.43;
-constexpr auto kChipBorderAlpha = 0.45;
-constexpr auto kChevronAlpha = 0.6;
-constexpr auto kDurationPillAlpha = 0.12;
-constexpr auto kChipAlpha = 0.18;
+constexpr auto kCardBgBlend = 0.025;
+constexpr auto kCardBorderAlpha = 28;
+constexpr auto kDurationPillAlpha = 0.10;
 constexpr auto kPulseHaloAlpha = 0.5;
 
 enum class Tab {
@@ -104,9 +85,7 @@ enum class Order {
 constexpr auto kMaxOnlineHistoryRows = 50;
 constexpr auto kMaxWatchEventRows = 30;
 constexpr auto kHistoryReadLimit = 200;
-// Collapsed cards show texts whole: only an actual wall of text (a
-// deleted copypasta) stays folded behind the chevron.
-constexpr auto kPreviewLimit = 2000;
+constexpr auto kMoreRows = 30;
 
 struct OnlineSession {
 	std::optional<int> start;
@@ -115,10 +94,19 @@ struct OnlineSession {
 
 // One row of the merged Events timeline: a stored watch event, or a
 // deleted/edited message rendered as one.
+struct EventDetail {
+	QString label;
+	QString text;
+};
+
 struct TrackedEvent {
 	int at = 0;
 	int kind = 0;
-	QString text;
+	QString summary;
+	std::vector<EventDetail> details;
+	QString context;
+	QString note;
+	ID messageId = 0;
 };
 
 [[nodiscard]] QColor Blended(
@@ -140,25 +128,15 @@ struct TrackedEvent {
 	return Blended(st::windowBg, st::windowFg, kCardBgBlend);
 }
 
-void PaintCardShell(Painter &p, int width, int height, bool hovered) {
+void PaintCardShell(Painter &p, int width, int height) {
 	auto border = st::windowShadowFg->c;
 	border.setAlpha(kCardBorderAlpha);
 	auto bg = CardBackgroundColor();
-	if (hovered) {
-		// The hover glint: the rim lights up in the accent and the plate
-		// lifts a touch brighter.
-		border = LuxuryUi::WithAlpha(
-			LuxuryUi::AccentColor(),
-			kCardHoverBorderAlpha);
-		bg = Blended(
-			st::windowBg,
-			st::windowFg,
-			kCardBgBlend + kCardHoverLift);
-	}
-	p.setPen(QPen(border));
+	p.setPen(QPen(border, st::lineWidth));
 	p.setBrush(bg);
+	const auto inset = st::lineWidth / 2.;
 	p.drawRoundedRect(
-		QRectF(0, 0, width, height),
+		QRectF(inset, inset, width - 2 * inset, height - 2 * inset),
 		st::luxuryWatcherCardRadius,
 		st::luxuryWatcherCardRadius);
 }
@@ -227,54 +205,90 @@ std::vector<OnlineSession> PairOnlineSessions(
 				cost);
 	}
 	case WatchKind::NameChanged:
-		return tr::luxury_WatchNameChanged(tr::now)
-			+ u": "_q
-			+ QString::fromStdString(event.title)
-			+ u" → "_q
-			+ QString::fromStdString(event.extra);
-	case WatchKind::UsernameChanged: {
-		const auto oldName = QString::fromStdString(event.title);
-		const auto newName = QString::fromStdString(event.extra);
-		return tr::luxury_WatchUsernameChanged(tr::now)
-			+ u": "_q
-			+ (oldName.isEmpty() ? u"—"_q : u"@"_q + oldName)
-			+ u" → "_q
-			+ (newName.isEmpty() ? u"—"_q : u"@"_q + newName);
-	}
+		return tr::luxury_WatchNameChanged(tr::now);
+	case WatchKind::UsernameChanged:
+		return tr::luxury_WatchUsernameChanged(tr::now);
 	case WatchKind::PhotoUpdated:
 		return tr::luxury_WatchPhotoUpdated(tr::now);
-	case WatchKind::ReactionsChanged: {
-		// The summary line names the emoji and counts; the stored message
-		// preview goes on the second line so it is clear what was
-		// reacted to.
-		const auto summary = tr::luxury_WatchReactions(
-			tr::now,
-			lt_list,
-			QString::fromStdString(event.title));
-		const auto context = QString::fromStdString(event.extra);
-		return context.isEmpty()
-			? summary
-			: summary + u"\n"_q + context;
-	}
+	case WatchKind::MessageEdited:
+		return tr::luxury_WatcherMessageEdited(tr::now);
+	case WatchKind::ReactionsChanged:
+		return event.title.empty()
+			? tr::luxury_WatcherReactionsRemoved(tr::now)
+			: tr::luxury_WatchReactions(
+				tr::now,
+				lt_list,
+				QString::fromStdString(event.title));
 	default:
 		return QString();
 	}
 }
 
-// A message-preview row: the plain text, flattened (newlines to spaces)
-// so a card stays a card; the collapsed card elides it further and the
-// expanded one shows it whole.
-[[nodiscard]] QString MessagePreview(const LuxuryMessageBase &message) {
-	auto text = QString::fromStdString(message.text);
-	text.replace(u'\n', u' ');
-	return text.isEmpty() ? u"—"_q : text;
+[[nodiscard]] QString MessageText(const LuxuryMessageBase &message) {
+	return QString::fromStdString(message.text);
 }
 
-// What a collapsed card shows: the flattened text capped hard.
-[[nodiscard]] QString ElidedPreview(const QString &text) {
-	return text.size() > kPreviewLimit
-		? text.left(kPreviewLimit) + u"…"_q
-		: text;
+[[nodiscard]] QString MessageContext(
+		not_null<PeerData*> peer,
+		ID messageId,
+		ID fromId = 0) {
+	const auto author = fromId
+		? peer->session().data().peerLoaded(static_cast<PeerId>(fromId))
+		: nullptr;
+	return (author ? author->name() + u" · "_q : QString())
+		+ tr::luxury_WatcherMessageId(
+			tr::now,
+			lt_id,
+			QString::number(messageId));
+}
+
+[[nodiscard]] TrackedEvent WatchEventDetails(
+		const WatchEvent &event,
+		not_null<PeerData*> peer) {
+	auto result = TrackedEvent();
+	result.at = event.at;
+	result.kind = event.kind;
+	result.messageId = event.messageId;
+	result.summary = WatchEventText(event, peer);
+	if (event.messageId) {
+		result.context = MessageContext(peer, event.messageId);
+	}
+	const auto kind = static_cast<WatchKind>(event.kind);
+	if (kind == WatchKind::NameChanged
+		|| kind == WatchKind::UsernameChanged
+		|| kind == WatchKind::MessageEdited) {
+		const auto username = (kind == WatchKind::UsernameChanged);
+		const auto value = [=](const std::string &text) {
+			const auto string = QString::fromStdString(text);
+			return string.isEmpty()
+				? tr::luxury_WatcherEmptyValue(tr::now)
+				: (username ? u"@"_q + string : string);
+		};
+		result.details = {
+			{ tr::luxury_WatchEditWas(tr::now), value(event.title) },
+			{ tr::luxury_WatchEditNow(tr::now), value(event.extra) },
+		};
+	} else if (kind == WatchKind::ReactionsChanged) {
+		auto label = tr::luxury_WatcherMessageText(tr::now);
+		auto context = QString::fromStdString(event.extra);
+		if (context.isEmpty()) {
+			if (const auto item = peer->session().data().message(
+					peer,
+					MsgId(event.messageId))) {
+				context = item->originalText().text;
+				label = tr::luxury_WatcherCurrentText(tr::now);
+			}
+		}
+		if (context.isEmpty()) {
+			result.note = tr::luxury_WatcherContextUnavailable(tr::now);
+		} else {
+			result.details.push_back({
+				label,
+				context,
+			});
+		}
+	}
+	return result;
 }
 
 // A timeline timestamp that stays short: bare time for today, day and
@@ -324,34 +338,10 @@ std::vector<OnlineSession> PairOnlineSessions(
 		return tr::luxury_OnlineHistoryKindPhoto(tr::now);
 	case WatchKind::ReactionsChanged:
 		return tr::luxury_OnlineHistoryKindReaction(tr::now);
+	case WatchKind::MessageEdited:
+		return tr::luxury_OnlineHistoryKindEdited(tr::now);
 	default:
 		return QString();
-	}
-}
-
-[[nodiscard]] style::color ChipColorFor(int kind) {
-	switch (kind) {
-	case kKindDeleted:
-		return kDeletedFg.color();
-	case kKindEdited:
-		return kEditedFg.color();
-	default:
-		break;
-	}
-	switch (static_cast<WatchKind>(kind)) {
-	case WatchKind::GiftSent:
-	case WatchKind::GiftReceived:
-		return kGiftFg.color();
-	case WatchKind::NameChanged:
-		return kNameFg.color();
-	case WatchKind::UsernameChanged:
-		return kUsernameFg.color();
-	case WatchKind::PhotoUpdated:
-		return kPhotoFg.color();
-	case WatchKind::ReactionsChanged:
-		return kReactionFg.color();
-	default:
-		return st::windowSubTextFg;
 	}
 }
 
@@ -387,26 +377,17 @@ private:
 
 class WatcherCard : public Ui::RpWidget {
 public:
-	WatcherCard(QWidget *parent, crl::time stagger);
+	WatcherCard(QWidget *parent);
 
 protected:
 	void paintEvent(QPaintEvent *e) override;
-	void enterEventHook(QEnterEvent *e) override;
-	void leaveEventHook(QEvent *e) override;
 	virtual void paintCard(Painter &p) = 0;
-	[[nodiscard]] bool hovered() const {
-		return _hovered;
-	}
-
-private:
-	Ui::Animations::Simple _appear;
-	bool _hovered = false;
 
 };
 
 class SessionCard final : public WatcherCard {
 public:
-	SessionCard(QWidget *parent, const OnlineSession &session, int index);
+	SessionCard(QWidget *parent, const OnlineSession &session);
 
 protected:
 	int resizeGetHeight(int newWidth) override;
@@ -423,6 +404,7 @@ private:
 	QString _startValue;
 	QString _endValue;
 	QString _durationText;
+	QString _durationElided;
 	QString _startValueElided;
 	QString _endValueElided;
 	Ui::Animations::Basic _pulse;
@@ -435,34 +417,45 @@ private:
 
 class EventCard final : public WatcherCard {
 public:
-	EventCard(QWidget *parent, const TrackedEvent &event, int index);
+	EventCard(QWidget *parent, const TrackedEvent &event);
+	~EventCard();
 
-	// A card with a text longer than the collapsed cap can be clicked to
-	// show the whole text; the body relayouts on every toggle. The
-	// chevron in the corner marks the cards that expand.
 	[[nodiscard]] rpl::producer<> toggleRequests() const {
 		return _toggles.events();
+	}
+	[[nodiscard]] rpl::producer<> openRequests() const {
+		return _opens.events();
 	}
 
 protected:
 	int resizeGetHeight(int newWidth) override;
 	void paintCard(Painter &p) override;
-	void mousePressEvent(QMouseEvent *e) override;
 
 private:
+	struct Detail {
+		QString heading;
+		Ui::FlatLabel *value = nullptr;
+		QRect headingRect;
+		QRect background;
+	};
+	void toggleExpanded();
+
 	QString _chipLabel;
 	QString _dateText;
-	Ui::Text::String _preview;
-	Ui::Text::String _text;
-	bool _expandable = false;
+	style::FlatLabel _detailStyle;
+	Ui::FlatLabel *_summary = nullptr;
+	Ui::FlatLabel *_context = nullptr;
+	Ui::FlatLabel *_note = nullptr;
+	LuxuryUi::ActionButton *_expand = nullptr;
+	LuxuryUi::ActionButton *_open = nullptr;
+	std::vector<Detail> _details;
 	bool _expanded = false;
 	rpl::event_stream<> _toggles;
+	rpl::event_stream<> _opens;
 	int _kind = 0;
-	int _chipWidth = 0;
-	int _chipHeight = 0;
 	int _rowHeight = 0;
-	int _textTop = 0;
-	int _textWidth = 0;
+	QString _chipElided;
+	QString _dateElided;
 
 };
 
@@ -473,16 +466,17 @@ public:
 	void setTab(Tab tab);
 	void setOrder(Order order);
 	void refresh();
+	[[nodiscard]] rpl::producer<ID> openMessages() const {
+		return _openMessages.events();
+	}
 	[[nodiscard]] rpl::producer<std::array<int, 3>> countsChanged() const {
 		return _counts.events();
 	}
-	// The tab labels show counts, and the box is built before anyone
-	// subscribes to countsChanged(), so the first state is read directly.
-	// Edit revisions count once per edited message, not once per row.
+	// Counts describe the loaded window, including rows revealed by Show more.
+	// The box reads the first state before subscribing to countsChanged().
 	[[nodiscard]] std::array<int, 3> counts() const {
 		const auto sessions = int(_sessions.size());
-		const auto events = int(
-			_watches.size() + _deleted.size() + editedGroupCount());
+		const auto events = int(sortedEvents().size());
 		return { sessions + events, sessions, events };
 	}
 
@@ -494,7 +488,7 @@ private:
 	void rebuild();
 	[[nodiscard]] std::vector<OnlineSession> sortedSessions() const;
 	[[nodiscard]] std::vector<TrackedEvent> sortedEvents() const;
-	[[nodiscard]] int editedGroupCount() const;
+
 	void refreshEarlier();
 
 	not_null<PeerData*> _peer;
@@ -511,7 +505,10 @@ private:
 	Ui::FlatLabel *_eventsTitle = nullptr;
 	LuxuryUi::EmptyBlock *_sessionEmpty = nullptr;
 	LuxuryUi::EmptyBlock *_eventEmpty = nullptr;
-	Ui::FlatLabel *_earlier = nullptr;
+	LuxuryUi::ActionButton *_earlier = nullptr;
+	int _sessionLimit = kMaxOnlineHistoryRows;
+	int _eventLimit = kMaxWatchEventRows;
+	rpl::event_stream<ID> _openMessages;
 	std::vector<SessionCard*> _sessionCards;
 	std::vector<EventCard*> _eventCards;
 	rpl::event_stream<std::array<int, 3>> _counts;
@@ -554,28 +551,6 @@ private:
 
 	LuxuryUi::TabsBar *_tabs = nullptr;
 	WatcherToolbar *_toolbar = nullptr;
-
-};
-
-// One fixed-height view: the pinned header on top, the scrolling list
-// below. Owning the scroll here is what keeps the tabs in place while the
-// list moves.
-class WatcherView : public Ui::RpWidget {
-public:
-	WatcherView(QWidget *parent, not_null<PeerData*> peer);
-
-protected:
-	void resizeEvent(QResizeEvent *e) override;
-
-private:
-	void showSettingsMenu();
-
-	WatcherHeader *_header = nullptr;
-	Ui::ScrollArea *_scroll = nullptr;
-	WatcherBody *_body = nullptr;
-	Tab _tab = Tab::All;
-	Order _order = Order::Newest;
-	base::unique_qptr<Ui::PopupMenu> _menu;
 
 };
 
@@ -636,10 +611,12 @@ WatcherToolbar::WatcherToolbar(QWidget *parent)
 		this,
 		LuxuryUi::ToolGlyph::Refresh);
 	_refresh->setToolTip(tr::luxury_OnlineHistoryRefresh(tr::now));
+	_refresh->setAccessibleName(tr::luxury_OnlineHistoryRefresh(tr::now));
 	_settings = Ui::CreateChild<LuxuryUi::ToolButton>(
 		this,
 		LuxuryUi::ToolGlyph::Gear);
 	_settings->setToolTip(tr::luxury_OnlineHistorySettings(tr::now));
+	_settings->setAccessibleName(tr::luxury_OnlineHistorySettings(tr::now));
 }
 
 void WatcherToolbar::setSortIndex(int index) {
@@ -648,6 +625,7 @@ void WatcherToolbar::setSortIndex(int index) {
 
 void WatcherToolbar::setLastEnabled(bool enabled) {
 	_sort->setLastEnabled(enabled);
+	resizeToWidth(width());
 }
 
 void WatcherToolbar::startRefreshSpin() {
@@ -672,54 +650,20 @@ int WatcherToolbar::resizeGetHeight(int newWidth) {
 	return std::max(st::luxuryWatcherSortHeight, icon);
 }
 
-WatcherCard::WatcherCard(QWidget *parent, crl::time stagger)
+WatcherCard::WatcherCard(QWidget *parent)
 : RpWidget(parent) {
-	// The stagger is folded into the transition: the first stagger
-	// milliseconds hold the progress at zero, then 150 ms of easeOutCubic
-	// raise the card from eight pixels below.
-	_appear.start(
-		[=](float64) { update(); },
-		0.,
-		1.,
-		kCardAppearDuration + stagger,
-		[stagger](float64 delta, float64 dt) {
-			const auto time = dt * (kCardAppearDuration + stagger);
-			const auto active = std::clamp(
-				(time - stagger) / float64(kCardAppearDuration),
-				0.,
-				1.);
-			return anim::easeOutCubic(delta, active);
-		});
 }
 
 void WatcherCard::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
 	auto hq = PainterHighQualityEnabler(p);
-	const auto progress = _appear.value(1.);
-	p.translate(0., (1. - progress) * st::luxuryWatcherCardRise);
-	auto opacity = ScopedPainterOpacity(p, progress);
 	paintCard(p);
-}
-
-void WatcherCard::enterEventHook(QEnterEvent *e) {
-	_hovered = true;
-	update();
-	RpWidget::enterEventHook(e);
-}
-
-void WatcherCard::leaveEventHook(QEvent *e) {
-	_hovered = false;
-	update();
-	RpWidget::leaveEventHook(e);
 }
 
 SessionCard::SessionCard(
 		QWidget *parent,
-		const OnlineSession &session,
-		int index)
-: WatcherCard(
-		parent,
-		std::min<crl::time>(index * kCardStagger, kCardStaggerMax))
+		const OnlineSession &session)
+: WatcherCard(parent)
 , _session(session) {
 	_startLabel = tr::luxury_OnlineHistoryStart(tr::now) + u":"_q;
 	_endLabel = tr::luxury_OnlineHistoryEnd(tr::now) + u":"_q;
@@ -775,8 +719,12 @@ void SessionCard::computeLayout(int newWidth) {
 		0,
 		newWidth
 			- _lineLeft
-			- st::luxuryWatcherCardPadding.right()
-			- (_pillWidth ? _pillWidth + st::luxuryWatcherCardSkip : 0));
+			- st::luxuryWatcherCardPadding.right());
+	_pillWidth = std::min(_pillWidth, _lineWidth);
+	_durationElided = font->elided(_durationText,
+		std::max(0, _pillWidth - st::luxuryWatcherClockSize
+			- 2 * st::luxuryWatcherPillPadding.left()
+			- st::luxuryWatcherPillPadding.right()));
 	_startValueElided = st::luxuryWatcherValueFont->elided(
 		_startValue,
 		std::max(
@@ -791,18 +739,26 @@ void SessionCard::computeLayout(int newWidth) {
 
 int SessionCard::resizeGetHeight(int newWidth) {
 	computeLayout(newWidth);
-	return st::luxuryWatcherCardHeight;
+	const auto pillHeight = _pillWidth
+		? st::luxuryWatcherChipFont->height
+			+ st::luxuryWatcherPillPadding.top()
+			+ st::luxuryWatcherPillPadding.bottom()
+			+ st::luxuryWatcherDetailSkip
+		: 0;
+	return st::luxuryWatcherCardPadding.top()
+		+ 2 * st::luxuryWatcherValueFont->height
+		+ st::luxuryWatcherMetaSkip + pillHeight
+		+ st::luxuryWatcherCardPadding.bottom();
 }
 
 void SessionCard::paintCard(Painter &p) {
-	PaintCardShell(p, width(), height(), hovered());
+	PaintCardShell(p, width(), height());
 	paintStatus(p);
 
 	const auto &labelFont = st::luxuryWatcherLabelFont;
 	const auto &valueFont = st::luxuryWatcherValueFont;
 	const auto lineH = valueFont->height;
-	const auto blockH = 2 * lineH + st::luxuryWatcherCardSkip;
-	auto top = (height() - blockH) / 2;
+	auto top = st::luxuryWatcherCardPadding.top();
 	for (auto line = 0; line != 2; ++line) {
 		const auto &label = line ? _endLabel : _startLabel;
 		const auto &value = line ? _endValueElided : _startValueElided;
@@ -828,7 +784,7 @@ void SessionCard::paintCard(Painter &p) {
 				lineRect.x() + labelFont->width(label) + labelFont->spacew,
 				top + valueFont->ascent),
 			value);
-		top += lineH + st::luxuryWatcherCardSkip;
+		top += lineH + st::luxuryWatcherMetaSkip;
 	}
 	paintDuration(p);
 }
@@ -837,7 +793,8 @@ void SessionCard::paintStatus(Painter &p) {
 	const auto dot = st::luxuryWatcherDotSize;
 	const auto rect = style::rtlrect(
 		st::luxuryWatcherCardPadding.left(),
-		(height() - dot) / 2,
+		st::luxuryWatcherCardPadding.top()
+			+ (st::luxuryWatcherValueFont->height - dot) / 2,
 		dot,
 		dot,
 		width());
@@ -891,7 +848,7 @@ void SessionCard::paintDuration(Painter &p) {
 		width()
 			- st::luxuryWatcherCardPadding.right()
 			- _pillWidth,
-		(height() - pillH) / 2,
+		height() - st::luxuryWatcherCardPadding.bottom() - pillH,
 		_pillWidth,
 		pillH,
 		width());
@@ -915,137 +872,176 @@ void SessionCard::paintDuration(Painter &p) {
 		QPointF(
 			clockX + clock + st::luxuryWatcherPillPadding.left(),
 			pillRect.y() + (pillH - font->height) / 2 + font->ascent),
-		_durationText);
+		_durationElided);
 }
 
 EventCard::EventCard(
 		QWidget *parent,
-		const TrackedEvent &event,
-		int index)
-: WatcherCard(
-		parent,
-		std::min<crl::time>(index * kCardStagger, kCardStaggerMax))
+		const TrackedEvent &event)
+: WatcherCard(parent)
+, _detailStyle(st::luxuryWatcherValueLabel)
 , _kind(event.kind) {
 	_chipLabel = ChipLabelFor(_kind);
 	_dateText = CompactTimestamp(event.at);
-	_text.setText(st::boxTextStyle, event.text);
-	_preview.setText(st::boxTextStyle, ElidedPreview(event.text));
-	_expandable = event.text.size() > kPreviewLimit;
-	if (_expandable) {
-		setCursor(style::cur_pointer);
+	setToolTip(QLocale().toString(base::unixtime::parse(event.at), QLocale::ShortFormat));
+	_summary = Ui::CreateChild<Ui::FlatLabel>(
+		this,
+		event.summary,
+		st::luxuryWatcherSummaryLabel);
+	_summary->setSelectable(true);
+	_context = Ui::CreateChild<Ui::FlatLabel>(
+		this,
+		event.context,
+		st::luxuryWatcherMetaLabel);
+	_context->setSelectable(true);
+	_context->setVisible(!event.context.isEmpty());
+	_note = Ui::CreateChild<Ui::FlatLabel>(
+		this,
+		event.note,
+		st::luxuryWatcherMetaLabel);
+	_note->setVisible(!event.note.isEmpty());
+	for (const auto &detail : event.details) {
+		const auto label = Ui::CreateChild<Ui::FlatLabel>(
+			this,
+			detail.text.isEmpty()
+				? tr::luxury_WatcherEmptyValue(tr::now)
+				: detail.text,
+			_detailStyle);
+		label->setSelectable(true);
+		_details.push_back({ detail.label, label });
+	}
+	_expand = Ui::CreateChild<LuxuryUi::ActionButton>(
+		this,
+		tr::luxury_WatcherExpand(tr::now));
+	_expand->setClickedCallback([=] { toggleExpanded(); });
+	_expand->hide();
+	_open = Ui::CreateChild<LuxuryUi::ActionButton>(
+		this,
+		tr::luxury_WatcherOpenMessage(tr::now));
+	_open->setVisible(event.messageId != 0 && _kind != kKindDeleted);
+	_open->setClickedCallback([=] { _opens.fire({}); });
+}
+
+EventCard::~EventCard() {
+	// FlatLabel keeps a style reference; destroy these children while
+	// the card's mutable style is still alive, not in QWidget's destructor.
+	for (const auto &detail : _details) {
+		delete detail.value;
 	}
 }
 
-void EventCard::mousePressEvent(QMouseEvent *e) {
-	if (e->button() == Qt::LeftButton && _expandable) {
-		_expanded = !_expanded;
-		_toggles.fire({});
-		update();
-	}
+void EventCard::toggleExpanded() {
+	_expanded = !_expanded;
+	_expand->setText(_expanded
+		? tr::luxury_WatcherCollapse(tr::now)
+		: tr::luxury_WatcherExpand(tr::now));
+	_toggles.fire({});
 }
 
 int EventCard::resizeGetHeight(int newWidth) {
 	const auto &padding = st::luxuryWatcherCardPadding;
-	_chipWidth = _chipLabel.isEmpty()
-		? 0
-		: st::luxuryWatcherChipFont->width(_chipLabel)
-			+ st::luxuryWatcherPillPadding.left()
-			+ st::luxuryWatcherPillPadding.right();
-	_chipHeight = _chipWidth
-		? st::luxuryWatcherChipFont->height
-			+ st::luxuryWatcherPillPadding.top()
-			+ st::luxuryWatcherPillPadding.bottom()
-		: 0;
-	// The chip and the date share one top row; the text always starts
-	// below that row at full width, so a long text is never squeezed
-	// between the chip and the date.
-	_rowHeight = std::max(_chipHeight, st::luxuryWatcherLabelFont->height);
-	_textTop = padding.top() + _rowHeight + st::luxuryWatcherCardSkip;
-	_textWidth = std::max(0, newWidth - padding.left() - padding.right());
-	const auto &active = _expanded ? _text : _preview;
-	const auto textHeight = active.countHeight(_textWidth);
-	const auto stripHeight = _expandable
-		? st::luxuryWatcherExpandGlyphHeight + st::luxuryWatcherCardSkip
-		: 0;
-	return _textTop + textHeight + stripHeight + padding.bottom();
+	const auto contentWidth = std::max(1,
+		newWidth - padding.left() - padding.right());
+	const auto &font = st::luxuryWatcherLabelFont;
+	_rowHeight = std::max(font->height, st::luxuryWatcherChipFont->height);
+	const auto dateWidth = std::min(font->width(_dateText), contentWidth / 2);
+	_dateElided = font->elided(_dateText, dateWidth);
+	_chipElided = st::luxuryWatcherChipFont->elided(
+		_chipLabel,
+		std::max(0, contentWidth - dateWidth - st::luxuryWatcherDetailSkip));
+	auto y = padding.top() + _rowHeight + st::luxuryWatcherDetailSkip;
+	_summary->resizeToWidth(contentWidth);
+	_summary->moveToLeft(padding.left(), y, newWidth);
+	y += _summary->height();
+	if (!_context->isHidden()) {
+		y += st::luxuryWatcherMetaSkip;
+		_context->resizeToWidth(contentWidth);
+		_context->moveToLeft(padding.left(), y, newWidth);
+		y += _context->height();
+	}
+	auto expandable = false;
+	for (auto &detail : _details) {
+		y += st::luxuryWatcherDetailSkip;
+		const auto top = y;
+		const auto inset = st::luxuryWatcherDetailPadding;
+		const auto textWidth = std::max(1, contentWidth - 2 * inset);
+		detail.headingRect = style::rtlrect(
+			padding.left() + inset,
+			y + inset,
+			textWidth,
+			font->height,
+			newWidth);
+		y += inset + font->height + st::luxuryWatcherMetaSkip;
+		_detailStyle.maxHeight = 0;
+		detail.value->resizeToWidth(textWidth);
+		const auto fullHeight = detail.value->height();
+		const auto lineHeight = std::max(_detailStyle.style.lineHeight,
+			_detailStyle.style.font->height);
+		const auto previewHeight = std::max(1,
+			st::luxuryWatcherPreviewHeight / lineHeight) * lineHeight;
+		expandable = expandable || fullHeight > previewHeight;
+		_detailStyle.maxHeight = _expanded ? 0 : previewHeight;
+		detail.value->resizeToWidth(textWidth);
+		detail.value->moveToLeft(padding.left() + inset, y, newWidth);
+		y += detail.value->height() + inset;
+		detail.background = style::rtlrect(
+			padding.left(), top, contentWidth, y - top, newWidth);
+	}
+	if (!_note->isHidden()) {
+		y += st::luxuryWatcherDetailSkip;
+		_note->resizeToWidth(contentWidth);
+		_note->moveToLeft(padding.left(), y, newWidth);
+		y += _note->height();
+	}
+	_expand->setVisible(expandable);
+	if (expandable || !_open->isHidden()) {
+		y += st::luxuryWatcherDetailSkip;
+		if (expandable) {
+			_expand->moveToLeft(padding.left(), y, newWidth);
+		}
+		if (!_open->isHidden()) {
+			if (expandable
+				&& _expand->width() + _open->width()
+					+ st::luxuryWatcherDetailSkip > contentWidth) {
+				y += _expand->height() + st::luxuryWatcherMetaSkip;
+			}
+			_open->moveToRight(padding.right(), y, newWidth);
+		}
+		y += std::max(_expand->isHidden() ? 0 : _expand->height(),
+			_open->isHidden() ? 0 : _open->height());
+	}
+	return y + padding.bottom();
 }
 
 void EventCard::paintCard(Painter &p) {
-	PaintCardShell(p, width(), height(), hovered());
+	PaintCardShell(p, width(), height());
 	const auto &padding = st::luxuryWatcherCardPadding;
-
-	const auto &labelFont = st::luxuryWatcherLabelFont;
-	const auto dateWidth = labelFont->width(_dateText);
-	const auto dateRect = style::rtlrect(
+	const auto &font = st::luxuryWatcherLabelFont;
+	const auto dateWidth = font->width(_dateElided);
+	const auto date = style::rtlrect(
 		width() - padding.right() - dateWidth,
-		padding.top() + (_rowHeight - labelFont->height) / 2,
-		dateWidth,
-		labelFont->height,
-		width());
-	p.setFont(labelFont);
+		padding.top(), dateWidth, _rowHeight, width());
+	p.setFont(font);
 	p.setPen(st::windowSubTextFg);
-	p.drawText(
-		QPointF(dateRect.x(), dateRect.y() + labelFont->ascent),
-		_dateText);
-
-	if (_chipWidth) {
-		const auto &font = st::luxuryWatcherChipFont;
-		const auto chipRect = style::rtlrect(
-			padding.left(),
-			padding.top() + (_rowHeight - _chipHeight) / 2,
-			_chipWidth,
-			_chipHeight,
-			width());
-		const auto color = ChipColorFor(_kind);
-		auto chipBg = QColor(color->c);
-		chipBg.setAlphaF(kChipAlpha);
-		// A rimmed chip: the fill is a soft tint, the border the same hue
-		// at strength, so the category reads even at a glance.
-		p.setPen(QPen(LuxuryUi::WithAlpha(color->c, kChipBorderAlpha)));
-		p.setBrush(chipBg);
-		p.drawRoundedRect(
-			QRectF(chipRect),
-			st::luxuryWatcherPillRadius,
-			st::luxuryWatcherPillRadius);
-		p.setFont(font);
-		p.setPen(color);
-		p.drawText(
-			QPointF(
-				chipRect.x() + st::luxuryWatcherPillPadding.left(),
-				chipRect.y() + (_chipHeight - font->height) / 2 + font->ascent),
-			_chipLabel);
-	}
-
-	p.setPen(st::windowFg);
-	const auto &active = _expanded ? _text : _preview;
-	active.draw(p, {
-		.position = QPoint(padding.left(), _textTop),
-		.outerWidth = width(),
-		.availableWidth = _textWidth,
-		.align = style::al_left,
-	});
-
-	if (_expandable) {
-		// The chevron marks the card as expandable: down while more text
-		// is hidden, up when the full text is shown.
-		const auto w = st::luxuryWatcherExpandGlyphWidth;
-		const auto h = st::luxuryWatcherExpandGlyphHeight;
-		const auto x = float64(width() - padding.right() - w);
-		const auto y = float64(height() - padding.bottom() - h);
-		auto path = QPainterPath();
-		if (_expanded) {
-			path.moveTo(x, y + h);
-			path.lineTo(x + w / 2., y);
-			path.lineTo(x + w, y + h);
-		} else {
-			path.moveTo(x, y);
-			path.lineTo(x + w / 2., y + h);
-			path.lineTo(x + w, y);
-		}
-		path.closeSubpath();
+	p.drawText(QPointF(date.x(), date.y() + font->ascent), _dateElided);
+	const auto chip = style::rtlrect(
+		padding.left(), padding.top(),
+		st::luxuryWatcherChipFont->width(_chipElided), _rowHeight, width());
+	p.setFont(st::luxuryWatcherChipFont);
+	// Category text carries the meaning; color is a quiet secondary cue.
+	p.setPen(st::windowSubTextFg);
+	p.drawText(QPointF(chip.x(), chip.y()
+		+ st::luxuryWatcherChipFont->ascent), _chipElided);
+	for (const auto &detail : _details) {
 		p.setPen(Qt::NoPen);
-		p.setBrush(LuxuryUi::WithAlpha(LuxuryUi::AccentColor(), kChevronAlpha));
-		p.drawPath(path);
+		p.setBrush(LuxuryUi::WithAlpha(st::windowFg->c, 0.035));
+		p.drawRoundedRect(detail.background, st::luxuryWatcherDetailRadius,
+			st::luxuryWatcherDetailRadius);
+		p.setFont(font);
+		p.setPen(st::windowSubTextFg);
+		p.drawText(QPointF(detail.headingRect.x(), detail.headingRect.y()
+			+ font->ascent), font->elided(detail.heading,
+				detail.headingRect.width()));
 	}
 }
 
@@ -1066,10 +1062,14 @@ WatcherBody::WatcherBody(QWidget *parent, not_null<PeerData*> peer)
 	_eventEmpty = Ui::CreateChild<LuxuryUi::EmptyBlock>(
 		this,
 		tr::luxury_OnlineHistoryEventsEmpty(tr::now));
-	_earlier = Ui::CreateChild<Ui::FlatLabel>(
+	_earlier = Ui::CreateChild<LuxuryUi::ActionButton>(
 		this,
-		QString(),
-		st::luxuryWatcherFootnoteLabel);
+		tr::luxury_WatcherShowMore(tr::now));
+	_earlier->setClickedCallback([=] {
+		_sessionLimit += kMoreRows;
+		_eventLimit += kMoreRows;
+		rebuild();
+	});
 	reload();
 	rebuild();
 }
@@ -1143,51 +1143,54 @@ std::vector<OnlineSession> WatcherBody::sortedSessions() const {
 std::vector<TrackedEvent> WatcherBody::sortedEvents() const {
 	auto list = std::vector<TrackedEvent>();
 	list.reserve(_watches.size() + _deleted.size() + _edits.size());
+	auto recordedEdits = std::set<std::tuple<ID, int, std::string>>();
 	for (const auto &watch : _watches) {
-		list.push_back({ watch.at, watch.kind, WatchEventText(watch, _peer) });
+		list.push_back(WatchEventDetails(watch, _peer));
+		if (watch.kind == static_cast<int>(WatchKind::MessageEdited)) {
+			recordedEdits.emplace(watch.messageId, watch.at, watch.title);
+		}
 	}
 	for (const auto &deleted : _deleted) {
-		list.push_back({
-			MessageTimestamp(deleted),
-			kKindDeleted,
-			MessagePreview(deleted),
-		});
+		auto event = TrackedEvent();
+		event.at = MessageTimestamp(deleted);
+		event.kind = kKindDeleted;
+		event.summary = tr::luxury_WatcherMessageDeleted(tr::now);
+		event.context = MessageContext(_peer, deleted.messageId, deleted.fromId);
+		event.details.push_back({
+			tr::luxury_WatcherMessageText(tr::now), MessageText(deleted) });
+		list.push_back(std::move(event));
 	}
-	// Revisions of one edited message collapse into a single card that
-	// shows the whole arc: the original text and the current one. The
-	// load comes in fakeId-descending order (newest revision first), so
-	// the first visit per message is the latest revision and the last
-	// visit is the original.
-	auto latestByMessage = std::map<ID, const LuxuryMessageBase*>();
-	auto firstByMessage = std::map<ID, const LuxuryMessageBase*>();
-	for (const auto &edited : _edits) {
-		latestByMessage.try_emplace(edited.messageId, &edited);
-		firstByMessage[edited.messageId] = &edited;
-	}
-	for (const auto &[messageId, latest] : latestByMessage) {
-		const auto first = firstByMessage[messageId];
-		const auto latestText = MessagePreview(*latest);
-		auto text = QString();
-		if (first != latest) {
-			const auto firstText = MessagePreview(*first);
-			text = (firstText == latestText)
-				? latestText
-				: tr::luxury_WatchEditWas(tr::now)
-					+ u" "_q + firstText
-					+ u"\n"_q
-					+ tr::luxury_WatchEditNow(tr::now)
-					+ u" "_q + latestText;
-		} else {
-			text = latestText;
+	const auto afterStates = RevisionAfterStates(_edits);
+	for (auto i = std::size_t(0); i != _edits.size(); ++i) {
+		const auto &edited = _edits[i];
+		const auto at = edited.entityCreateDate
+			? edited.entityCreateDate : MessageTimestamp(edited);
+		if (recordedEdits.contains({ edited.messageId, at, edited.text })) {
+			continue;
 		}
-		list.push_back({
-			MessageTimestamp(*latest),
-			kKindEdited,
-			text,
-		});
+		auto event = TrackedEvent();
+		event.at = at;
+		event.kind = kKindEdited;
+		event.messageId = edited.messageId;
+		event.summary = tr::luxury_WatcherMessageEdited(tr::now);
+		event.context = MessageContext(_peer, edited.messageId, edited.fromId);
+		event.details.push_back({ tr::luxury_WatchEditWas(tr::now),
+			MessageText(edited) });
+		if (const auto after = afterStates[i]) {
+			event.details.push_back({ tr::luxury_WatcherNextSavedText(tr::now),
+				MessageText(*after) });
+		} else {
+			const auto current = _peer->session().data().message(
+				_peer, MsgId(edited.messageId));
+			if (current) {
+				event.details.push_back({ tr::luxury_WatcherCurrentText(tr::now),
+					current->originalText().text });
+			} else {
+				event.note = tr::luxury_WatcherRevisionUnavailable(tr::now);
+			}
+		}
+		list.push_back(std::move(event));
 	}
-	// A stable order: same-second rows (a delete and an edit recorded in
-	// one second) keep their relative position across rebuilds.
 	std::stable_sort(list.begin(), list.end(), [](
 			const TrackedEvent &a,
 			const TrackedEvent &b) {
@@ -1199,14 +1202,6 @@ std::vector<TrackedEvent> WatcherBody::sortedEvents() const {
 	return list;
 }
 
-int WatcherBody::editedGroupCount() const {
-	auto ids = std::set<ID>();
-	for (const auto &edited : _edits) {
-		ids.insert(edited.messageId);
-	}
-	return int(ids.size());
-}
-
 void WatcherBody::refreshEarlier() {
 	const auto hidden = _sessionOverflow + _eventOverflow;
 	const auto visible = hidden > 0
@@ -1215,14 +1210,7 @@ void WatcherBody::refreshEarlier() {
 			|| (_tab == Tab::Events && _eventOverflow > 0));
 	_earlier->setVisible(visible);
 	if (visible) {
-		_earlier->setText(tr::luxury_OnlineHistoryEarlier(
-			tr::now,
-			lt_count,
-			_tab == Tab::Sessions
-				? _sessionOverflow
-				: _tab == Tab::Events
-				? _eventOverflow
-				: hidden));
+		_earlier->setText(tr::luxury_WatcherShowMore(tr::now));
 	}
 }
 
@@ -1259,13 +1247,12 @@ void WatcherBody::rebuild() {
 		} else {
 			_sessionEmpty->hide();
 			const auto total = int(sessionList.size());
-			const auto shown = std::min(total, kMaxOnlineHistoryRows);
+			const auto shown = std::min(total, _sessionLimit);
 			_sessionOverflow = total - shown;
 			for (auto i = 0; i != shown; ++i) {
 				_sessionCards.push_back(Ui::CreateChild<SessionCard>(
 					this,
-					sessionList[i],
-					i));
+					sessionList[i]));
 			}
 		}
 	} else {
@@ -1275,21 +1262,24 @@ void WatcherBody::rebuild() {
 		_eventsTitle->setText(
 			tr::luxury_OnlineHistoryEvents(tr::now)
 			+ u" · "_q
-			+ QString::number(
-				_watches.size() + _deleted.size() + editedGroupCount()));
+			+ QString::number(eventList.size()));
 		if (eventList.empty()) {
 			_eventEmpty->show();
 		} else {
 			_eventEmpty->hide();
 			const auto total = int(eventList.size());
-			const auto shown = std::min(total, kMaxWatchEventRows);
+			const auto shown = std::min(total, _eventLimit);
 			_eventOverflow = total - shown;
 			for (auto i = 0; i != shown; ++i) {
 				const auto card = Ui::CreateChild<EventCard>(
 					this,
-					eventList[i],
-					i);
+					eventList[i]);
 				_eventCards.push_back(card);
+				const auto messageId = eventList[i].messageId;
+				card->openRequests(
+				) | rpl::on_next([=] {
+					_openMessages.fire_copy(messageId);
+				}, card->lifetime());
 				// An expanding card changes its own height: re-run the
 				// layout so the cards below it move out of the way.
 				card->toggleRequests(
@@ -1316,15 +1306,13 @@ int WatcherBody::resizeGetHeight(int newWidth) {
 	y = LayoutCards(newWidth, y, _eventsTitle, _eventEmpty, _eventCards);
 	if (!_earlier->isHidden()) {
 		const auto left = st::boxRowPadding.left();
-		const auto width = newWidth - left - st::boxRowPadding.right();
-		_earlier->resizeToWidth(width);
 		_earlier->moveToLeft(
 			left,
 			y + st::defaultSubsectionTitlePadding.top(),
 			newWidth);
 		y += st::defaultSubsectionTitlePadding.top() + _earlier->height();
 	}
-	return y;
+	return y + st::luxuryWatcherDetailSkip;
 }
 
 int WatcherHeader::contentHeight() const {
@@ -1366,17 +1354,14 @@ void WatcherHeader::setTabCounts(std::array<int, 3> counts) {
 
 void WatcherHeader::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
-	// An opaque plate: the list scrolls below this widget and is clipped
-	// by the view geometry, so this is belt-and-braces against any
-	// future overlap, plus the separator under the pinned part. The
-	// hairline is a faint accent line -- the one neon seam of the box.
+	// The pinned header stays opaque above the scrolling list.
 	p.fillRect(rect(), st::boxBg);
 	p.fillRect(
 		0,
 		height() - st::lineWidth,
 		width(),
 		st::lineWidth,
-		LuxuryUi::WithAlpha(LuxuryUi::AccentColor(), 0.14));
+		LuxuryUi::WithAlpha(st::windowFg->c, 0.08));
 }
 
 void WatcherHeader::resizeEvent(QResizeEvent *e) {
@@ -1399,122 +1384,106 @@ void WatcherHeader::resizeEvent(QResizeEvent *e) {
 			+ st::luxuryWatcherHeaderSkip);
 }
 
-WatcherView::WatcherView(QWidget *parent, not_null<PeerData*> peer)
-: RpWidget(parent) {
-	// The pinned header plus the scrolling list never exceed this: the
-	// box grows to the title, the view and the button row, and taller
-	// lists scroll inside the view instead of growing the box.
-	setFixedHeight(st::luxuryWatcherViewHeight);
-
-	_header = Ui::CreateChild<WatcherHeader>(this);
-	_scroll = Ui::CreateChild<Ui::ScrollArea>(this, st::boxScroll);
-	_body = _scroll->setOwnedWidget(
-		object_ptr<WatcherBody>(_scroll, peer));
-
-	_header->tabChanges(
-	) | rpl::on_next([=](int index) {
-		_tab = static_cast<Tab>(index);
-		// "Longest" only makes sense for sessions; disable the segment
-		// and fall back to Newest when the Events tab makes it
-		// meaningless.
-		_header->setLastEnabled(_tab != Tab::Events);
-		if (_tab == Tab::Events && _order == Order::Longest) {
-			_order = Order::Newest;
-			_body->setOrder(Order::Newest);
-			_header->setSortIndex(static_cast<int>(Order::Newest));
-		}
-		_body->setTab(_tab);
-		_scroll->scrollToY(0);
-	}, lifetime());
-
-	_header->sortChanges(
-	) | rpl::on_next([=](int index) {
-		// Selecting Longest on the Events tab is a no-op; keep Newest.
-		if (_tab == Tab::Events
-			&& static_cast<Order>(index) == Order::Longest) {
-			_header->setSortIndex(static_cast<int>(_order));
-			return;
-		}
-		_order = static_cast<Order>(index);
-		_body->setOrder(_order);
-	}, lifetime());
-
-	_header->refreshClicks(
-	) | rpl::on_next([=] {
-		// The read is synchronous and local, so the spin is the only
-		// feedback the refresh needs.
-		_header->startRefreshSpin();
-		_body->refresh();
-	}, lifetime());
-
-	_header->settingsClicks(
-	) | rpl::on_next([=] {
-		showSettingsMenu();
-	}, lifetime());
-
-	_body->countsChanged(
-	) | rpl::on_next([=](std::array<int, 3> counts) {
-		_header->setTabCounts(counts);
-	}, lifetime());
-	_header->setTabCounts(_body->counts());
-}
-
-void WatcherView::showSettingsMenu() {
-	_menu = base::make_unique_q<Ui::PopupMenu>(
-		_header,
-		st::defaultPopupMenu);
-	const auto addAction = Ui::Menu::CreateAddActionCallback(_menu);
-	const auto on = tr::luxury_OnlineHistorySettingOn(tr::now);
-	const auto off = tr::luxury_OnlineHistorySettingOff(tr::now);
-	const auto addToggle = [&](
-			const QString &label,
-			bool value,
-			Fn<void(bool)> setter) {
-		addAction(
-			label + u": "_q + (value ? on : off),
-			[=] { setter(!value); },
-			nullptr);
-	};
-	// LuxurySettings is a singleton with a deleted copy constructor:
-	// resolve it inside the handler, never capture a reference.
-	addToggle(
-		tr::luxury_TrackOnlineHistory(tr::now),
-		LuxurySettings::getInstance().trackOnlineHistory(),
-		[](bool value) {
-			LuxurySettings::getInstance().setTrackOnlineHistory(value);
-		});
-	addToggle(
-		tr::luxury_TrackOnlineEvenWhenLocked(tr::now),
-		LuxurySettings::getInstance().trackOnlineEvenWhenLocked(),
-		[](bool value) {
-			LuxurySettings::getInstance().setTrackOnlineEvenWhenLocked(value);
-		});
-	const auto gear = _header->gearButton();
-	_menu->popup(gear->mapToGlobal(QPoint(0, gear->height())));
-}
-
-void WatcherView::resizeEvent(QResizeEvent *e) {
-	RpWidget::resizeEvent(e);
-	_header->setGeometry(0, 0, width(), _header->height());
-	_scroll->setGeometry(0, _header->height(), width(), height() - _header->height());
-	// QScrollArea does not track the viewport width itself: the list is
-	// sized to the scroll width, the same convention the box scroll uses
-	// (the bar overlaps the row padding, the cards inset themselves).
-	_body->resizeToWidth(_scroll->width());
-}
-
 void FillWatcherBox(
 		not_null<Ui::GenericBox*> box,
-		not_null<PeerData*> peer) {
-	// The view owns its pinned header (tabs over the toolbar) and its
-	// scrolling card list: the tabs stay in place while the list moves,
-	// and nothing scrolls behind them.
+		not_null<PeerData*> peer,
+		not_null<Window::SessionController*> controller) {
+	struct State {
+		Tab tab = Tab::All;
+		Order order = Order::Newest;
+		base::unique_qptr<Ui::PopupMenu> menu;
+	};
+	const auto state = box->lifetime().make_state<State>();
 	box->setTitle(tr::luxury_OnlineHistoryTitle());
-	box->setWidth(st::aboutWidth);
+	box->setWidth(st::luxuryWatcherWidth);
+	box->setMinHeight(st::luxuryWatcherViewHeight);
+	box->setMaxHeight(st::luxuryWatcherViewHeight);
 
-	box->verticalLayout()->add(
-		object_ptr<WatcherView>(box->verticalLayout(), peer),
+	// GenericBox owns the only scroll area and adapts it to the window;
+	// its pinned content stays outside that area's viewport.
+	const auto header = box->setPinnedToTopContent(
+		object_ptr<WatcherHeader>(box));
+	const auto body = box->addRow(
+		object_ptr<WatcherBody>(box, peer),
 		style::margins());
+
+	header->tabChanges(
+	) | rpl::on_next([=](int index) {
+		state->tab = static_cast<Tab>(index);
+		// Longest is a session sort, not an event sort.
+		header->setLastEnabled(state->tab != Tab::Events);
+		if (state->tab == Tab::Events && state->order == Order::Longest) {
+			state->order = Order::Newest;
+			body->setOrder(Order::Newest);
+			header->setSortIndex(static_cast<int>(Order::Newest));
+		}
+		body->setTab(state->tab);
+		box->scrollToY(0);
+	}, box->lifetime());
+
+	header->sortChanges(
+	) | rpl::on_next([=](int index) {
+		if (state->tab == Tab::Events
+			&& static_cast<Order>(index) == Order::Longest) {
+			header->setSortIndex(static_cast<int>(state->order));
+			return;
+		}
+		state->order = static_cast<Order>(index);
+		body->setOrder(state->order);
+		box->scrollToY(0);
+	}, box->lifetime());
+
+	header->refreshClicks(
+	) | rpl::on_next([=] {
+		// The read is synchronous and local: no blocking loading overlay.
+		header->startRefreshSpin();
+		body->refresh();
+	}, box->lifetime());
+
+	header->settingsClicks(
+	) | rpl::on_next([=] {
+		state->menu = base::make_unique_q<Ui::PopupMenu>(
+			header,
+			st::defaultPopupMenu);
+		const auto addAction = Ui::Menu::CreateAddActionCallback(state->menu);
+		const auto on = tr::luxury_OnlineHistorySettingOn(tr::now);
+		const auto off = tr::luxury_OnlineHistorySettingOff(tr::now);
+		const auto addToggle = [&](
+				const QString &label,
+				bool value,
+				Fn<void(bool)> setter) {
+			addAction(
+				label + u": "_q + (value ? on : off),
+				[=] { setter(!value); },
+				nullptr);
+		};
+		// LuxurySettings is a singleton with a deleted copy constructor:
+		// resolve it inside the handler, never capture a reference.
+		addToggle(
+			tr::luxury_TrackOnlineHistory(tr::now),
+			LuxurySettings::getInstance().trackOnlineHistory(),
+			[](bool value) {
+				LuxurySettings::getInstance().setTrackOnlineHistory(value);
+			});
+		addToggle(
+			tr::luxury_TrackOnlineEvenWhenLocked(tr::now),
+			LuxurySettings::getInstance().trackOnlineEvenWhenLocked(),
+			[](bool value) {
+				LuxurySettings::getInstance().setTrackOnlineEvenWhenLocked(value);
+			});
+		const auto gear = header->gearButton();
+		state->menu->popup(gear->mapToGlobal(QPoint(0, gear->height())));
+	}, box->lifetime());
+
+	body->countsChanged(
+	) | rpl::on_next([=](std::array<int, 3> counts) {
+		header->setTabCounts(counts);
+	}, box->lifetime());
+	header->setTabCounts(body->counts());
+	body->openMessages(
+	) | rpl::on_next([=](ID id) {
+		controller->showPeerHistory(peer, {}, MsgId(id));
+	}, box->lifetime());
 
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 }
@@ -1524,7 +1493,7 @@ void FillWatcherBox(
 void Show(
 		not_null<Window::SessionController*> controller,
 		not_null<PeerData*> peer) {
-	controller->show(Box(FillWatcherBox, peer));
+	controller->show(Box(FillWatcherBox, peer, controller));
 }
 
 } // namespace LuxuryWatcher

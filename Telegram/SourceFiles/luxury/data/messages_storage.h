@@ -16,7 +16,9 @@ namespace LuxuryMessages {
 // arriving before its own insert would drop nothing. addEditedMessage() is the
 // exception and writes synchronously, because hasRevisions() reads it back on
 // the main thread -- see the note over that in luxury_database.h.
-void addEditedMessage(not_null<HistoryItem *> item);
+void addEditedMessage(
+	not_null<HistoryItem*> item,
+	const QString &afterText);
 std::vector<LuxuryMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit);
 std::vector<LuxuryMessageBase> getEditedMessages(
 	ID userId,
@@ -75,10 +77,8 @@ void noteProfileChange(
 	const QString &oldText,
 	const QString &newText,
 	int at);
-// Reactions: one row per genuine change of a message's reaction state,
-// keyed by the message id, carrying the resulting summary (the counted
-// emoji list) in the title and a flattened preview of the message body
-// in the extra field, so the timeline shows what was reacted to.
+// Reactions: one row per genuine change, including an empty summary when
+// the last reaction disappears. extra retains the complete message body.
 // No dedup probe: every change is its own event.
 void noteReactions(
 	not_null<PeerData*> peer,
