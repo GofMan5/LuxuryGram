@@ -177,9 +177,19 @@ bool hasRevisions(not_null<HistoryItem*> item) {
 std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
 		not_null<PeerData*> peer,
 		int totalLimit) {
-	return convertToBase(LuxuryDatabase::getEditedMessagesForDialog(
+	return getEditedMessagesForDialog(
 		DatabaseUserId(peer->session()),
 		getDialogIdFromPeer(peer),
+		totalLimit);
+}
+
+std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
+		ID userId,
+		ID dialogId,
+		int totalLimit) {
+	return convertToBase(LuxuryDatabase::getEditedMessagesForDialog(
+		userId,
+		dialogId,
 		totalLimit));
 }
 
@@ -320,21 +330,8 @@ std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit) {
 		totalLimit);
 }
 
-// Single gate for the server-driven presence hook in Session::processUser.
-// Bots and service accounts never transition for real; a transition the
-// update already applied is compared against the pre-update state the caller
-// captured, so only genuine flaps reach the disk.
-void noteServerLastseen(not_null<UserData*> user, bool wasOnline, int now) {
-	if (!WatchGate()) {
-		return;
-	}
-	if (user->isBot() || user->isServiceUser()) {
-		return;
-	}
-	if (wasOnline == user->lastseen().isOnline(now)) {
-		return;
-	}
-	recordTransition(user, user->lastseen().isOnline(now), now);
+bool TrackingAllowed() {
+	return WatchGate();
 }
 
 void noteGift(
@@ -451,6 +448,10 @@ std::vector<WatchEvent> getWatchEvents(not_null<PeerData*> peer, int totalLimit)
 void clearHistory(not_null<PeerData*> peer) {
 	const auto userId = DatabaseUserId(peer->session());
 	const auto dialogId = getDialogIdFromPeer(peer);
+	LastOffline.erase({ userId, dialogId });
+	if (const auto user = peer->asUser()) {
+		user->resetTrackedPresence();
+	}
 	LuxuryDatabase::async([=] {
 		LuxuryDatabase::clearOnlineEvents(userId, dialogId);
 		LuxuryDatabase::clearWatchEvents(userId, dialogId);

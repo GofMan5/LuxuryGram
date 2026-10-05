@@ -727,7 +727,7 @@ std::vector<OnlineEvent> getOnlineEvents(ID userId, ID dialogId, int totalLimit)
 				column<OnlineEvent>(&OnlineEvent::userId) == userId and
 				column<OnlineEvent>(&OnlineEvent::dialogId) == dialogId
 			),
-			order_by(column<OnlineEvent>(&OnlineEvent::at)).desc(),
+			order_by(column<OnlineEvent>(&OnlineEvent::fakeId)).desc(),
 			limit(totalLimit)
 		);
 	} catch (const std::exception &ex) {

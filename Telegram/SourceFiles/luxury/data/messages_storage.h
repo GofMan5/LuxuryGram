@@ -31,6 +31,10 @@ bool hasRevisions(not_null<HistoryItem*> item);
 std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
 	not_null<PeerData*> peer,
 	int totalLimit);
+std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
+	ID userId,
+	ID dialogId,
+	int totalLimit);
 
 void addDeletedMessage(not_null<HistoryItem*> item);
 void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items);
@@ -50,12 +54,10 @@ void clearDeletedMessages(not_null<PeerData*> peer, ID topicId);
 
 namespace LuxuryOnline {
 
-// Transitions are posted through LuxuryDatabase::async like the deleted-message
-// writes, so recording never blocks the update that triggered it. Reads are
-// synchronous: the history box is opened by an explicit click, so there is
-// something to await into.
+// Writes use the ordered database queue. Read helpers are synchronous;
+// viewers schedule them on that queue with captured IDs, never background peers.
 void recordTransition(not_null<UserData*> user, bool online, int at);
-void noteServerLastseen(not_null<UserData*> user, bool wasOnline, int now);
+[[nodiscard]] bool TrackingAllowed();
 std::optional<int> lastOfflineAt(not_null<UserData*> user);
 std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit);
 void clearHistory(not_null<PeerData*> peer);

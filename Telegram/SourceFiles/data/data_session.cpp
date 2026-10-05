@@ -375,6 +375,28 @@ Session::Session(not_null<Main::Session*> session)
 	setupPeerNameViewer();
 	setupUserIsContactViewer();
 
+	const auto resetPresence = [=] {
+		for (const auto &[id, peer] : _peers) {
+			if (const auto user = peer->asUser()) {
+				user->resetTrackedPresence();
+			}
+		}
+	};
+	LuxurySettings::getInstance().trackOnlineHistoryChanges(
+	) | rpl::on_next(resetPresence, _lifetime);
+	LuxurySettings::getInstance().trackOnlineEvenWhenLockedChanges(
+	) | rpl::on_next([=] {
+		if (Core::App().passcodeLocked()) {
+			resetPresence();
+		}
+	}, _lifetime);
+	Core::App().passcodeLockChanges(
+	) | rpl::on_next([=] {
+		if (!LuxurySettings::getInstance().trackOnlineEvenWhenLocked()) {
+			resetPresence();
+		}
+	}, _lifetime);
+
 	_chatsList.unreadStateChanges(
 	) | rpl::on_next([=] {
 		notifyUnreadBadgeChanged();
@@ -935,19 +957,15 @@ not_null<UserData*> Session::processUser(const MTPUser &data) {
 	}
 
 	if (!minimal) {
-		const auto lastseen = status
-			? LastseenFromMTP(*status, result->lastseen())
-			: Data::LastseenStatus::LongAgo(false);
-		// LuxuryGram: online-history hook. Deliberately here and not in
-		// updateLastseen: that one also serves madeAction(), the local
-		// +30s inference on every incoming message or typing event, which
-		// would record a phantom "came online" with no matching offline.
-		// Server slices are the only genuine presence source.
 		const auto now = base::unixtime::now();
-		const auto wasOnline = result->lastseen().isOnline(now);
-		if (result->updateLastseen(lastseen)) {
+		if (!status) {
+			result->resetTrackedPresence();
+		}
+		const auto statusChanged = status
+			? result->updateServerLastseen(*status)
+			: result->updateLastseen(Data::LastseenStatus::LongAgo(false));
+		if (statusChanged) {
 			flags |= UpdateFlag::OnlineStatus;
-			LuxuryOnline::noteServerLastseen(result, wasOnline, now);
 		}
 		// LuxuryGram: profile-change hook. Minimal slices carry partial data
 		// and the first sync has no before-state, so both stay out. Bio would

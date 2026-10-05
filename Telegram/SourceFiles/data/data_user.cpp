@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_statistics.h"
 #include "api/api_text_entities.h"
 #include "base/timer_rpl.h"
+#include "base/unixtime.h"
 #include "core/application.h"
 #include "storage/localstorage.h"
 #include "storage/storage_account.h"
@@ -40,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/notifications_manager.h"
 
 // LuxuryGram includes
+#include "luxury/data/messages_storage.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/utils/telegram_helpers.h"
 
@@ -172,6 +174,42 @@ bool UserData::updateLastseen(Data::LastseenStatus value) {
 	_lastseen = value;
 	owner().maybeStopWatchForOffline(this);
 	return true;
+}
+
+bool UserData::updateServerLastseen(const MTPUserStatus &status) {
+	const auto now = base::unixtime::now();
+	if (_trackedPresence.start() && !_serverLastseen.isOnline(now)
+		&& status.type() == mtpc_userStatusOnline) {
+		_trackedPresence.reset();
+	}
+	_serverLastseen = LastseenFromMTP(status, _serverLastseen);
+	const auto enabled = LuxuryOnline::TrackingAllowed()
+		&& !isSelf()
+		&& !isBot()
+		&& !isServiceUser();
+	const auto online = status.type() == mtpc_userStatusOnline
+		&& _serverLastseen.isOnline(now);
+	const auto exact = online || status.type() == mtpc_userStatusOffline;
+	const auto transition = _trackedPresence.observe(
+		online,
+		enabled && exact,
+		now);
+	if (transition) {
+		LuxuryOnline::recordTransition(this, *transition, now);
+	}
+	return updateLastseen(LastseenFromMTP(status, _lastseen));
+}
+
+void UserData::resetTrackedPresence() {
+	_trackedPresence.reset();
+}
+
+std::optional<int> UserData::trackedOnlineStart() const {
+	return _trackedPresence.start();
+}
+
+Data::LastseenStatus UserData::serverLastseen() const {
+	return _serverLastseen;
 }
 
 // see Serialize::readPeer as well

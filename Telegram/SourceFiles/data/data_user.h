@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_lastseen_status.h"
 #include "data/data_user_names.h"
 #include "dialogs/dialogs_key.h"
+#include "luxury/features/watch/presence_history.h"
 #include "base/flags.h"
 
 namespace Data {
@@ -264,6 +265,10 @@ public:
 
 	[[nodiscard]] Data::LastseenStatus lastseen() const;
 	bool updateLastseen(Data::LastseenStatus value);
+	bool updateServerLastseen(const MTPUserStatus &status);
+	void resetTrackedPresence();
+	[[nodiscard]] std::optional<int> trackedOnlineStart() const;
+	[[nodiscard]] Data::LastseenStatus serverLastseen() const;
 
 	enum class CallsStatus : char {
 		Unknown,
@@ -338,6 +343,8 @@ private:
 
 	Flags _flags;
 	Data::LastseenStatus _lastseen;
+	Data::LastseenStatus _serverLastseen;
+	LuxuryFeatures::Watch::PresenceTracker _trackedPresence;
 	Data::Birthday _birthday;
 	int _commonChatsCount = 0;
 	int _peerGiftsCount = 0;

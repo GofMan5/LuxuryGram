@@ -74,6 +74,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/format_values.h" // Ui::FormatPhone
 
 // LuxuryGram includes
+#include "luxury/data/messages_storage.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/luxury_worker.h"
 
@@ -2093,8 +2094,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 	case mtpc_updateUserStatus: {
 		const auto &d = update.c_updateUserStatus();
 		if (const auto user = session().data().userLoaded(d.vuser_id())) {
-			const auto now = LastseenFromMTP(d.vstatus(), user->lastseen());
-			if (user->updateLastseen(now)) {
+			if (user->updateServerLastseen(d.vstatus())) {
 				session().changes().peerUpdated(
 					user,
 					Data::PeerUpdate::Flag::OnlineStatus);
@@ -2119,6 +2119,8 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 	case mtpc_updateUserName: {
 		const auto &d = update.c_updateUserName();
 		if (const auto user = session().data().userLoaded(d.vuser_id())) {
+			const auto oldName = user->name();
+			const auto oldUsername = user->username();
 			const auto contact = user->isContact();
 			const auto first = contact
 				? user->firstName
@@ -2134,6 +2136,23 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 				user->nameOrPhone,
 				TextUtilities::SingleLine(username));
 			user->setUsernames(Api::Usernames::FromTL(d.vusernames()));
+			const auto at = base::unixtime::now();
+			if (oldName != user->name()) {
+				LuxuryOnline::noteProfileChange(
+					user,
+					WatchKind::NameChanged,
+					oldName,
+					user->name(),
+					at);
+			}
+			if (oldUsername != user->username()) {
+				LuxuryOnline::noteProfileChange(
+					user,
+					WatchKind::UsernameChanged,
+					oldUsername,
+					user->username(),
+					at);
+			}
 		}
 	} break;
 

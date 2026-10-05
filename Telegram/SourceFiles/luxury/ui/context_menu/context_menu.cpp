@@ -382,8 +382,11 @@ void AddLuxuryGramActions(PeerData *peerData,
 	// A plain bool, not settings itself: fillSubmenu captures by [=], and
 	// capturing the settings reference would copy the singleton behind it,
 	// whose copy constructor is deleted.
-	const auto trackOnlineHistory = settings.trackOnlineHistory();
-	if (!showFilters && !saveDeletedMessages && !trackOnlineHistory) {
+	const auto watcherAvailable = user
+		&& !user->isSelf()
+		&& !user->isBot()
+		&& !user->isServiceUser();
+	if (!showFilters && !saveDeletedMessages && !watcherAvailable) {
 		return;
 	}
 
@@ -447,11 +450,8 @@ void AddLuxuryGramActions(PeerData *peerData,
 			// Online history is users only: channels and groups have no presence
 			// to track, and bots and service accounts never transition for real
 			// (the recorder skips them too, so the viewer would stay empty).
-			const auto trackOnline = trackOnlineHistory
-				&& user
-				&& !user->isBot()
-				&& !user->isServiceUser();
-			if (trackOnline) {
+			// Saved history stays accessible while recording is disabled.
+			if (watcherAvailable) {
 				if (saveDeletedMessages || showFilters || filteredToggleShown.value_or(false)) addAction({ .isSeparator = true });
 				addAction(
 					tr::luxury_ViewOnlineHistoryMenuText(tr::now),

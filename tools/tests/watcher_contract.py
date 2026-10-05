@@ -70,4 +70,41 @@ for key in keys:
     english = re.search(r'"' + key + r'" = "(.*)";', lang).group(1)
     russian = re.search(r'\{ "' + key + r'", "(.*)" \}', ru).group(1)
     assert set(re.findall(r'\{\w+\}', english)) == set(re.findall(r'\{\w+\}', russian)), key
-print('Watcher source contracts: PASS (layout wiring, edit capture, reactions, controls, localization, SQL order)')
+user = (src / 'data/data_user.cpp').read_text('utf-8')
+updates = (src / 'api/api_updates.cpp').read_text('utf-8')
+menu = (src / 'luxury/ui/context_menu/context_menu.cpp').read_text('utf-8')
+assert 'result->updateServerLastseen(*status)' in session
+assert 'user->updateServerLastseen(d.vstatus())' in updates
+server = user.split('bool UserData::updateServerLastseen(', 1)[1].split('void UserData::resetTrackedPresence', 1)[0]
+assert '_serverLastseen = LastseenFromMTP(status, _serverLastseen)' in server
+assert '_trackedPresence.observe(' in server and 'LuxuryOnline::TrackingAllowed()' in server
+assert 'LuxuryOnline' not in user.split('void UserData::madeAction(', 1)[1].split('\nvoid ', 1)[0]
+assert 'trackOnlineHistoryChanges(' in session and 'passcodeLockChanges(' in session
+assert 'noteServerLastseen' not in storage
+clear = storage.split('void clearHistory(', 1)[1]
+assert 'LastOffline.erase' in clear and 'resetTrackedPresence()' in clear
+online = database.split('std::vector<OnlineEvent> getOnlineEvents(', 1)[1].split('\nvoid ', 1)[0]
+assert 'order_by(column<OnlineEvent>(&OnlineEvent::fakeId)).desc()' in online
+assert 'LuxuryDatabase::async([=]' in box and 'crl::on_main(' in box and 'if (!weak)' in box
+assert 'SameRecordIds(_events, events)' in box
+assert 'user->trackedOnlineStart() == session.start' in box
+assert 'session.startId == _events.front().fakeId' in box
+assert 'user->serverLastseen().isOnline' in box
+assert '_expandedEvents.contains(key)' in box
+assert 'QApplication::mouseButtons()' in box and 'body->isAncestorOf(QApplication::focusWidget())' in box
+assert 'state->refreshTimer.callEach(kRefreshInterval)' in box
+assert 'base::make_unique_q<Ui::Menu::Toggle>' in box
+assert 'setter(!getter())' in box
+assert 'itemPadding: margins(17px, 9px, 60px, 8px);' in style
+assert 'itemToggleShift: 43px;' in style
+assert 'body->rebuilds(' in box and 'box->scrollToY(state->scrollTop)' in box
+assert 'luxury/features/watch/presence_history.h' in (root / 'Telegram/CMakeLists.txt').read_text('utf-8')
+assert 'const auto exact = online || status.type() == mtpc_userStatusOffline' in server
+assert 'enabled && exact' in server  # Approximate/hidden presence opens a gap, not an invented logout.
+assert 'if (watcherAvailable)' in menu and 'trackOnlineHistory = settings.trackOnlineHistory()' not in menu
+assert updates.count('LuxuryOnline::noteProfileChange(') == 2
+with sqlite3.connect(':memory:') as db:
+    db.execute('CREATE TABLE OnlineEvent(fakeId INTEGER PRIMARY KEY, at INTEGER, online INTEGER)')
+    db.executemany('INSERT INTO OnlineEvent VALUES (?, ?, ?)', [(1, 10, 1), (2, 10, 0), (3, 9, 1)])
+    assert db.execute('SELECT fakeId FROM OnlineEvent ORDER BY fakeId DESC').fetchall() == [(3,), (2,), (1,)]
+print('Watcher source contracts: PASS (layout, recording paths, privacy gates, async reads, live state, localization, SQL order)')

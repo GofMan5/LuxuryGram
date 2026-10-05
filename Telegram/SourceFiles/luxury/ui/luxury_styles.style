@@ -167,6 +167,15 @@ luxuryWatcherMetaLabel: FlatLabel(boxLabel) {
 		font: font(12px);
 	}
 }
+luxuryWatcherIdentityLabel: FlatLabel(luxuryWatcherSummaryLabel) {
+	maxHeight: 20px;
+}
+luxuryWatcherSettingsMenu: PopupMenu(defaultPopupMenu) {
+	menu: Menu(defaultMenu) {
+		itemPadding: margins(17px, 9px, 60px, 8px);
+		itemToggleShift: 43px;
+	}
+}
 luxuryWatcherAction: LinkButton(defaultLinkButton) {
 	font: font(12px semibold);
 	overFont: font(12px semibold);

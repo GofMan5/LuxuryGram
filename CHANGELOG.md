@@ -4,6 +4,20 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Changed
+
+- Watcher identifies the selected person, explains the limits of observed history and shows when recording is paused. Its settings use native toggles and explicitly identify recording as an all-chats setting; saved history remains accessible when recording is off.
+- Watcher reads saved history off the UI thread and refreshes idle views every five seconds, preserving scroll position and expanded event details. Automatic refresh pauses while selecting text, focusing a detail or using the settings menu; active-session duration updates every second and timestamps include seconds.
+
+### Fixed
+
+- Online history now records live Telegram status updates as well as user snapshots, independently of the temporary online status inferred from messages or typing. Repeated server confirmations no longer duplicate transitions, and an initial offline snapshot is not recorded as a departure.
+- Watcher no longer labels old unfinished sessions as Online now. Missing departures and observation gaps remain explicit; resumed tracking starts a new interval instead of merging time across pauses or restarts. Same-second transitions and system-clock changes retain insertion order.
+- Live name and username updates are now included in Watcher events rather than being missed until another user snapshot arrives.
+- Clearing Watcher history also clears its cached last-seen fallback and active-session state instead of continuing to display cleared data.
+
 ## 1.0.19
 
 ### Changed

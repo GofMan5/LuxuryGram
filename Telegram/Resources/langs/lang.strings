@@ -9028,6 +9028,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_WatchReactions" = "Reactions: {list}";
 "luxury_WatchEditWas" = "Was:";
 "luxury_WatchEditNow" = "Now:";
+"luxury_WatcherEndUnobserved" = "End not observed";
+"luxury_WatcherTrackingHint" = "Observed history only; gaps are not online time.";
+"luxury_WatcherTrackingPaused" = "Recording paused. Saved history is still available.";
+"luxury_WatcherTrackingAllChats" = "Record in all chats";
+"luxury_WatcherLoading" = "Loading saved history…";
 "luxury_WatcherExpand" = "Show full text";
 "luxury_WatcherCollapse" = "Collapse text";
 "luxury_WatcherShowMore" = "Show more records";

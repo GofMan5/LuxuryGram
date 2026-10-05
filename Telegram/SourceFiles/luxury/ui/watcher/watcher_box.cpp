@@ -6,13 +6,19 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/watcher/watcher_box.h"
 
+#include "base/timer.h"
 #include "base/unixtime.h"
 #include "base/unique_qptr.h"
+#include "base/weak_ptr.h"
+#include "crl/crl_on_main.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
+#include "data/data_user.h"
 #include "history/history_item.h"
 #include "lang_auto.h"
+#include "luxury/data/luxury_database.h"
 #include "luxury/data/messages_storage.h"
+#include "luxury/features/watch/presence_history.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/ui/watcher/watcher_components.h"
 #include "luxury/ui/watcher/watcher_revisions.h"
@@ -24,8 +30,7 @@
 #include "ui/text/format_values.h"
 #include "ui/text/text.h"
 #include "ui/widgets/menu/menu.h"
-#include "ui/widgets/menu/menu_add_action_callback.h"
-#include "ui/widgets/menu/menu_add_action_callback_factory.h"
+#include "ui/widgets/menu/menu_toggle.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
@@ -41,6 +46,7 @@
 #include <tuple>
 #include <vector>
 #include <QtCore/QLocale>
+#include <QtWidgets/QApplication>
 
 #include "styles/style_basic.h"
 #include "styles/style_boxes.h"
@@ -87,10 +93,10 @@ constexpr auto kMaxWatchEventRows = 30;
 constexpr auto kHistoryReadLimit = 200;
 constexpr auto kMoreRows = 30;
 
-struct OnlineSession {
-	std::optional<int> start;
-	std::optional<int> end;
-};
+using LuxuryFeatures::Watch::OnlineSession;
+using LuxuryFeatures::Watch::PairOnlineSessions;
+
+constexpr auto kRefreshInterval = crl::time(5000);
 
 // One row of the merged Events timeline: a stored watch event, or a
 // deleted/edited message rendered as one.
@@ -107,6 +113,7 @@ struct TrackedEvent {
 	QString context;
 	QString note;
 	ID messageId = 0;
+	ID rowId = 0;
 };
 
 [[nodiscard]] QColor Blended(
@@ -139,36 +146,6 @@ void PaintCardShell(Painter &p, int width, int height) {
 		QRectF(inset, inset, width - 2 * inset, height - 2 * inset),
 		st::luxuryWatcherCardRadius,
 		st::luxuryWatcherCardRadius);
-}
-
-// Pairs presence transitions into stays online, oldest first. The loader
-// reports newest first, so this walks the events back to front: an online
-// followed by an offline is one stay. A repeated online only confirms the
-// stay is ongoing -- the earliest one stays the start. An offline with no
-// online in the loaded set began before tracking started or past the load
-// window and keeps an empty start instead of an invented one; a trailing
-// online with no offline yet is still open.
-std::vector<OnlineSession> PairOnlineSessions(
-		const std::vector<OnlineEvent> &events) {
-	auto result = std::vector<OnlineSession>();
-	result.reserve(events.size());
-	auto start = std::optional<int>();
-	for (auto i = events.rbegin(); i != events.rend(); ++i) {
-		if (i->online) {
-			if (!start) {
-				start = i->at;
-			}
-		} else if (start) {
-			result.push_back({ start, i->at });
-			start = std::nullopt;
-		} else {
-			result.push_back({ std::nullopt, i->at });
-		}
-	}
-	if (start) {
-		result.push_back({ start, std::nullopt });
-	}
-	return result;
 }
 
 // One sentence per watched event: gifts name the giver and the stored
@@ -247,6 +224,7 @@ std::vector<OnlineSession> PairOnlineSessions(
 		not_null<PeerData*> peer) {
 	auto result = TrackedEvent();
 	result.at = event.at;
+	result.rowId = event.fakeId;
 	result.kind = event.kind;
 	result.messageId = event.messageId;
 	result.summary = WatchEventText(event, peer);
@@ -299,9 +277,9 @@ std::vector<OnlineSession> PairOnlineSessions(
 	const auto today = QDateTime::currentDateTime().date();
 	const auto date = time.date();
 	if (date == today) {
-		return time.toString(u"HH:mm"_q);
+		return time.toString(u"HH:mm:ss"_q);
 	}
-	const auto timePart = u" "_q + time.toString(u"HH:mm"_q);
+	const auto timePart = u" "_q + time.toString(u"HH:mm:ss"_q);
 	return (date.year() == today.year())
 		? date.toString(u"dd.MM"_q) + timePart
 		: date.toString(u"dd.MM.yyyy"_q) + timePart;
@@ -387,7 +365,10 @@ protected:
 
 class SessionCard final : public WatcherCard {
 public:
-	SessionCard(QWidget *parent, const OnlineSession &session);
+	SessionCard(QWidget *parent, const OnlineSession &session, bool active);
+	void tick();
+	void setActive(bool active);
+	[[nodiscard]] const OnlineSession &session() const { return _session; }
 
 protected:
 	int resizeGetHeight(int newWidth) override;
@@ -399,6 +380,7 @@ private:
 	void computeLayout(int newWidth);
 
 	OnlineSession _session;
+	bool _active = false;
 	QString _startLabel;
 	QString _endLabel;
 	QString _startValue;
@@ -417,7 +399,7 @@ private:
 
 class EventCard final : public WatcherCard {
 public:
-	EventCard(QWidget *parent, const TrackedEvent &event);
+	EventCard(QWidget *parent, const TrackedEvent &event, bool expanded);
 	~EventCard();
 
 	[[nodiscard]] rpl::producer<> toggleRequests() const {
@@ -466,6 +448,13 @@ public:
 	void setTab(Tab tab);
 	void setOrder(Order order);
 	void refresh();
+	void tick();
+	[[nodiscard]] rpl::producer<> rebuilds() const {
+		return _rebuilds.events();
+	}
+	[[nodiscard]] rpl::producer<bool> reloads() const {
+		return _reloads.events();
+	}
 	[[nodiscard]] rpl::producer<ID> openMessages() const {
 		return _openMessages.events();
 	}
@@ -486,6 +475,7 @@ protected:
 private:
 	void reload();
 	void rebuild();
+	[[nodiscard]] bool sessionActive(const OnlineSession &session) const;
 	[[nodiscard]] std::vector<OnlineSession> sortedSessions() const;
 	[[nodiscard]] std::vector<TrackedEvent> sortedEvents() const;
 
@@ -497,6 +487,9 @@ private:
 	std::vector<LuxuryMessageBase> _deleted;
 	std::vector<LuxuryMessageBase> _edits;
 	std::vector<OnlineSession> _sessions;
+	std::set<std::pair<int, ID>> _expandedEvents;
+	bool _loading = false;
+	bool _reloadAgain = false;
 	Tab _tab = Tab::All;
 	Order _order = Order::Newest;
 	int _sessionOverflow = 0;
@@ -512,6 +505,8 @@ private:
 	std::vector<SessionCard*> _sessionCards;
 	std::vector<EventCard*> _eventCards;
 	rpl::event_stream<std::array<int, 3>> _counts;
+	rpl::event_stream<bool> _reloads;
+	rpl::event_stream<> _rebuilds;
 
 };
 
@@ -541,13 +536,15 @@ public:
 	void setLastEnabled(bool enabled);
 	void startRefreshSpin();
 	void setTabCounts(std::array<int, 3> counts);
+	void updateContext(not_null<PeerData*> peer);
 
 protected:
 	void paintEvent(QPaintEvent *e) override;
-	void resizeEvent(QResizeEvent *e) override;
+	int resizeGetHeight(int newWidth) override;
 
 private:
-	[[nodiscard]] int contentHeight() const;
+	Ui::FlatLabel *_identity = nullptr;
+	Ui::FlatLabel *_status = nullptr;
 
 	LuxuryUi::TabsBar *_tabs = nullptr;
 	WatcherToolbar *_toolbar = nullptr;
@@ -662,9 +659,11 @@ void WatcherCard::paintEvent(QPaintEvent *e) {
 
 SessionCard::SessionCard(
 		QWidget *parent,
-		const OnlineSession &session)
+		const OnlineSession &session,
+		bool active)
 : WatcherCard(parent)
-, _session(session) {
+, _session(session)
+, _active(active) {
 	_startLabel = tr::luxury_OnlineHistoryStart(tr::now) + u":"_q;
 	_endLabel = tr::luxury_OnlineHistoryEnd(tr::now) + u":"_q;
 	if (_session.start) {
@@ -673,7 +672,9 @@ SessionCard::SessionCard(
 		_startValue = tr::luxury_OnlineHistoryUnknown(tr::now);
 	}
 	if (!_session.end) {
-		_endValue = tr::luxury_OnlineHistoryOpen(tr::now);
+		_endValue = _active
+			? tr::luxury_OnlineHistoryOpen(tr::now)
+			: tr::luxury_WatcherEndUnobserved(tr::now);
 	} else {
 		_endValue = CompactTimestamp(*_session.end);
 	}
@@ -684,22 +685,54 @@ SessionCard::SessionCard(
 			0,
 			qint64(*_session.end) - qint64(*_session.start));
 		_durationText = Ui::FormatDurationText(seconds);
-	} else if (_session.start) {
-		// Open by construction only with a start set (see the pairing
-		// above); it reads as "since <start>", like the row always did.
-		_durationText = tr::luxury_OnlineHistorySince(
-			tr::now,
-			lt_time,
-			_startValue);
+	} else if (_active && _session.start) {
+		_durationText = Ui::FormatDurationText(std::max<qint64>(
+			0,
+			base::unixtime::now() - qint64(*_session.start)));
 	}
-	if (!_session.end) {
-		_pulse.init([=](crl::time now) {
-			_pulsePhase = (now % kPulseDuration) / float64(kPulseDuration);
-			update();
-			return true;
-		});
+	_pulse.init([=](crl::time now) {
+		_pulsePhase = (now % kPulseDuration) / float64(kPulseDuration);
+		update();
+		return true;
+	});
+	if (_active) {
 		_pulse.start();
 	}
+	setToolTip(_startLabel + u" "_q + _startValue
+		+ u"\n"_q + _endLabel + u" "_q + _endValue);
+}
+
+void SessionCard::setActive(bool active) {
+	if (_active == active) {
+		return;
+	}
+	_active = active;
+	_endValue = active
+		? tr::luxury_OnlineHistoryOpen(tr::now)
+		: tr::luxury_WatcherEndUnobserved(tr::now);
+	if (active) {
+		_pulse.start();
+		tick();
+	} else {
+		_pulse.stop();
+		_durationText = QString();
+		computeLayout(width());
+		update();
+	}
+	setToolTip(_startLabel + u" "_q + _startValue
+		+ u"\n"_q + _endLabel + u" "_q + _endValue);
+	resizeToWidth(width());
+}
+
+void SessionCard::tick() {
+	if (!_active || !_session.start) {
+		return;
+	}
+	_durationText = Ui::FormatDurationText(std::max<qint64>(
+		0,
+		base::unixtime::now() - qint64(*_session.start)));
+	computeLayout(width());
+	update();
 }
 
 void SessionCard::computeLayout(int newWidth) {
@@ -763,7 +796,7 @@ void SessionCard::paintCard(Painter &p) {
 		const auto &label = line ? _endLabel : _startLabel;
 		const auto &value = line ? _endValueElided : _startValueElided;
 		// Only the End line of an open session carries the accent.
-		const auto valuePen = (!line || _session.end)
+		const auto valuePen = (!line || !_active)
 			? QPen(st::windowFg->c)
 			: QPen(LuxuryUi::AccentColor());
 		const auto lineRect = style::rtlrect(
@@ -799,7 +832,7 @@ void SessionCard::paintStatus(Painter &p) {
 		dot,
 		width());
 	p.setPen(Qt::NoPen);
-	if (!_session.end) {
+	if (_active) {
 		// Open: an accent dot with a halo that grows and fades on a sine
 		// loop -- the live "online right now" beacon.
 		const auto accent = LuxuryUi::AccentColor();
@@ -814,8 +847,8 @@ void SessionCard::paintStatus(Painter &p) {
 		p.drawEllipse(center, halo / 2., halo / 2.);
 		p.setBrush(accent);
 		p.drawEllipse(QRectF(rect));
-	} else if (!_session.start) {
-		// Unknown start: an outlined circle with a question mark.
+	} else if (!_session.start || !_session.end) {
+		// Incomplete interval: an outlined circle with a question mark.
 		p.setPen(QPen(st::windowSubTextFg->c, dot / 5.));
 		p.setBrush(Qt::NoBrush);
 		p.drawEllipse(QRectF(rect));
@@ -877,9 +910,11 @@ void SessionCard::paintDuration(Painter &p) {
 
 EventCard::EventCard(
 		QWidget *parent,
-		const TrackedEvent &event)
+		const TrackedEvent &event,
+		bool expanded)
 : WatcherCard(parent)
 , _detailStyle(st::luxuryWatcherValueLabel)
+, _expanded(expanded)
 , _kind(event.kind) {
 	_chipLabel = ChipLabelFor(_kind);
 	_dateText = CompactTimestamp(event.at);
@@ -993,6 +1028,9 @@ int EventCard::resizeGetHeight(int newWidth) {
 		_note->moveToLeft(padding.left(), y, newWidth);
 		y += _note->height();
 	}
+	_expand->setText(_expanded
+		? tr::luxury_WatcherCollapse(tr::now)
+		: tr::luxury_WatcherExpand(tr::now));
 	_expand->setVisible(expandable);
 	if (expandable || !_open->isHidden()) {
 		y += st::luxuryWatcherDetailSkip;
@@ -1092,23 +1130,98 @@ void WatcherBody::setOrder(Order order) {
 
 void WatcherBody::refresh() {
 	reload();
-	rebuild();
+}
+
+bool WatcherBody::sessionActive(const OnlineSession &session) const {
+	const auto user = _peer->asUser();
+	return user
+		&& !session.end
+		&& session.start
+		&& !_events.empty()
+		&& _events.front().online
+		&& session.startId == _events.front().fakeId
+		&& LuxuryOnline::TrackingAllowed()
+		&& user->trackedOnlineStart() == session.start
+		&& user->serverLastseen().isOnline(base::unixtime::now());
+}
+
+void WatcherBody::tick() {
+	for (const auto card : _sessionCards) {
+		card->setActive(sessionActive(card->session()));
+		card->tick();
+	}
+	if (width() > 0) {
+		resizeToWidth(width());
+	}
 }
 
 void WatcherBody::reload() {
-	_events = LuxuryOnline::getHistory(_peer, kHistoryReadLimit);
-	_watches = LuxuryOnline::getWatchEvents(_peer, kHistoryReadLimit);
-	_deleted = LuxuryMessages::getDeletedMessages(
-		_peer,
-		0,
-		0,
-		0,
-		kHistoryReadLimit);
-	_edits = LuxuryMessages::getEditedMessagesForDialog(
-		_peer,
-		kHistoryReadLimit);
-	_sessions = PairOnlineSessions(_events);
-	_counts.fire(counts());
+	if (_loading) {
+		_reloadAgain = true;
+		return;
+	}
+	_loading = true;
+	const auto userId = static_cast<ID>(_peer->session().uniqueId());
+	const auto dialogId = getDialogIdFromPeer(_peer);
+	const auto weak = base::make_weak(this);
+	LuxuryDatabase::async([=] {
+		auto events = LuxuryDatabase::getOnlineEvents(
+			userId,
+			dialogId,
+			kHistoryReadLimit);
+		auto watches = LuxuryDatabase::getWatchEvents(
+			userId,
+			dialogId,
+			kHistoryReadLimit);
+		auto deleted = LuxuryMessages::getDeletedMessages(
+			userId,
+			dialogId,
+			0,
+			0,
+			0,
+			kHistoryReadLimit);
+		auto edits = LuxuryMessages::getEditedMessagesForDialog(
+			userId,
+			dialogId,
+			kHistoryReadLimit);
+		crl::on_main([=,
+				events = std::move(events),
+				watches = std::move(watches),
+				deleted = std::move(deleted),
+				edits = std::move(edits)]() mutable {
+			if (!weak) {
+				return;
+			}
+			_loading = false;
+			using LuxuryFeatures::Watch::SameRecordIds;
+			const auto changed = !SameRecordIds(_events, events)
+				|| !SameRecordIds(_watches, watches)
+				|| !SameRecordIds(_deleted, deleted)
+				|| !SameRecordIds(_edits, edits);
+			if (changed && (QApplication::mouseButtons()
+				|| isAncestorOf(QApplication::focusWidget()))) {
+				_reloadAgain = false;
+				return;
+			}
+			_events = std::move(events);
+			_watches = std::move(watches);
+			_deleted = std::move(deleted);
+			_edits = std::move(edits);
+			_sessions = PairOnlineSessions(_events);
+			const auto rebuilt = changed || (_sessionCards.empty() && _eventCards.empty());
+			if (rebuilt) {
+				rebuild();
+			} else {
+				tick();
+			}
+			_counts.fire(counts());
+			_reloads.fire_copy(rebuilt);
+			if (_reloadAgain) {
+				_reloadAgain = false;
+				reload();
+			}
+		});
+	});
 }
 
 std::vector<OnlineSession> WatcherBody::sortedSessions() const {
@@ -1124,10 +1237,10 @@ std::vector<OnlineSession> WatcherBody::sortedSessions() const {
 				const OnlineSession &a,
 				const OnlineSession &b) {
 			const auto left = a.start && a.end
-				? qint64(*a.end) - qint64(*a.start)
+				? std::max<qint64>(0, qint64(*a.end) - qint64(*a.start))
 				: -1;
 			const auto right = b.start && b.end
-				? qint64(*b.end) - qint64(*b.start)
+				? std::max<qint64>(0, qint64(*b.end) - qint64(*b.start))
 				: -1;
 			return left > right;
 		});
@@ -1153,6 +1266,7 @@ std::vector<TrackedEvent> WatcherBody::sortedEvents() const {
 	for (const auto &deleted : _deleted) {
 		auto event = TrackedEvent();
 		event.at = MessageTimestamp(deleted);
+		event.rowId = deleted.fakeId;
 		event.kind = kKindDeleted;
 		event.summary = tr::luxury_WatcherMessageDeleted(tr::now);
 		event.context = MessageContext(_peer, deleted.messageId, deleted.fromId);
@@ -1170,6 +1284,7 @@ std::vector<TrackedEvent> WatcherBody::sortedEvents() const {
 		}
 		auto event = TrackedEvent();
 		event.at = at;
+		event.rowId = edited.fakeId;
 		event.kind = kKindEdited;
 		event.messageId = edited.messageId;
 		event.summary = tr::luxury_WatcherMessageEdited(tr::now);
@@ -1215,6 +1330,7 @@ void WatcherBody::refreshEarlier() {
 }
 
 void WatcherBody::rebuild() {
+	_rebuilds.fire({});
 	// Rebuild swaps the card children; deleteLater keeps the destruction
 	// out of this paint event, hiding them so nothing overlaps first.
 	for (const auto card : _sessionCards) {
@@ -1230,6 +1346,11 @@ void WatcherBody::rebuild() {
 
 	const auto sessionList = sortedSessions();
 	const auto eventList = sortedEvents();
+	std::erase_if(_expandedEvents, [&](const auto &key) {
+		return std::none_of(eventList.begin(), eventList.end(), [&](const auto &event) {
+			return key == std::pair(event.kind, event.rowId);
+		});
+	});
 	const auto sessionsVisible = _tab != Tab::Events;
 	const auto eventsVisible = _tab != Tab::Sessions;
 	_sessionOverflow = 0;
@@ -1243,6 +1364,9 @@ void WatcherBody::rebuild() {
 			+ u" · "_q
 			+ QString::number(_sessions.size()));
 		if (sessionList.empty()) {
+			_sessionEmpty->setText(_loading
+				? tr::luxury_WatcherLoading(tr::now)
+				: tr::luxury_OnlineHistorySessionsEmpty(tr::now));
 			_sessionEmpty->show();
 		} else {
 			_sessionEmpty->hide();
@@ -1252,7 +1376,8 @@ void WatcherBody::rebuild() {
 			for (auto i = 0; i != shown; ++i) {
 				_sessionCards.push_back(Ui::CreateChild<SessionCard>(
 					this,
-					sessionList[i]));
+					sessionList[i],
+					sessionActive(sessionList[i])));
 			}
 		}
 	} else {
@@ -1264,6 +1389,9 @@ void WatcherBody::rebuild() {
 			+ u" · "_q
 			+ QString::number(eventList.size()));
 		if (eventList.empty()) {
+			_eventEmpty->setText(_loading
+				? tr::luxury_WatcherLoading(tr::now)
+				: tr::luxury_OnlineHistoryEventsEmpty(tr::now));
 			_eventEmpty->show();
 		} else {
 			_eventEmpty->hide();
@@ -1271,9 +1399,11 @@ void WatcherBody::rebuild() {
 			const auto shown = std::min(total, _eventLimit);
 			_eventOverflow = total - shown;
 			for (auto i = 0; i != shown; ++i) {
+				const auto key = std::pair(eventList[i].kind, eventList[i].rowId);
 				const auto card = Ui::CreateChild<EventCard>(
 					this,
-					eventList[i]);
+					eventList[i],
+					_expandedEvents.contains(key));
 				_eventCards.push_back(card);
 				const auto messageId = eventList[i].messageId;
 				card->openRequests(
@@ -1284,6 +1414,9 @@ void WatcherBody::rebuild() {
 				// layout so the cards below it move out of the way.
 				card->toggleRequests(
 				) | rpl::on_next([=] {
+					if (!_expandedEvents.erase(key)) {
+						_expandedEvents.insert(key);
+					}
 					resizeToWidth(width());
 				}, card->lifetime());
 			}
@@ -1315,16 +1448,15 @@ int WatcherBody::resizeGetHeight(int newWidth) {
 	return y + st::luxuryWatcherDetailSkip;
 }
 
-int WatcherHeader::contentHeight() const {
-	return st::luxuryWatcherHeaderSkip
-		+ st::luxuryWatcherTabHeight
-		+ st::luxuryWatcherHeaderSkip
-		+ std::max(st::luxuryWatcherSortHeight, st::luxuryWatcherIconSize)
-		+ st::luxuryWatcherHeaderSkip;
-}
-
 WatcherHeader::WatcherHeader(QWidget *parent)
 : RpWidget(parent) {
+	_identity = Ui::CreateChild<Ui::FlatLabel>(
+		this,
+		QString(),
+		st::luxuryWatcherIdentityLabel);
+	_identity->setSelectable(true);
+	_status = Ui::CreateChild<Ui::FlatLabel>(
+		this, QString(), st::luxuryWatcherMetaLabel);
 	_tabs = Ui::CreateChild<LuxuryUi::TabsBar>(
 		this,
 		std::array<QString, 3>{
@@ -1333,7 +1465,7 @@ WatcherHeader::WatcherHeader(QWidget *parent)
 			tr::luxury_OnlineHistorySortEvents(tr::now),
 		});
 	_toolbar = Ui::CreateChild<WatcherToolbar>(this);
-	setFixedHeight(contentHeight());
+	resizeToWidth(width());
 }
 
 void WatcherHeader::setSortIndex(int index) {
@@ -1364,24 +1496,31 @@ void WatcherHeader::paintEvent(QPaintEvent *e) {
 		LuxuryUi::WithAlpha(st::windowFg->c, 0.08));
 }
 
-void WatcherHeader::resizeEvent(QResizeEvent *e) {
-	RpWidget::resizeEvent(e);
+void WatcherHeader::updateContext(not_null<PeerData*> peer) {
+	const auto name = peer->name();
+	_identity->setText(name);
+	_identity->setToolTip(name);
+	_status->setText(LuxuryOnline::TrackingAllowed()
+		? tr::luxury_WatcherTrackingHint(tr::now)
+		: tr::luxury_WatcherTrackingPaused(tr::now));
+	resizeToWidth(width());
+}
+
+int WatcherHeader::resizeGetHeight(int newWidth) {
 	const auto left = st::boxRowPadding.left();
-	const auto width = this->width() - left - st::boxRowPadding.right();
-	_tabs->setGeometryToLeft(
-		left,
-		st::luxuryWatcherHeaderSkip,
-		width,
-		st::luxuryWatcherTabHeight,
-		this->width());
-	// resizeToWidth (not setGeometry): the toolbar lays its children out
-	// in resizeGetHeight, which only runs through it.
+	const auto width = std::max(1, newWidth - left - st::boxRowPadding.right());
+	auto y = st::luxuryWatcherHeaderSkip;
+	_identity->resizeToWidth(width);
+	_identity->moveToLeft(left, y, newWidth);
+	y += _identity->height() + st::luxuryWatcherMetaSkip;
+	_status->resizeToWidth(width);
+	_status->moveToLeft(left, y, newWidth);
+	y += _status->height() + st::luxuryWatcherHeaderSkip;
+	_tabs->setGeometryToLeft(left, y, width, st::luxuryWatcherTabHeight, newWidth);
+	y += st::luxuryWatcherTabHeight + st::luxuryWatcherHeaderSkip;
 	_toolbar->resizeToWidth(width);
-	_toolbar->moveToLeft(
-		left,
-		st::luxuryWatcherHeaderSkip
-			+ st::luxuryWatcherTabHeight
-			+ st::luxuryWatcherHeaderSkip);
+	_toolbar->moveToLeft(left, y, newWidth);
+	return y + _toolbar->height() + st::luxuryWatcherHeaderSkip;
 }
 
 void FillWatcherBox(
@@ -1392,6 +1531,9 @@ void FillWatcherBox(
 		Tab tab = Tab::All;
 		Order order = Order::Newest;
 		base::unique_qptr<Ui::PopupMenu> menu;
+		base::Timer refreshTimer;
+		base::Timer clockTimer;
+		int scrollTop = 0;
 	};
 	const auto state = box->lifetime().make_state<State>();
 	box->setTitle(tr::luxury_OnlineHistoryTitle());
@@ -1407,6 +1549,40 @@ void FillWatcherBox(
 		object_ptr<WatcherBody>(box, peer),
 		style::margins());
 
+	header->updateContext(peer);
+	const auto refresh = [=] {
+		state->scrollTop = box->scrollTop();
+		body->refresh();
+	};
+	body->rebuilds(
+	) | rpl::on_next([=] { state->scrollTop = box->scrollTop(); }, box->lifetime());
+	body->reloads(
+	) | rpl::on_next([=](bool rebuilt) {
+		header->updateContext(peer);
+		if (rebuilt) {
+			box->scrollToY(state->scrollTop);
+		}
+	}, box->lifetime());
+	state->refreshTimer.setCallback([=] {
+		// Do not replace selectable widgets while the user is interacting.
+		if (!box->isVisible() || state->menu || QApplication::mouseButtons()
+			|| body->isAncestorOf(QApplication::focusWidget())) {
+			return;
+		}
+		refresh();
+	});
+	state->refreshTimer.callEach(kRefreshInterval);
+	state->clockTimer.setCallback([=] {
+		if (box->isVisible() && !QApplication::mouseButtons()) {
+			body->tick();
+		}
+	});
+	state->clockTimer.callEach(1000);
+	LuxurySettings::getInstance().trackOnlineHistoryChanges(
+	) | rpl::on_next([=] { header->updateContext(peer); body->tick(); }, box->lifetime());
+	LuxurySettings::getInstance().trackOnlineEvenWhenLockedChanges(
+	) | rpl::on_next([=] { header->updateContext(peer); body->tick(); }, box->lifetime());
+
 	header->tabChanges(
 	) | rpl::on_next([=](int index) {
 		state->tab = static_cast<Tab>(index);
@@ -1418,6 +1594,7 @@ void FillWatcherBox(
 			header->setSortIndex(static_cast<int>(Order::Newest));
 		}
 		body->setTab(state->tab);
+		state->scrollTop = 0;
 		box->scrollToY(0);
 	}, box->lifetime());
 
@@ -1430,44 +1607,47 @@ void FillWatcherBox(
 		}
 		state->order = static_cast<Order>(index);
 		body->setOrder(state->order);
+		state->scrollTop = 0;
 		box->scrollToY(0);
 	}, box->lifetime());
 
 	header->refreshClicks(
 	) | rpl::on_next([=] {
-		// The read is synchronous and local: no blocking loading overlay.
 		header->startRefreshSpin();
-		body->refresh();
+		refresh();
 	}, box->lifetime());
 
 	header->settingsClicks(
 	) | rpl::on_next([=] {
 		state->menu = base::make_unique_q<Ui::PopupMenu>(
 			header,
-			st::defaultPopupMenu);
-		const auto addAction = Ui::Menu::CreateAddActionCallback(state->menu);
-		const auto on = tr::luxury_OnlineHistorySettingOn(tr::now);
-		const auto off = tr::luxury_OnlineHistorySettingOff(tr::now);
+			st::luxuryWatcherSettingsMenu);
 		const auto addToggle = [&](
 				const QString &label,
-				bool value,
+				Fn<bool()> getter,
 				Fn<void(bool)> setter) {
-			addAction(
-				label + u": "_q + (value ? on : off),
-				[=] { setter(!value); },
-				nullptr);
+			const auto value = getter();
+			const auto action = state->menu->addAction(base::make_unique_q<Ui::Menu::Toggle>(
+				state->menu->menu(),
+				state->menu->st().menu,
+				label,
+				[=] { setter(!getter()); },
+				nullptr,
+				nullptr));
+			action->setCheckable(true);
+			action->setChecked(value);
 		};
 		// LuxurySettings is a singleton with a deleted copy constructor:
 		// resolve it inside the handler, never capture a reference.
 		addToggle(
-			tr::luxury_TrackOnlineHistory(tr::now),
-			LuxurySettings::getInstance().trackOnlineHistory(),
+			tr::luxury_WatcherTrackingAllChats(tr::now),
+			[] { return LuxurySettings::getInstance().trackOnlineHistory(); },
 			[](bool value) {
 				LuxurySettings::getInstance().setTrackOnlineHistory(value);
 			});
 		addToggle(
 			tr::luxury_TrackOnlineEvenWhenLocked(tr::now),
-			LuxurySettings::getInstance().trackOnlineEvenWhenLocked(),
+			[] { return LuxurySettings::getInstance().trackOnlineEvenWhenLocked(); },
 			[](bool value) {
 				LuxurySettings::getInstance().setTrackOnlineEvenWhenLocked(value);
 			});
