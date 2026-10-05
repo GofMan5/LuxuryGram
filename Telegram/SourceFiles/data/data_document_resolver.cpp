@@ -259,6 +259,9 @@ void ResolveDocument(
 
 	const auto media = document->createMediaView();
 	const auto openPluginInfo = [&] {
+		if (document->size >= Images::kReadBytesLimit) {
+			return false;
+		}
 		if (controller
 			&& document->filename().endsWith(
 				u".plugin"_q,

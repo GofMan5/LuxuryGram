@@ -16,6 +16,7 @@
 #include "luxury/data/messages_storage.h"
 #include "luxury/features/filters/filters_controller.h"
 #include "luxury/features/forward/luxury_forward.h"
+#include "luxury/features/forward/luxury_forward_rich.h"
 #include "luxury/ui/context_menu/menu_item_subtext.h"
 #include "luxury/ui/message_history/history_section.h"
 #include "luxury/ui/settings/filters/edit_filter.h"
@@ -1130,23 +1131,42 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 			}
 
 			if (useNoQuote) {
-				auto message = ApiWrap::MessageToSend(action);
-				const auto media = currentItem->media();
-				if (!currentItem->originalText().text.isEmpty()) {
-					message.textWithTags = {
-						currentItem->originalText().text,
-						TextUtilities::ConvertEntitiesToTextTags(
-							currentItem->originalText().entities),
-					};
-				}
-				if (media) {
-					if (const auto photo = media->photo()) {
-						Api::SendExistingPhoto(std::move(message), photo);
-					} else if (const auto document = media->document()) {
-						Api::SendExistingDocument(std::move(message), document);
+				if (currentItem->richPage() && session->premium()) {
+					if (preserveReply) {
+						crl::async([=]
+						{
+							LuxuryForward::forwardRichMessage(session, itemId, action);
+						});
+					} else {
+						const auto forwardDraft = Data::ForwardDraft{
+							.ids = MessageIdsList{ itemId },
+							.options = Data::ForwardOptions::NoSenderNames,
+						};
+						auto resolvedDraft = history->resolveForwardDraft(forwardDraft);
+						session->api().forwardMessages(
+							std::move(resolvedDraft),
+							action,
+							[] {});
 					}
 				} else {
-					session->api().sendMessage(std::move(message));
+					auto message = ApiWrap::MessageToSend(action);
+					const auto media = currentItem->media();
+					if (!currentItem->originalText().text.isEmpty()) {
+						message.textWithTags = {
+							currentItem->originalText().text,
+							TextUtilities::ConvertEntitiesToTextTags(
+								currentItem->originalText().entities),
+						};
+					}
+					if (media) {
+						if (const auto photo = media->photo()) {
+							Api::SendExistingPhoto(std::move(message), photo);
+						} else if (const auto document = media->document()) {
+							Api::SendExistingDocument(std::move(message), document);
+						}
+					} else {
+						session->api().sendMessage(std::move(message));
+					}
 				}
 			} else {
 				const auto forwardDraft = Data::ForwardDraft{

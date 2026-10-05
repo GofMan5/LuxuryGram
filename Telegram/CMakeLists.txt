@@ -235,6 +235,8 @@ set(luxurygram_files
         luxury/features/forward/luxury_forward.h
         luxury/features/forward/luxury_sync.cpp
         luxury/features/forward/luxury_sync.h
+        luxury/features/forward/luxury_forward_rich.cpp
+        luxury/features/forward/luxury_forward_rich.h
         luxury/features/translator/luxury_translator.cpp
         luxury/features/translator/luxury_translator.h
         luxury/features/translator/luxury_translate_provider.cpp
@@ -2466,6 +2468,7 @@ elseif (APPLE)
     target_link_frameworks(Telegram PRIVATE CoreBluetooth)
     target_link_frameworks_weak(Telegram PRIVATE UserNotifications)
 
+    set(icons_path ${CMAKE_CURRENT_SOURCE_DIR}/Telegram/Images.xcassets)
     if (CMAKE_GENERATOR STREQUAL Xcode)
         set(luxurygram_icons
             Default
@@ -2508,6 +2511,36 @@ elseif (APPLE)
                     XCODE_EXPLICIT_FILE_TYPE "folder.iconcomposer.icon"
             )
         endforeach()
+    else()
+        set(icon_path ${icons_path}/Icon.iconset)
+        find_program(ICONUTIL iconutil)
+        find_program(PNG2ICNS png2icns)
+        if (ICONUTIL)
+            add_custom_command(
+                OUTPUT AppIcon-Default.icns
+                COMMAND ${ICONUTIL}
+                ARGS
+                    --convert icns
+                    --output AppIcon-Default.icns
+                    ${icon_path}
+            )
+        elseif (PNG2ICNS)
+            add_custom_command(
+                OUTPUT AppIcon-Default.icns
+                COMMAND ${PNG2ICNS}
+                ARGS
+                    AppIcon-Default.icns
+                    ${icon_path}/icon_16x16.png
+                    ${icon_path}/icon_32x32.png
+                    ${icon_path}/icon_128x128.png
+                    ${icon_path}/icon_256x256.png
+                    ${icon_path}/icon_512x512.png
+            )
+        endif()
+        if (ICONUTIL OR PNG2ICNS)
+            set_source_files_properties(AppIcon-Default.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+            target_add_resource(Telegram AppIcon-Default.icns)
+        endif()
     endif()
 
     set(lang_packs

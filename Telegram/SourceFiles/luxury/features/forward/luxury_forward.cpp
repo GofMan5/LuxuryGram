@@ -8,9 +8,9 @@
 
 #include "apiwrap.h"
 #include "lang_auto.h"
+#include "luxury/features/forward/luxury_forward_rich.h"
 #include "luxury/features/forward/luxury_sync.h"
 #include "luxury/utils/telegram_helpers.h"
-#include "base/base_file_utilities.h"
 #include "data/data_changes.h"
 #include "data/data_document.h"
 #include "data/data_peer.h"
@@ -53,6 +53,7 @@ struct ForwardItem {
 	bool round = false;
 	bool video = false;
 	bool invertCaption = false;
+	bool richPage = false;
 };
 
 struct ForwardChunk {
@@ -82,7 +83,7 @@ ForwardItem SnapshotItem(
 	result.text = extractText(item);
 	result.path = LuxurySync::filePath(session, media);
 	result.displayName = document
-		? base::FileNameFromUserString(document->filename())
+		? LuxurySync::documentFileName(document)
 		: QString();
 	result.expectedSize = document
 		? document->size
@@ -100,6 +101,7 @@ ForwardItem SnapshotItem(
 	result.video = document
 		&& (document->isVideoFile() || document->isGifv());
 	result.invertCaption = item->invertMedia();
+	result.richPage = (item->richPage() != nullptr);
 	return result;
 }
 
@@ -532,12 +534,57 @@ bool ForwardItems(
 		const auto &item = items[i];
 		if (cancelled()) {
 			return false;
-		} else if (item.text.empty() && !item.downloadable) {
-			return false;
+		}
+
+		const auto updateProgress = gsl::finally([&] {
+			if (!cancelled()) {
+				state->setSentMessages(i + 1);
+				state->updateBottomBar(
+					job.session,
+					job.peerId,
+					ForwardState::State::Sending);
+			}
+		});
+
+		if (item.richPage) {
+			state->updateBottomBar(
+				job.session,
+				job.peerId,
+				ForwardState::State::Downloading);
+
+			const auto strong = job.session.get();
+			if (!strong) {
+				return false;
+			}
+			const auto sent = forwardRichMessage(
+				strong,
+				item.id,
+				job.action,
+				cancelled);
+
+			if (cancelled()) {
+				return false;
+			}
+
+			state->updateBottomBar(
+				job.session,
+				job.peerId,
+				ForwardState::State::Sending);
+
+			if (sent) {
+				continue;
+			}
+		}
+		if (item.text.empty() && !item.downloadable) {
+			continue;
 		}
 
 		auto message = Api::MessageToSend(job.action);
 		message.action.options.invertCaption = item.invertCaption;
+		message.action.options.scheduled = 0;
+		message.action.options.suggest = {};
+		message.action.options.effectId = 0;
+		message.action.replaceMediaOf = 0;
 		if (!item.downloadable
 			|| job.options != Data::ForwardOptions::NoNamesAndCaptions) {
 			message.textWithTags = item.text;
@@ -564,7 +611,15 @@ bool ForwardItems(
 				}
 			}
 			if (preparedMedia.files.empty()) {
-				return false;
+				if (!message.textWithTags.empty()) {
+					if (!LuxurySync::sendMessageSync(
+						job.session,
+						std::move(message),
+						cancelled)) {
+						return false;
+					}
+				}
+				continue;
 			}
 
 			auto way = Ui::SendFilesWay();
@@ -591,14 +646,6 @@ bool ForwardItems(
 				return false;
 			}
 		}
-		if (cancelled()) {
-			return false;
-		}
-		state->setSentMessages(i + 1);
-		state->updateBottomBar(
-			job.session,
-			job.peerId,
-			ForwardState::State::Sending);
 	}
 	return true;
 }
