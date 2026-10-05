@@ -19,6 +19,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Fixed
 
+- Partial user updates that carry no last-seen information (for example a name or photo change) no longer reset the online-presence tracker, so online intervals recorded by Watcher stay continuous instead of being split by unrelated updates.
 - Online history now records live Telegram status updates as well as user snapshots, independently of the temporary online status inferred from messages or typing. Repeated server confirmations no longer duplicate transitions, and an initial offline snapshot is not recorded as a departure.
 - Watcher no longer labels old unfinished sessions as Online now. Missing departures and observation gaps remain explicit; resumed tracking starts a new interval instead of merging time across pauses or restarts. Same-second transitions and system-clock changes retain insertion order.
 - Live name and username updates are now included in Watcher events rather than being missed until another user snapshot arrives.

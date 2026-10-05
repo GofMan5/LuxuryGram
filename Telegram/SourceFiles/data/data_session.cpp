@@ -958,9 +958,6 @@ not_null<UserData*> Session::processUser(const MTPUser &data) {
 
 	if (!minimal) {
 		const auto now = base::unixtime::now();
-		if (!status) {
-			result->resetTrackedPresence();
-		}
 		const auto statusChanged = status
 			? result->updateServerLastseen(*status)
 			: result->updateLastseen(Data::LastseenStatus::LongAgo(false));
