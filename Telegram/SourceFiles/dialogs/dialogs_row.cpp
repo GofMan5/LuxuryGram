@@ -839,6 +839,7 @@ void Row::paintUserpic(
 		&& !(badgeUser && Data::IsUserOnline(badgeUser))
 		&& !subscribed
 		&& !insideCommunity;
+	_cornerBadgeUserpic->communityMember = communityMember ? 1 : 0;
 	// Only stories outline and online badge differ for active row.
 	// LuxuryGram: and the TTL badge, which flattens the row background into
 	// itself, so a peer with a TTL has to redraw on an active change too.
@@ -915,6 +916,26 @@ void Row::paintUserpic(
 bool Row::lookupIsInTopicJump(int x, int y) const {
 	const auto history = this->history();
 	return history && history->lastItemDialogsView().isInTopicJump(x, y);
+}
+
+bool Row::lookupIsInCommunityBadge(
+		int x,
+		int y,
+		const style::DialogRow &st) const {
+	if (!_cornerBadgeUserpic
+		|| !_cornerBadgeUserpic->communityMember
+		|| !_cornerBadgeUserpic->layersManager.isSameLayer(kTopLayer)) {
+		return false;
+	}
+	const auto size = st::dialogsCommunityBadgeSize;
+	const auto &skip = st::dialogsCommunityBadgeSkip;
+	const auto stroke = st::dialogsCommunityBadgeStroke;
+	return QRect(
+		st.padding.left() + st.photoSize - skip.x() - size,
+		st.padding.top() + st.photoSize - skip.y() - size,
+		size,
+		size
+	).marginsAdded({ stroke, stroke, stroke, stroke }).contains(x, y);
 }
 
 void Row::stopLastRipple() {

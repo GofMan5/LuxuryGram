@@ -23,13 +23,13 @@ constexpr auto AppNameOld = "AyuGram for Windows"_cs;
 constexpr auto AppName = "LuxuryGram Desktop"_cs;
 constexpr auto AppFile = "LuxuryGram"_cs;
 // Keep AppVersion on the upstream line for storage and update compatibility.
-constexpr auto AppVersion = 7002009;
-constexpr auto AppVersionStr = "7.2.9";
+constexpr auto AppVersion = 7002010;
+constexpr auto AppVersionStr = "7.2.10";
 // Product version is bumped only for LuxuryGram releases.
 constexpr auto LuxuryVersionStr = "1.0.19";
 // Update packages are compared by this counter instead of the upstream
 // AppVersion, so syncing Telegram Desktop never looks like an update.
 // major * 1'000'000 + minor * 1'000 + patch
 constexpr auto LuxuryUpdateVersion = 1'000'019;
-constexpr auto AppBetaVersion = false;
+constexpr auto AppBetaVersion = true;
 constexpr auto AppAlphaVersion = TDESKTOP_ALPHA_VERSION;

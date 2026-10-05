@@ -10,11 +10,7 @@
   <Identity Name="TelegramMessengerLLP.TelegramDesktop"
     ProcessorArchitecture="ARCHITECTURE"
     Publisher="CN=536BC709-8EE1-4478-AF22-F0F0F26FF64A"
-<<<<<<< HEAD
     Version="1.0.19.0" />
-=======
-    Version="7.2.9.0" />
->>>>>>> 6154cbe9ff
   <Properties>
     <DisplayName>Telegram Desktop</DisplayName>
     <PublisherDisplayName>Telegram Messenger LLP</PublisherDisplayName>
