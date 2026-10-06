@@ -101,6 +101,7 @@ bool PendingKeepsRetrying = false;
 base::flat_set<uint64> SubscribedSessions;
 int FetchesSincePrune = 0;
 std::atomic<bool> Pruning = false;
+std::atomic<bool> ClearingAllKept = false;
 std::atomic<bool> ReportedOverBudget = false;
 
 [[nodiscard]] QString PendingDir() {
@@ -501,6 +502,35 @@ bool ownsFetchedPath(const QString &path) {
 	// target, and the parent tdata/ holds the temp download directory, which is
 	// where a user-chosen "Temporary folder" download really lands.
 	return path.startsWith(PendingDir());
+}
+
+void clearKeptMedia() {
+	// Guards the all-files walk only: per-dialog clears touch disjoint name
+	// ranges, so they can overlap this walk or each other without harm.
+	if (ClearingAllKept.exchange(true)) {
+		return;
+	}
+	crl::async([kept = KeptDir()] {
+		for (const auto &entry : QDir(kept).entryInfoList(QDir::Files)) {
+			QFile::remove(entry.absoluteFilePath());
+		}
+		// The budget warning is armed again, so a new run over it is said.
+		ReportedOverBudget = false;
+		ClearingAllKept = false;
+	});
+}
+
+void clearKeptMediaForDialog(ID dialogId) {
+	// The same anchored prefix keptFileForMessage() matches with: "5_*"
+	// cannot hit "56_7.jpg", so only this dialog's files go.
+	const auto prefix = u"%1_"_q.arg(dialogId);
+	crl::async([kept = KeptDir(), prefix] {
+		for (const auto &entry : QDir(kept).entryList(
+				{ prefix + '*' },
+				QDir::Files)) {
+			QFile::remove(entry.absoluteFilePath());
+		}
+	});
 }
 
 } // namespace LuxuryFeatures::Watch

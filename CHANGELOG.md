@@ -31,6 +31,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Ghost-mode per-account settings are capped at 64 accounts instead of growing without bound.
 - The Windows pinned-shortcut scan no longer leaks a file-search handle when an error occurs.
 - User registration-date lookups skip entries whose date cannot be parsed instead of showing a broken date.
+- Watcher gear popup: the tracking toggle was labeled "Record in all chats", implying a per-chat scope that does not exist; it now shows the same "Track Online History" label as the settings page (same switch).
+- Watcher session list: selecting text no longer makes the list drop incoming updates; rebuilds wait for the selection to end and then apply, so the list never goes silently stale.
+- Watcher saved-attachment ok marker: the hard-coded green is replaced with the theme's online-status color, so custom themes no longer get a dot that matches nothing.
+- Watcher session cards now expose their content (state, duration, open/closed) to screen readers via accessible names.
 
 ## 1.0.19
 

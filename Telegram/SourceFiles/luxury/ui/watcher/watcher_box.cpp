@@ -60,8 +60,6 @@ namespace {
 
 constexpr auto kPi = 3.14159265358979323846;
 
-const auto kOkFg = style::internal::OwnedColor(QColor(0x31, 0xc4, 0x8d));
-
 // Timeline kinds beyond the stored WatchKind set: the deleted and edited
 // message tables feed the same Events timeline, so their kinds live here
 // where no database value can collide with them.
@@ -378,6 +376,7 @@ private:
 	void paintStatus(Painter &p);
 	void paintDuration(Painter &p);
 	void computeLayout(int newWidth);
+	void updateAccessibleName();
 
 	OnlineSession _session;
 	bool _active = false;
@@ -490,6 +489,7 @@ private:
 	std::set<std::pair<int, ID>> _expandedEvents;
 	bool _loading = false;
 	bool _reloadAgain = false;
+	bool _rebuildPending = false;
 	Tab _tab = Tab::All;
 	Order _order = Order::Newest;
 	int _sessionOverflow = 0;
@@ -700,6 +700,18 @@ SessionCard::SessionCard(
 	}
 	setToolTip(_startLabel + u" "_q + _startValue
 		+ u"\n"_q + _endLabel + u" "_q + _endValue);
+	updateAccessibleName();
+}
+
+void SessionCard::updateAccessibleName() {
+	// The card paints its lines instead of hosting child widgets, so the
+	// painted content needs mirroring in the accessible name.
+	auto name = _startLabel + u" "_q + _startValue
+		+ u", "_q + _endLabel + u" "_q + _endValue;
+	if (!_durationText.isEmpty()) {
+		name += u", "_q + _durationText;
+	}
+	setAccessibleName(name);
 }
 
 void SessionCard::setActive(bool active) {
@@ -721,6 +733,7 @@ void SessionCard::setActive(bool active) {
 	}
 	setToolTip(_startLabel + u" "_q + _startValue
 		+ u"\n"_q + _endLabel + u" "_q + _endValue);
+	updateAccessibleName();
 	resizeToWidth(width());
 }
 
@@ -863,8 +876,8 @@ void SessionCard::paintStatus(Painter &p) {
 					+ font->ascent),
 			mark);
 	} else {
-		// Closed normally: a plain green dot.
-		p.setBrush(kOkFg.color());
+		// Closed normally: the theme's online-status color, without a halo.
+		p.setBrush(st::luxuryWatcherOkFg->c);
 		p.drawEllipse(QRectF(rect));
 	}
 }
@@ -1146,6 +1159,16 @@ bool WatcherBody::sessionActive(const OnlineSession &session) const {
 }
 
 void WatcherBody::tick() {
+	// A deferred rebuild waits for interaction to end, so swapping the
+	// list never interrupts a press or a text selection.
+	if (_rebuildPending
+		&& !QApplication::mouseButtons()
+		&& !isAncestorOf(QApplication::focusWidget())) {
+		_rebuildPending = false;
+		rebuild();
+		_counts.fire(counts());
+		_reloads.fire_copy(true);
+	}
 	for (const auto card : _sessionCards) {
 		card->setActive(sessionActive(card->session()));
 		card->tick();
@@ -1198,18 +1221,20 @@ void WatcherBody::reload() {
 				|| !SameRecordIds(_watches, watches)
 				|| !SameRecordIds(_deleted, deleted)
 				|| !SameRecordIds(_edits, edits);
-			if (changed && (QApplication::mouseButtons()
-				|| isAncestorOf(QApplication::focusWidget()))) {
-				_reloadAgain = false;
-				return;
-			}
+			// Fresh data always lands; only the widget swap can wait,
+			// because rebuilding mid-press yanks the row being pressed.
+			const auto defer = changed && (QApplication::mouseButtons()
+				|| isAncestorOf(QApplication::focusWidget()));
 			_events = std::move(events);
 			_watches = std::move(watches);
 			_deleted = std::move(deleted);
 			_edits = std::move(edits);
 			_sessions = PairOnlineSessions(_events);
-			const auto rebuilt = changed || (_sessionCards.empty() && _eventCards.empty());
-			if (rebuilt) {
+			const auto rebuilt = !defer && (changed
+				|| (_sessionCards.empty() && _eventCards.empty()));
+			if (defer) {
+				_rebuildPending = true;
+			} else if (rebuilt) {
 				rebuild();
 			} else {
 				tick();
@@ -1640,7 +1665,7 @@ void FillWatcherBox(
 		// LuxurySettings is a singleton with a deleted copy constructor:
 		// resolve it inside the handler, never capture a reference.
 		addToggle(
-			tr::luxury_WatcherTrackingAllChats(tr::now),
+			tr::luxury_TrackOnlineHistory(tr::now),
 			[] { return LuxurySettings::getInstance().trackOnlineHistory(); },
 			[](bool value) {
 				LuxurySettings::getInstance().setTrackOnlineHistory(value);

@@ -34,4 +34,16 @@ void processNewMessage(not_null<HistoryItem*> item);
 // modal in front of them or be read as a problem with their download path.
 [[nodiscard]] bool ownsFetchedPath(const QString &path);
 
+// Deletes every kept file: the ones that outlived their message on purpose
+// and are exempt from the budget. A clear can be large, so the walk runs on
+// a pool thread with no completion callback. Deleted-message rows keep
+// their stored names; a file missing from disk already shows up as
+// "nothing was kept".
+void clearKeptMedia();
+
+// Deletes one dialog's kept files, by the name prefix every kept file
+// carries, so unwatching a chat does not orphan its media. Runs as the
+// same fire-and-forget walk as clearKeptMedia().
+void clearKeptMediaForDialog(ID dialogId);
+
 } // namespace LuxuryFeatures::Watch
