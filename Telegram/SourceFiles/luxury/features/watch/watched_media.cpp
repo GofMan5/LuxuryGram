@@ -525,7 +525,7 @@ void clearKeptMediaForDialog(ID dialogId) {
 	// cannot hit "56_7.jpg", so only this dialog's files go.
 	const auto prefix = u"%1_"_q.arg(dialogId);
 	crl::async([kept = KeptDir(), prefix] {
-		for (const auto &entry : QDir(kept).entryList(
+		for (const auto &entry : QDir(kept).entryInfoList(
 				{ prefix + '*' },
 				QDir::Files)) {
 			QFile::remove(entry.absoluteFilePath());
