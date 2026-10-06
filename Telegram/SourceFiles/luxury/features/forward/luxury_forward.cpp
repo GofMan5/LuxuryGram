@@ -519,10 +519,12 @@ bool ForwardItems(
 			job.peerId,
 			ForwardState::State::Downloading);
 		if (!LoadDocuments(job, items, cancelled)) {
+			LOG(("failed to load documents for forward"));
 			return false;
 		}
 	}
 	if (cancelled()) {
+		LOG(("forward cancelled before sending"));
 		return false;
 	}
 
@@ -533,6 +535,7 @@ bool ForwardItems(
 	for (auto i = 0; i != int(items.size()); ++i) {
 		const auto &item = items[i];
 		if (cancelled()) {
+			LOG(("forward cancelled while sending"));
 			return false;
 		}
 
@@ -554,6 +557,7 @@ bool ForwardItems(
 
 			const auto strong = job.session.get();
 			if (!strong) {
+				LOG(("failed to forward items: session destroyed"));
 				return false;
 			}
 			const auto sent = forwardRichMessage(
@@ -563,6 +567,7 @@ bool ForwardItems(
 				cancelled);
 
 			if (cancelled()) {
+				LOG(("forward cancelled while sending a rich page"));
 				return false;
 			}
 

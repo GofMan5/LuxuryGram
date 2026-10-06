@@ -509,6 +509,7 @@ void loadDocumentSync(
 		const auto media = item ? item->media() : nullptr;
 		const auto document = media ? media->document() : nullptr;
 		if (!document) {
+			LOG(("failed to load document for forward"));
 			latch->countDown();
 			return;
 		}
@@ -528,7 +529,9 @@ void loadDocumentSync(
 		}, *lifetime);
 	});
 
-	WaitUntil(latch, std::chrono::minutes(15), stopped);
+	if (!WaitUntil(latch, std::chrono::minutes(15), stopped)) {
+		LOG(("forward document download timed out"));
+	}
 
 	crl::on_main([lifetime = std::move(lifetime)] {
 		lifetime->destroy();
@@ -554,6 +557,9 @@ QString loadDocumentSync(
 			kDocumentDownloadTimeout,
 			cancelled);
 		if (waitResult != DownloadWaitResult::Completed) {
+			if (waitResult != DownloadWaitResult::Cancelled) {
+				LOG(("forward document download timed out"));
+			}
 			return {};
 		}
 		const auto path = registration.state->readyPath;
@@ -582,9 +588,11 @@ QString loadDocumentSync(
 	while (true) {
 		path = NextDocumentPath(session, data);
 		if (path.isEmpty()) {
+			LOG(("failed to pick document path for forward"));
 			return {};
 		}
 		if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
+			LOG(("failed to create document directory for forward"));
 			return {};
 		}
 		auto reservation = QFile(path);
@@ -594,6 +602,7 @@ QString loadDocumentSync(
 			break;
 		}
 		if (!QFile::exists(path)) {
+			LOG(("failed to reserve document file for forward"));
 			return {};
 		}
 	}
@@ -626,6 +635,9 @@ QString loadDocumentSync(
 		kDocumentDownloadTimeout,
 		cancelled);
 	if (waitResult != DownloadWaitResult::Completed) {
+		if (waitResult != DownloadWaitResult::Cancelled) {
+			LOG(("forward document download timed out"));
+		}
 		return {};
 	}
 	path = registration.state->readyPath;
@@ -663,6 +675,7 @@ bool forwardMessagesSync(WeakSession session,
 			}
 		}
 		if (items.empty()) {
+			LOG(("forward has no items to send"));
 			latch->countDown();
 			return;
 		}
@@ -673,8 +686,11 @@ bool forwardMessagesSync(WeakSession session,
 			[latch] { latch->countDown(); });
 	});
 
-	return WaitUntil(latch, std::chrono::minutes(1), stopped)
-		&& started->load();
+	const auto completed = WaitUntil(latch, std::chrono::minutes(1), stopped);
+	if (!completed && !stopped()) {
+		LOG(("forward send timed out"));
+	}
+	return completed && started->load();
 }
 
 void loadPhotoSync(
@@ -686,6 +702,7 @@ void loadPhotoSync(
 		return;
 	}
 	if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
+		LOG(("failed to create photo directory for forward"));
 		return;
 	}
 
@@ -705,6 +722,7 @@ void loadPhotoSync(
 		const auto photo = media ? media->photo() : nullptr;
 		const auto view = photo ? photo->createMediaView() : nullptr;
 		if (!view) {
+			LOG(("failed to load photo for forward"));
 			latch->countDown();
 			return;
 		}
@@ -718,7 +736,9 @@ void loadPhotoSync(
 			latch->countDown();
 		}, *lifetime);
 	});
-	WaitUntil(latch, std::chrono::minutes(5), stopped);
+	if (!WaitUntil(latch, std::chrono::minutes(5), stopped)) {
+		LOG(("forward photo download timed out"));
+	}
 	crl::on_main([lifetime = std::move(lifetime)] {
 		lifetime->destroy();
 	});
@@ -731,6 +751,7 @@ void loadPhotoSync(
 		const Cancelled &cancelled) {
 	const auto path = pathForSave(session);
 	if (path.isEmpty() || !QDir().mkpath(path)) {
+		LOG(("failed to prepare photo path for forward"));
 		return;
 	}
 
@@ -765,7 +786,9 @@ void loadPhotoSync(
 		}, *lifetime);
 	});
 
-	WaitUntil(latch, std::chrono::minutes(5), cancelled);
+	if (!WaitUntil(latch, std::chrono::minutes(5), cancelled)) {
+		LOG(("forward photo download timed out"));
+	}
 
 	crl::on_main([lifetime = std::move(lifetime)] {
 		lifetime->destroy();
