@@ -8347,7 +8347,7 @@ void HistoryItem::processAction(const MTPMessageAction &action) {
 			_history->peer,
 			_from,
 			StarGiftLabel(data),
-			id.bare,
+			realGiftMsgId.bare ? realGiftMsgId.bare : id.bare,
 			date());
 	}, [&](const MTPDmessageActionStarGiftUnique &data) {
 		const auto service = _from->isServiceUser();
@@ -8430,7 +8430,7 @@ void HistoryItem::processAction(const MTPMessageAction &action) {
 			_history->peer,
 			_from,
 			qs(data.vgift().c_starGiftUnique().vtitle()),
-			id.bare,
+			realGiftMsgId.bare ? realGiftMsgId.bare : id.bare,
 			date());
 	}, [&](const MTPDmessageActionSuggestBirthday &data) {
 		const auto &fields = data.vbirthday().data();

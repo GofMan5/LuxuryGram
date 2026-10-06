@@ -36,6 +36,8 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Watcher saved-attachment ok marker: the hard-coded green is replaced with the theme's online-status color, so custom themes no longer get a dot that matches nothing.
 - Watcher session cards now expose their content (state, duration, open/closed) to screen readers via accessible names.
 - Settings boxes that previously fell back to English for Russian users now show Russian labels: the font customizer, the message-shot theme picker, the chat-filter import/export options, and the plugin details box.
+- Watcher online-history departures now record the server's exact last-seen time instead of the moment the update arrived, so recorded offline events keep their real transition time.
+- Star gifts forwarded into Saved Messages no longer create a duplicate Watcher gift event; the forwarded copy is matched to the original gift message.
 
 ## 1.0.19
 

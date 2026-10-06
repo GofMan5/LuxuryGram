@@ -1046,9 +1046,8 @@ TextWithEntities SingleCustomEmoji(not_null<DocumentData*> document) {
 bool AllowEmojiWithoutPremium(
 		not_null<PeerData*> peer,
 		DocumentData *exactEmoji) {
-	if (true) { // LuxuryGram: allow all premium emojis (via tg://emoji?id=...)
-		return true;
-	}
+	// LuxuryGram: allow all premium emojis (via tg://emoji?id=...)
+	return true;
 
 	if (peer->isSelf()) {
 		return true;

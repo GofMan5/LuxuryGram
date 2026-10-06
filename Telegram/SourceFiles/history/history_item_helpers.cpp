@@ -778,9 +778,8 @@ void ConfirmDeleteSelectedEphemeral(
 TextWithEntities DropDisallowedCustomEmoji(
 		not_null<PeerData*> to,
 		TextWithEntities text) {
-	if (true) { // LuxuryGram: allow all premium emojis (via tg://emoji?id=...)
-		return text;
-	}
+	// LuxuryGram: allow all premium emojis (via tg://emoji?id=...)
+	return text;
 
 	if (to->session().premium() || to->isSelf()) {
 		return text;

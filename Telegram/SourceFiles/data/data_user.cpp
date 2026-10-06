@@ -195,7 +195,14 @@ bool UserData::updateServerLastseen(const MTPUserStatus &status) {
 		enabled && exact,
 		now);
 	if (transition) {
-		LuxuryOnline::recordTransition(this, *transition, now);
+		// Offline statuses carry the server's exact was_online; prefer it
+		// over the arrival moment so tracked history keeps the real
+		// transition time. Clamped to now in case the server runs ahead.
+		const auto offlineAt = _serverLastseen.onlineTill();
+		const auto at = (!*transition && offlineAt > 0 && offlineAt < now)
+			? offlineAt
+			: now;
+		LuxuryOnline::recordTransition(this, *transition, at);
 	}
 	return updateLastseen(LastseenFromMTP(status, _lastseen));
 }
