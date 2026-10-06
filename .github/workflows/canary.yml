@@ -614,7 +614,7 @@ jobs:
           cd $TBUILD/$REPO_NAME/out/Release
           DUMP=$TBUILD/Libraries/win64/breakpad/src/tools/windows/dump_syms/Release/dump_syms.exe
           mkdir -p symbols
-          for MODULE in Telegram Updater; do
+          for MODULE in LuxuryGram Updater; do
             "$DUMP" $MODULE.pdb > $MODULE.sym
             DEBUG_ID=$(head -n 1 $MODULE.sym | awk '{ print $4 }')
             mkdir -p symbols/$MODULE.pdb/$DEBUG_ID
@@ -649,12 +649,12 @@ jobs:
           # the account exists. The signing itself is:
           echo "$SM_CLIENT_CERT_FILE_B64" | base64 -d > /tmp/keylocker.p12
           export SM_CLIENT_CERT_FILE=/tmp/keylocker.p12
-          smctl sign --keypair-alias "$SM_KEYPAIR_ALIAS" --input Telegram.exe
+          smctl sign --keypair-alias "$SM_KEYPAIR_ALIAS" --input LuxuryGram.exe
           smctl sign --keypair-alias "$SM_KEYPAIR_ALIAS" --input Updater.exe
           # Both binaries are verified here, on the exact bytes that get
           # packed: Updater.exe travels only inside the update envelope,
-          # the publish job can re-check just the portable's Telegram.exe.
-          signtool verify /pa /all Telegram.exe
+          # the publish job can re-check just the portable's LuxuryGram.exe.
+          signtool verify /pa /all LuxuryGram.exe
           signtool verify /pa /all Updater.exe
           echo "signed=true" >> $GITHUB_OUTPUT
 
@@ -675,7 +675,7 @@ jobs:
           # the release copy is a pinned known-good build for Windows 7,
           # while CI would grab whatever the runner's SDK ships. Canary
           # machines use the system compiler dll.
-          ./Packer.exe -path Telegram.exe -path Updater.exe \
+          ./Packer.exe -path LuxuryGram.exe -path Updater.exe \
             -target win64 \
             -version $BASE \
             -channel canary-${{ needs.version.outputs.channel }} \
@@ -708,7 +708,7 @@ jobs:
           rm -rf portable
           mkdir -p portable/$CANARY_FOLDER/TelegramForcePortable
           touch portable/$CANARY_FOLDER/TelegramForcePortable/.keep
-          cp Telegram.exe portable/$CANARY_FOLDER/
+          cp LuxuryGram.exe portable/$CANARY_FOLDER/
           (cd portable && 7z a -mx9 ../$PORTABLE $CANARY_FOLDER/)
 
           mkdir -p artifact/update artifact/portable
@@ -887,10 +887,10 @@ jobs:
           cd $REPO_NAME/out/Release
           DUMP=../../../Libraries/breakpad/src/tools/mac/dump_syms/build/Release/dump_syms
           mkdir -p symbols
-          for MODULE in Telegram Updater; do
-            BINARY=Telegram.app/Contents/MacOS/Telegram
+          for MODULE in LuxuryGram Updater; do
+            BINARY=LuxuryGram.app/Contents/MacOS/LuxuryGram
             if [ "$MODULE" = "Updater" ]; then
-              BINARY=Telegram.app/Contents/Frameworks/Updater
+              BINARY=LuxuryGram.app/Contents/Frameworks/Updater
             fi
             "$DUMP" -a ${{ matrix.arch }} "$BINARY" > $MODULE.sym 2>/dev/null
             DEBUG_ID=$(head -n 1 $MODULE.sym | awk '{ print $4 }')
@@ -902,7 +902,7 @@ jobs:
       - name: Pack the half for transport.
         run: |
           cd $REPO_NAME/out/Release
-          for ENTRY in Telegram.app Packer; do
+          for ENTRY in LuxuryGram.app Packer; do
             if [ ! -e "$ENTRY" ]; then
               echo "::error::$ENTRY not found after the build."
               exit 1
@@ -910,15 +910,15 @@ jobs:
           done
 
           # Stripped here: the universal app is lipo'd from these.
-          for BINARY in MacOS/Telegram Frameworks/Updater Helpers/crashpad_handler; do
-            strip Telegram.app/Contents/$BINARY
+          for BINARY in MacOS/LuxuryGram Frameworks/Updater Helpers/crashpad_handler; do
+            strip LuxuryGram.app/Contents/$BINARY
           done
 
           # A tar, because upload-artifact resolves symlinks and drops
           # the executable bit, and an .app bundle survives neither.
           mkdir -p transport
           cp ../../../MACOS_TOOLCHAIN.txt macos-toolchain.txt
-          tar -cf transport/mac-${{ matrix.arch }}.tar Telegram.app Packer macos-toolchain.txt
+          tar -cf transport/mac-${{ matrix.arch }}.tar LuxuryGram.app Packer macos-toolchain.txt
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         name: Upload the half.
@@ -991,10 +991,10 @@ jobs:
           # universal app installs, the thin ones become the updates.
           cd $REPO_NAME/out/Release
           for ARCH in x86_64 arm64; do
-            rm -rf unpack.$ARCH Telegram.$ARCH.app
+            rm -rf unpack.$ARCH LuxuryGram.$ARCH.app
             mkdir unpack.$ARCH
             tar -xf transport/mac-$ARCH.tar -C unpack.$ARCH
-            mv unpack.$ARCH/Telegram.app Telegram.$ARCH.app
+            mv unpack.$ARCH/LuxuryGram.app LuxuryGram.$ARCH.app
           done
           if ! cmp -s unpack.arm64/macos-toolchain.txt unpack.x86_64/macos-toolchain.txt; then
             echo "::error::The architecture builds used different Xcode/SDK versions or deployment targets."
@@ -1008,17 +1008,17 @@ jobs:
 
           # Use the arm64 bundle as the template and include Intel-only
           # Swift runtimes below for older macOS versions.
-          BINARIES="MacOS/Telegram Frameworks/Updater Helpers/crashpad_handler"
-          rm -rf Telegram.app
-          cp -R Telegram.arm64.app Telegram.app
+          BINARIES="MacOS/LuxuryGram Frameworks/Updater Helpers/crashpad_handler"
+          rm -rf LuxuryGram.app
+          cp -R LuxuryGram.arm64.app LuxuryGram.app
           for BINARY in $BINARIES; do
-            lipo -create Telegram.arm64.app/Contents/$BINARY \
-              Telegram.x86_64.app/Contents/$BINARY \
-              -output Telegram.app/Contents/$BINARY
+            lipo -create LuxuryGram.arm64.app/Contents/$BINARY \
+              LuxuryGram.x86_64.app/Contents/$BINARY \
+              -output LuxuryGram.app/Contents/$BINARY
           done
-          for FILE in Telegram.x86_64.app/Contents/Frameworks/libswift*.dylib; do
+          for FILE in LuxuryGram.x86_64.app/Contents/Frameworks/libswift*.dylib; do
             [ -f "$FILE" ] || continue
-            DESTINATION="Telegram.app/Contents/Frameworks/${FILE##*/}"
+            DESTINATION="LuxuryGram.app/Contents/Frameworks/${FILE##*/}"
             if [ -f "$DESTINATION" ]; then
               if ! cmp -s "$FILE" "$DESTINATION"; then
                 echo "::error::Swift runtime differs between architecture builds: ${FILE##*/}"
@@ -1040,7 +1040,7 @@ jobs:
                 exit 1
                 ;;
             esac
-          done < <(find Telegram.app -type f -perm +111 -print0)
+          done < <(find LuxuryGram.app -type f -perm +111 -print0)
 
       - name: Sign and notarize.
         id: sign
@@ -1073,7 +1073,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" build.keychain
 
-          for BUNDLE in Telegram.x86_64.app Telegram.arm64.app Telegram.app; do
+          for BUNDLE in LuxuryGram.x86_64.app LuxuryGram.arm64.app LuxuryGram.app; do
             codesign --force --deep --timestamp --options runtime \
               --sign "$SIGN_IDENTITY" \
               --entitlements ../../Telegram/Telegram/Telegram.entitlements \
@@ -1111,10 +1111,10 @@ jobs:
             # so the file paths inside the update match the install.
             rm -rf update_pack
             mkdir update_pack
-            cp -R Telegram.$ARCH.app update_pack/Telegram.app
+            cp -R LuxuryGram.$ARCH.app update_pack/LuxuryGram.app
             cp Packer update_pack/
             cd update_pack
-            ./Packer -path Telegram.app \
+            ./Packer -path LuxuryGram.app \
               -arch $ARCH \
               -version $BASE \
               -channel canary-${{ needs.version.outputs.channel }} \
@@ -1149,7 +1149,7 @@ jobs:
           rm -rf portable
           mkdir -p portable/$CANARY_FOLDER/TelegramForcePortable
           touch portable/$CANARY_FOLDER/TelegramForcePortable/.keep
-          cp -R Telegram.app portable/$CANARY_FOLDER/
+          cp -R LuxuryGram.app portable/$CANARY_FOLDER/
           (cd portable && zip -q -r ../$PORTABLE $CANARY_FOLDER)
 
           mkdir -p artifact/update artifact/portable
@@ -1347,7 +1347,7 @@ jobs:
           # dump_syms is built into the centos_env image (breakpad), so
           # it runs there against the same binaries mounted from the
           # host; the release flow copies the tool out by hand instead.
-          for MODULE in Telegram Updater; do
+          for MODULE in LuxuryGram Updater; do
             docker run --rm \
               -u $(id -u) \
               -v $PWD:/out -w /out \
@@ -1358,7 +1358,7 @@ jobs:
             mv $MODULE.sym symbols/$MODULE/$DEBUG_ID/
           done
           # TODO(canary-infra): upload symbols/ to R2 (see the Windows job).
-          ../../Telegram/build/minidebug.sh Telegram
+          ../../Telegram/build/minidebug.sh LuxuryGram
 
       - name: Verify the update trust chain.
         run: |
@@ -1379,7 +1379,7 @@ jobs:
       - name: Pack v2 update.
         run: |
           cd out/Release
-          ./Packer -path Telegram -path Updater \
+          ./Packer -path LuxuryGram -path Updater \
             -version ${{ needs.version.outputs.base }} \
             -channel canary-${{ needs.version.outputs.channel }} \
             -counter $CANARY_COUNTER \
@@ -1409,7 +1409,7 @@ jobs:
           rm -rf portable
           mkdir -p portable/$CANARY_FOLDER/TelegramForcePortable
           touch portable/$CANARY_FOLDER/TelegramForcePortable/.keep
-          cp Telegram Updater portable/$CANARY_FOLDER/
+          cp LuxuryGram Updater portable/$CANARY_FOLDER/
           tar -cJf $PORTABLE -C portable $CANARY_FOLDER
 
           mkdir -p artifact/update artifact/portable
@@ -1486,12 +1486,12 @@ jobs:
           # Publishing unsigned binaries is never allowed: this is a hard
           # gate, not a warning. Both binaries inside the update envelope
           # were verified with signtool right after signing in the build
-          # job; here the portable's Telegram.exe is re-checked as the
+          # job; here the portable's LuxuryGram.exe is re-checked as the
           # publish-side witness.
           sudo apt-get update && sudo apt-get install -y osslsigncode
           unzip -q artifacts/portable/td-portable-win-x64-*.zip -d /tmp/winapp
-          if ! osslsigncode verify /tmp/winapp/${{ needs.version.outputs.folder }}/Telegram.exe; then
-            echo "::error::The portable Telegram.exe is not Authenticode-signed."
+          if ! osslsigncode verify /tmp/winapp/${{ needs.version.outputs.folder }}/LuxuryGram.exe; then
+            echo "::error::The portable LuxuryGram.exe is not Authenticode-signed."
             exit 1
           fi
 
@@ -1576,10 +1576,10 @@ jobs:
           # spctl --assess on every bundle; this is the publish-side
           # witness. TODO(canary-infra): pin an apple-codesign (rcodesign)
           # release for full signature + staple verification on Linux:
-          #   rcodesign verify /tmp/macapp/Telegram/Telegram.app
+          #   rcodesign verify /tmp/macapp/Telegram/LuxuryGram.app
           unzip -q artifacts/portable/td-portable-mac-*.zip -d /tmp/macapp
-          if [ ! -d "/tmp/macapp/${{ needs.version.outputs.folder }}/Telegram.app/Contents/_CodeSignature" ]; then
-            echo "::error::The portable Telegram.app has no code signature."
+          if [ ! -d "/tmp/macapp/${{ needs.version.outputs.folder }}/LuxuryGram.app/Contents/_CodeSignature" ]; then
+            echo "::error::The portable LuxuryGram.app has no code signature."
             exit 1
           fi
 
