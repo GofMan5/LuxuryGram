@@ -18,6 +18,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Watcher reads saved history off the UI thread and refreshes idle views every five seconds, preserving scroll position and expanded event details. Automatic refresh pauses while selecting text, focusing a detail or using the settings menu; active-session duration updates every second and timestamps include seconds.
 - Plugin descriptions in the plugin details box now render bold text, links and @mentions instead of showing raw markdown-style markup.
 - The Watcher box header now notes when its view updates are paused because you are selecting text, so the paused list is explained instead of looking stuck.
+- On Linux, bot web apps now use the external desktop shell only on Wayland sessions; on X11 they open as regular in-app panels again.
 
 ### Fixed
 
@@ -43,6 +44,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Watcher reaction events now skip bot and service chats, matching the gift and profile-change exclusions; reaction events in groups and channels are unchanged.
 - The Russian label for the watcher media switch said "Не отслеживать", implying history recording stops; it now says "Не скачивать медиа", matching the switch's actual effect of stopping media downloads.
 - Watcher event cards whose kind is not recognized now show a dash instead of an empty label.
+- Rich messages (for example web page previews) no longer risk freezing the app when a relative date such as today rolls over.
 
 ## 1.0.19
 
