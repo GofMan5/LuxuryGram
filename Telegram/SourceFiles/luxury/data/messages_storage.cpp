@@ -418,6 +418,13 @@ void noteReactions(
 	if (!WatchGate()) {
 		return;
 	}
+	// Bots and service accounts are not watchable, mirroring noteGift and
+	// noteProfileChange; group and channel reactions are genuine dialog
+	// activity, so only user peers are filtered.
+	const auto tracked = peer->asUser();
+	if (tracked && (tracked->isBot() || tracked->isServiceUser())) {
+		return;
+	}
 	const auto userId = DatabaseUserId(peer->session());
 	const auto dialogId = getDialogIdFromPeer(peer);
 	const auto peerId = static_cast<ID>(peer->id.value);
