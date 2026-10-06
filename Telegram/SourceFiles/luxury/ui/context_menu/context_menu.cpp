@@ -17,6 +17,7 @@
 #include "luxury/features/filters/filters_controller.h"
 #include "luxury/features/forward/luxury_forward.h"
 #include "luxury/features/forward/luxury_forward_rich.h"
+#include "luxury/features/watch/watched_media.h"
 #include "luxury/ui/context_menu/menu_item_subtext.h"
 #include "luxury/ui/message_history/history_section.h"
 #include "luxury/ui/settings/filters/edit_filter.h"
@@ -55,6 +56,7 @@
 #include "ui/layers/generic_box.h"
 #include "ui/text/format_values.h"
 #include "ui/vertical_list.h"
+#include "ui/widgets/checkbox.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
@@ -463,15 +465,26 @@ void AddLuxuryGramActions(PeerData *peerData,
 				addAction({
 					.text = tr::luxury_ClearOnlineHistoryMenuText(tr::now),
 					.handler = [=] {
-						sessionController->show(Ui::MakeConfirmBox({
-							.text = tr::luxury_ClearOnlineHistoryText(tr::now),
-							.confirmed = [=](Fn<void()> &&close) {
+						sessionController->show(Box([=](not_null<Ui::GenericBox*> box) {
+							box->addRow(object_ptr<Ui::FlatLabel>(
+								box,
+								tr::luxury_ClearOnlineHistoryText(tr::now),
+								st::boxLabel));
+							const auto alsoFiles = box->addRow(
+								object_ptr<Ui::Checkbox>(
+									box,
+									tr::luxury_WatcherClearKeptFilesAlso(tr::now),
+									true,
+									st::defaultBoxCheckbox));
+							box->addButton(tr::luxury_ClearOnlineHistoryMenuText(), [=] {
+								if (alsoFiles && alsoFiles->checked()) {
+									LuxuryFeatures::Watch::clearKeptMediaForDialog(
+										getDialogIdFromPeer(peerData));
+								}
 								LuxuryOnline::clearHistory(peerData);
-								close();
-							},
-							.confirmText = tr::luxury_ClearOnlineHistoryMenuText(tr::now),
-							.cancelText = tr::lng_cancel(),
-							.confirmStyle = &st::attentionBoxButton,
+								box->closeBox();
+							}, st::attentionBoxButton);
+							box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
 						}));
 					},
 					.icon = &st::menuIconClearAttention,

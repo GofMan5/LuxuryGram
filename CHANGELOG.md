@@ -10,12 +10,14 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 - The Repeat message context-menu action now re-sends messages that contain a rich page (for example a web page preview) as the full rich page for premium users, instead of replacing them with a plain-text copy.
 - Forwarding a selection that includes messages with rich pages now re-sends those messages as the full rich page for premium users instead of degrading them to a plain-text copy.
+- Clear Watcher Data in the chat context menu now opens a confirmation box that also offers deleting the media files Watcher saved for that chat, instead of only clearing recorded online history.
 
 ### Changed
 
 - Watcher identifies the selected person, explains the limits of observed history and shows when recording is paused. Its settings use native toggles and explicitly identify recording as an all-chats setting; saved history remains accessible when recording is off.
 - Watcher reads saved history off the UI thread and refreshes idle views every five seconds, preserving scroll position and expanded event details. Automatic refresh pauses while selecting text, focusing a detail or using the settings menu; active-session duration updates every second and timestamps include seconds.
 - Plugin descriptions in the plugin details box now render bold text, links and @mentions instead of showing raw markdown-style markup.
+- The Watcher box header now notes when its view updates are paused because you are selecting text, so the paused list is explained instead of looking stuck.
 
 ### Fixed
 
@@ -39,6 +41,8 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Watcher online-history departures now record the server's exact last-seen time instead of the moment the update arrived, so recorded offline events keep their real transition time.
 - Star gifts forwarded into Saved Messages no longer create a duplicate Watcher gift event; the forwarded copy is matched to the original gift message.
 - Watcher reaction events now skip bot and service chats, matching the gift and profile-change exclusions; reaction events in groups and channels are unchanged.
+- The Russian label for the watcher media switch said "Не отслеживать", implying history recording stops; it now says "Не скачивать медиа", matching the switch's actual effect of stopping media downloads.
+- Watcher event cards whose kind is not recognized now show a dash instead of an empty label.
 
 ## 1.0.19
 

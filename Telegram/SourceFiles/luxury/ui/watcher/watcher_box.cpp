@@ -317,7 +317,7 @@ void PaintCardShell(Painter &p, int width, int height) {
 	case WatchKind::MessageEdited:
 		return tr::luxury_OnlineHistoryKindEdited(tr::now);
 	default:
-		return QString();
+		return QString(QChar(0x2014));
 	}
 }
 
@@ -454,6 +454,9 @@ public:
 	[[nodiscard]] rpl::producer<bool> reloads() const {
 		return _reloads.events();
 	}
+	[[nodiscard]] bool rebuildPending() const {
+		return _rebuildPending;
+	}
 	[[nodiscard]] rpl::producer<ID> openMessages() const {
 		return _openMessages.events();
 	}
@@ -536,7 +539,7 @@ public:
 	void setLastEnabled(bool enabled);
 	void startRefreshSpin();
 	void setTabCounts(std::array<int, 3> counts);
-	void updateContext(not_null<PeerData*> peer);
+	void updateContext(not_null<PeerData*> peer, bool updatesDeferred);
 
 protected:
 	void paintEvent(QPaintEvent *e) override;
@@ -1521,13 +1524,22 @@ void WatcherHeader::paintEvent(QPaintEvent *e) {
 		LuxuryUi::WithAlpha(st::windowFg->c, 0.08));
 }
 
-void WatcherHeader::updateContext(not_null<PeerData*> peer) {
+void WatcherHeader::updateContext(
+		not_null<PeerData*> peer,
+		bool updatesDeferred) {
 	const auto name = peer->name();
 	_identity->setText(name);
 	_identity->setToolTip(name);
-	_status->setText(LuxuryOnline::TrackingAllowed()
-		? tr::luxury_WatcherTrackingHint(tr::now)
-		: tr::luxury_WatcherTrackingPaused(tr::now));
+	if (LuxuryOnline::TrackingAllowed()) {
+		auto status = tr::luxury_WatcherTrackingHint(tr::now);
+		if (updatesDeferred) {
+			status += QChar(' ');
+			status += tr::luxury_WatcherUpdatesPaused(tr::now);
+		}
+		_status->setText(std::move(status));
+	} else {
+		_status->setText(tr::luxury_WatcherTrackingPaused(tr::now));
+	}
 	resizeToWidth(width());
 }
 
@@ -1574,7 +1586,7 @@ void FillWatcherBox(
 		object_ptr<WatcherBody>(box, peer),
 		style::margins());
 
-	header->updateContext(peer);
+	header->updateContext(peer, body->rebuildPending());
 	const auto refresh = [=] {
 		state->scrollTop = box->scrollTop();
 		body->refresh();
@@ -1583,7 +1595,7 @@ void FillWatcherBox(
 	) | rpl::on_next([=] { state->scrollTop = box->scrollTop(); }, box->lifetime());
 	body->reloads(
 	) | rpl::on_next([=](bool rebuilt) {
-		header->updateContext(peer);
+		header->updateContext(peer, body->rebuildPending());
 		if (rebuilt) {
 			box->scrollToY(state->scrollTop);
 		}
@@ -1604,9 +1616,9 @@ void FillWatcherBox(
 	});
 	state->clockTimer.callEach(1000);
 	LuxurySettings::getInstance().trackOnlineHistoryChanges(
-	) | rpl::on_next([=] { header->updateContext(peer); body->tick(); }, box->lifetime());
+	) | rpl::on_next([=] { header->updateContext(peer, body->rebuildPending()); body->tick(); }, box->lifetime());
 	LuxurySettings::getInstance().trackOnlineEvenWhenLockedChanges(
-	) | rpl::on_next([=] { header->updateContext(peer); body->tick(); }, box->lifetime());
+	) | rpl::on_next([=] { header->updateContext(peer, body->rebuildPending()); body->tick(); }, box->lifetime());
 
 	header->tabChanges(
 	) | rpl::on_next([=](int index) {

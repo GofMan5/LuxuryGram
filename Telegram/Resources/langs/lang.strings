@@ -8997,7 +8997,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ViewDeletedMenuText" = "View Deleted";
 "luxury_ViewOnlineHistoryMenuText" = "Watcher";
 "luxury_ClearOnlineHistoryMenuText" = "Clear Watcher Data";
-"luxury_ClearOnlineHistoryText" = "Delete all Watcher data recorded for this chat?";
+"luxury_ClearOnlineHistoryText" = "Clear all Watcher data for this chat? Online history and events are removed; the messages list is not.";
+"luxury_WatcherClearKeptFilesAlso" = "Also delete saved media files";
 "luxury_OnlineHistoryTitle" = "Watcher";
 "luxury_OnlineHistoryEarlier#one" = "+{count} earlier";
 "luxury_OnlineHistoryEarlier#other" = "+{count} earlier";
@@ -9033,6 +9034,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_WatcherEndUnobserved" = "End not observed";
 "luxury_WatcherTrackingHint" = "Observed history only; gaps are not online time.";
 "luxury_WatcherTrackingPaused" = "Recording paused. Saved history is still available.";
+"luxury_WatcherUpdatesPaused" = "Paused while you are selecting text";
 "luxury_WatcherLoading" = "Loading saved history…";
 "luxury_WatcherExpand" = "Show full text";
 "luxury_WatcherCollapse" = "Collapse text";
