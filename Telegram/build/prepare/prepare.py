@@ -540,7 +540,7 @@ if os.path.isdir(localQtbasePatches):
 stage('patches', """
     git clone https://github.com/desktop-app/patches.git
     cd patches
-    git checkout 4ca9e1e9d86cc87b78c2480f41ba61871c76f2fa
+    git checkout 51912ada9f0c3dfbded54616175ddd211dce8aaf
 """ + copyQtbasePatches + """mac:
     sed -i '' "s/10.13/$MACOSX_DEPLOYMENT_TARGET/g" macos_meson_*.txt
     git clone https://github.com/desktop-app/qt6_highsierra_patches.git qt6_highsierra
