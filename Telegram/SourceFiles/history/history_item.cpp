@@ -2692,9 +2692,9 @@ void HistoryItem::applySentMessage(const MTPDmessage &data) {
 		_flags &= ~MessageFlag::InvertMedia;
 	}
 	if (data.is_noforwards()) {
-		_flags |= MessageFlag::NoForwards;
+		_flags |= MessageFlag::LuxuryNoForwards;
 	} else {
-		_flags &= ~MessageFlag::NoForwards;
+		_flags &= ~MessageFlag::LuxuryNoForwards;
 	}
 
 	const auto wasTypes = sharedMediaTypes();
