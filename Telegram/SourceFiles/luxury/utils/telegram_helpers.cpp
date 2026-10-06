@@ -18,6 +18,7 @@
 #include "core/core_settings.h"
 #include "core/application.h"
 #include "base/call_delayed.h"
+#include "base/debug_log.h"
 #include "base/unixtime.h"
 #include "core/mime_type.h"
 #include "data/data_channel.h"
@@ -251,6 +252,7 @@ void readHistory(not_null<HistoryItem*> message) {
 							 LuxuryWorker::markAsOnline(&history->session());
 						 }).fail([=]
 						 {
+							 LOG(("LuxuryGram: messages.readHistory failed for peer %1").arg(history->peer->id.value));
 						 }).send();
 					 });
 
@@ -649,9 +651,10 @@ void resolvePeer(
 }
 
 void searchPeer(
-		const QString &,
+		const QString &query,
 		Main::Session *,
 		const UsernameResolverCallback &callback) {
+	LOG(("LuxuryGram: searchPeer cannot resolve query \"%1\": no network lookup exists").arg(query));
 	callback(QString(), nullptr);
 }
 
@@ -1128,6 +1131,9 @@ void getUserRegistrationDateInner(
 			const auto date = obj["date"].toString();
 
 			const auto parsedDate = QDate::fromString(date, "dd.MM.yyyy");
+			if (!parsedDate.isValid()) {
+				continue;
+			}
 			const auto formattedDate = langDayOfMonthFull(parsedDate);
 
 			if (flag == "EXACT" || flag == "INTERPOLATED") {

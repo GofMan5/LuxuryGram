@@ -6,6 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "luxury/features/message_shot/message_shot_theme_state.h"
 
+#include "base/debug_log.h"
 #include "lang_auto.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/utils/telegram_helpers.h"
@@ -152,6 +153,7 @@ void applyCloudThemeAsync(
 		std::shared_ptr<style::palette> palette,
 		Fn<void()> onApplied) {
 	if (!theme.documentId) {
+		LOG(("MessageShot: theme %1 has no document file, skipping apply").arg(theme.id));
 		return;
 	}
 
@@ -165,6 +167,7 @@ void applyCloudThemeAsync(
 
 	const auto apply = [=] {
 		if (!weak) {
+			LOG(("MessageShot: session controller destroyed before theme apply"));
 			return;
 		}
 
@@ -173,6 +176,7 @@ void applyCloudThemeAsync(
 			document->location().name(),
 			theme);
 		if (!preview) {
+			LOG(("MessageShot: failed to parse downloaded theme document"));
 			return;
 		}
 
@@ -369,6 +373,7 @@ void subscribeToCloudThemeLoad(
 
 	const auto session = getSession(shot.cloudThemeAccountId());
 	if (!session) {
+		LOG(("MessageShot: session for saved theme account %1 not found").arg(shot.cloudThemeAccountId()));
 		return;
 	}
 

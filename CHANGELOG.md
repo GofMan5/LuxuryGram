@@ -27,6 +27,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Bulk custom forwarding no longer aborts the whole job when one message has no forwardable content or its media cannot be prepared: such items are skipped, their text is still sent when available, and the rest of the selection completes. The forward progress bar now counts every processed item, including skipped ones.
 - Re-sent (repeated) and bulk-forwarded messages no longer inherit the source message's scheduled date, message effect, reply suggestion or media-replacement context; each forwarded item is sent as a fresh message.
 - Translating multiple messages no longer stalls the batch when a translation attempt completes twice or a service reply completes synchronously: each attempt is counted exactly once and the queue keeps draining to the next message.
+- Ghost-mode settings changes made from background threads now run on the main thread instead of writing concurrently with the autosave timer, which could interleave two writers.
+- Ghost-mode per-account settings are capped at 64 accounts instead of growing without bound.
+- The Windows pinned-shortcut scan no longer leaks a file-search handle when an error occurs.
+- User registration-date lookups skip entries whose date cannot be parsed instead of showing a broken date.
 
 ## 1.0.19
 

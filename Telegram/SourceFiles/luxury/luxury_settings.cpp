@@ -15,8 +15,10 @@
 #include "luxury/luxury_worker.h"
 #include "luxury/features/streamer_mode/streamer_mode.h"
 #include "luxury/ui/luxury_logo.h"
+#include "base/debug_log.h"
 #include "base/timer.h"
 #include "core/application.h"
+#include "crl/crl_on_main.h"
 #include "features/filters/filters_cache_controller.h"
 #include "features/translator/luxury_translator.h"
 #include "main/main_domain.h"
@@ -131,7 +133,7 @@ void dropMismatchedKeys(json &p, const json &shape, const QString &path) {
 // constructed by whichever caller reaches save() first -- in practice the
 // main thread, since every setter runs there. Nothing depends on that: save()
 // compares before it starts the timer, so a first caller on some other thread
-// only means that thread owns it and the main one writes inline instead.
+// only means that thread owns it and the other ones queue onto the main one.
 struct SaveTimer {
 	base::Timer timer{ [] { writeSettings(); } };
 	// base::Timer inherits QObject privately, so it cannot be asked which
@@ -579,7 +581,13 @@ void LuxurySettings::save() {
 	auto &saver = saveTimer();
 	if (saver.thread != QThread::currentThread()) {
 		// A timer owned by another thread cannot be started from here, and
-		// dropping the write is not an option, so pay for it on the spot.
+		// dropping the write is not an option. writeSettings() running on
+		// this thread would race one on the timer's thread, so queue the
+		// write on the main thread instead.
+		if (Core::IsAppLaunched()) {
+			crl::on_main([] { writeSettings(); });
+			return;
+		}
 		writeSettings();
 		return;
 	}
@@ -644,6 +652,18 @@ GhostModeAccountSettings &LuxurySettings::ghost(uint64 userId) {
 
 	auto it = settings._ghostAccounts.find(overriddenId);
 	if (it == settings._ghostAccounts.end()) {
+		if (settings._ghostAccounts.size() >= kMaxGhostAccounts) {
+			static bool logged = false;
+			if (!logged) {
+				logged = true;
+				LOG(("LuxuryGramSettings: ghost account cap of %1 reached, ignoring further accounts").arg(kMaxGhostAccounts));
+			}
+			// ponytail: cap where the map grows, not where it persists;
+			// a rejected account shares this dummy and its writes are
+			// never saved by design.
+			static GhostModeAccountSettings dummy;
+			return dummy;
+		}
 		auto account = std::make_unique<GhostModeAccountSettings>();
 		it = settings._ghostAccounts.emplace(overriddenId, std::move(account)).first;
 	}
