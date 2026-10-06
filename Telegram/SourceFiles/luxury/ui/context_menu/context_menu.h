@@ -32,6 +32,7 @@ void AddJumpToBeginningAction(PeerData *peerData,
 							  const Window::PeerMenuCallback &addCallback);
 
 void AddShadowBanAction(PeerData *peerData,
+						not_null<Window::SessionController*> sessionController,
 						const Window::PeerMenuCallback &addCallback);
 void AddWatchChatAction(PeerData *peerData,
 						not_null<Window::SessionController*> sessionController,

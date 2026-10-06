@@ -8930,8 +8930,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_RegexFilterBulletinText" = "Filter added to the **Shared filters**.";
 "luxury_RegexFilterBulletinAction" = "To Current Chat";
 "luxury_RegexFiltersListEmpty" = "No filters here yet.";
+"luxury_RegexFiltersLoading" = "Loading…";
+"luxury_UnknownPeer" = "Unknown (ID: {id})";
 "luxury_FiltersQuickShadowBan" = "Shadow Ban";
 "luxury_FiltersQuickUnshadowBan" = "Unshadow Ban";
+"luxury_ShadowBanEnabled" = "Messages from this sender are hidden in your chats.";
+"luxury_ShadowBanDisabled" = "Messages from this sender are shown in your chats again.";
 "luxury_FiltersMenuSelectChat" = "Select Chat";
 "luxury_FiltersMenuImport" = "Import";
 "luxury_FiltersMenuExport" = "Export";
@@ -8970,6 +8974,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MessageDetailsPC" = "Details";
 "luxury_MessageDetailsViewsPC" = "Views";
 "luxury_MessageDetailsSharesPC" = "Shares";
+"luxury_MessageDetailsIdPC" = "ID";
 "luxury_MessageDetailsDatePC" = "Date";
 "luxury_MessageDetailsEditedDatePC" = "Edit Date";
 "luxury_MessageDetailsForwardedDatePC" = "Forward Date";

@@ -19,6 +19,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Plugin descriptions in the plugin details box now render bold text, links and @mentions instead of showing raw markdown-style markup.
 - The Watcher box header now notes when its view updates are paused because you are selecting text, so the paused list is explained instead of looking stuck.
 - On Linux, bot web apps now use the external desktop shell only on Wayland sessions; on X11 they open as regular in-app panels again.
+- The shadow-ban and watched-chats lists act directly on row activation: the ban is lifted or watching stopped, the row disappears, and a toast confirms what changed — instead of opening a cursor-anchored one-item popup with a generic "Delete" label that keyboard activation could not aim at the row.
 
 ### Fixed
 
@@ -45,6 +46,9 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - The Russian label for the watcher media switch said "Не отслеживать", implying history recording stops; it now says "Не скачивать медиа", matching the switch's actual effect of stopping media downloads.
 - Watcher event cards whose kind is not recognized now show a dash instead of an empty label.
 - Rich messages (for example web page previews) no longer risk freezing the app when a relative date such as today rolls over.
+- Regex filter lists show a "Loading…" placeholder while the stored filters are being read, instead of presenting a list that already looks empty.
+- The Shadow Ban context-menu action now confirms the new state with a toast, instead of toggling silently while messages from that sender are hidden or restored.
+- Filter list rows whose peer cannot be resolved now show a localized "Unknown (ID: …)" name instead of a hard-coded English label.
 
 ## 1.0.19
 

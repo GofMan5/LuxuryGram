@@ -14,13 +14,35 @@
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "main/main_session.h"
-#include "styles/style_menu_icons.h"
 #include "ui/painter.h"
 #include "window/window_session_controller.h"
 
 #include <utility>
 
 namespace Settings {
+
+namespace {
+
+// Not a dialog id: the loading placeholder owns this row id so that
+// rowClicked can tell it apart from every dialog-backed row.
+constexpr auto kLoadingRowId = PeerListRowId(-1);
+
+// A "special" row (no peer) standing in for the regex rows while the
+// database read runs, so an existing list never reads as empty while it
+// is merely not finished loading.
+class LoadingRow final : public PeerListRow {
+public:
+	explicit LoadingRow(PeerListRowId id)
+		: PeerListRow(id) {
+		setDisabledState(State::Disabled);
+	}
+
+	QString generateName() override {
+		return tr::luxury_RegexFiltersLoading(tr::now);
+	}
+};
+
+} // namespace
 
 PerDialogFiltersListRow::PerDialogFiltersListRow(ID dialogId)
 	: PeerListRow(PeerListRowId(dialogId))
@@ -37,7 +59,10 @@ QString PerDialogFiltersListRow::generateName() {
 		this->setPeer(from);
 		return PeerListRow::generateName();
 	}
-	return QString("UNKNOWN (ID: %1)").arg(QString::number(peerId.value & PeerId::kChatTypeMask));
+	return tr::luxury_UnknownPeer(
+		tr::now,
+		lt_id,
+		QString::number(peerId.value & PeerId::kChatTypeMask));
 }
 
 PaintRoundImageCallback PerDialogFiltersListRow::generatePaintUserpicCallback(bool forceRound) {
@@ -86,7 +111,10 @@ void PerDialogFiltersListController::prepare() {
 		return;
 	}
 	// Two full-table reads, and prepare() runs while the section it belongs to is
-	// being built. Append the rows when they come back instead.
+	// being built. Append the rows when they come back instead, and keep a
+	// disabled placeholder until then: a credible empty state for that moment
+	// invites acting on a filter list that is about to appear.
+	delegate()->peerListAppendRow(std::make_unique<LoadingRow>(kLoadingRowId));
 	const auto weak = base::make_weak(this);
 	LuxuryDatabase::async([=] {
 		auto filters = LuxuryDatabase::getAllRegexFilters();
@@ -104,7 +132,13 @@ void PerDialogFiltersListController::prepare() {
 void PerDialogFiltersListController::fillCounts(
 		const std::vector<RegexFilter> &filters,
 		const std::vector<RegexFilterGlobalExclusion> &exclusions) {
+	// The placeholder goes even when the read comes back empty: that is the
+	// real state, not "still loading".
+	if (const auto row = delegate()->peerListFindRow(kLoadingRowId)) {
+		delegate()->peerListRemoveRow(row);
+	}
 	if (filters.empty() && exclusions.empty()) {
+		delegate()->peerListRefreshRows();
 		return;
 	}
 
@@ -143,6 +177,9 @@ void PerDialogFiltersListController::fillCounts(
 }
 
 void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
+	if (peer->id() == kLoadingRowId) {
+		return;
+	}
 	ID did;
 	if (const auto row = dynamic_cast<PerDialogFiltersListRow*>(peer.get())) {
 		did = row->dialogId();
@@ -153,42 +190,28 @@ void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
 		did = getDialogIdFromPeer(peer->peer());
 	}
 	if (_mode == Mode::ShadowBan) {
-		auto _contextMenu = new Ui::PopupMenu(nullptr, st::popupMenuWithIcons);
-		_contextMenu->setAttribute(Qt::WA_DeleteOnClose);
-
-		_contextMenu->addAction(
-			tr::lng_theme_delete(tr::now),
-			[=]
-			{
-				if (LuxurySettings::getInstance().isShadowBanned(did)) {
-					LuxurySettings::getInstance().removeShadowBan(did);
-				} else {
-					LuxurySettings::getInstance().addShadowBan(did);
-				}
-			},
-			&st::menuIconDelete);
-
-		_contextMenu->popup(QCursor::pos());
+		// Every row's only action is lifting that chat's ban, so activation
+		// performs it directly. The old one-item popup was anchored at the
+		// cursor, which a keyboard activation cannot aim at the row it
+		// belongs to, and its label was a generic "Delete".
+		LuxurySettings::getInstance().removeShadowBan(did);
+		// The row is the only thing pointing at that chat here, so it goes
+		// with the setting: leaving it would say the chat is still banned.
+		if (const auto row = delegate()->peerListFindRow(PeerListRowId(did))) {
+			delegate()->peerListRemoveRow(row);
+			delegate()->peerListRefreshRows();
+		}
+		_controller->showToast(tr::luxury_ShadowBanDisabled(tr::now));
 		return;
 	} else if (_mode == Mode::Watched) {
-		auto menu = new Ui::PopupMenu(nullptr, st::popupMenuWithIcons);
-		menu->setAttribute(Qt::WA_DeleteOnClose);
-
-		menu->addAction(
-			tr::luxury_WatchChatStop(tr::now),
-			crl::guard(this, [=] {
-				LuxurySettings::getInstance().setWatched(did, false);
-				// The row is the only thing pointing at that chat here, so it goes
-				// with the setting: leaving it would say the chat is still watched.
-				if (const auto row = delegate()->peerListFindRow(
-						PeerListRowId(did))) {
-					delegate()->peerListRemoveRow(row);
-					delegate()->peerListRefreshRows();
-				}
-			}),
-			&st::menuIconDelete);
-
-		menu->popup(QCursor::pos());
+		LuxurySettings::getInstance().setWatched(did, false);
+		// The row is the only thing pointing at that chat here, so it goes
+		// with the setting: leaving it would say the chat is still watched.
+		if (const auto row = delegate()->peerListFindRow(PeerListRowId(did))) {
+			delegate()->peerListRemoveRow(row);
+			delegate()->peerListRefreshRows();
+		}
+		_controller->showToast(tr::luxury_WatchChatDisabled(tr::now));
 		return;
 	}
 	_controller->luxuryFilters = {

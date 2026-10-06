@@ -67,6 +67,10 @@ namespace LuxuryUi {
 
 namespace {
 
+// Message-details file names are shortened from the tail to this many
+// characters; the full name goes to the clipboard on activation.
+constexpr auto kMaxMediaNameLength = 20;
+
 Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> controller, not_null<PeerData*> peer, ID topicId) {
 	return [=] {
 		controller->show(Ui::MakeConfirmBox({
@@ -616,6 +620,7 @@ void AddOpenChannelAction(PeerData *peerData,
 }
 
 void AddShadowBanAction(PeerData *peerData,
+						not_null<Window::SessionController*> sessionController,
 						const Window::PeerMenuCallback &addCallback) {
 	const auto &settings = LuxurySettings::getInstance();
 	if (!peerData || !(peerData->isUser() || peerData->isBroadcast()) || !settings.filtersEnabled()) {
@@ -637,6 +642,15 @@ void AddShadowBanAction(PeerData *peerData,
 		} else {
 			LuxurySettings::getInstance().addShadowBan(realId);
 		}
+
+		// Read back instead of assuming, then say what the new state means:
+		// a ban hides every message from that sender in your chats, and
+		// lifting one brings them back -- a silent toggle leaves the user
+		// to rediscover that from the timeline itself.
+		sessionController->showToast(
+			LuxurySettings::getInstance().isShadowBanned(realId)
+				? tr::luxury_ShadowBanEnabled(tr::now)
+				: tr::luxury_ShadowBanDisabled(tr::now));
 	};
 
 	addCallback({
@@ -970,7 +984,7 @@ void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 			menu2->addAction(Ui::ContextActionWithSubText(
 				menu2->menu(),
 				st::menuIconInfo,
-				QString("ID"),
+				tr::luxury_MessageDetailsIdPC(tr::now),
 				messageId
 			));
 
@@ -1023,7 +1037,9 @@ void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 				}
 
 				if (!mediaName.isEmpty()) {
-					auto const shortified = mediaName.length() > 20 ? "…" + mediaName.right(20) : mediaName;
+					const auto shortified = mediaName.length() > kMaxMediaNameLength
+						? "…" + mediaName.right(kMaxMediaNameLength)
+						: mediaName;
 
 					menu2->addAction(Ui::ContextActionWithSubText(
 						menu2->menu(),
