@@ -35,6 +35,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Watcher session list: selecting text no longer makes the list drop incoming updates; rebuilds wait for the selection to end and then apply, so the list never goes silently stale.
 - Watcher saved-attachment ok marker: the hard-coded green is replaced with the theme's online-status color, so custom themes no longer get a dot that matches nothing.
 - Watcher session cards now expose their content (state, duration, open/closed) to screen readers via accessible names.
+- Settings boxes that previously fell back to English for Russian users now show Russian labels: the font customizer, the message-shot theme picker, the chat-filter import/export options, and the plugin details box.
 
 ## 1.0.19
 
