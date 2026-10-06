@@ -270,7 +270,7 @@ InnerWidget::InnerWidget(
 	  _emptyText(
 		  st::historyAdminLogEmptyWidth
 		  - st::historyAdminLogEmptyPadding.left()
-		  - st::historyAdminLogEmptyPadding.left()) {
+		  - st::historyAdminLogEmptyPadding.right()) {
 	Window::ChatThemeValueFromPeer(
 		controller,
 		peer
