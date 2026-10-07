@@ -235,6 +235,13 @@ std::pair<QString, QString> stateName(
 
 	);
 
+	if (snapshot.skippedMessages > 0) {
+		messagesString += u", " + tr::luxury_LuxuryForwardStatusSkippedCount(
+			tr::now,
+			lt_count,
+			snapshot.skippedMessages);
+	}
+
 	QString chunkString = tr::luxury_LuxuryForwardStatusChunkCount(tr::now,
 													 lt_count1,
 													 QString::number(snapshot.currentChunk + 1),
@@ -292,6 +299,11 @@ void ForwardState::setMessages(int total, int sent) {
 void ForwardState::setSentMessages(int sent) {
 	const auto lock = std::lock_guard(_mutex);
 	_data.sentMessages = sent;
+}
+
+void ForwardState::setSkippedMessages(int skipped) {
+	const auto lock = std::lock_guard(_mutex);
+	_data.skippedMessages = skipped;
 }
 
 void ForwardState::advanceChunk() {
@@ -471,13 +483,25 @@ qint64 FileSize(const QString &path) {
 	return file.exists() ? file.size() : 0;
 }
 
-bool LoadDocuments(
+struct DocumentsResult {
+	// True when the user stopped the job or the session died; the caller
+	// aborts the whole forward.
+	bool cancelled = false;
+	// Indexes into `items` whose media could not be fetched. The forward
+	// skips those items and keeps going instead of failing the whole job.
+	std::vector<int> failed;
+};
+
+DocumentsResult LoadDocuments(
 		const ForwardJob &job,
 		const std::vector<ForwardItem> &items,
 		const LuxurySync::Cancelled &cancelled) {
-	for (const auto &item : items) {
+	auto result = DocumentsResult();
+	for (auto i = 0; i != int(items.size()); ++i) {
+		const auto &item = items[i];
 		if (cancelled && cancelled()) {
-			return false;
+			result.cancelled = true;
+			return result;
 		} else if (!item.downloadable) {
 			continue;
 		}
@@ -497,12 +521,19 @@ bool LoadDocuments(
 				item.path,
 				cancelled);
 		}
-		if ((cancelled && cancelled())
-			|| FileSize(item.path) != item.expectedSize) {
-			return false;
+		if (cancelled && cancelled()) {
+			result.cancelled = true;
+			return result;
+		} else if (FileSize(item.path) != item.expectedSize) {
+			result.failed.push_back(i);
+			LOG(("forward: media for item %1 could not be fetched, "
+				"skipping it (expected %2 bytes, got %3)")
+				.arg(i)
+				.arg(item.expectedSize)
+				.arg(FileSize(item.path)));
 		}
 	}
-	return true;
+	return result;
 }
 
 bool ForwardItems(
@@ -513,14 +544,24 @@ bool ForwardItems(
 		return state->stopRequested() || !session.get();
 	};
 	state->setMessages(int(items.size()), 0);
+	auto skip = std::vector<char>(items.size(), 0);
 	if (std::ranges::any_of(items, &ForwardItem::downloadable)) {
 		state->updateBottomBar(
 			job.session,
 			job.peerId,
 			ForwardState::State::Downloading);
-		if (!LoadDocuments(job, items, cancelled)) {
-			LOG(("failed to load documents for forward"));
+		const auto result = LoadDocuments(job, items, cancelled);
+		if (result.cancelled) {
+			LOG(("forward cancelled while downloading"));
 			return false;
+		}
+		for (const auto index : result.failed) {
+			skip[index] = 1;
+		}
+		if (!result.failed.empty()) {
+			state->setSkippedMessages(int(result.failed.size()));
+			// The bar counts only what will actually be sent.
+			state->setMessages(int(items.size() - result.failed.size()), 0);
 		}
 	}
 	if (cancelled()) {
@@ -532,16 +573,20 @@ bool ForwardItems(
 		job.session,
 		job.peerId,
 		ForwardState::State::Sending);
+	auto sent = 0;
 	for (auto i = 0; i != int(items.size()); ++i) {
 		const auto &item = items[i];
 		if (cancelled()) {
 			LOG(("forward cancelled while sending"));
 			return false;
 		}
-
+		if (skip[i]) {
+			continue;
+		}
+		++sent;
 		const auto updateProgress = gsl::finally([&] {
 			if (!cancelled()) {
-				state->setSentMessages(i + 1);
+				state->setSentMessages(sent);
 				state->updateBottomBar(
 					job.session,
 					job.peerId,
@@ -560,7 +605,7 @@ bool ForwardItems(
 				LOG(("failed to forward items: session destroyed"));
 				return false;
 			}
-			const auto sent = forwardRichMessage(
+			const auto richSent = forwardRichMessage(
 				strong,
 				item.id,
 				job.action,
@@ -576,7 +621,7 @@ bool ForwardItems(
 				job.peerId,
 				ForwardState::State::Sending);
 
-			if (sent) {
+			if (richSent) {
 				continue;
 			}
 		}
@@ -652,7 +697,13 @@ bool ForwardItems(
 			}
 		}
 	}
-	return true;
+	// Nothing was sent and everything was skipped: report the job as
+	// failed, so the success callback does not run.
+	const auto skippedEverything = !items.empty()
+		&& std::ranges::all_of(skip, [](const char skipped) {
+			return skipped;
+		});
+	return !skippedEverything;
 }
 
 void RunForward(

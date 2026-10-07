@@ -34,6 +34,9 @@ public:
 		int currentChunk = 0;
 		int totalMessages = 0;
 		int sentMessages = 0;
+		// Messages dropped from the job before sending because their media
+		// could not be fetched; reported next to the sent count.
+		int skippedMessages = 0;
 		State state = State::Preparing;
 		bool stopRequested = false;
 	};
@@ -45,6 +48,7 @@ public:
 	void requestStop();
 	void setMessages(int total, int sent);
 	void setSentMessages(int sent);
+	void setSkippedMessages(int skipped);
 	void advanceChunk();
 	void updateBottomBar(
 		base::weak_ptr<Main::Session> session,

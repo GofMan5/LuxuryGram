@@ -9126,6 +9126,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_LuxuryForwardStatusFinished" = "Done";
 "luxury_LuxuryForwardStatusSentCount" = "sent {count1} of {count2}";
 "luxury_LuxuryForwardStatusChunkCount" = "chunk {count1} of {count2}";
+"luxury_LuxuryForwardStatusSkippedCount#one" = "skipped {count}";
+"luxury_LuxuryForwardStatusSkippedCount#other" = "skipped {count}";
 "luxury_CreationDateUserApproximately" = "**{item1}** created their account approximately on **{item2}**.";
 "luxury_CreationDateUserEarlier" = "**{item1}** created their account earlier than **{item2}**.";
 "luxury_CreationDateUserLater" = "**{item1}** created their account later than **{item2}**.";

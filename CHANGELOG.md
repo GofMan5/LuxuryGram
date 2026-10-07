@@ -28,12 +28,13 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Fixed
 
+- The message-shot box now falls back to the chat's own theme and clears the saved choice when a saved custom theme can no longer be loaded (its file failed to download or parse, or it has no theme file), instead of staying stuck waiting for an apply that never comes.
 - Partial user updates that carry no last-seen information (for example a name or photo change) no longer reset the online-presence tracker, so online intervals recorded by Watcher stay continuous instead of being split by unrelated updates.
 - Online history now records live Telegram status updates as well as user snapshots, independently of the temporary online status inferred from messages or typing. Repeated server confirmations no longer duplicate transitions, and an initial offline snapshot is not recorded as a departure.
 - Watcher no longer labels old unfinished sessions as Online now. Missing departures and observation gaps remain explicit; resumed tracking starts a new interval instead of merging time across pauses or restarts. Same-second transitions and system-clock changes retain insertion order.
 - Live name and username updates are now included in Watcher events rather than being missed until another user snapshot arrives.
 - Clearing Watcher history also clears its cached last-seen fallback and active-session state instead of continuing to display cleared data.
-- Bulk custom forwarding no longer aborts the whole job when one message has no forwardable content or its media cannot be prepared: such items are skipped, their text is still sent when available, and the rest of the selection completes. The forward progress bar now counts every processed item, including skipped ones.
+- Bulk custom forwarding no longer aborts the whole job when one message has no forwardable content, its media cannot be prepared, or its media fails to download: such items are skipped, their text is still sent when available, and the rest of the selection completes. The forward progress bar counts only what can still be sent and appends a "skipped N" note when items were dropped.
 - Re-sent (repeated) and bulk-forwarded messages no longer inherit the source message's scheduled date, message effect, reply suggestion or media-replacement context; each forwarded item is sent as a fresh message.
 - Translating multiple messages no longer stalls the batch when a translation attempt completes twice or a service reply completes synchronously: each attempt is counted exactly once and the queue keeps draining to the next message.
 - Ghost-mode settings changes made from background threads now run on the main thread instead of writing concurrently with the autosave timer, which could interleave two writers.

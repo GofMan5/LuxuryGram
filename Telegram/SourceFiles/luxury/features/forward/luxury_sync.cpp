@@ -732,7 +732,9 @@ void loadPhotoSync(
 		) | rpl::filter([view] {
 			return view->loaded();
 		}) | rpl::take(1) | rpl::on_next([=] {
-			view->saveToFile(path);
+			if (!view->saveToFile(path)) {
+				LOG(("failed to save photo for forward to %1").arg(path));
+			}
 			latch->countDown();
 		}, *lifetime);
 	});
@@ -767,7 +769,10 @@ void loadPhotoSync(
 		view->wanted(Data::PhotoSize::Large, origin);
 
 		const auto saveToFiles = [=] {
-			view->saveToFile(filePath(session, photo));
+			const auto target = filePath(session, photo);
+			if (!view->saveToFile(target)) {
+				LOG(("failed to save photo for forward to %1").arg(target));
+			}
 		};
 
 		if (view->loaded()) {

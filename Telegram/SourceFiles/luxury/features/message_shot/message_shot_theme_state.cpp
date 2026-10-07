@@ -79,7 +79,7 @@ bool tryApplyCloudThemePalette(
 SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 		const MessageShotSettings &shot,
 		std::shared_ptr<style::palette> palette,
-		Fn<void()> onApplied) {
+		Fn<void(bool applied)> onApplied) {
 	if (shot.embeddedThemeType() == -1) {
 		return SavedThemeApplyResult::Failed;
 	}
@@ -105,7 +105,7 @@ SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 			setDefaultSelectedColor(*accent);
 		}
 		if (onApplied) {
-			onApplied();
+			onApplied(true);
 		}
 		return SavedThemeApplyResult::AppliedSync;
 	}
@@ -123,7 +123,7 @@ SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 		setDefaultSelected(type);
 		setDefaultSelectedColor(color);
 		if (onApplied) {
-			onApplied();
+			onApplied(true);
 		}
 		return SavedThemeApplyResult::AppliedSync;
 	}
@@ -141,7 +141,7 @@ SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 	palette->load(preview->instance.palette.save());
 	setDefaultSelected(type);
 	if (onApplied) {
-		onApplied();
+		onApplied(true);
 	}
 	return SavedThemeApplyResult::AppliedSync;
 }
@@ -151,9 +151,12 @@ void applyCloudThemeAsync(
 		not_null<Main::Session*> session,
 		const Data::CloudTheme &theme,
 		std::shared_ptr<style::palette> palette,
-		Fn<void()> onApplied) {
+		Fn<void(bool applied)> onApplied) {
 	if (!theme.documentId) {
 		LOG(("MessageShot: theme %1 has no document file, skipping apply").arg(theme.id));
+		if (onApplied) {
+			onApplied(false);
+		}
 		return;
 	}
 
@@ -168,6 +171,9 @@ void applyCloudThemeAsync(
 	const auto apply = [=] {
 		if (!weak) {
 			LOG(("MessageShot: session controller destroyed before theme apply"));
+			if (onApplied) {
+				onApplied(false);
+			}
 			return;
 		}
 
@@ -177,6 +183,9 @@ void applyCloudThemeAsync(
 			theme);
 		if (!preview) {
 			LOG(("MessageShot: failed to parse downloaded theme document"));
+			if (onApplied) {
+				onApplied(false);
+			}
 			return;
 		}
 
@@ -184,7 +193,7 @@ void applyCloudThemeAsync(
 		palette->load(preview->instance.palette.save());
 		setCustomSelected(theme);
 		if (onApplied) {
-			onApplied();
+			onApplied(true);
 		}
 	};
 
@@ -322,7 +331,7 @@ void setPersistedPalette(std::shared_ptr<style::palette> palette) {
 
 SavedThemeApplyResult applySavedThemePalette(
 		std::shared_ptr<style::palette> palette,
-		Fn<void()> onApplied) {
+		Fn<void(bool applied)> onApplied) {
 	const auto &shot = LuxurySettings::getInstance().messageShotSettings();
 
 	if (shot.embeddedThemeType() != -1) {
@@ -341,7 +350,7 @@ SavedThemeApplyResult applySavedThemePalette(
 	if (const auto fromList = findCloudThemeById(session, shot.cloudThemeId())) {
 		if (tryApplyCloudThemePalette(session, *fromList, palette)) {
 			if (onApplied) {
-				onApplied();
+				onApplied(true);
 			}
 			return SavedThemeApplyResult::AppliedSync;
 		}
@@ -354,7 +363,7 @@ SavedThemeApplyResult applySavedThemePalette(
 	saved.title = shot.cloudThemeTitle();
 	if (tryApplyCloudThemePalette(session, saved, palette)) {
 		if (onApplied) {
-			onApplied();
+			onApplied(true);
 		}
 		return SavedThemeApplyResult::AppliedSync;
 	}
@@ -365,7 +374,7 @@ SavedThemeApplyResult applySavedThemePalette(
 void subscribeToCloudThemeLoad(
 		not_null<Window::SessionController*> controller,
 		std::shared_ptr<style::palette> palette,
-		Fn<void()> onApplied) {
+		Fn<void(bool applied)> onApplied) {
 	const auto &shot = LuxurySettings::getInstance().messageShotSettings();
 	if (shot.cloudThemeId() == 0) {
 		return;

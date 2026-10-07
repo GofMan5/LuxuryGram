@@ -220,14 +220,23 @@ void MessageShotBox::setupContent() {
 
 	if (savedThemeApplyResult == LuxuryFeatures::MessageShot::SavedThemeApplyResult::AwaitingAsync) {
 		const auto weakBox = base::make_weak(this);
+		// Built while the controller is guaranteed alive: the async
+		// failure path must not dereference it.
+		const auto fallbackStyle = std::make_shared<Ui::ChatStyle>(
+			_config.controller->chatStyle());
 		LuxuryFeatures::MessageShot::subscribeToCloudThemeLoad(
 			_config.controller,
 			_selectedPalette,
-			[=] {
+			[=](bool applied) {
 				if (!weakBox) {
 					return;
 				}
-				_config.st = std::make_shared<Ui::ChatStyle>(_selectedPalette.get());
+				if (!applied) {
+					LuxurySettings::getInstance().messageShotSettings().clearTheme();
+				}
+				_config.st = applied
+					? std::make_shared<Ui::ChatStyle>(_selectedPalette.get())
+					: fallbackStyle;
 				updatePreview();
 			});
 	}
