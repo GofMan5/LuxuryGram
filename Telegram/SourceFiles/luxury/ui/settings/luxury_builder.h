@@ -28,6 +28,14 @@ public:
 		IconDescriptor icon;
 		QStringList keywords;
 		rpl::producer<bool> shown;
+		// Live value stream for rows whose preference can also be flipped
+		// outside of settings (e.g. the watcher box menu). Empty makes the
+		// row fall back to its value at build time.
+		rpl::producer<bool> value;
+		// Second line under the title. Rows with a description are built as
+		// DetailedSettingsButton rows, which are not SettingsButtons, so
+		// addSettingToggle() returns nullptr for them.
+		rpl::producer<QString> description;
 	};
 	Ui::SettingsButton *addSettingToggle(SettingToggleArgs &&args);
 
@@ -40,6 +48,8 @@ public:
 		IconDescriptor icon;
 		QStringList keywords;
 		rpl::producer<bool> shown;
+		rpl::producer<bool> value;
+		rpl::producer<QString> description;
 	};
 	Ui::SettingsButton *addToggle(ToggleArgs &&args);
 

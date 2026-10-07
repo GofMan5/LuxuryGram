@@ -19,7 +19,9 @@
 #include "data/data_photo_media.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "lang_auto.h"
 #include "main/main_session.h"
+#include "ui/toast/toast.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -27,6 +29,7 @@
 #include <QFileInfo>
 
 #include <atomic>
+#include <utility>
 
 namespace LuxuryFeatures::Watch {
 namespace {
@@ -75,6 +78,11 @@ constexpr auto kMaxPendingKeeps = 256;
 // PruneOldFiles() takes it. Slow on purpose: this only covers that case.
 constexpr auto kKeepRetryDelay = crl::time(30 * 1000);
 
+// Give-ups logged per file would never reach the user, and a failing disk
+// drops whole batches at once. They are counted into one window and surface
+// as a single toast when it closes.
+constexpr auto kGiveUpToastDelay = crl::time(60 * 1000);
+
 struct AwaitingPhoto {
 	QString path;
 	std::shared_ptr<Data::PhotoMedia> media;
@@ -98,6 +106,10 @@ std::vector<AwaitingPhoto> AwaitingPhotos;
 std::vector<PendingKeep> PendingKeeps;
 // One retry timer at a time: anything pushed while it is armed rides on it.
 bool PendingKeepsRetrying = false;
+// Give-ups counted while a toast window is open; the delayed toast swaps
+// the count back to zero when it fires.
+int GivenUpKeeps = 0;
+crl::time GivenUpKeepsWindow = 0;
 base::flat_set<uint64> SubscribedSessions;
 int FetchesSincePrune = 0;
 std::atomic<bool> Pruning = false;
@@ -312,6 +324,13 @@ void RetryPendingKeepsLater() {
 	});
 }
 
+void ShowGivenUpKeepsToast() {
+	const auto count = std::exchange(GivenUpKeeps, 0);
+	GivenUpKeepsWindow = 0;
+	Ui::Toast::Show(
+		tr::luxury_WatcherMediaSaveFailed(tr::now, lt_count, count));
+}
+
 void FlushPendingKeeps() {
 	if (PendingKeeps.empty()) {
 		return;
@@ -335,6 +354,13 @@ void FlushPendingKeeps() {
 			retry.push_back(std::move(entry));
 		} else {
 			LOG(("Luxury Watch: gave up moving %1 to kept.").arg(entry.name));
+			++GivenUpKeeps;
+			if (!GivenUpKeepsWindow) {
+				GivenUpKeepsWindow = now;
+				base::call_delayed(kGiveUpToastDelay, [] {
+					ShowGivenUpKeepsToast();
+				});
+			}
 		}
 	}
 	PendingKeeps.insert(

@@ -16,10 +16,12 @@
 #include "data/data_user.h"
 #include "history/history_item.h"
 #include "lang_auto.h"
+#include "lang/lang_text_entity.h" // tr::rich.
 #include "luxury/data/luxury_database.h"
 #include "luxury/data/messages_storage.h"
 #include "luxury/features/watch/presence_history.h"
 #include "luxury/luxury_settings.h"
+#include "luxury/ui/settings/settings_main.h"
 #include "luxury/ui/watcher/watcher_components.h"
 #include "luxury/ui/watcher/watcher_revisions.h"
 #include "luxury/utils/telegram_helpers.h"
@@ -30,6 +32,7 @@
 #include "ui/text/format_values.h"
 #include "ui/text/text.h"
 #include "ui/widgets/menu/menu.h"
+#include "ui/widgets/menu/menu_multiline_action.h"
 #include "ui/widgets/menu/menu_toggle.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
@@ -1725,6 +1728,18 @@ void FillWatcherBox(
 		state->menu = base::make_unique_q<Ui::PopupMenu>(
 			header,
 			st::luxuryWatcherSettingsMenu);
+		{
+			// Non-interactive caption row, like the poll label in
+			// the chat context menu.
+			auto title = base::make_unique_q<Ui::Menu::MultilineAction>(
+				state->menu->menu(),
+				state->menu->st().menu,
+				st::luxuryWatcherMenuTitleLabel,
+				st::luxuryWatcherMenuTitlePosition,
+				tr::luxury_WatcherMenuHeader(tr::now, tr::rich));
+			title->setAttribute(Qt::WA_TransparentForMouseEvents);
+			state->menu->addAction(std::move(title));
+		}
 		const auto addToggle = [&](
 				const QString &label,
 				Fn<bool()> getter,
@@ -1753,6 +1768,24 @@ void FillWatcherBox(
 			[] { return LuxurySettings::getInstance().trackOnlineEvenWhenLocked(); },
 			[](bool value) {
 				LuxurySettings::getInstance().setTrackOnlineEvenWhenLocked(value);
+			});
+		{
+			auto note = base::make_unique_q<Ui::Menu::MultilineAction>(
+				state->menu->menu(),
+				state->menu->st().menu,
+				st::luxuryWatcherMenuNoteLabel,
+				st::luxuryWatcherMenuNotePosition,
+				tr::luxury_WatcherLockDisclosure(tr::now, tr::rich));
+			note->setAttribute(Qt::WA_TransparentForMouseEvents);
+			state->menu->addAction(std::move(note));
+		}
+		state->menu->addSeparator();
+		state->menu->addAction(
+			tr::luxury_WatcherOpenSettings(tr::now),
+			[=] {
+				controller->showSettings(
+					::Settings::LuxuryMain::Id());
+				controller->window().activate();
 			});
 		const auto gear = header->gearButton();
 		state->menu->popup(gear->mapToGlobal(QPoint(0, gear->height())));

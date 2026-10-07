@@ -8,6 +8,7 @@
 
 #include "luxury/luxury_settings.h"
 #include "luxury/ui/settings/settings_luxury_utils.h"
+#include "settings/detailed_settings_button.h"
 #include "settings/settings_common.h"
 #include "styles/style_luxury_styles.h"
 #include "styles/style_boxes.h"
@@ -60,6 +61,8 @@ Ui::SettingsButton *LuxurySectionBuilder::addSettingToggle(
 		.icon = std::move(args.icon),
 		.keywords = std::move(args.keywords),
 		.shown = std::move(args.shown),
+		.value = std::move(args.value),
+		.description = std::move(args.description),
 	});
 }
 
@@ -67,6 +70,48 @@ Ui::SettingsButton *LuxurySectionBuilder::addToggle(ToggleArgs &&args) {
 	auto getter = std::move(args.getter);
 	auto setter = std::move(args.setter);
 	const auto initialValue = getter();
+	auto toggled = args.value
+		? std::move(args.value)
+		: rpl::producer<bool>(rpl::single(initialValue));
+
+	if (args.description) {
+		const auto &rowStyle = args.icon.icon
+			? st::detailedSettingsButtonStyle
+			: st::luxuryDetailedButton;
+		auto button = (DetailedSettingsButton*)nullptr;
+		_builder.addControl({
+			.factory = [&](not_null<Ui::VerticalLayout*> container) {
+				auto result = object_ptr<DetailedSettingsButton>(
+					container,
+					rpl::duplicate(args.title),
+					std::move(args.description),
+					args.icon,
+					std::move(toggled),
+					rowStyle);
+				button = result.data();
+				return object_ptr<Ui::RpWidget>(std::move(result));
+			},
+			.id = std::move(args.id),
+			.altIds = std::move(args.altIds),
+			.title = rpl::duplicate(args.title),
+			.shown = std::move(args.shown),
+			.keywords = std::move(args.keywords),
+			.searchIcon = args.icon,
+		});
+		if (button) {
+			button->toggledChanges(
+			) | rpl::filter(
+				[=](bool enabled) {
+					return (enabled != getter());
+				}
+			) | rpl::on_next(
+				[=](bool enabled) {
+					setter(enabled);
+				},
+				button->lifetime());
+		}
+		return nullptr;
+	}
 
 	const auto button = _builder.addButton({
 		.id = std::move(args.id),
@@ -74,7 +119,7 @@ Ui::SettingsButton *LuxurySectionBuilder::addToggle(ToggleArgs &&args) {
 		.title = std::move(args.title),
 		.st = args.icon.icon ? nullptr : &st::settingsButtonNoIcon,
 		.icon = std::move(args.icon),
-		.toggled = rpl::single(initialValue),
+		.toggled = std::move(toggled),
 		.keywords = std::move(args.keywords),
 		.shown = std::move(args.shown),
 	});

@@ -648,10 +648,38 @@ void BuildSpyEssentials(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.setter = &LuxurySettings::setSaveDeletedMessages,
 	});
 	luxury.addSettingToggle({
+		.id = u"luxury/saveDeletedMessagesEvenWhenLocked"_q,
+		.title = tr::luxury_SaveDeletedMessagesEvenWhenLocked(),
+		.getter = &LuxurySettings::saveDeletedMessagesEvenWhenLocked,
+		.setter = &LuxurySettings::setSaveDeletedMessagesEvenWhenLocked,
+		.description = tr::luxury_SaveDeletedMessagesEvenWhenLockedDescription(),
+	});
+	luxury.addSettingToggle({
 		.id = u"luxury/saveMessagesHistory"_q,
 		.title = tr::luxury_SaveMessagesHistory(),
 		.getter = &LuxurySettings::saveMessagesHistory,
 		.setter = &LuxurySettings::setSaveMessagesHistory,
+	});
+	luxury.addSettingToggle({
+		.id = u"luxury/trackOnlineHistory"_q,
+		.title = tr::luxury_TrackOnlineHistory(),
+		.getter = &LuxurySettings::trackOnlineHistory,
+		.setter = &LuxurySettings::setTrackOnlineHistory,
+		.value = LuxurySettings::getInstance().trackOnlineHistoryValue(),
+	});
+	luxury.addSettingToggle({
+		.id = u"luxury/trackOnlineEvenWhenLocked"_q,
+		.title = tr::luxury_TrackOnlineEvenWhenLocked(),
+		.getter = &LuxurySettings::trackOnlineEvenWhenLocked,
+		.setter = &LuxurySettings::setTrackOnlineEvenWhenLocked,
+		.value = LuxurySettings::getInstance().trackOnlineEvenWhenLockedValue(),
+		.description = tr::luxury_TrackOnlineEvenWhenLockedDescription(),
+	});
+	luxury.addSettingToggle({
+		.id = u"luxury/showLastSeenSeconds"_q,
+		.title = tr::luxury_SettingsShowLastSeenSeconds(),
+		.getter = &LuxurySettings::showLastSeenSeconds,
+		.setter = &LuxurySettings::setShowLastSeenSeconds,
 	});
 
 	luxury.addSectionDivider();
@@ -668,34 +696,10 @@ void BuildLuxuryExtra(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	builder.addSubsectionTitle(tr::luxury_ExtraHeader());
 
 	luxury.addSettingToggle({
-		.id = u"luxury/showLastSeenSeconds"_q,
-		.title = tr::luxury_SettingsShowLastSeenSeconds(),
-		.getter = &LuxurySettings::showLastSeenSeconds,
-		.setter = &LuxurySettings::setShowLastSeenSeconds,
-	});
-	luxury.addSettingToggle({
-		.id = u"luxury/trackOnlineHistory"_q,
-		.title = tr::luxury_TrackOnlineHistory(),
-		.getter = &LuxurySettings::trackOnlineHistory,
-		.setter = &LuxurySettings::setTrackOnlineHistory,
-	});
-	luxury.addSettingToggle({
-		.id = u"luxury/trackOnlineEvenWhenLocked"_q,
-		.title = tr::luxury_TrackOnlineEvenWhenLocked(),
-		.getter = &LuxurySettings::trackOnlineEvenWhenLocked,
-		.setter = &LuxurySettings::setTrackOnlineEvenWhenLocked,
-	});
-	luxury.addSettingToggle({
 		.id = u"luxury/disableChatSelectionLimit"_q,
 		.title = tr::luxury_DisableChatSelectionLimit(),
 		.getter = &LuxurySettings::disableChatSelectionLimit,
 		.setter = &LuxurySettings::setDisableChatSelectionLimit,
-	});
-	luxury.addSettingToggle({
-		.id = u"luxury/saveDeletedMessagesEvenWhenLocked"_q,
-		.title = tr::luxury_SaveDeletedMessagesEvenWhenLocked(),
-		.getter = &LuxurySettings::saveDeletedMessagesEvenWhenLocked,
-		.setter = &LuxurySettings::setSaveDeletedMessagesEvenWhenLocked,
 	});
 	luxury.addSettingToggle({
 		.id = u"luxury/unlimitedRecentStickers"_q,
@@ -712,23 +716,35 @@ void BuildLuxuryExtra(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	});
 }
 
-// The chats picked with "Watch Media" in a chat's own menu. There is nothing to
-// show until one is picked, so the whole block only appears once there is, and a
-// click on a row offers to stop watching it.
+// The chats picked with "Watch Media" in a chat's own menu. The section is
+// registered unconditionally so settings search can lead here before the
+// first chat is picked, and a click on a row offers to stop watching it.
 void BuildWatchedChats(SectionBuilder &builder) {
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"luxury/watchedChats"_q,
+		.title = tr::luxury_WatchChatsHeader(),
+		.keywords = QStringList{ u"watch"_q, u"media"_q },
+	});
 	builder.add([](const BuildContext &ctx) {
 		v::match(ctx, [&](const WidgetContext &wctx) {
-			if (!LuxurySettings::getInstance().watchAnything()) {
-				return;
-			}
-
 			const auto container = wctx.container;
 			const auto controller = wctx.controller;
 
+			if (!LuxurySettings::getInstance().watchAnything()) {
+				AddSkip(container);
+				AddDividerText(
+					container,
+					tr::luxury_WatchChatsEmpty());
+				return;
+			}
+
 			AddSkip(container);
-			AddDivider(container);
-			AddSkip(container);
-			AddSubsectionTitle(container, tr::luxury_WatchChatsHeader());
+			AddDividerText(
+				container,
+				tr::luxury_WatchChatsRecordingNote());
 
 			auto ctrl = container->lifetime().make_state<PerDialogFiltersListController>(
 				&controller->session(),

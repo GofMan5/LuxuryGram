@@ -8809,8 +8809,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SpyEssentialsHeader" = "Spy essentials";
 "luxury_SaveDeletedMessages" = "Save Deleted Messages";
 "luxury_SaveDeletedMessagesEvenWhenLocked" = "Save Deleted When Locked";
+"luxury_SaveDeletedMessagesEvenWhenLockedDescription" = "Deleted messages are saved even while the app is locked with your local passcode; turn this off to pause saving while locked.";
 "luxury_TrackOnlineHistory" = "Track Online History";
 "luxury_TrackOnlineEvenWhenLocked" = "Track Online When Locked";
+"luxury_TrackOnlineEvenWhenLockedDescription" = "Online history is recorded even while the app is locked with your local passcode; turn this off to pause recording while locked.";
 "luxury_DisableChatSelectionLimit" = "No Selection Limit";
 "luxury_SaveMessagesHistory" = "Save Edits History";
 "luxury_MessageSavingOtherHeader" = "Other";
@@ -8822,6 +8824,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_WatchChatLimit" = "Too many chats are watched already.";
 "luxury_WatchShowSavedMedia" = "Show Saved Attachment";
 "luxury_WatchChatsHeader" = "Watched chats";
+"luxury_WatchChatsEmpty" = "No watched chats yet. Open the LuxuryGram menu in a chat and choose \"Watch Media\".";
+"luxury_WatchChatsRecordingNote" = "Media from these chats is saved even while the app is locked with your local passcode.";
 "luxury_DisableAds" = "Disable Ads";
 "luxury_DisableStories" = "Disable Stories";
 "luxury_DisableOpenLinkWarning" = "Disable Open Link Warning";
@@ -9026,6 +9030,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistorySettings" = "Settings";
 "luxury_OnlineHistorySettingOn" = "on";
 "luxury_OnlineHistorySettingOff" = "off";
+"luxury_WatcherMenuHeader" = "Watcher";
+"luxury_WatcherOpenSettings" = "Open Luxury Settings…";
+"luxury_WatcherLockDisclosure" = "Online history is recorded even while the app is locked with your local passcode; turn \"Track Online When Locked\" off to pause it.";
 "luxury_OnlineHistoryKindGift" = "Gift";
 "luxury_OnlineHistoryKindName" = "Name";
 "luxury_OnlineHistoryKindUsername" = "Username";
@@ -9040,6 +9047,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_WatcherTrackingHint" = "Observed history only; gaps are not online time.";
 "luxury_WatcherTrackingPaused" = "Recording paused. Saved history is still available.";
 "luxury_WatcherUpdatesPaused" = "Paused while the mouse button is held";
+"luxury_WatcherMediaSaveFailed#one" = "Couldn't save {count} media file from a watched chat";
+"luxury_WatcherMediaSaveFailed#other" = "Couldn't save {count} media files from a watched chat";
 "luxury_WatcherLoading" = "Loading saved history…";
 "luxury_WatcherExpand" = "Show full text";
 "luxury_WatcherCollapse" = "Collapse text";

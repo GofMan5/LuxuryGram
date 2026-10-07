@@ -11,6 +11,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - The Repeat message context-menu action now re-sends messages that contain a rich page (for example a web page preview) as the full rich page for premium users, instead of replacing them with a plain-text copy.
 - Forwarding a selection that includes messages with rich pages now re-sends those messages as the full rich page for premium users instead of degrading them to a plain-text copy.
 - Clear Watcher Data in the chat context menu now opens a confirmation box that also offers deleting the media files Watcher saved for that chat, instead of only clearing recorded online history.
+- Watched chats now report media that could not be saved: when Watcher gives up retrying a file, a toast says how many files in the last minute failed, instead of the loss being visible only in the log.
 
 ### Changed
 
@@ -21,6 +22,9 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - On Linux, bot web apps now use the external desktop shell only on Wayland sessions; on X11 they open as regular in-app panels again.
 - The shadow-ban and watched-chats lists act directly on row activation: the ban is lifted or watching stopped, the row disappears, and a toast confirms what changed — instead of opening a cursor-anchored one-item popup with a generic "Delete" label that keyboard activation could not aim at the row.
 - The Watcher events section now discloses how much older recorded history exists beyond the loaded window, as a measured "+N earlier" count taken from the database, and Show more extends only the list that actually overflowed instead of deepening both windows.
+- The lock-time switches in Settings (Save Deleted When Locked, Track Online When Locked) moved out of the Luxury Extra block into Spy essentials, next to the recording switches they guard, and each now describes exactly what keeps happening while the app is locked. Track Online History, Track Online When Locked and Show Last Seen Seconds moved there too; Luxury Extra keeps only the limits that have nothing to do with recording.
+- The watched chats block in Settings now appears from the start: empty, it explains that chats are added with the Watch Media action in the LuxuryGram chat menu, and once chats are watched it notes that saving continues while the app is locked. The block is also reachable from settings search by "watch" and "media".
+- The Watcher box gear menu gained a Watcher header row, a note that online history keeps recording while the app is locked, and an Open Luxury Settings action that jumps to LuxuryGram Preferences in Settings and brings the window forward.
 
 ### Fixed
 

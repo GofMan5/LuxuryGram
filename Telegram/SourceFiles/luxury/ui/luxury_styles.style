@@ -106,6 +106,27 @@ ghostPickerButton: LinkButton(defaultLinkButton) {
 
 luxuryBetaBadgePadding: margins(4px, 1px, 4px, 1px);
 
+// Two-line settings rows built on settings/detailed_settings_button.cpp.
+// The upstream st::detailedSettingsButtonStyle reserves icon space on the
+// left, which misaligns rows shown next to settingsButtonNoIcon neighbors.
+luxuryDetailedButton: DetailedSettingsButtonStyle {
+	button: SettingsButton(settingsButtonNoIcon) {
+		style: defaultTextStyle;
+		textBg: transparent;
+		textBgOver: transparent;
+		padding: margins(22px, 8px, 22px, 8px);
+	}
+	description: FlatLabel(defaultFlatLabel) {
+		textFg: windowSubTextFg;
+	}
+	iconRadius: 10px;
+	iconPadding: 6px;
+	iconForegroundPadding: 3px;
+	descriptionTopSkip: 0px;
+	descriptionBottomSkip: 8px;
+	descriptionRightSkip: 4px;
+}
+
 luxuryServiceTimeBadgeFont: font(11px semibold);
 luxuryServiceTimeBadgeHorizontalPadding: 7px;
 luxuryServiceTimeBadgeVerticalPadding: 2px;
@@ -177,6 +198,23 @@ luxuryWatcherSettingsMenu: PopupMenu(defaultPopupMenu) {
 		itemToggleShift: 43px;
 	}
 }
+// Header and info rows inside that menu, laid out with Ui::Menu::
+// MultilineAction. The point matches the menu item text origin so the
+// title lines up with the toggle rows below it.
+luxuryWatcherMenuTitleLabel: FlatLabel(defaultFlatLabel) {
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px semibold);
+	}
+}
+luxuryWatcherMenuTitlePosition: point(17px, 9px);
+luxuryWatcherMenuNoteLabel: FlatLabel(luxuryWatcherMenuTitleLabel) {
+	textFg: windowSubTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px);
+	}
+	minWidth: 136px;
+}
+luxuryWatcherMenuNotePosition: point(17px, 6px);
 luxuryWatcherAction: LinkButton(defaultLinkButton) {
 	font: font(12px semibold);
 	overFont: font(12px semibold);
