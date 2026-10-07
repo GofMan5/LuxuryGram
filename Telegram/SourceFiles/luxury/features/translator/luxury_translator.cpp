@@ -67,14 +67,6 @@ TranslateManager::Builder &TranslateManager::Builder::fail(std::function<void(co
 	return *this;
 }
 
-TranslateManager::Builder &TranslateManager::Builder::fail(std::function<void()> cb) {
-	_fail = [cb = std::move(cb)](const MTP::Error &)
-	{
-		cb();
-	};
-	return *this;
-}
-
 mtpRequestId TranslateManager::Builder::send() {
 	return _manager->performTranslation(*this);
 }

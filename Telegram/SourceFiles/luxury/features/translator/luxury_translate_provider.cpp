@@ -126,7 +126,7 @@ public:
 				MTPVector<MTPTextWithEntities>(),
 				MTP_string(to.twoLetterCode()),
 				_provider
-			).done(doneFromResult).fail(failAll).send();
+			).done(doneFromResult).fail([=](const MTP::Error &) { failAll(); }).send();
 			return;
 		}
 		auto allWithText = true;
@@ -155,7 +155,7 @@ public:
 				MTP_vector<MTPTextWithEntities>(text),
 				MTP_string(to.twoLetterCode()),
 				_provider
-			).done(doneFromResult).fail(failAll).send();
+			).done(doneFromResult).fail([=](const MTP::Error &) { failAll(); }).send();
 			return;
 		}
 		if (requests.size() == 1) {

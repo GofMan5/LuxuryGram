@@ -93,6 +93,7 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 
 	QObject::connect(reply,
 					 &QNetworkReply::finished,
+					 reply,
 					 [reply, onSuccess = onSuccess, onFail = onFail, timer]
 					 {
 						 if (!reply) return;
@@ -106,12 +107,12 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 							 return;
 						 }
 
-							 const auto body = reply->read(
-								 kMaxTranslationResponseBytes + 1);
-							 if (body.size() > kMaxTranslationResponseBytes) {
-								 if (onFail) onFail();
-								 return;
-							 }
+						 const auto body = reply->read(
+							 kMaxTranslationResponseBytes + 1);
+						 if (body.size() > kMaxTranslationResponseBytes) {
+							 if (onFail) onFail();
+							 return;
+						 }
 						 bool ok = false;
 						 const auto translatedText = parseJsonPath(body, QStringLiteral("text"), &ok);
 						 if (!ok || translatedText.trimmed().isEmpty()) {

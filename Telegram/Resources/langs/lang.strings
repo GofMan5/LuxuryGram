@@ -8944,7 +8944,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_RegexFilterBulletinAction" = "To Current Chat";
 "luxury_RegexFiltersListEmpty" = "No filters here yet.";
 "luxury_RegexFiltersLoading" = "Loading…";
+"luxury_UnknownDC" = "Unknown";
 "luxury_UnknownPeer" = "Unknown (ID: {id})";
+"luxury_UnknownSection" = "Unknown section.";
 "luxury_FiltersQuickShadowBan" = "Shadow Ban";
 "luxury_FiltersQuickUnshadowBan" = "Unshadow Ban";
 "luxury_ShadowBanEnabled" = "Messages from this sender are hidden in your chats.";
@@ -9122,6 +9124,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MessageShotEmpty" = "Nothing to save: the shot is too large, or the messages are gone.";
 "luxury_MessageShotSaveFailed" = "Could not save the image.";
 "luxury_MessageShotThemePreviewFailed" = "Could not load the theme file.";
+"luxury_MessageShotTooLarge" = "Sorry, the screenshot is too large.";
 "luxury_SendAsSticker" = "Send as Sticker";
 "luxury_SendWithSound" = "Send With Sound";
 "luxury_LuxuryForwardStatusPreparing" = "Forwarding messages";

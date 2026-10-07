@@ -27,7 +27,9 @@ namespace {
 
 constexpr auto kGoogleTranslateUrl = "https://translate-pa.googleapis.com/v1/translateHtml";
 constexpr auto kGoogleContentType = "application/json+protobuf";
-constexpr auto kGoogleDefaultApiKey = "AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520";
+// Key embedded in the public Google Translate web widget; it is not a
+// private credential and is shared by every client of that endpoint.
+constexpr auto kGoogleTranslateApiKey = "AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520";
 constexpr auto kMaxTranslationResponseBytes = 4 * 1024 * 1024;
 
 QString decodeHtmlEntities(const QString &text) {
@@ -105,7 +107,7 @@ QPointer<QNetworkReply> GoogleTranslator::startSingleTranslation(
 	req.setHeader(QNetworkRequest::UserAgentHeader, userAgent);
 	req.setHeader(QNetworkRequest::ContentTypeHeader, QString::fromLatin1(kGoogleContentType));
 	req.setRawHeader(QByteArrayLiteral("Accept"), QByteArrayLiteral("application/json"));
-	req.setRawHeader(QByteArrayLiteral("X-Goog-Api-Key"), QByteArray(kGoogleDefaultApiKey));
+	req.setRawHeader(QByteArrayLiteral("X-Goog-Api-Key"), QByteArray(kGoogleTranslateApiKey));
 
 	QPointer<QNetworkReply> reply = _nam.post(req, body);
 	QObject::connect(
@@ -159,14 +161,14 @@ QPointer<QNetworkReply> GoogleTranslator::startSingleTranslation(
 						 }
 						 const auto root = doc.array();
 						 if (root.isEmpty()) {
-						 	 if (onFail) onFail();
-						 	 return;
+							 if (onFail) onFail();
+							 return;
 						 }
 						 const auto translatedItems = collectStrings(root.at(0));
 						 const auto textOutCombined = translatedItems.join(QStringLiteral(" "));
 						 if (textOutCombined.trimmed().isEmpty()) {
-						 	 if (onFail) onFail();
-						 	 return;
+							 if (onFail) onFail();
+							 return;
 						 }
 						 const auto decodedText = decodeHtmlEntities(textOutCombined);
 						 if (onSuccess) {

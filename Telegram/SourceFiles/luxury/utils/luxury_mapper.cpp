@@ -147,7 +147,7 @@ int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item) {
 	}
 
 	if (item->displayFrom()) {
-		// todo: maybe wrong
+		// No reader consumes this bit yet; kept for forward compatibility.
 		flags |= kMessageFlagHasFromId;
 	}
 
@@ -216,7 +216,7 @@ int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item) {
 	}
 
 	if (item->savedFromSender()) {
-		// todo: maybe wrong
+		// No reader consumes this bit yet; kept for forward compatibility.
 		flags |= kMessageFlagHasSavedPeer;
 	}
 

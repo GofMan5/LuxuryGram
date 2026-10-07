@@ -415,7 +415,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			|| pixelHeight <= 0
 			|| pixelWidth > (kMaxMessageShotPixels / pixelHeight)) {
 			sizeRejected = true;
-			Ui::Toast::Show(tr::lng_passport_error_too_large(tr::now));
+			Ui::Toast::Show(tr::luxury_MessageShotTooLarge(tr::now));
 			return;
 		}
 		width = int(pixelWidth);
@@ -425,7 +425,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 		QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
 		if (image.isNull()) {
 			sizeRejected = true;
-			Ui::Toast::Show(tr::lng_passport_error_too_large(tr::now));
+			Ui::Toast::Show(tr::luxury_MessageShotTooLarge(tr::now));
 			return;
 		}
 		image.setDevicePixelRatio(style::DevicePixelRatio());

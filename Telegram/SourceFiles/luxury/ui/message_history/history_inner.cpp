@@ -1352,7 +1352,6 @@ void InnerWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					lnkDocument,
 					[] { return false; });
 
-
 				if (lnkDocument->hasAttachedStickers()) {
 					const auto controller = _controller;
 					auto callback = [=]

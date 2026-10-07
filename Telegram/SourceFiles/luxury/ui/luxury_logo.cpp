@@ -172,7 +172,7 @@ void applyAppIcon() {
 	// the icon name, so switching back to an icon written earlier leaves the
 	// file untouched while the shortcuts still point at the previous one.
 	loadAppIco();
-	reloadAppIconFromTaskBar();
+	reloadAppIconFromTaskBar(appIcoPath());
 #endif
 
 	Window::OverrideApplicationIcon(currentAppLogo());

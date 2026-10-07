@@ -17,7 +17,6 @@
 #include <map>
 #include <unordered_set>
 
-
 namespace Main {
 class Session;
 }

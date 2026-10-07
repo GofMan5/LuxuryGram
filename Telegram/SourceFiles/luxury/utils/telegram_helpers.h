@@ -59,8 +59,6 @@ ID getBareDialogId(ID dialogId);
 
 ID getBareID(not_null<PeerData*> peer);
 
-
-
 bool isMessageHidden(not_null<HistoryItem*> item);
 
 void MarkAsReadChatList(not_null<Dialogs::MainList*> list);

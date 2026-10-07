@@ -8,7 +8,7 @@
 
 #include "luxury/utils/windows_utils.h"
 
-#include "luxury/ui/luxury_logo.h"
+#include "base/debug_log.h"
 #include "base/platform/win/base_windows_winrt.h"
 #include "platform/win/windows_app_user_model_id.h"
 
@@ -20,51 +20,71 @@ void processIcon(QString shortcut, QString iconPath) {
 		return;
 	}
 
-	IShellLink *pShellLink = NULL;
-	IPersistFile *pPersistFile = NULL;
-
+	IShellLink *pShellLink = nullptr;
 	HRESULT hr = CoCreateInstance(CLSID_ShellLink,
-								  NULL,
+								  nullptr,
 								  CLSCTX_INPROC_SERVER,
 								  IID_IShellLink,
 								  (void**) &pShellLink);
-	if (SUCCEEDED(hr)) {
-		hr = pShellLink->QueryInterface(IID_IPersistFile, (void**) &pPersistFile);
-		if (SUCCEEDED(hr)) {
-			const auto shortcutPath = shortcut.toStdWString();
+	if (FAILED(hr)) {
+		LOG(("LuxuryGram: could not create IShellLink, hr = %1.").arg(hr));
+		return;
+	}
+	const auto shellGuard = gsl::finally([&] { pShellLink->Release(); });
 
-			if (SUCCEEDED(pPersistFile->Load(shortcutPath.c_str(), STGM_READWRITE))) {
-				pShellLink->SetIconLocation(iconPath.toStdWString().c_str(), 0);
-				pPersistFile->Save(shortcutPath.c_str(), TRUE);
-			}
+	IPersistFile *pPersistFile = nullptr;
+	hr = pShellLink->QueryInterface(IID_IPersistFile, (void**) &pPersistFile);
+	if (FAILED(hr)) {
+		LOG(("LuxuryGram: IPersistFile is missing, hr = %1.").arg(hr));
+		return;
+	}
+	const auto persistGuard = gsl::finally([&] { pPersistFile->Release(); });
 
-			pPersistFile->Release();
-		}
+	const auto shortcutPath = shortcut.toStdWString();
+	hr = pPersistFile->Load(shortcutPath.c_str(), STGM_READWRITE);
+	if (FAILED(hr)) {
+		LOG(("LuxuryGram: could not load shortcut %1, hr = %2.").arg(shortcut).arg(hr));
+		return;
+	}
 
-		pShellLink->Release();
+	hr = pShellLink->SetIconLocation(iconPath.toStdWString().c_str(), 0);
+	if (FAILED(hr)) {
+		LOG(("LuxuryGram: SetIconLocation failed for %1, hr = %2.").arg(shortcut).arg(hr));
+		return;
+	}
+
+	hr = pPersistFile->Save(shortcutPath.c_str(), TRUE);
+	if (FAILED(hr)) {
+		LOG(("LuxuryGram: could not save shortcut %1, hr = %2.").arg(shortcut).arg(hr));
 	}
 }
 
 void processLegacy(const QString &iconPath) {
 	const auto appdata = QDir::fromNativeSeparators(qgetenv("APPDATA"));
-	auto shortcut = appdata + "/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/AyuGram Desktop.lnk";
-	if (!QFile::exists(shortcut)) {
-		shortcut = appdata + "/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/AyuGram.lnk";
+	const auto taskbar = appdata + "/Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/";
+	const auto shortcuts = {
+		taskbar + u"LuxuryGram Desktop.lnk"_q,
+		taskbar + u"LuxuryGram.lnk"_q,
+		taskbar + u"AyuGram Desktop.lnk"_q,
+		taskbar + u"AyuGram.lnk"_q,
+	};
+	for (const auto &shortcut : shortcuts) {
+		if (QFile::exists(shortcut)) {
+			processIcon(shortcut, iconPath);
+		}
 	}
-	if (!QFile::exists(shortcut)) {
-		return;
-	}
-
-	processIcon(shortcut, iconPath);
 }
 
 void processNewPinned(const QString &iconPath) {
-	if (!SUCCEEDED(CoInitialize(0))) {
+	const auto hrInit = CoInitialize(0);
+	if (FAILED(hrInit) && hrInit != RPC_E_CHANGED_MODE) {
 		return;
 	}
-	const auto coGuard = gsl::finally([]
+	const auto coGuard = gsl::finally([&]
 	{
-		CoUninitialize();
+		if (SUCCEEDED(hrInit)) {
+			CoUninitialize();
+		}
 	});
 
 	const auto path = Platform::AppUserModelId::PinnedIconsPath();
@@ -95,9 +115,9 @@ void processNewPinned(const QString &iconPath) {
 			continue;
 		}
 
-		DWORD attributes = GetFileAttributes(fname.c_str());
-		if (attributes >= 0xFFFFFFF) {
-			continue; // file does not exist
+		const auto attributes = GetFileAttributes(fname.c_str());
+		if (attributes == INVALID_FILE_ATTRIBUTES) {
+			continue;
 		}
 
 		auto shellLink = base::WinRT::TryCreateInstance<IShellLink>(
@@ -127,9 +147,10 @@ void processNewPinned(const QString &iconPath) {
 			processIcon(filePath, iconPath);
 		}
 	} while (FindNextFile(findHandle, &findData));
-	DWORD errorCode = GetLastError();
+
+	const auto errorCode = GetLastError();
 	if (errorCode && errorCode != ERROR_NO_MORE_FILES) {
-		return;
+		LOG(("LuxuryGram: enumerating pinned shortcuts failed, error %1.").arg(errorCode));
 	}
 }
 
@@ -150,8 +171,8 @@ void processNewShortcuts(const QString &iconPath) {
 	for (const auto &shortcut : shortcuts) {
 		const auto native = QDir::toNativeSeparators(shortcut).toStdWString();
 
-		DWORD attributes = GetFileAttributes(native.c_str());
-		if (attributes >= 0xFFFFFFF) {
+		const auto attributes = GetFileAttributes(native.c_str());
+		if (attributes == INVALID_FILE_ATTRIBUTES) {
 			continue;
 		}
 
@@ -159,9 +180,7 @@ void processNewShortcuts(const QString &iconPath) {
 	}
 }
 
-void reloadAppIconFromTaskBar() {
-	const auto iconPath = LuxuryAssets::appIcoPath();
-
+void reloadAppIconFromTaskBar(const QString &iconPath) {
 	processNewPinned(iconPath);
 	processNewShortcuts(iconPath);
 	processLegacy(iconPath);

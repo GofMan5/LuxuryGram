@@ -15,9 +15,9 @@ template<typename MTPObject>
 template<typename MTPObject>
 [[nodiscard]] std::vector<char> serializeObject(MTPObject object);
 
-std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<HistoryItem*> item);
+[[nodiscard]] std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<HistoryItem*> item);
 [[nodiscard]] MTPVector<MTPMessageEntity> deserializeTextWithEntities(
 	const std::vector<char> &serialized);
-int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item);
+[[nodiscard]] int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item);
 
 } // namespace LuxuryMapper

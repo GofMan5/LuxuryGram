@@ -227,13 +227,12 @@ std::pair<QString, QString> stateName(
 	}
 	const auto snapshot = state->snapshot();
 
-	QString messagesString = tr::luxury_LuxuryForwardStatusSentCount(tr::now,
-														   lt_count1,
-														   QString::number(snapshot.sentMessages),
-														   lt_count2,
-														   QString::number(snapshot.totalMessages)
-
-	);
+	QString messagesString = tr::luxury_LuxuryForwardStatusSentCount(
+		tr::now,
+		lt_count1,
+		QString::number(snapshot.sentMessages),
+		lt_count2,
+		QString::number(snapshot.totalMessages));
 
 	if (snapshot.skippedMessages > 0) {
 		messagesString += u", " + tr::luxury_LuxuryForwardStatusSkippedCount(
@@ -242,13 +241,12 @@ std::pair<QString, QString> stateName(
 			snapshot.skippedMessages);
 	}
 
-	QString chunkString = tr::luxury_LuxuryForwardStatusChunkCount(tr::now,
-													 lt_count1,
-													 QString::number(snapshot.currentChunk + 1),
-													 lt_count2,
-													 QString::number(snapshot.totalChunks)
-
-	);
+	QString chunkString = tr::luxury_LuxuryForwardStatusChunkCount(
+		tr::now,
+		lt_count1,
+		QString::number(snapshot.currentChunk + 1),
+		lt_count2,
+		QString::number(snapshot.totalChunks));
 
 	const auto partString = snapshot.totalChunks <= 1
 		? messagesString
@@ -266,7 +264,6 @@ std::pair<QString, QString> stateName(
 		// ForwardState::State::Finished
 		status = tr::luxury_LuxuryForwardStatusFinished(tr::now);
 	}
-
 
 	return std::make_pair(status, partString);
 }

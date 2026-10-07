@@ -68,6 +68,9 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Message history rows whose sender cannot be resolved show the same localized "Unknown (ID: …)" fallback as the filter lists, and the filter rows' placeholder avatar now carries the localized first letter instead of a hard-coded "U".
 - Selecting a message-shot theme whose file fails to download or parse now shows a "Could not load the theme file" toast instead of silently selecting nothing.
 - The avatar-corners sample row in Settings is now reachable with the keyboard — Tab focuses it, Enter or Space opens the releases page — draws a focus ring while focused, and announces its purpose to screen readers instead of being mouse-only.
+- Custom `luxury://` section links that point to a section this build does not know now show a localized "Unknown section." toast instead of the developer placeholder ":3".
+- A message shot rejected as too large now explains itself with "Sorry, the screenshot is too large." instead of reusing the passport upload error "Sorry, this file is too large.".
+- Message details now show a localized "Unknown" in the DC field when the datacenter cannot be determined, instead of the raw `DC_UNKNOWN`/`UNKNOWN` markers.
 
 ## 1.0.19
 

@@ -284,15 +284,18 @@ QString getDCName(int dc) {
 			case 2:
 			case 4: return "Amsterdam, NL";
 			case 5: return "Singapore, SG";
-			default: return "UNKNOWN";
+			default: return QString();
 		}
 	};
 
 	if (dc < 1) {
-		return {"DC_UNKNOWN"};
+		return tr::luxury_UnknownDC(tr::now);
 	}
 
-	return QString("DC%1, %2").arg(dc).arg(getName());
+	const auto name = getName();
+	return name.isEmpty()
+		? tr::luxury_UnknownDC(tr::now)
+		: QString("DC%1, %2").arg(dc).arg(name);
 }
 
 QString getLocalizedAt() {
@@ -493,7 +496,7 @@ QString getPeerDC(not_null<PeerData*> peer) {
 			},
 			[&](const WebFileLocation &)
 			{
-				// should't happen, but still
+				// shouldn't happen, but still
 				// all webpages are on DC4
 				return 4;
 			},
@@ -509,7 +512,7 @@ QString getPeerDC(not_null<PeerData*> peer) {
 			},
 			[&](const PlainUrlLocation &)
 			{
-				// should't happen, but still
+				// shouldn't happen, but still
 				// all webpages are on DC4
 				return 4;
 			},
@@ -573,7 +576,7 @@ bool isMessageSavable(const not_null<HistoryItem*> item) {
 	}
 
 	if (const auto possiblyBot = peer->asUser()) {
-		return !possiblyBot->isBot() || (settings.saveForBots() && possiblyBot->isBot());
+		return !possiblyBot->isBot() || settings.saveForBots();
 	}
 	return true;
 }

@@ -1554,7 +1554,7 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	s._saveDeletedMessagesEvenWhenLocked = j.value("saveDeletedMessagesEvenWhenLocked", defaults._saveDeletedMessagesEvenWhenLocked.current());
 	s._trackOnlineHistory = j.value("trackOnlineHistory", defaults._trackOnlineHistory.current());
 	s._trackOnlineEvenWhenLocked = j.value("trackOnlineEvenWhenLocked", defaults._trackOnlineEvenWhenLocked.current());
-s._disableChatSelectionLimit = j.value("disableChatSelectionLimit", defaults._disableChatSelectionLimit.current());
+	s._disableChatSelectionLimit = j.value("disableChatSelectionLimit", defaults._disableChatSelectionLimit.current());
 	s._saveMessagesHistory = j.value("saveMessagesHistory", defaults._saveMessagesHistory.current());
 	s._saveForBots = j.value("saveForBots", defaults._saveForBots.current());
 	s._shadowBanIds.clear();
@@ -1874,7 +1874,9 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_TrackOnlineHistory", "Следить за онлайном" },
 	{ "luxury_TranslationProvider", "Провайдер перевода" },
 	{ "luxury_TrayElementsHeader", "Элементы трея" },
+	{ "luxury_UnknownDC", "Неизвестно" },
 	{ "luxury_UnknownPeer", "Неизвестно (ID: {id})" },
+	{ "luxury_UnknownSection", "Неизвестный раздел." },
 	{ "luxury_UseScheduledMessages", "Откладывать сообщения" },
 	{ "luxury_UseScheduledMessagesDescription", "Автоматически откладывает исходящие примерно на 12 секунд (медиа — дольше). С этой функцией вы не появляетесь в сети. Не используйте на нестабильной сети." },
 	{ "luxury_UserMessagesMenuText", "Сообщения пользователя" },
@@ -1987,6 +1989,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_MessageShotThemeApply", "Применить" },
 	{ "luxury_MessageShotThemeDefault", "По умолчанию" },
 	{ "luxury_MessageShotThemeSelectTitle", "Выбор темы сообщения" },
+	{ "luxury_MessageShotTooLarge", "Извините, снимок слишком большой." },
 	{ "luxury_PluginNoAuthor", "Неизвестный автор" },
 	{ "luxury_PluginNoDescription", "Описание отсутствует." },
 	{ "luxury_PluginVersion", "Версия" },

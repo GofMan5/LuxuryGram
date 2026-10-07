@@ -48,7 +48,6 @@ public:
 
         Builder &done(std::function<void(const Result &)> cb);
         Builder &fail(std::function<void(const MTP::Error &)> cb);
-        Builder &fail(std::function<void()> cb);
 
         mtpRequestId send();
 

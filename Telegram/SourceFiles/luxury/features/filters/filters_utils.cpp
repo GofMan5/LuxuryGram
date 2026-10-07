@@ -492,7 +492,6 @@ void FilterUtils::importFromJson(const QByteArray &json) {
 	}
 	auto changes = prepareChanges(root);
 
-
 	if (!HasChanges(changes)) {
 		Ui::Toast::Show(tr::luxury_FiltersToastFailNoChanges(tr::now));
 		LOG(("FilterUtils: received empty changes"));
@@ -603,7 +602,6 @@ QString FilterUtils::exportFilters() {
 
 	const auto excl = LuxuryDatabase::getAllFiltersExclusions();
 
-
 	std::vector<BackupExclusion> exclusions;
 	exclusions.reserve(excl.size());
 
@@ -629,7 +627,6 @@ QString FilterUtils::exportFilters() {
 		}
 	}
 	jsonObject["peers"] = peers;
-
 
 	QJsonDocument jsonDoc(jsonObject);
 	QByteArray jsonData = jsonDoc.toJson(QJsonDocument::Indented);
@@ -855,7 +852,6 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 		return {};
 	}
 
-
 	const auto existingFilters = LuxuryDatabase::getAllRegexFilters();
 	const auto existingExclusions = LuxuryDatabase::getAllFiltersExclusions();
 	std::map<std::vector<char>, const RegexFilter*> existingFiltersById;
@@ -873,7 +869,6 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	std::vector<std::vector<char>> removeFiltersById;
 	std::vector<RegexFilterGlobalExclusion> removeExclusions;
 	std::vector<QString> peersToBeResolved;
-
 
 	if (!filters.isEmpty()) {
 		for (const auto &filterRef : filters) {
@@ -916,7 +911,6 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 					continue;
 				}
 				regex.text = text.toStdString();
-
 
 				const auto it = existingFiltersById.find(regex.id);
 				if (it != existingFiltersById.end()) {

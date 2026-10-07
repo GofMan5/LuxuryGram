@@ -24,16 +24,16 @@ namespace {
 constexpr auto kMaxLanguageBytes = 4 * 1024 * 1024;
 constexpr auto kFetchTimeout = 15 * 1000;
 
-} // namespace
-
 // hard-coded languages
-std::map<QString, QString> langMapping = {
+const std::map<QString, QString> langMapping = {
 	{"pt-br", "pt"},
 	{"zh-hans-beta", "zh-hans"},
 	{"zh-hant-beta", "zh-hant"},
 	{"zh-hans-raw", "zh-hans"},
 	{"zh-hant-raw", "zh-hant"},
 };
+
+} // namespace
 
 constexpr auto postfixes = {
 	"zero",
@@ -77,7 +77,7 @@ QString LuxuryLanguage::getCachePath(const QString &langId) const {
 void LuxuryLanguage::loadCachedLanguage() {
 	const auto langPackId = Lang::GetInstance().id();
 	const auto langPackBaseId = Lang::GetInstance().baseId();
-	auto finalLangPackId = langMapping.contains(langPackId) ? langMapping[langPackId] : langPackId;
+	auto finalLangPackId = langMapping.contains(langPackId) ? langMapping.at(langPackId) : langPackId;
 
 	if (finalLangPackId.isEmpty()) {
 		finalLangPackId = langPackBaseId;
@@ -139,7 +139,7 @@ void LuxuryLanguage::fetchLanguage(const QString &id, const QString &baseId) {
 	}
 	clearReply();
 
-	auto finalLangPackId = langMapping.contains(id) ? langMapping[id] : id;
+	auto finalLangPackId = langMapping.contains(id) ? langMapping.at(id) : id;
 	_currentLangId = finalLangPackId.isEmpty() ? baseId : finalLangPackId;
 
 	networkManager.setProxy(QNetworkProxy::NoProxy);

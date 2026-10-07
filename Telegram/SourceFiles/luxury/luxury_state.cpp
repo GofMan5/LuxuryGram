@@ -14,13 +14,21 @@
 
 namespace LuxuryState {
 
+namespace {
+
 std::unordered_map<
 	uint64,
 	std::unordered_map<PeerId, std::unordered_set<MsgId>>> hiddenMessages;
 std::size_t hiddenMessagesCount = 0;
 base::weak_ptr<Main::Session> disableGhostModeOnStoryCloseSession;
 
-void hide(uint64 sessionId, PeerId peerId, MsgId messageId) {
+} // namespace
+
+void hide(not_null<HistoryItem*> item) {
+	const auto sessionId = item->history()->session().uniqueId();
+	const auto peerId = item->history()->peer->id;
+	const auto messageId = item->id;
+
 	const auto session = hiddenMessages.find(sessionId);
 	if (session != end(hiddenMessages)) {
 		const auto existing = session->second.find(peerId);
@@ -48,30 +56,17 @@ void hide(uint64 sessionId, PeerId peerId, MsgId messageId) {
 	++hiddenMessagesCount;
 }
 
-void hide(not_null<HistoryItem*> item) {
-	hide(
-		item->history()->session().uniqueId(),
-		item->history()->peer->id,
-		item->id);
-}
-
-bool isHidden(uint64 sessionId, PeerId peerId, MsgId messageId) {
-	const auto session = hiddenMessages.find(sessionId);
+bool isHidden(not_null<HistoryItem*> item) {
+	const auto session = hiddenMessages.find(
+		item->history()->session().uniqueId());
 	if (session == end(hiddenMessages)) {
 		return false;
 	}
-	const auto peer = session->second.find(peerId);
+	const auto peer = session->second.find(item->history()->peer->id);
 	if (peer != end(session->second)) {
-		return peer->second.contains(messageId);
+		return peer->second.contains(item->id);
 	}
 	return false;
-}
-
-bool isHidden(not_null<HistoryItem*> item) {
-	return isHidden(
-		item->history()->session().uniqueId(),
-		item->history()->peer->id,
-		item->id);
 }
 
 void setDisableGhostModeOnStoryClose(Main::Session *session) {

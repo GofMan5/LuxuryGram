@@ -108,23 +108,20 @@ bool HandleLuxury(
 		return false;
 	}
 
-	try {
-		const auto section = match->captured(1).mid(1).toLower();
-		const auto type = [&]() -> std::optional<::Settings::Type>
-		{
-			if (section == u"settings"_q || section == u"preferences"_q || section == u"prefs"_q) {
-				return ::Settings::LuxuryMain::Id();
-			}
-			return std::nullopt;
-		}();
-
-		if (type.has_value()) {
-			controller->showSettings(*type);
-			controller->window().activate();
-		} else {
-			controller->showToast(QString(":3"), 500);
+	const auto section = match->captured(1).mid(1).toLower();
+	const auto type = [&]() -> std::optional<::Settings::Type>
+	{
+		if (section == u"settings"_q || section == u"preferences"_q || section == u"prefs"_q) {
+			return ::Settings::LuxuryMain::Id();
 		}
-	} catch (...) {
+		return std::nullopt;
+	}();
+
+	if (type.has_value()) {
+		controller->showSettings(*type);
+		controller->window().activate();
+	} else {
+		controller->showToast(tr::luxury_UnknownSection(tr::now));
 	}
 
 	return true;
@@ -194,16 +191,14 @@ bool TryHandleSpotify(const QString &url) {
 	// docs on their url scheme
 	// https://www.iana.org/assignments/uri-schemes/prov/spotify
 
-	using namespace qthelp;
-	constexpr auto matchOptions = RegExOption::CaseInsensitive;
 	// https://regex101.com/r/l4Ogzf/2
-	const auto match = regex_match(
+	static const auto pattern = QRegularExpression(
 		u"^(https?:\\/\\/)?([a-zA-Z0-9_]+)\\.spotify\\.com\\/(?<type>track|album|artist|user|playlist)\\/(?<identifier>[a-zA-Z0-9_\\/]+?)((\\?si=.+)?)$"_q,
-		url,
-		matchOptions);
-	if (match) {
-		const auto type = match->captured("type").toLower();
-		const auto identifier = match->captured("identifier").replace("/", ":");
+		QRegularExpression::CaseInsensitiveOption);
+	const auto match = pattern.match(url);
+	if (match.hasMatch()) {
+		const auto type = match.captured("type").toLower();
+		const auto identifier = match.captured("identifier").replace("/", ":");
 
 		// '/' -> ':' for links like:
 		// https://open.spotify.com/user/1185903410/playlist/6YAnJeVC7tgOiocOG23Dd

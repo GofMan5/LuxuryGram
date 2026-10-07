@@ -264,7 +264,6 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 		button->addClickHandler(defaultClickHandler);
 	}
 
-
 	crl::on_main(
 		this,
 		[=, this]

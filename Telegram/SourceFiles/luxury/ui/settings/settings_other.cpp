@@ -26,7 +26,6 @@
 #include "window/window_session_controller.h"
 #include "window/themes/window_theme.h"
 
-
 namespace Settings {
 
 using namespace Builder;

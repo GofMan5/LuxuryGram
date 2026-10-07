@@ -214,7 +214,6 @@ std::vector<Font> PrepareFonts() {
 		fonts.push_back(fontItem);
 	}
 
-
 	return fonts;
 }
 
@@ -712,7 +711,6 @@ void Content::setupContent(
 
 	Ui::ResizeFitChild(this, content);
 
-
 	divider->hide(anim::type::instant);
 
 	const auto count = [](Rows *widget)
@@ -880,7 +878,6 @@ void LuxuryUi::FontSelectorBox::prepare() {
 						  .confirmText = tr::lng_settings_restart_now(),
 						  .cancelText = tr::lng_settings_restart_later(),
 					  }));
-
 
 					  closeBox();
 				  });

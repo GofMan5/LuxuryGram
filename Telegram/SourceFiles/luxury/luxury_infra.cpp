@@ -88,7 +88,7 @@ void initIcon() {
 	// .lnk in it through COM, and this runs before the first window is shown.
 	// Only pay for it when the icon on disk is not the one we want.
 	if (LuxuryAssets::loadAppIco()) {
-		reloadAppIconFromTaskBar();
+		reloadAppIconFromTaskBar(LuxuryAssets::appIcoPath());
 	}
 #endif
 }

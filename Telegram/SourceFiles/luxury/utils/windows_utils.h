@@ -6,4 +6,4 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-void reloadAppIconFromTaskBar();
+void reloadAppIconFromTaskBar(const QString &iconPath);
