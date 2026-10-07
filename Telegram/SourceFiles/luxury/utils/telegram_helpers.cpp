@@ -280,10 +280,10 @@ QString getDCName(int dc) {
 	{
 		switch (dc) {
 			case 1:
-			case 3: return "Miami FL, USA";
+			case 3: return u"Miami FL, USA"_q;
 			case 2:
-			case 4: return "Amsterdam, NL";
-			case 5: return "Singapore, SG";
+			case 4: return u"Amsterdam, NL"_q;
+			case 5: return u"Singapore, SG"_q;
 			default: return QString();
 		}
 	};
@@ -295,7 +295,7 @@ QString getDCName(int dc) {
 	const auto name = getName();
 	return name.isEmpty()
 		? tr::luxury_UnknownDC(tr::now)
-		: QString("DC%1, %2").arg(dc).arg(name);
+		: u"DC%1, %2"_q.arg(dc).arg(name);
 }
 
 QString getLocalizedAt() {
