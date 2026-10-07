@@ -235,7 +235,7 @@ std::pair<QString, QString> stateName(
 		QString::number(snapshot.totalMessages));
 
 	if (snapshot.skippedMessages > 0) {
-		messagesString += u", " + tr::luxury_LuxuryForwardStatusSkippedCount(
+		messagesString += u", "_q + tr::luxury_LuxuryForwardStatusSkippedCount(
 			tr::now,
 			lt_count,
 			snapshot.skippedMessages);
