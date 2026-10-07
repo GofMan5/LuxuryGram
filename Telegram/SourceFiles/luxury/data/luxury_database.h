@@ -43,11 +43,17 @@ void shutdown();
 void addEditedMessage(const EditedMessage &message);
 std::vector<EditedMessage> getEditedMessages(ID userId, ID dialogId, ID messageId, ID minId, ID maxId, int totalLimit);
 std::vector<EditedMessage> getEditedMessagesForDialog(ID userId, ID dialogId, int totalLimit);
+// Row count behind that capped whole-dialog read, for the watcher's
+// "how much is older" disclosure; called off the main thread.
+int countEditedMessagesForDialog(ID userId, ID dialogId);
 bool hasRevisions(ID userId, ID dialogId, ID messageId);
 
 void addDeletedMessage(DeletedMessage message);
 void addDeletedMessages(std::vector<DeletedMessage> &&messages);
 std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicId, ID minId, ID maxId, int totalLimit, const std::string &searchQuery = "");
+// Row count behind the watcher's (userId, dialogId, every-topic) read,
+// which is capped; called off the main thread.
+int countDeletedMessages(ID userId, ID dialogId);
 void removeDeletedMessage(ID userId, ID dialogId, ID messageId);
 void clearDeletedMessages(ID userId, ID dialogId, ID topicId);
 

@@ -9039,7 +9039,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_WatcherEndUnobserved" = "End not observed";
 "luxury_WatcherTrackingHint" = "Observed history only; gaps are not online time.";
 "luxury_WatcherTrackingPaused" = "Recording paused. Saved history is still available.";
-"luxury_WatcherUpdatesPaused" = "Paused while you are selecting text";
+"luxury_WatcherUpdatesPaused" = "Paused while the mouse button is held";
 "luxury_WatcherLoading" = "Loading saved history…";
 "luxury_WatcherExpand" = "Show full text";
 "luxury_WatcherCollapse" = "Collapse text";

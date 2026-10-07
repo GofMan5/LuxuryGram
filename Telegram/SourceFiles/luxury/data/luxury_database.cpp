@@ -550,6 +550,21 @@ std::vector<EditedMessage> getEditedMessagesForDialog(ID userId, ID dialogId, in
 	}
 }
 
+int countEditedMessagesForDialog(ID userId, ID dialogId) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		return storage.count<EditedMessage>(
+			where(
+				column<EditedMessage>(&EditedMessage::userId) == userId and
+				column<EditedMessage>(&EditedMessage::dialogId) == dialogId
+			)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to count edited messages: %1").arg(ex.what()));
+		return 0;
+	}
+}
+
 bool hasRevisions(ID userId, ID dialogId, ID messageId) {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	try {
@@ -644,6 +659,23 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 	} catch (const std::exception &ex) {
 		LOG(("Failed to load deleted messages: %1").arg(ex.what()));
 		return {};
+	}
+}
+
+int countDeletedMessages(ID userId, ID dialogId) {
+	// Parity with the watcher's read: it passes topicId 0 ("every
+	// topic"), which leaves userId and dialogId as the only filters.
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		return storage.count<DeletedMessage>(
+			where(
+				column<DeletedMessage>(&DeletedMessage::userId) == userId and
+				column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId
+			)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to count deleted messages: %1").arg(ex.what()));
+		return 0;
 	}
 }
 

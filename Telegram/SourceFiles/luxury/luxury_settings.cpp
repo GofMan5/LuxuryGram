@@ -1914,7 +1914,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_WatcherEndUnobserved", "Выход не зафиксирован" },
 	{ "luxury_WatcherTrackingHint", "Только наблюдаемые события. Пропуски — не время онлайн." },
 	{ "luxury_WatcherTrackingPaused", "Запись приостановлена. Сохранённая история доступна." },
-	{ "luxury_WatcherUpdatesPaused", "Пауза, пока вы выделяете текст" },
+	{ "luxury_WatcherUpdatesPaused", "Пауза, пока зажата кнопка мыши" },
 	{ "luxury_WatcherLoading", "Загружаем сохранённую историю…" },
 	{ "luxury_WatcherExpand", "Показать полностью" },
 	{ "luxury_WatcherCollapse", "Свернуть текст" },

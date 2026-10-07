@@ -15,11 +15,12 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 ### Changed
 
 - Watcher identifies the selected person, explains the limits of observed history and shows when recording is paused. Its settings use native toggles and explicitly identify recording as an all-chats setting; saved history remains accessible when recording is off.
-- Watcher reads saved history off the UI thread and refreshes idle views every five seconds, preserving scroll position and expanded event details. Automatic refresh pauses while selecting text, focusing a detail or using the settings menu; active-session duration updates every second and timestamps include seconds.
+- Watcher reads saved history off the UI thread and refreshes idle views every five seconds, preserving scroll position and expanded event details. Automatic refresh pauses only while a row is held pressed and catches up the moment the press ends; active-session duration updates every second and timestamps include seconds.
 - Plugin descriptions in the plugin details box now render bold text, links and @mentions instead of showing raw markdown-style markup.
-- The Watcher box header now notes when its view updates are paused because you are selecting text, so the paused list is explained instead of looking stuck.
+- The Watcher box header now notes when its view updates are held for a mouse press, so the paused list is explained instead of looking stuck.
 - On Linux, bot web apps now use the external desktop shell only on Wayland sessions; on X11 they open as regular in-app panels again.
 - The shadow-ban and watched-chats lists act directly on row activation: the ban is lifted or watching stopped, the row disappears, and a toast confirms what changed — instead of opening a cursor-anchored one-item popup with a generic "Delete" label that keyboard activation could not aim at the row.
+- The Watcher events section now discloses how much older recorded history exists beyond the loaded window, as a measured "+N earlier" count taken from the database, and Show more extends only the list that actually overflowed instead of deepening both windows.
 
 ### Fixed
 
@@ -36,7 +37,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - The Windows pinned-shortcut scan no longer leaks a file-search handle when an error occurs.
 - User registration-date lookups skip entries whose date cannot be parsed instead of showing a broken date.
 - Watcher gear popup: the tracking toggle was labeled "Record in all chats", implying a per-chat scope that does not exist; it now shows the same "Track Online History" label as the settings page (same switch).
-- Watcher session list: selecting text no longer makes the list drop incoming updates; rebuilds wait for the selection to end and then apply, so the list never goes silently stale.
+- Watcher session list: holding a press no longer makes the list drop incoming updates; rebuilds wait for the press to end and then apply, so the list never goes silently stale.
 - Watcher saved-attachment ok marker: the hard-coded green is replaced with the theme's online-status color, so custom themes no longer get a dot that matches nothing.
 - Watcher session cards now expose their content (state, duration, open/closed) to screen readers via accessible names.
 - Settings boxes that previously fell back to English for Russian users now show Russian labels: the font customizer, the message-shot theme picker, the chat-filter import/export options, and the plugin details box.
@@ -49,6 +50,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Regex filter lists show a "Loading…" placeholder while the stored filters are being read, instead of presenting a list that already looks empty.
 - The Shadow Ban context-menu action now confirms the new state with a toast, instead of toggling silently while messages from that sender are hidden or restored.
 - Filter list rows whose peer cannot be resolved now show a localized "Unknown (ID: …)" name instead of a hard-coded English label.
+- The Longest sort option stays visible but disabled on the Watcher Events tab instead of disappearing, and a stored Longest choice is re-applied when you return to Sessions instead of being silently replaced by Newest.
+- Hovering a watcher event shows the exact date and time in one consistent format: the tooltip no longer disagrees with the compact label when the label drops the date part.
+- The Watcher list no longer relayouts every second while active-session durations tick; only a real geometry change triggers a relayout, so scrolling and selection stay stable.
+- Sort and tab segments whose labels do not fit now show the full text on hover instead of cutting it off with no way to read it.
 
 ## 1.0.19
 

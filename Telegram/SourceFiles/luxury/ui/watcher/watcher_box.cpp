@@ -270,17 +270,29 @@ void PaintCardShell(Painter &p, int width, int height) {
 // A timeline timestamp that stays short: bare time for today, day and
 // month added within the current year, the full date further back. The
 // long "dd.MM.yyyy at HH:mm:ss" form made every card noisy.
-[[nodiscard]] QString CompactTimestamp(int at) {
+// When the compact text drops the date, the tooltip half carries the full
+// locale timestamp, so hovering never shows a second, conflicting format.
+struct TimestampLabel {
+	QString text;
+	QString tooltip;
+};
+
+[[nodiscard]] QString FullStamp(const QDateTime &time) {
+	return QLocale().toString(time, QLocale::ShortFormat);
+}
+
+[[nodiscard]] TimestampLabel CompactTimestamp(int at) {
 	const auto time = base::unixtime::parse(at);
 	const auto today = QDateTime::currentDateTime().date();
 	const auto date = time.date();
-	if (date == today) {
-		return time.toString(u"HH:mm:ss"_q);
-	}
 	const auto timePart = u" "_q + time.toString(u"HH:mm:ss"_q);
-	return (date.year() == today.year())
-		? date.toString(u"dd.MM"_q) + timePart
-		: date.toString(u"dd.MM.yyyy"_q) + timePart;
+	if (date == today) {
+		return { time.toString(u"HH:mm:ss"_q), FullStamp(time) };
+	}
+	if (date.year() == today.year()) {
+		return { date.toString(u"dd.MM"_q) + timePart, FullStamp(time) };
+	}
+	return { date.toString(u"dd.MM.yyyy"_q) + timePart, QString() };
 }
 
 // When the row was written beats when the message claims to have been
@@ -497,6 +509,9 @@ private:
 	Order _order = Order::Newest;
 	int _sessionOverflow = 0;
 	int _eventOverflow = 0;
+	// Rows hidden below the loaded events window (deleted and edited
+	// history are uncapped); disclosed by the events section title.
+	int _eventEarlier = 0;
 	Ui::FlatLabel *_sessionsTitle = nullptr;
 	Ui::FlatLabel *_eventsTitle = nullptr;
 	LuxuryUi::EmptyBlock *_sessionEmpty = nullptr;
@@ -670,7 +685,7 @@ SessionCard::SessionCard(
 	_startLabel = tr::luxury_OnlineHistoryStart(tr::now) + u":"_q;
 	_endLabel = tr::luxury_OnlineHistoryEnd(tr::now) + u":"_q;
 	if (_session.start) {
-		_startValue = CompactTimestamp(*_session.start);
+		_startValue = CompactTimestamp(*_session.start).text;
 	} else {
 		_startValue = tr::luxury_OnlineHistoryUnknown(tr::now);
 	}
@@ -679,7 +694,7 @@ SessionCard::SessionCard(
 			? tr::luxury_OnlineHistoryOpen(tr::now)
 			: tr::luxury_WatcherEndUnobserved(tr::now);
 	} else {
-		_endValue = CompactTimestamp(*_session.end);
+		_endValue = CompactTimestamp(*_session.end).text;
 	}
 	if (_session.start && _session.end) {
 		// Same-second flaps and clock steps clamp at zero -- the row
@@ -744,9 +759,15 @@ void SessionCard::tick() {
 	if (!_active || !_session.start) {
 		return;
 	}
-	_durationText = Ui::FormatDurationText(std::max<qint64>(
+	const auto duration = Ui::FormatDurationText(std::max<qint64>(
 		0,
 		base::unixtime::now() - qint64(*_session.start)));
+	if (duration == _durationText) {
+		// The rendered text doubles as the cache: unchanged means no
+		// relayout and no repaint for this tick.
+		return;
+	}
+	_durationText = duration;
 	computeLayout(width());
 	update();
 }
@@ -933,8 +954,11 @@ EventCard::EventCard(
 , _expanded(expanded)
 , _kind(event.kind) {
 	_chipLabel = ChipLabelFor(_kind);
-	_dateText = CompactTimestamp(event.at);
-	setToolTip(QLocale().toString(base::unixtime::parse(event.at), QLocale::ShortFormat));
+	const auto stamp = CompactTimestamp(event.at);
+	_dateText = stamp.text;
+	// The compact text can drop the date; hovering then shows the full
+	// locale timestamp instead of a second, conflicting format.
+	setToolTip(stamp.tooltip.isEmpty() ? stamp.text : stamp.tooltip);
 	_summary = Ui::CreateChild<Ui::FlatLabel>(
 		this,
 		event.summary,
@@ -1120,8 +1144,15 @@ WatcherBody::WatcherBody(QWidget *parent, not_null<PeerData*> peer)
 		this,
 		tr::luxury_WatcherShowMore(tr::now));
 	_earlier->setClickedCallback([=] {
-		_sessionLimit += kMoreRows;
-		_eventLimit += kMoreRows;
+		// Each section grows by its own overflow: widening the window
+		// of the section that did not overflow would deepen the gap
+		// between what it shows and what it stores.
+		if (_sessionOverflow > 0) {
+			_sessionLimit += kMoreRows;
+		}
+		if (_eventOverflow > 0) {
+			_eventLimit += kMoreRows;
+		}
 		rebuild();
 	});
 	reload();
@@ -1162,21 +1193,28 @@ bool WatcherBody::sessionActive(const OnlineSession &session) const {
 }
 
 void WatcherBody::tick() {
-	// A deferred rebuild waits for interaction to end, so swapping the
-	// list never interrupts a press or a text selection.
-	if (_rebuildPending
-		&& !QApplication::mouseButtons()
-		&& !isAncestorOf(QApplication::focusWidget())) {
+	// A deferred rebuild waits for the press to end, so swapping the
+	// list never yanks the row being held.
+	if (_rebuildPending && !QApplication::mouseButtons()) {
 		_rebuildPending = false;
 		rebuild();
 		_counts.fire(counts());
 		_reloads.fire_copy(true);
+		// Data that landed during the press is already stored; one
+		// fresh fetch picks up anything that arrived after it, now
+		// that applying it cannot interrupt a press.
+		reload();
 	}
+	auto relayout = false;
 	for (const auto card : _sessionCards) {
+		const auto heightBefore = card->height();
 		card->setActive(sessionActive(card->session()));
 		card->tick();
+		// Only a real geometry change needs the body relayout; the
+		// per-second duration repaint does not.
+		relayout |= (card->height() != heightBefore);
 	}
-	if (width() > 0) {
+	if (relayout && width() > 0) {
 		resizeToWidth(width());
 	}
 }
@@ -1210,11 +1248,25 @@ void WatcherBody::reload() {
 			userId,
 			dialogId,
 			kHistoryReadLimit);
+		// The events window is capped; the two tables it reads are not.
+		// Their real row counts say how much history the window hides,
+		// so the disclosure is a measured number, never a guess.
+		const auto deletedTotal = LuxuryDatabase::countDeletedMessages(
+			userId,
+			dialogId);
+		const auto editedTotal = LuxuryDatabase::countEditedMessagesForDialog(
+			userId,
+			dialogId);
+		const auto eventEarlier = std::max(
+			0,
+			deletedTotal + editedTotal
+				- int(deleted.size() + edits.size()));
 		crl::on_main([=,
 				events = std::move(events),
 				watches = std::move(watches),
 				deleted = std::move(deleted),
-				edits = std::move(edits)]() mutable {
+				edits = std::move(edits),
+				eventEarlier = eventEarlier]() mutable {
 			if (!weak) {
 				return;
 			}
@@ -1223,15 +1275,16 @@ void WatcherBody::reload() {
 			const auto changed = !SameRecordIds(_events, events)
 				|| !SameRecordIds(_watches, watches)
 				|| !SameRecordIds(_deleted, deleted)
-				|| !SameRecordIds(_edits, edits);
+				|| !SameRecordIds(_edits, edits)
+				|| _eventEarlier != eventEarlier;
 			// Fresh data always lands; only the widget swap can wait,
 			// because rebuilding mid-press yanks the row being pressed.
-			const auto defer = changed && (QApplication::mouseButtons()
-				|| isAncestorOf(QApplication::focusWidget()));
+			const auto defer = changed && QApplication::mouseButtons();
 			_events = std::move(events);
 			_watches = std::move(watches);
 			_deleted = std::move(deleted);
 			_edits = std::move(edits);
+			_eventEarlier = eventEarlier;
 			_sessions = PairOnlineSessions(_events);
 			const auto rebuilt = !defer && (changed
 				|| (_sessionCards.empty() && _eventCards.empty()));
@@ -1412,10 +1465,19 @@ void WatcherBody::rebuild() {
 		_sessionEmpty->hide();
 	}
 	if (eventsVisible) {
-		_eventsTitle->setText(
-			tr::luxury_OnlineHistoryEvents(tr::now)
+		auto title = tr::luxury_OnlineHistoryEvents(tr::now)
 			+ u" · "_q
-			+ QString::number(eventList.size()));
+			+ QString::number(eventList.size());
+		if (_eventEarlier > 0) {
+			// The events window is capped while the tables it reads
+			// are not; the count is the real hidden remainder.
+			title += u" · "_q
+				+ tr::luxury_OnlineHistoryEarlier(
+					tr::now,
+					lt_count,
+					_eventEarlier);
+		}
+		_eventsTitle->setText(std::move(title));
 		if (eventList.empty()) {
 			_eventEmpty->setText(_loading
 				? tr::luxury_WatcherLoading(tr::now)
@@ -1601,9 +1663,10 @@ void FillWatcherBox(
 		}
 	}, box->lifetime());
 	state->refreshTimer.setCallback([=] {
-		// Do not replace selectable widgets while the user is interacting.
-		if (!box->isVisible() || state->menu || QApplication::mouseButtons()
-			|| body->isAncestorOf(QApplication::focusWidget())) {
+		// Only an actual press holds the refresh back: the deferred
+		// rebuild keeps the pressed row alive, and the open menu never
+		// sits on the scrolling body.
+		if (!box->isVisible() || QApplication::mouseButtons()) {
 			return;
 		}
 		refresh();
@@ -1623,13 +1686,16 @@ void FillWatcherBox(
 	header->tabChanges(
 	) | rpl::on_next([=](int index) {
 		state->tab = static_cast<Tab>(index);
-		// Longest is a session sort, not an event sort.
+		// Longest is a session sort: on Events it is disabled in place
+		// while the selection itself survives, so returning to Sessions
+		// re-applies it instead of silently switching to Newest.
 		header->setLastEnabled(state->tab != Tab::Events);
-		if (state->tab == Tab::Events && state->order == Order::Longest) {
-			state->order = Order::Newest;
-			body->setOrder(Order::Newest);
-			header->setSortIndex(static_cast<int>(Order::Newest));
-		}
+		const auto applied = (state->tab == Tab::Events
+			&& state->order == Order::Longest)
+			? Order::Newest
+			: state->order;
+		body->setOrder(applied);
+		header->setSortIndex(static_cast<int>(applied));
 		body->setTab(state->tab);
 		state->scrollTop = 0;
 		box->scrollToY(0);

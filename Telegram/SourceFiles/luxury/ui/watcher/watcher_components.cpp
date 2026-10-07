@@ -63,6 +63,9 @@ private:
 ChoiceButton::ChoiceButton(QWidget *parent, QString text)
 : LinkButton(parent, text, st::luxuryWatcherControl) {
 	setFocusPolicy(Qt::StrongFocus);
+	// The paint pass elides to whatever width the segment gets; the
+	// tooltip keeps the whole label reachable.
+	setToolTip(text);
 }
 
 void ChoiceButton::setSelected(bool selected) {
@@ -79,7 +82,9 @@ void ChoiceButton::paintEvent(QPaintEvent *e) {
 	p.setPen(Qt::NoPen);
 	p.setBrush(_selected
 		? WithAlpha(AccentColor(), 0.10)
-		: isOver() ? st::windowBgOver->c : QColor(Qt::transparent));
+		: (isOver() && isEnabled())
+		? st::windowBgOver->c
+		: QColor(Qt::transparent));
 	const auto inset = st::lineWidth / 2.;
 	const auto plate = QRectF(inset, inset, width() - 2 * inset,
 		height() - 2 * inset);
@@ -91,9 +96,14 @@ void ChoiceButton::paintEvent(QPaintEvent *e) {
 		p.drawRoundedRect(plate, st::luxuryWatcherDetailRadius,
 			st::luxuryWatcherDetailRadius);
 	}
+	const auto disabled = !isEnabled();
 	const auto &font = st::luxuryWatcherChipFont;
 	p.setFont(font);
-	p.setPen(_selected ? AccentColor() : st::windowFg->c);
+	p.setPen(_selected
+		? AccentColor()
+		: disabled
+		? WithAlpha(st::windowFg->c, 0.5)
+		: st::windowFg->c);
 	const auto text = font->elided(accessibilityName(),
 		std::max(0, width() - 2 * st::luxuryWatcherControlInset));
 	p.drawText(rect(), Qt::AlignCenter, text);
@@ -251,7 +261,7 @@ SegmentControl::SegmentControl(QWidget *parent, std::array<QString, 3> labels)
 
 int SegmentControl::contentWidth() const {
 	auto result = 0;
-	for (auto i = 0; i != (_lastEnabled ? 3 : 2); ++i) {
+	for (auto i = 0; i != 3; ++i) {
 		result += _buttons[i]->naturalWidth() + st::luxuryWatcherSortSkip;
 	}
 	return result - st::luxuryWatcherSortSkip;
@@ -267,19 +277,20 @@ void SegmentControl::setIndex(int index) {
 }
 
 void SegmentControl::setLastEnabled(bool enabled) {
+	// Disabled in place: the third option stays visible and muted, so
+	// the control never changes width and the choice reads as
+	// "unavailable here" instead of disappearing.
 	_lastEnabled = enabled;
 	_buttons[2]->setDisabled(!enabled);
-	_buttons[2]->setVisible(enabled);
 	layoutButtons();
 }
 
 void SegmentControl::layoutButtons() {
-	const auto count = _lastEnabled ? 3 : 2;
 	const auto gap = st::luxuryWatcherSortSkip;
-	const auto available = std::max(0, width() - (count - 1) * gap);
+	const auto available = std::max(0, width() - 2 * gap);
 	auto left = 0;
-	for (auto i = 0; i != count; ++i) {
-		const auto w = available / count + (i == count - 1 ? available % count : 0);
+	for (auto i = 0; i != 3; ++i) {
+		const auto w = available / 3 + (i == 2 ? available % 3 : 0);
 		_buttons[i]->setGeometryToLeft(left, 0, w, height(), width());
 		left += w + gap;
 	}
