@@ -39,6 +39,7 @@
 #include "ui/widgets/popup_menu.h"
 #include "ui/painter.h"
 #include "ui/qt_object_factory.h"
+#include "window/window_controller.h"
 #include "window/window_session_controller.h"
 
 #include <algorithm>

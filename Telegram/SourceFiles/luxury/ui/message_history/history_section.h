@@ -6,6 +6,7 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include "base/object_ptr.h"
 #include "luxury/ui/message_history/history_item.h"
 #include "mtproto/sender.h"
 #include "window/section_memento.h"
