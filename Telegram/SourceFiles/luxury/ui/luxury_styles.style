@@ -12,6 +12,7 @@ using "ui/colors.palette";
 using "ui/widgets/widgets.style";
 using "info/info.style";
 using "settings/settings.style";
+using "media/player/media_player.style";
 
 iconPickerSelectedPadding: 2px;
 iconPickerSelectedRounding: 12px;
@@ -224,4 +225,36 @@ luxuryWatcherControl: LinkButton(defaultLinkButton) {
 	font: font(12px semibold);
 	overFont: font(12px semibold);
 	padding: margins(10px, 6px, 10px, 6px);
+}
+luxuryPlayerBoxWidth: 296px;
+luxuryPlayerCoverRadius: 8px;
+luxuryPlayerCoverFetchSize: 600px;
+luxuryPlayerCoverPadding: margins(32px, 32px, 32px, 8px);
+luxuryPlayerTitlePadding: margins(32px, 12px, 32px, 0px);
+luxuryPlayerPerformerPadding: margins(32px, 2px, 32px, 0px);
+luxuryPlayerSliderPadding: margins(32px, 12px, 32px, 0px);
+luxuryPlayerTimePadding: margins(32px, 4px, 32px, 0px);
+luxuryPlayerControlsPadding: margins(0px, 12px, 0px, 0px);
+luxuryPlayerControlsSkip: 12px;
+luxuryPlayerTitle: FlatLabel(boxLabel) {
+	minWidth: 1px;
+	maxHeight: 0px;
+	align: align(center);
+	style: TextStyle(boxTextStyle) {
+		font: font(17px semibold);
+	}
+}
+luxuryPlayerPerformer: FlatLabel(boxLabel) {
+	minWidth: 1px;
+	maxHeight: 0px;
+	align: align(center);
+	textFg: windowSubTextFg;
+	style: TextStyle(boxTextStyle) {
+		font: font(14px);
+	}
+}
+luxuryPlayerExpandButton: IconButton(mediaPlayerNextButton) {
+	icon: icon {
+		{ "player/player_pip_enlarge", mediaPlayerActiveFg }
+	};
 }

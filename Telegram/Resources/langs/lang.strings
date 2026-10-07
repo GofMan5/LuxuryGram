@@ -9179,3 +9179,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ConfirmationRound" = "Do you want to send this round video?";
 "luxury_UpdateLuxuryGram" = "Update LuxuryGram";
 "luxury_ContextSelectBetween" = "Select messages between";
+"luxury_PlayerExpand" = "Open expanded player";
+"luxury_PlayerTitle" = "Now playing";
+"luxury_PlayerSaveCover" = "Save cover";
+"luxury_PlayerSaveCoverFailed" = "Couldn't save the cover image.";

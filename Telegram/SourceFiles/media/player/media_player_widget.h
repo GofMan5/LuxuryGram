@@ -155,6 +155,7 @@ private:
 	object_ptr<Ui::IconButton> _orderToggle;
 	object_ptr<SpeedButton> _speedToggle;
 	object_ptr<Ui::IconButton> _close;
+	object_ptr<Ui::IconButton> _expand;
 	object_ptr<Ui::PlainShadow> _shadow = { nullptr };
 	object_ptr<Ui::FilledSlider> _playbackSlider;
 	base::unique_qptr<Dropdown> _volume;

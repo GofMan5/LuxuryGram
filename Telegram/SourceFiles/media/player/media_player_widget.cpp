@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "media/player/media_player_widget.h"
 
+#include "boxes/abstract_box.h"
 #include "platform/platform_specific.h"
 #include "data/data_document.h"
 #include "data/data_session.h"
@@ -25,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/format_values.h"
 #include "ui/text/format_song_document_name.h"
 #include "lang/lang_keys.h"
+#include "luxury/ui/boxes/expanded_player_box.h"
 #include "media/audio/media_audio.h"
 #include "media/view/media_view_playback_progress.h"
 #include "media/player/media_player_button.h"
@@ -37,6 +39,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "window/window_session_controller.h"
 #include "styles/style_media_player.h"
+#include "styles/style_luxury_styles.h"
 
 namespace Media {
 namespace Player {
@@ -57,6 +60,7 @@ Widget::Widget(
 , _orderToggle(rightControls(), st::mediaPlayerOrderButton)
 , _speedToggle(rightControls(), st::mediaPlayerSpeedButton)
 , _close(this, st::mediaPlayerClose)
+, _expand(this, st::luxuryPlayerExpandButton)
 , _shadow(this)
 , _playbackSlider(this, st::mediaPlayerPlayback)
 , _volume(std::in_place, dropdownsParent.get())
@@ -96,6 +100,10 @@ Widget::Widget(
 	_repeatToggle->setAccessibleName(tr::lng_schedule_repeat_label(tr::now));
 	_orderToggle->setAccessibleName(tr::lng_sr_playback_order(tr::now));
 	_close->setAccessibleName(tr::lng_sr_player_close(tr::now));
+	_expand->setAccessibleName(tr::luxury_PlayerExpand(tr::now));
+	_expand->setClickedCallback([=] {
+		Ui::show(Box<ExpandedPlayerBox>(_controller, _type));
+	});
 
 	_nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
 	_timeLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -215,6 +223,7 @@ Widget::Widget(
 
 	hidePlaylistOn(_playPause);
 	hidePlaylistOn(_close);
+	hidePlaylistOn(_expand);
 	hidePlaylistOn(_rightControls);
 
 	hideDropdownsOn(_volumeToggle);
@@ -413,6 +422,9 @@ void Widget::resizeEvent(QResizeEvent *e) {
 
 void Widget::updateControlsGeometry() {
 	_close->moveToRight(st::mediaPlayerCloseRight, st::mediaPlayerPlayTop);
+	_expand->moveToRight(
+		st::mediaPlayerCloseRight + _close->width(),
+		st::mediaPlayerPlayTop);
 	auto right = 0;
 	if (hasPlaybackSpeedControl()) {
 		_speedToggle->moveToRight(right, 0); right += _speedToggle->width();
@@ -441,7 +453,10 @@ void Widget::updateControlsWrapGeometry() {
 	const auto controls = getTimeRight() + _timeLabel->width() + fade;
 	rightControls()->resize(controls, _repeatToggle->height());
 	_rightControls->move(
-		width() - st::mediaPlayerCloseRight - _close->width() - controls,
+		width() - st::mediaPlayerCloseRight
+			- _close->width()
+			- _expand->width()
+			- controls,
 		st::mediaPlayerPlayTop);
 }
 
@@ -583,6 +598,7 @@ int Widget::getNameLeft() const {
 int Widget::getNameRight() const {
 	return st::mediaPlayerCloseRight
 		+ _close->width()
+		+ _expand->width()
 		+ st::mediaPlayerPadding;
 }
 

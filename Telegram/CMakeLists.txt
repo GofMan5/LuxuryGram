@@ -197,6 +197,8 @@ set(luxurygram_files
         luxury/ui/boxes/theme_selector_box.h
         luxury/ui/boxes/message_shot_box.cpp
         luxury/ui/boxes/message_shot_box.h
+        luxury/ui/boxes/expanded_player_box.cpp
+        luxury/ui/boxes/expanded_player_box.h
         luxury/ui/boxes/plugin_info_box.cpp
         luxury/ui/boxes/plugin_info_box.h
         luxury/ui/components/image_view.cpp

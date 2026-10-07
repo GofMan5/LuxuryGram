@@ -13,6 +13,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Clear Watcher Data in the chat context menu now opens a confirmation box that also offers deleting the media files Watcher saved for that chat, instead of only clearing recorded online history.
 - Watched chats now report media that could not be saved: when Watcher gives up retrying a file, a toast says how many files in the last minute failed, instead of the loss being visible only in the log.
 - The context menu over a message selection gained a Select messages between action: with two or more messages selected, it selects every selectable message between the outermost selected ones in one step, respecting the selection limit, instead of requiring each message to be selected by hand.
+- The media player gained an expanded view: a new button next to the player close button opens a box with the track's cover (embedded or fetched from the iTunes catalog), title, performer, a seekable progress bar with position and duration, and full playback controls, plus a button that saves the current cover as a PNG file.
 
 ### Changed
 
