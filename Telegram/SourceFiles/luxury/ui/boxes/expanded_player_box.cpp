@@ -25,6 +25,7 @@
 #include "ui/text/format_song_document_name.h"
 #include "ui/text/format_values.h"
 #include "ui/toast/toast.h"
+#include "ui/ui_utility.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/continuous_sliders.h"
 #include "ui/widgets/labels.h"
@@ -191,10 +192,16 @@ private:
 class ExpandedPlayerBox::ControlsWidget final : public Ui::RpWidget {
 public:
 	ControlsWidget(QWidget *parent, AudioMsgId::Type type)
-	: RpWidget(parent)
-	, _previousTrack(this, st::mediaPlayerPreviousButton)
-	, _playPause(this, st::mediaPlayerPlayButton)
-	, _nextTrack(this, st::mediaPlayerNextButton) {
+	: RpWidget(parent) {
+		_previousTrack = Ui::CreateChild<Ui::IconButton>(
+			this,
+			st::mediaPlayerPreviousButton);
+		_playPause = Ui::CreateChild<Media::Player::PlayButton>(
+			this,
+			st::mediaPlayerPlayButton);
+		_nextTrack = Ui::CreateChild<Ui::IconButton>(
+			this,
+			st::mediaPlayerNextButton);
 		_previousTrack->setClickedCallback([=] {
 			Media::Player::instance()->previous(type);
 		});
