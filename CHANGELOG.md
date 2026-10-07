@@ -14,6 +14,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Watched chats now report media that could not be saved: when Watcher gives up retrying a file, a toast says how many files in the last minute failed, instead of the loss being visible only in the log.
 - The context menu over a message selection gained a Select messages between action: with two or more messages selected, it selects every selectable message between the outermost selected ones in one step, respecting the selection limit, instead of requiring each message to be selected by hand.
 - The media player gained an expanded view: a new button next to the player close button opens a box with the track's cover (embedded or fetched from the iTunes catalog), title, performer, a seekable progress bar with position and duration, and full playback controls, plus a button that saves the current cover as a PNG file.
+- URL buttons in rich pages (web page previews) now show the destination URL in a tooltip and offer Copy Link, instead of giving no hint of where the button leads.
 
 ### Changed
 
@@ -28,6 +29,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - The watched chats block in Settings now appears from the start: empty, it explains that chats are added with the Watch Media action in the LuxuryGram chat menu, and once chats are watched it notes that saving continues while the app is locked. The block is also reachable from settings search by "watch" and "media".
 - The Watcher box gear menu gained a Watcher header row, a note that online history keeps recording while the app is locked, and an Open Luxury Settings action that jumps to LuxuryGram Preferences in Settings and brings the window forward.
 - The LuxuryGram description in Settings now reads "customization and privacy features" instead of "ToS-breaking features".
+- Rich pages (web page previews) now match ordinary message bubbles: edge media is rounded like bubble media, plain text keeps the same paddings at the bubble edges, and article width and the last line fit the bubble instead of spilling past it.
+- On Linux, mini apps now ask for camera and location permission before use, matching the behavior on other platforms.
+- Web app loading progress now appears when the main frame starts navigating instead of flickering on sub-frame activity.
+- WebRTC and ANGLE dependencies were refreshed: stopped transceivers are cleaned up, VP8 temporal bounds are fixed, and a Windows vertex value cache fix lands with ANGLE.
 
 ### Fixed
 
@@ -80,6 +85,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Saved-music track titles and performer names now sit one padding away from the cover image, matching where the cover is drawn, instead of being pushed out twice as far.
 - The message-shot box title now updates when the interface language changes instead of keeping the wording from when the box was opened.
 - A voice (or round video) recording left paused in the record bar when the automatic app lock triggers is no longer silently lost after unlocking: the paused draft survives the unlock and can be resumed, while explicitly discarding it (trash, cancel) still works at once.
+
+### Security
+
+- The bundled OpenSSL was updated to the 3.5.9 LTS release, staying on the maintained fixes branch.
 
 ## 1.0.19
 
