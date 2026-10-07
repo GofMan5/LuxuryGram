@@ -13,8 +13,11 @@ void SetAppliedBubbleRadius(int value);
 void SetBubbleRadiusOverride(int value);
 void ClearBubbleRadiusOverride();
 
+enum class BubbleCornerRounding : uchar;
+
 [[nodiscard]] int BubbleRadiusSmall();
 [[nodiscard]] int BubbleRadiusLarge();
+[[nodiscard]] int BubbleCornerRadius(BubbleCornerRounding corner);
 
 [[nodiscard]] int MsgFileThumbRadiusSmall();
 [[nodiscard]] int MsgFileThumbRadiusLarge();
