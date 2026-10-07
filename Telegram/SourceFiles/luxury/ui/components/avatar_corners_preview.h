@@ -27,6 +27,7 @@ protected:
 	void paintEvent(QPaintEvent *e) override;
 	void mousePressEvent(QMouseEvent *e) override;
 	void mouseReleaseEvent(QMouseEvent *e) override;
+	void keyPressEvent(QKeyEvent *e) override;
 
 private:
 	Ui::EmptyUserpic _emptyUserpic;

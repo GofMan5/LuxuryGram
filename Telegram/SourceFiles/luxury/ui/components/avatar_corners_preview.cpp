@@ -7,8 +7,11 @@
 #include "luxury/ui/components/avatar_corners_preview.h"
 
 #include "data/data_peer.h"
-#include "styles/style_luxury_icons.h"
+#include "lang/lang_keys.h"
+#include "styles/style_basic.h"
 #include "styles/style_dialogs.h"
+#include "styles/style_luxury_icons.h"
+#include "styles/style_luxury_styles.h"
 #include "styles/style_settings.h"
 #include "ui/empty_userpic.h"
 #include "ui/painter.h"
@@ -28,6 +31,8 @@ AvatarCornersPreview::AvatarCornersPreview(
 	const auto &row = st::defaultDialogRow;
 	setFixedHeight(row.height);
 	setCursor(Qt::PointingHandCursor);
+	setFocusPolicy(Qt::StrongFocus);
+	setAccessibleName(tr::luxury_PreviewAvatarAccessibleName(tr::now));
 }
 
 void AvatarCornersPreview::paintEvent(QPaintEvent *e) {
@@ -58,7 +63,25 @@ void AvatarCornersPreview::paintEvent(QPaintEvent *e) {
 
 	p.setPen(st::dialogsTextFg);
 	p.setFont(st::dialogsTextFont);
-	p.drawText(row.textLeft + xShift, row.textTop + st::dialogsTextFont->ascent, u"Better late than never"_q);
+	p.drawText(
+		row.textLeft + xShift,
+		row.textTop + st::dialogsTextFont->ascent,
+		tr::luxury_PreviewAvatarRowText(tr::now));
+
+	if (hasFocus()) {
+		const auto inset = st::lineWidth / 2.;
+		const auto plate = QRectF(
+			inset,
+			inset,
+			width() - 2 * inset,
+			height() - 2 * inset);
+		p.setPen(QPen(st::windowActiveTextFg->c, st::lineWidth));
+		p.setBrush(Qt::NoBrush);
+		p.drawRoundedRect(
+			plate,
+			st::luxuryWatcherDetailRadius,
+			st::luxuryWatcherDetailRadius);
+	}
 }
 
 void AvatarCornersPreview::mousePressEvent(QMouseEvent *e) {
@@ -82,4 +105,16 @@ void AvatarCornersPreview::mouseReleaseEvent(QMouseEvent *e) {
 		QDesktopServices::openUrl(
 			u"https://github.com/GofMan5/LuxuryGram/releases"_q);
 	}
+}
+
+void AvatarCornersPreview::keyPressEvent(QKeyEvent *e) {
+	const auto key = e->key();
+	if (key == Qt::Key_Enter
+		|| key == Qt::Key_Return
+		|| key == Qt::Key_Space) {
+		QDesktopServices::openUrl(
+			u"https://github.com/GofMan5/LuxuryGram/releases"_q);
+		return;
+	}
+	return RpWidget::keyPressEvent(e);
 }

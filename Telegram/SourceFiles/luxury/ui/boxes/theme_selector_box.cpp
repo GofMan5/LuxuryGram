@@ -16,6 +16,7 @@
 #include "settings/sections/settings_chat.h"
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
+#include "ui/toast/toast.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
 #include "ui/wrap/slide_wrap.h"
@@ -141,6 +142,9 @@ void ThemeSelectorBox::setupContent() {
 					document->location().name(),
 					theme);
 				if (!preview) {
+					Ui::Toast::Show(
+						tr::luxury_MessageShotThemePreviewFailed(
+							tr::now));
 					return;
 				}
 

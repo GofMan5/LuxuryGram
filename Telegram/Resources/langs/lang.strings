@@ -8907,6 +8907,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MessageBubbleRadius" = "Message Bubble Radius";
 "luxury_SettingsWideMultiplier" = "Wide Messages Multiplier";
 "luxury_SettingsWideMultiplierDescription" = "You can change message width for better display on wide monitors.";
+"luxury_PreviewReplyText" = "Update wehn?";
+"luxury_PreviewMessageText" = "You need to go outside and touch some grass...";
+"luxury_PreviewAvatarRowText" = "Better late than never";
+"luxury_PreviewAvatarAccessibleName" = "Sample chat row for avatar corners; opens the LuxuryGram releases page.";
 "luxury_SettingsSpoofWebviewAsAndroid" = "Spoof Client as Android";
 "luxury_SettingsBiggerWindow" = "Bigger Window";
 "luxury_SettingsIncreaseWebviewHeight" = "Increase Content Height";
@@ -9033,8 +9037,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_OnlineHistoryUnknown" = "unknown";
 "luxury_OnlineHistoryRefresh" = "Refresh";
 "luxury_OnlineHistorySettings" = "Settings";
-"luxury_OnlineHistorySettingOn" = "on";
-"luxury_OnlineHistorySettingOff" = "off";
 "luxury_WatcherMenuHeader" = "Watcher";
 "luxury_WatcherOpenSettings" = "Open Luxury Settings…";
 "luxury_WatcherLockDisclosure" = "Online history is recorded even while the app is locked with your local passcode; turn \"Track Online When Locked\" off to pause it.";
@@ -9099,6 +9101,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MonospaceFont" = "Monospace Font";
 "luxury_FontDefault" = "Default";
 "luxury_CustomizeFontTitle" = "Customize Font";
+"luxury_NoFontsFound" = "No fonts found.";
 "luxury_MessageShotTopBarText" = "Shot";
 "luxury_MessageShotPreview" = "Preview";
 "luxury_MessageShotPreferences" = "Preferences";
@@ -9118,6 +9121,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_MessageShotAnonymousName" = "User {index}";
 "luxury_MessageShotEmpty" = "Nothing to save: the shot is too large, or the messages are gone.";
 "luxury_MessageShotSaveFailed" = "Could not save the image.";
+"luxury_MessageShotThemePreviewFailed" = "Could not load the theme file.";
 "luxury_SendAsSticker" = "Send as Sticker";
 "luxury_SendWithSound" = "Send With Sound";
 "luxury_LuxuryForwardStatusPreparing" = "Forwarding messages";
@@ -9164,7 +9168,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_LocalPremiumNotice" = "You're using **local** Telegram Premium.\nIt **won't** give you any benefits.\n**Enjoy the star near your nickname!**";
 "luxury_MutualContactInfo" = "This contact is mutual.";
 "luxury_SessionInfoOfficialApp" = "Official app";
-"luxury_SettingsDescription" = "Telegram Desktop fork focused on customization and ToS-breaking features.";
+"luxury_SettingsDescription" = "Telegram Desktop fork focused on customization and privacy features.";
 "luxury_ConfirmationSticker" = "Do you want to send this sticker?";
 "luxury_ConfirmationGIF" = "Do you want to send this GIF?";
 "luxury_ConfirmationVoice" = "Do you want to send this voice message?";

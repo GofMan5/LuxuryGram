@@ -22,6 +22,7 @@
 #include "data/data_user.h"
 #include "history/history.h"
 #include "history/view/history_view_element.h"
+#include "lang/lang_keys.h"
 #include "ui/basic_click_handlers.h"
 #include "ui/text/text_utilities.h"
 
@@ -113,7 +114,7 @@ void GenerateItems(
 														  ? QString::fromStdString(message.postAuthor)
 														  : from
 																? QString()
-																: QString("unknown user: %1").arg(message.fromId),
+																: tr::luxury_UnknownPeer(tr::now, lt_id, QString::number(message.fromId)),
 									},
 									std::move(text),
 									MTP_messageMediaEmpty());

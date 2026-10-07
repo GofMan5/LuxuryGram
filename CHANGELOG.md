@@ -25,6 +25,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - The lock-time switches in Settings (Save Deleted When Locked, Track Online When Locked) moved out of the Luxury Extra block into Spy essentials, next to the recording switches they guard, and each now describes exactly what keeps happening while the app is locked. Track Online History, Track Online When Locked and Show Last Seen Seconds moved there too; Luxury Extra keeps only the limits that have nothing to do with recording.
 - The watched chats block in Settings now appears from the start: empty, it explains that chats are added with the Watch Media action in the LuxuryGram chat menu, and once chats are watched it notes that saving continues while the app is locked. The block is also reachable from settings search by "watch" and "media".
 - The Watcher box gear menu gained a Watcher header row, a note that online history keeps recording while the app is locked, and an Open Luxury Settings action that jumps to LuxuryGram Preferences in Settings and brings the window forward.
+- The LuxuryGram description in Settings now reads "customization and privacy features" instead of "ToS-breaking features".
 
 ### Fixed
 
@@ -63,6 +64,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Watcher empty and loading text blocks are now exposed to screen readers instead of being painted text that assistive technology cannot see.
 - The Watcher sort and tab toggle rows now report their real on/off state to screen readers instead of always announcing themselves as checked.
 - The Watcher session card's accessible name keeps updating while the session duration ticks, so screen readers hear the current duration instead of the value from when the card was created.
+- The Settings sample rows — the message-bubble preview, the avatar-corners chat row and the "no fonts found" message — now follow the interface language instead of always showing hard-coded English text.
+- Message history rows whose sender cannot be resolved show the same localized "Unknown (ID: …)" fallback as the filter lists, and the filter rows' placeholder avatar now carries the localized first letter instead of a hard-coded "U".
+- Selecting a message-shot theme whose file fails to download or parse now shows a "Could not load the theme file" toast instead of silently selecting nothing.
+- The avatar-corners sample row in Settings is now reachable with the keyboard — Tab focuses it, Enter or Space opens the releases page — draws a focus ring while focused, and announces its purpose to screen readers instead of being mouse-only.
 
 ## 1.0.19
 

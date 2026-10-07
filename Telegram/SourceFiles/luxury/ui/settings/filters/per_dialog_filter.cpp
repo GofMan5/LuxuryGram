@@ -71,14 +71,18 @@ PaintRoundImageCallback PerDialogFiltersListRow::generatePaintUserpicCallback(bo
 		return PeerListRow::generatePaintUserpicCallback(forceRound);
 	}
 
+	const auto name = tr::luxury_UnknownPeer(
+		tr::now,
+		lt_id,
+		QString::number(peerId.value & PeerId::kChatTypeMask));
 	return [=](Painter &p, int x, int y, int outerWidth, int size) mutable
 	{
 		using namespace Ui;
 		const auto realId = peerId.value & PeerId::kChatTypeMask;
-		auto _userpicEmpty = std::make_unique<EmptyUserpic>(
-			EmptyUserpic::UserpicColor(realId % 7),
-			QString("U")); // U - Unknown
-		_userpicEmpty->paintCircle(p, x, y, outerWidth, size);
+		auto userpicEmpty = std::make_unique<EmptyUserpic>(
+			EmptyUserpic::UserpicColor(EmptyUserpic::ColorIndex(realId)),
+			name);
+		userpicEmpty->paintCircle(p, x, y, outerWidth, size);
 	};
 }
 

@@ -1691,6 +1691,8 @@ namespace LuxuryRussian {
 // language packs never carry our keys, so without this RU users
 // read English here. Applied through applyValue() on every language
 // switch (see Lang::Instance::reset), EN originals restored first.
+// Every key listed here must keep an entry in lang.strings;
+// check_ru_mirror.py verifies the two stay in sync.
 const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_AppIconHeader", "Иконка приложения" },
 	{ "luxury_AvatarCorners", "Углы аватаров" },
@@ -1840,7 +1842,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_SettingsContextMenuReactionsPanel", "Панель реакций" },
 	{ "luxury_SettingsContextMenuTitle", "Когда показывать пункт" },
 	{ "luxury_SettingsContextMenuViewsPanel", "Панель просмотров" },
-	{ "luxury_SettingsDescription", "Форк Telegram Desktop с акцентом на кастомизацию и функции за гранью ToS." },
+	{ "luxury_SettingsDescription", "Форк Telegram Desktop с акцентом на кастомизацию и функции приватности." },
 	{ "luxury_SettingsIncreaseWebviewHeight", "Увеличить высоту контента" },
 	{ "luxury_SettingsIncreaseWebviewWidth", "Увеличить ширину контента" },
 	{ "luxury_SettingsShowID", "Показывать ID" },
@@ -1908,8 +1910,6 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_OnlineHistoryUnknown", "неизвестно" },
 	{ "luxury_OnlineHistoryRefresh", "Обновить" },
 	{ "luxury_OnlineHistorySettings", "Настройки" },
-	{ "luxury_OnlineHistorySettingOn", "вкл" },
-	{ "luxury_OnlineHistorySettingOff", "выкл" },
 	{ "luxury_OnlineHistoryKindGift", "Подарок" },
 	{ "luxury_OnlineHistoryKindName", "Имя" },
 	{ "luxury_OnlineHistoryKindUsername", "Юзернейм" },
@@ -1963,6 +1963,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_WatchPhotoUpdated", "Обновил фото профиля" },
 	{ "luxury_BoxActionReset", "Сбросить" },
 	{ "luxury_CustomizeFontTitle", "Настройка шрифта" },
+	{ "luxury_NoFontsFound", "Шрифты не найдены." },
 	{ "luxury_FiltersExportClipboard", "Скопировать в буфер обмена" },
 	{ "luxury_FiltersExportURL", "Опубликовать на dpaste.com" },
 	{ "luxury_FiltersImportClipboard", "Вставить из буфера обмена" },
@@ -1975,6 +1976,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_MessageShotRevealSpoilers", "Раскрывать спойлеры" },
 	{ "luxury_MessageShotSave", "Сохранить" },
 	{ "luxury_MessageShotSaveFailed", "Не удалось сохранить изображение." },
+	{ "luxury_MessageShotThemePreviewFailed", "Не удалось загрузить файл темы." },
 	{ "luxury_MessageShotShowBackground", "Показывать фон" },
 	{ "luxury_MessageShotShowColorfulReplies", "Показывать цветные ответы" },
 	{ "luxury_MessageShotShowDate", "Показывать дату" },
@@ -1989,6 +1991,10 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_PluginNoDescription", "Описание отсутствует." },
 	{ "luxury_PluginVersion", "Версия" },
 	{ "luxury_PluginsNotAvailable", "Плагины пока не поддерживаются в LuxuryGram Desktop." },
+	{ "luxury_PreviewReplyText", "Когда апдейт?" },
+	{ "luxury_PreviewMessageText", "Тебе бы выйти на улицу и потрогать траву..." },
+	{ "luxury_PreviewAvatarRowText", "Лучше поздно, чем никогда" },
+	{ "luxury_PreviewAvatarAccessibleName", "Пример строки чата для углов аватара; открывает страницу релизов LuxuryGram." },
 };
 
 void applyIfRussian(not_null<Lang::Instance*> instance, const QString &id) {
