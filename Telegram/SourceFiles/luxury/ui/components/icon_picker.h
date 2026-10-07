@@ -6,8 +6,8 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-#include "ui/rp_widget.h"
 #include "ui/effects/animations.h"
+#include "ui/rp_widget.h"
 
 class IconPicker : public Ui::RpWidget
 {
@@ -20,12 +20,15 @@ public:
 protected:
 	void paintEvent(QPaintEvent *e) override;
 	void mousePressEvent(QMouseEvent *e) override;
+	void keyPressEvent(QKeyEvent *e) override;
 
 private:
 	void drawIcon(QPainter &p, const QImage &icon, int x, int y, float strokeOpacity);
+	[[nodiscard]] bool applyIcon(int index);
 	[[nodiscard]] int cellWidth() const;
 
 	Ui::Animations::Simple _animation;
 	QString _wasSelected;
+	int _focusedIndex = 0;
 	std::unordered_map<QString, QImage> _cachedIcons;
 };

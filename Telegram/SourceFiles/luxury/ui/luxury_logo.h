@@ -43,3 +43,5 @@ QImage currentAppLogoPad();
 void applyAppIcon();
 
 }
+
+#undef ICON

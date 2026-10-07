@@ -8981,6 +8981,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_FiltersClearPopupText" = "Are you sure you want to clear all filters?";
 "luxury_FiltersClearPopupActionText" = "Clear";
 "luxury_AppIconHeader" = "App Icon";
+"luxury_AppIconPickerAccessible" = "App icon picker. Use the arrow keys to choose an icon and press Enter to apply.";
 "luxury_ConfirmationsTitle" = "Send Confirmations";
 "luxury_StickerConfirmation" = "Stickers";
 "luxury_GIFConfirmation" = "GIFs";

@@ -7,28 +7,29 @@
 #include "luxury/ui/message_history/history_section.h"
 
 #include "apiwrap.h"
-#include "luxury/ui/message_history/history_inner.h"
 #include "base/timer.h"
 #include "core/shortcuts.h"
 #include "data/data_channel.h"
 #include "data/data_session.h"
 #include "info/profile/info_profile_values.h"
 #include "lang/lang_keys.h"
+#include "luxury/ui/message_history/history_inner.h"
 #include "profile/profile_back_button.h"
-#include "styles/style_chat.h"
-#include "styles/style_chat_helpers.h"
-#include "styles/style_info.h"
-#include "ui/effects/animations.h"
-#include "ui/ui_utility.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/controls/userpic_button.h"
+#include "ui/effects/animations.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/scroll_area.h"
 #include "ui/widgets/shadow.h"
+#include "ui/ui_utility.h"
+#include "window/themes/window_theme.h"
 #include "window/window_adaptive.h"
 #include "window/window_session_controller.h"
-#include "window/themes/window_theme.h"
+
+#include "styles/style_chat.h"
+#include "styles/style_chat_helpers.h"
+#include "styles/style_info.h"
 
 namespace MessageHistory {
 
@@ -50,13 +51,7 @@ public:
 
 	void goBack();
 	void showSearch();
-	bool setSearchFocus() {
-		if (_searchShown) {
-			_field->setFocus();
-			return true;
-		}
-		return false;
-	}
+	bool setSearchFocus();
 
 protected:
 	void mousePressEvent(QMouseEvent *e) override;
@@ -149,6 +144,14 @@ void FixedBar::showSearch() {
 	if (_searchEnabled && !_searchShown) {
 		toggleSearch();
 	}
+}
+
+bool FixedBar::setSearchFocus() {
+	if (_searchShown) {
+		_field->setFocus();
+		return true;
+	}
+	return false;
 }
 
 void FixedBar::toggleSearch() {

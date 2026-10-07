@@ -6,11 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/message_history/history_item.h"
 
-#include "history/history_item.h"
 #include "api/api_text_entities.h"
-#include "luxury/data/entities.h"
-#include "luxury/ui/message_history/history_inner.h"
-#include "luxury/utils/luxury_mapper.h"
 #include "base/unixtime.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
@@ -20,9 +16,13 @@
 #include "data/data_forum_topic.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
-#include "history/history.h"
 #include "history/view/history_view_element.h"
+#include "history/history.h"
+#include "history/history_item.h"
 #include "lang/lang_keys.h"
+#include "luxury/data/entities.h"
+#include "luxury/ui/message_history/history_inner.h"
+#include "luxury/utils/luxury_mapper.h"
 #include "ui/basic_click_handlers.h"
 #include "ui/text/text_utilities.h"
 

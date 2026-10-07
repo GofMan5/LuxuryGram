@@ -6,11 +6,10 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-#include "window/section_widget.h"
-#include "window/section_memento.h"
 #include "luxury/ui/message_history/history_item.h"
 #include "mtproto/sender.h"
-// don't reformat includes above
+#include "window/section_memento.h"
+#include "window/section_widget.h"
 
 namespace Ui {
 class ScrollArea;

@@ -9,8 +9,8 @@
 #include "luxury/luxury_ui_settings.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/painter.h"
-#include "styles/style_widgets.h"
 #include "styles/style_settings.h"
+#include "styles/style_widgets.h"
 
 #include <algorithm>
 

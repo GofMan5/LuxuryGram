@@ -6,6 +6,13 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include "base/basic_types.h"
+#include "data/data_msg_id.h"
+#include "rpl/producer.h"
+#include "ui/text/text_entity.h"
+
+class PeerData;
+
 QString IDString(not_null<PeerData*> peer);
 QString IDString(MsgId topicRootId);
 

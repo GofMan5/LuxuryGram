@@ -7,17 +7,18 @@
 #include "luxury/ui/context_menu/menu_item_subtext.h"
 
 #include "mainwindow.h"
-#include "qguiapplication.h"
-#include "luxury/utils/telegram_helpers.h"
 #include "base/unixtime.h"
 #include "data/data_user.h"
 #include "lang/lang_keys.h"
-#include "styles/style_chat.h"
-#include "styles/style_menu_icons.h"
-#include "ui/painter.h"
+#include "luxury/utils/telegram_helpers.h"
+#include "qguiapplication.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/widgets/menu/menu_action.h"
+#include "ui/painter.h"
 #include "window/window_session_controller.h"
+
+#include "styles/style_chat.h"
+#include "styles/style_menu_icons.h"
 
 #include <utility>
 
@@ -210,7 +211,7 @@ ActionStickerPackAuthor::ActionStickerPackAuthor(not_null<Menu::Menu*> menu,
 						{
 						},
 						tr::luxury_MessageDetailsPackOwnerPC(tr::now),
-						QString(tr::luxury_MessageDetailsPackOwnerFetchingPC(tr::now))),
+						tr::luxury_MessageDetailsPackOwnerFetchingPC(tr::now)),
 	  _session(session) {
 	searchAuthor(authorId);
 }
@@ -236,7 +237,7 @@ void ActionStickerPackAuthor::searchAuthor(ID authorId) {
 			}
 
 			if (username.isEmpty() && !user) {
-				strong->_subText = QString(tr::luxury_MessageDetailsPackOwnerNotFoundPC(tr::now));
+				strong->_subText = tr::luxury_MessageDetailsPackOwnerNotFoundPC(tr::now);
 				strong->setActionTriggered(
 					[authorId, session]
 					{
@@ -273,7 +274,7 @@ void ActionStickerPackAuthor::searchAuthor(ID authorId) {
 			};
 
 			strong->setActionTriggered(callback);
-			strong->_subText = QString(title);
+			strong->_subText = title;
 			crl::on_main(
 				[weak]
 				{

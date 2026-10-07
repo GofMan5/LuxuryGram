@@ -7,9 +7,6 @@
 #include "luxury/ui/boxes/message_shot_box.h"
 
 #include "lang_auto.h"
-#include "luxury/luxury_settings.h"
-#include "luxury/ui/boxes/theme_selector_box.h"
-#include "luxury/ui/components/image_view.h"
 #include "boxes/abstract_box.h"
 #include "core/file_utilities.h"
 #include "data/data_chat.h"
@@ -17,20 +14,29 @@
 #include "data/data_todo_list.h"
 #include "data/data_user.h"
 #include "history/history.h"
-#include "history/history_item_components.h"
 #include "history/history_item.h"
+#include "history/history_item_components.h"
+#include "luxury/ui/boxes/theme_selector_box.h"
+#include "luxury/ui/components/image_view.h"
+#include "luxury/luxury_settings.h"
 #include "main/main_session.h"
 #include "settings/settings_common.h"
-#include "styles/style_luxury_styles.h"
-#include "styles/style_layers.h"
-#include "styles/style_settings.h"
-#include "ui/vertical_list.h"
 #include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
 #include "ui/wrap/vertical_layout.h"
+#include "ui/vertical_list.h"
+
+#include "styles/style_layers.h"
+#include "styles/style_luxury_styles.h"
+#include "styles/style_settings.h"
 
 #include <memory>
 #include <QGuiApplication>
+
+namespace {
+// Rough allowance, in box paddings, for the chrome around the preview image.
+constexpr auto kBoxWidthPaddingMultiplier = 4;
+} // namespace
 
 MessageShotBox::MessageShotBox(
 	QWidget *parent,
@@ -70,7 +76,7 @@ void MessageShotBox::setupContent() {
 		}
 	}
 
-	setTitle(rpl::single(tr::luxury_MessageShotTopBarText(tr::now)));
+	setTitle(tr::luxury_MessageShotTopBarText());
 
 	auto wrap = object_ptr<Ui::VerticalLayout>(this);
 	const auto content = wrap.data();
@@ -470,13 +476,14 @@ void MessageShotBox::setupContent() {
 				  }
 				  QGuiApplication::clipboard()->setImage(image);
 
-			  	  _tookShot = true;
+				  _tookShot = true;
 				  closeBox();
 			  });
 
 	updatePreview();
 
-	const auto boxWidth = imageView->getImage().width() / style::DevicePixelRatio() + (st::boxPadding.left() + st::boxPadding.right()) * 4;
+	const auto boxWidth = imageView->getImage().width() / style::DevicePixelRatio()
+		+ (st::boxPadding.left() + st::boxPadding.right()) * kBoxWidthPaddingMultiplier;
 
 	boxClosing() | rpl::on_next(
 		[=]

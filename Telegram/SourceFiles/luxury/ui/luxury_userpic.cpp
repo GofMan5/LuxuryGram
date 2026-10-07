@@ -6,12 +6,12 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/luxury_userpic.h"
 
+#include "base/algorithm.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/luxury_ui_settings.h"
 #include "media/streaming/media_streaming_common.h"
 #include "ui/image/image_prepare.h"
 #include "ui/style/style_core.h"
-#include "base/algorithm.h"
 
 #include <QRectF>
 

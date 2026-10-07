@@ -7,12 +7,13 @@
 #include "luxury/ui/luxury_logo.h"
 
 #include "tray.h"
-#include "luxury/luxury_settings.h"
 #include "core/application.h"
+#include "luxury/luxury_settings.h"
 #include "main/main_domain.h"
-#include "styles/style_luxury_styles.h"
 #include "ui/rect.h"
 #include "window/main_window.h"
+
+#include "styles/style_luxury_styles.h"
 
 #ifdef Q_OS_WIN
 #include "luxury/utils/windows_utils.h"
@@ -137,11 +138,13 @@ QImage CreateImage(const QString &name, const QSize resultImageSize, const int p
 }
 
 void loadIcons() {
+	constexpr auto kIconPad = 12;
+
 	const auto iconName = safeAppIconName();
 	if (LAST_LOADED_NAME != iconName) {
 		LAST_LOADED_NAME = iconName;
 		LAST_LOADED = CreateImage(iconName, Size(256));
-		LAST_LOADED_PAD = CreateImage(iconName, Size(256), 12);
+		LAST_LOADED_PAD = CreateImage(iconName, Size(256), kIconPad);
 	}
 }
 

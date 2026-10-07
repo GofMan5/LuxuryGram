@@ -6,10 +6,10 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/utils/luxury_profile_values.h"
 
-#include "luxury/luxury_settings.h"
-#include "luxury/utils/telegram_helpers.h"
 #include "data/data_peer.h"
 #include "lang/lang_text_entity.h"
+#include "luxury/utils/telegram_helpers.h"
+#include "luxury/luxury_settings.h"
 
 constexpr auto kMaxChannelId = -1000000000000;
 

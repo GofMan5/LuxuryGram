@@ -9,6 +9,7 @@
 #include "ui/userpic_view.h"
 
 #include <QRect>
+#include <array>
 
 namespace Media::Streaming { struct FrameRequest; }
 

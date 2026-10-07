@@ -6,24 +6,25 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/components/saved_music.h"
 
-#include "luxury/luxury_settings.h"
-#include "luxury/ui/utils/color_utils.h"
-#include "luxury/ui/utils/itunes_search.h"
-#include "luxury/ui/utils/palette.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
 #include "data/data_file_origin.h"
 #include "data/data_session.h"
 #include "info/profile/info_profile_music_button.h"
+#include "luxury/ui/utils/color_utils.h"
+#include "luxury/ui/utils/itunes_search.h"
+#include "luxury/ui/utils/palette.h"
+#include "luxury/luxury_settings.h"
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
-#include "styles/palette.h"
-#include "styles/style_info.h"
-#include "ui/painter.h"
-#include "ui/ui_utility.h"
 #include "ui/image/image.h"
 #include "ui/widgets/labels.h"
+#include "ui/painter.h"
+#include "ui/ui_utility.h"
 #include "window/themes/window_theme.h"
+
+#include "styles/palette.h"
+#include "styles/style_info.h"
 
 #include <QSvgRenderer>
 #include <QtCore/QCoreApplication>
@@ -186,14 +187,21 @@ std::optional<QRgb> ExtractColorFromCover(const QImage &cover) {
 	constexpr auto whiteColor = qRgb(255, 255, 255);
 	const auto contrast = Luxury::Ui::ColorUtils::calculateContrast(whiteColor, extractedColor);
 
+	// White-on-cover contrast above which the cover is brightened to soften glare.
+	constexpr auto kTooBright = 15.0f;
+	// White-on-cover contrast below which the cover is darkened to lift the text.
+	constexpr auto kTooDark = 10.0f;
+	// Minimum white-on-cover contrast kept before forcing a darker shade.
+	constexpr auto kMinTextContrast = 3.0f;
+
 	auto adjustedColor = extractedColor;
-	if (contrast > 15.0f) {
+	if (contrast > kTooBright) {
 		adjustedColor = AdjustHsl(extractedColor, 2.0f);
-	} else if (contrast < 10.0f) {
+	} else if (contrast < kTooDark) {
 		adjustedColor = AdjustHsl(extractedColor, 0.5f);
 	}
 
-	if (Luxury::Ui::ColorUtils::calculateContrast(whiteColor, adjustedColor) < 3.0f) {
+	if (Luxury::Ui::ColorUtils::calculateContrast(whiteColor, adjustedColor) < kMinTextContrast) {
 		adjustedColor = BlendARGB(adjustedColor, qRgb(0, 0, 0), 0.3f);
 	}
 
@@ -394,6 +402,7 @@ void LuxuryMusicButton::paintEvent(QPaintEvent *e) {
 		gradient.setColorAt(0, cover.bg);
 		gradient.setColorAt(1, QColor::fromRgb(AdjustHsl(cover.bg.rgb(), 1.5f)));
 		p.fillRect(rect(), gradient);
+		paintRipple(p, QPoint());
 	}
 
 	if (!cover.pix.isNull()) {
@@ -414,9 +423,9 @@ int LuxuryMusicButton::resizeGetHeight(int newWidth) {
 
 	const auto available = newWidth - padding.left() - padding.right() - coverSize;
 	_title->resizeToNaturalWidth(available);
-	_title->moveToLeft(st::infoMusicButtonPadding.left() + padding.left() + coverSize, top);
+	_title->moveToLeft(padding.left() + coverSize, top);
 	_performer->resizeToNaturalWidth(available);
-	_performer->moveToLeft(st::infoMusicButtonPadding.left() + padding.left() + coverSize, top + font->height + skip);
+	_performer->moveToLeft(padding.left() + coverSize, top + font->height + skip);
 
 	return padding.top() + font->height + skip + font->height + padding.bottom();
 }

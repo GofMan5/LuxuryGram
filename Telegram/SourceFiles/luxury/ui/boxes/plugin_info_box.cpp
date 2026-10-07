@@ -7,37 +7,37 @@
 #include "luxury/ui/boxes/plugin_info_box.h"
 
 #include "apiwrap.h"
+#include "chat_helpers/stickers_lottie.h"
 #include "core/file_utilities.h"
 #include "core/ui_integration.h"
+#include "data/stickers/data_stickers_set.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
 #include "data/data_file_origin.h"
 #include "data/data_session.h"
-#include "data/stickers/data_stickers_set.h"
-#include "lang/lang_keys.h"
-#include "chat_helpers/stickers_lottie.h"
 #include "history/view/media/history_view_sticker_player.h"
+#include "lang/lang_keys.h"
 #include "main/main_session.h"
-#include "styles/style_luxury_styles.h"
-#include "styles/style_boxes.h"
-#include "styles/style_chat.h"
-#include "styles/style_giveaway.h"
-#include "styles/style_layers.h"
-#include "styles/style_premium.h"
-#include "ui/painter.h"
-#include "ui/rect.h"
-#include "ui/vertical_list.h"
 #include "ui/layers/generic_box.h"
 #include "ui/text/text_utilities.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/scroll_area.h"
+#include "ui/painter.h"
+#include "ui/rect.h"
+#include "ui/vertical_list.h"
 #include "window/window_session_controller.h"
+
+#include "styles/style_boxes.h"
+#include "styles/style_chat.h"
+#include "styles/style_giveaway.h"
+#include "styles/style_layers.h"
+#include "styles/style_luxury_styles.h"
+#include "styles/style_premium.h"
 
 #include <QPainterPath>
 #include <QRegularExpression>
-
 
 namespace Ui {
 namespace {

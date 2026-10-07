@@ -1,8 +1,9 @@
 #include "luxury/ui/toasts.h"
 
 #include "lang_auto.h"
-#include "styles/style_chat.h"
 #include "ui/widgets/buttons.h"
+
+#include "styles/style_chat.h"
 
 #include <memory>
 

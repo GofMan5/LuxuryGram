@@ -71,6 +71,12 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Custom `luxury://` section links that point to a section this build does not know now show a localized "Unknown section." toast instead of the developer placeholder ":3".
 - A message shot rejected as too large now explains itself with "Sorry, the screenshot is too large." instead of reusing the passport upload error "Sorry, this file is too large.".
 - Message details now show a localized "Unknown" in the DC field when the datacenter cannot be determined, instead of the raw `DC_UNKNOWN`/`UNKNOWN` markers.
+- Refreshing the app icon now rewrites every pinned taskbar shortcut it recognizes, including pins saved under the LuxuryGram names; before, only a single legacy-named pin was ever updated.
+- The app icon picker's clickable area now matches the drawn icon; before, the hit rectangle was offset up and to the left of the visible image.
+- The app icon picker is now reachable and operable from the keyboard: Tab focuses the grid, arrow keys move between icons, Enter or Space applies the selection, and a focus rectangle marks the active cell.
+- The saved-music button now paints its press ripple with adaptive cover colors enabled, not only with the flat cover fill.
+- Saved-music track titles and performer names now sit one padding away from the cover image, matching where the cover is drawn, instead of being pushed out twice as far.
+- The message-shot box title now updates when the interface language changes instead of keeping the wording from when the box was opened.
 
 ## 1.0.19
 

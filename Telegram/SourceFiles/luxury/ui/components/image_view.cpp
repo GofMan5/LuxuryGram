@@ -6,11 +6,12 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/components/image_view.h"
 
-#include "luxury/features/message_shot/message_shot.h"
 #include "base/call_delayed.h"
-#include "styles/style_luxury_styles.h"
-#include "styles/style_chat.h"
+#include "luxury/features/message_shot/message_shot.h"
 #include "ui/painter.h"
+
+#include "styles/style_chat.h"
+#include "styles/style_luxury_styles.h"
 
 namespace {
 
@@ -25,7 +26,7 @@ ImageView::ImageView(QWidget *parent)
 
 void ImageView::setImage(const QImage &image) {
 	const auto generation = ++_imageGeneration;
-	if (this->image == image) {
+	if (this->_image == image) {
 		return;
 	}
 
@@ -33,33 +34,33 @@ void ImageView::setImage(const QImage &image) {
 		if (generation != _imageGeneration) {
 			return;
 		}
-		this->prevImage = this->image;
-		this->image = image;
+		this->_prevImage = this->_image;
+		this->_image = image;
 
-		if (!this->prevImage.isNull()
+		if (!this->_prevImage.isNull()
 			&& !image.isNull()
-			&& this->prevImage.size() == image.size()
+			&& this->_prevImage.size() == image.size()
 			&& (qint64(image.width()) * image.height()) <= kMaxDiffPixels) {
-			computeDiffImages(this->prevImage, image);
+			computeDiffImages(this->_prevImage, image);
 		} else {
-			this->baseImage = QImage();
-			this->prevDiffImage = QImage();
-			this->newDiffImage = QImage();
+			this->_baseImage = QImage();
+			this->_prevDiffImage = QImage();
+			this->_newDiffImage = QImage();
 		}
 
 		const auto size = image.size() / style::DevicePixelRatio();
 		setMinimumSize(size.grownBy(st::imageViewInnerPadding));
 
-		if (this->animation.animating()) {
-			this->animation.stop();
+		if (this->_animation.animating()) {
+			this->_animation.stop();
 		}
 
-		if (this->prevImage.isNull()) {
+		if (this->_prevImage.isNull()) {
 			update();
 			return;
 		}
 
-		this->animation.start(
+		this->_animation.start(
 			[=]
 			{
 				update();
@@ -70,7 +71,7 @@ void ImageView::setImage(const QImage &image) {
 			anim::easeInCubic);
 	};
 
-	if (this->image.isNull()) {
+	if (this->_image.isNull()) {
 		set();
 		return;
 	}
@@ -105,13 +106,13 @@ void ImageView::computeDiffImages(const QImage &prev, const QImage &curr) {
 		}
 	}
 
-	this->baseImage = base;
-	this->prevDiffImage = prevDiff;
-	this->newDiffImage = newDiff;
+	this->_baseImage = base;
+	this->_prevDiffImage = prevDiff;
+	this->_newDiffImage = newDiff;
 }
 
 QImage ImageView::getImage() const {
-	return image;
+	return _image;
 }
 
 void ImageView::paintEvent(QPaintEvent *e) {
@@ -124,62 +125,59 @@ void ImageView::paintEvent(QPaintEvent *e) {
 
 	p.fillPath(path, brush);
 
-	if (!baseImage.isNull()) {
+	if (!_baseImage.isNull()) {
 		const auto realRect = rect().marginsRemoved(st::imageViewInnerPadding);
 
 		const auto resizedRect = QRect(
-			(realRect.width() - image.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
-			(realRect.height() - image.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
-			image.width() / style::DevicePixelRatio(),
-			image.height() / style::DevicePixelRatio());
+			(realRect.width() - _image.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
+			(realRect.height() - _image.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
+			_image.width() / style::DevicePixelRatio(),
+			_image.height() / style::DevicePixelRatio());
 
-		p.drawImage(resizedRect, baseImage);
+		p.drawImage(resizedRect, _baseImage);
 
-		const auto t = animation.value(1.0);
+		const auto t = _animation.value(1.0);
 
 		if (t < 1.0) {
 			p.setOpacity(1.0 - t);
-			p.drawImage(resizedRect, prevDiffImage);
+			p.drawImage(resizedRect, _prevDiffImage);
 			p.setOpacity(1.0);
 		}
 
 		if (t > 0.0) {
 			p.setOpacity(t);
-			p.drawImage(resizedRect, newDiffImage);
+			p.drawImage(resizedRect, _newDiffImage);
 			p.setOpacity(1.0);
 		}
 	} else {
-		if (!prevImage.isNull()) {
+		if (!_prevImage.isNull()) {
 			const auto realRect = rect().marginsRemoved(st::imageViewInnerPadding);
 
 			const auto resizedRect = QRect(
-				(realRect.width() - prevImage.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
-				(realRect.height() - prevImage.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
-				prevImage.width() / style::DevicePixelRatio(),
-				prevImage.height() / style::DevicePixelRatio());
+				(realRect.width() - _prevImage.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
+				(realRect.height() - _prevImage.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
+				_prevImage.width() / style::DevicePixelRatio(),
+				_prevImage.height() / style::DevicePixelRatio());
 
-			const auto opacity = 1.0 - animation.value(1.0);
+			const auto opacity = 1.0 - _animation.value(1.0);
 			p.setOpacity(opacity);
-			p.drawImage(resizedRect, prevImage);
+			p.drawImage(resizedRect, _prevImage);
 			p.setOpacity(1.0);
 		}
 
-		if (!image.isNull()) {
+		if (!_image.isNull()) {
 			const auto realRect = rect().marginsRemoved(st::imageViewInnerPadding);
 
 			const auto resizedRect = QRect(
-				(realRect.width() - image.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
-				(realRect.height() - image.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
-				image.width() / style::DevicePixelRatio(),
-				image.height() / style::DevicePixelRatio());
+				(realRect.width() - _image.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
+				(realRect.height() - _image.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
+				_image.width() / style::DevicePixelRatio(),
+				_image.height() / style::DevicePixelRatio());
 
-			const auto opacity = animation.value(1.0);
+			const auto opacity = _animation.value(1.0);
 			p.setOpacity(opacity);
-			p.drawImage(resizedRect, image);
+			p.drawImage(resizedRect, _image);
 			p.setOpacity(1.0);
 		}
 	}
-}
-
-void ImageView::mousePressEvent(QMouseEvent *e) {
 }

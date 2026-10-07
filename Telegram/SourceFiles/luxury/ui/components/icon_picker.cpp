@@ -6,10 +6,15 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/components/icon_picker.h"
 
-#include "luxury/luxury_settings.h"
+#include "lang_auto.h"
 #include "luxury/ui/luxury_logo.h"
-#include "styles/style_luxury_styles.h"
+#include "luxury/luxury_settings.h"
 #include "ui/painter.h"
+
+#include "styles/style_luxury_styles.h"
+
+#include <QStyle>
+#include <QStyleOption>
 
 namespace {
 
@@ -35,6 +40,8 @@ const auto rows = static_cast<int>(icons.size()) / IconPicker::kColumns
 
 IconPicker::IconPicker(QWidget *parent)
 	: RpWidget(parent) {
+	setFocusPolicy(Qt::StrongFocus);
+	setAccessibleName(tr::luxury_AppIconPickerAccessible(tr::now));
 	widthValue() | rpl::on_next([=](int w) {
 		const auto cell = w / kColumns;
 		const auto iconSize = st::iconPickerIconSize;
@@ -107,14 +114,50 @@ void IconPicker::paintEvent(QPaintEvent *e) {
 			const auto y = row * cell;
 
 			drawIcon(p, icon, x, y, opacity);
+
+			if (hasFocus() && idx == _focusedIndex) {
+				auto option = QStyleOptionFocusRect();
+				option.rect = QRect(
+					x + st::iconPickerSelectedPadding,
+					y + st::iconPickerSelectedPadding,
+					st::iconPickerIconSize + st::iconPickerSelectedPadding * 2,
+					st::iconPickerIconSize + st::iconPickerSelectedPadding * 2
+				);
+				option.state |= QStyle::State_KeyboardFocusChange;
+				style()->drawPrimitive(QStyle::PE_FrameFocusRect, &option, &p, this);
+			}
 		}
 	}
 }
 
-void IconPicker::mousePressEvent(QMouseEvent *e) {
-	const auto &settings = LuxurySettings::getInstance();
-	auto changed = false;
+bool IconPicker::applyIcon(int index) {
+	const auto &iconName = icons[index];
+	if (iconName.isEmpty()) {
+		return false;
+	}
 
+	const auto &settings = LuxurySettings::getInstance();
+	if (settings.appIcon() == iconName) {
+		return false;
+	}
+
+	_wasSelected = settings.appIcon();
+	_animation.start(
+		[=]
+		{
+			update();
+		},
+		0.0,
+		1.0,
+		200,
+		anim::easeOutCubic
+	);
+
+	LuxurySettings::getInstance().setAppIcon(iconName);
+	return true;
+}
+
+void IconPicker::mousePressEvent(QMouseEvent *e) {
 	const auto cell = cellWidth();
 	const auto iconSize = st::iconPickerIconSize;
 
@@ -123,40 +166,52 @@ void IconPicker::mousePressEvent(QMouseEvent *e) {
 		for (int i = 0; i < columns; i++) {
 			auto const idx = i + row * kColumns;
 
-			const auto x = i * cell + (cell - iconSize) / 2;
-			const auto y = row * cell;
+			const auto x = i * cell + (cell - iconSize) / 2 + st::iconPickerImagePadding;
+			const auto y = row * cell + st::iconPickerImagePadding;
 
 			if (e->pos().x() >= x && e->pos().x() <= x + iconSize
 				&& e->pos().y() >= y && e->pos().y() <= y + iconSize) {
-				const auto &iconName = icons[idx];
-				if (iconName.isEmpty()) {
-					break;
-				}
+				_focusedIndex = idx;
+				if (applyIcon(idx)) {
+					LuxuryAssets::applyAppIcon();
 
-				if (settings.appIcon() != iconName) {
-					_wasSelected = settings.appIcon();
-					_animation.start(
-						[=]
-						{
-							update();
-						},
-						0.0,
-						1.0,
-						200,
-						anim::easeOutCubic
-					);
-
-					LuxurySettings::getInstance().setAppIcon(iconName);
-					changed = true;
-					break;
+					repaint();
 				}
+				return;
 			}
 		}
 	}
+}
 
-	if (changed) {
-		LuxuryAssets::applyAppIcon();
+void IconPicker::keyPressEvent(QKeyEvent *e) {
+	const auto count = static_cast<int>(icons.size());
+	auto index = _focusedIndex;
+	switch (e->key()) {
+	case Qt::Key_Left:
+		index = (index + count - 1) % count;
+		break;
+	case Qt::Key_Right:
+		index = (index + 1) % count;
+		break;
+	case Qt::Key_Up:
+		index = (index + count - kColumns) % count;
+		break;
+	case Qt::Key_Down:
+		index = (index + kColumns) % count;
+		break;
+	case Qt::Key_Enter:
+	case Qt::Key_Return:
+	case Qt::Key_Space:
+		if (applyIcon(_focusedIndex)) {
+			LuxuryAssets::applyAppIcon();
 
-		repaint();
+			repaint();
+		}
+		return;
+	default:
+		RpWidget::keyPressEvent(e);
+		return;
 	}
+	_focusedIndex = index;
+	update();
 }

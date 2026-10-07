@@ -6,9 +6,12 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include "base/basic_types.h"
+#include "data/data_msg_id.h"
 #include "luxury/data/entities.h"
 
 class History;
+class HistoryItem;
 
 namespace HistoryView {
 class ElementDelegate;

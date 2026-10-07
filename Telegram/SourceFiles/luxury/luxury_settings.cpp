@@ -1695,6 +1695,7 @@ namespace LuxuryRussian {
 // check_ru_mirror.py verifies the two stay in sync.
 const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_AppIconHeader", "Иконка приложения" },
+	{ "luxury_AppIconPickerAccessible", "Выбор иконки приложения. Перемещайтесь стрелками и нажимайте Enter, чтобы применить." },
 	{ "luxury_AvatarCorners", "Углы аватаров" },
 	{ "luxury_AvatarCornersCircle", "Круглые" },
 	{ "luxury_AvatarCornersSquare", "Квадратные" },

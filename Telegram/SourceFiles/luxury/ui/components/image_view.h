@@ -6,8 +6,8 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
-#include "ui/rp_widget.h"
 #include "ui/effects/animations.h"
+#include "ui/rp_widget.h"
 
 class ImageView : public Ui::RpWidget
 {
@@ -19,18 +19,17 @@ public:
 
 protected:
 	void paintEvent(QPaintEvent *e) override;
-	void mousePressEvent(QMouseEvent *e) override;
 
 	void computeDiffImages(const QImage &prev, const QImage &curr);
 
 private:
-	QImage image;
-	QImage prevImage;
-	QImage baseImage;
-	QImage prevDiffImage;
-	QImage newDiffImage;
+	QImage _image;
+	QImage _prevImage;
+	QImage _baseImage;
+	QImage _prevDiffImage;
+	QImage _newDiffImage;
 
-	Ui::Animations::Simple animation;
+	Ui::Animations::Simple _animation;
 	int _imageGeneration = 0;
 
 };
