@@ -465,10 +465,24 @@ void InnerWidget::checkPreloadMore() {
 }
 
 void InnerWidget::updateEmptyText() {
-	// auto text = !_searchQuery.isEmpty()
-	// 	? tr::lng_admin_log_no_results_title(tr::now)
-	// 	: tr::lng_search_messages_none(tr::now);
-	_emptyText.setMarkedText(st::defaultTextStyle, Ui::Text::Semibold(tr::lng_search_messages_none(tr::now)));
+	// Two-line empty state on the admin-log pattern: a bold title plus a
+	// description. The standing state of a storage view explains how to
+	// start filling it; only an actual search may claim "no results".
+	auto text = tr::semibold(!_searchQuery.isEmpty()
+		? tr::lng_search_messages_none(tr::now)
+		: _itemId
+		? tr::luxury_EditsHistoryEmptyTitle(tr::now)
+		: tr::luxury_DeletedHistoryEmptyTitle(tr::now));
+	auto description = !_searchQuery.isEmpty()
+		? tr::luxury_DeletedHistoryNoResultsText(
+			tr::now,
+			lt_query,
+			_searchQuery)
+		: _itemId
+		? tr::luxury_EditsHistoryEmptyText(tr::now)
+		: tr::luxury_DeletedHistoryEmptyText(tr::now);
+	text.text.append(u"\n\n"_q + description);
+	_emptyText.setMarkedText(st::defaultTextStyle, text);
 }
 
 QString InnerWidget::tooltipText() const {

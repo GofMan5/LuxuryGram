@@ -71,7 +71,10 @@ ChoiceButton::ChoiceButton(QWidget *parent, QString text)
 void ChoiceButton::setSelected(bool selected) {
 	if (_selected != selected) {
 		_selected = selected;
-		accessibilityStateChanged({ .checked = true, .selected = true });
+		accessibilityStateChanged({
+			.checked = _selected,
+			.selected = _selected,
+		});
 		update();
 	}
 }
@@ -356,6 +359,10 @@ EmptyBlock::EmptyBlock(QWidget *parent, const QString &text)
 
 void EmptyBlock::setText(const QString &text) {
 	_text.setText(st::boxTextStyle, text, kPlainTextOptions);
+	// The painted text is the block's whole content: mirror it into the
+	// accessible name so screen readers announce empty and loading
+	// states instead of silence.
+	setAccessibleName(text);
 	resizeToWidth(width());
 	update();
 }

@@ -771,6 +771,9 @@ void SessionCard::tick() {
 		return;
 	}
 	_durationText = duration;
+	// The painted duration is part of the accessible name; keep the
+	// two in step as the running session ages.
+	updateAccessibleName();
 	computeLayout(width());
 	update();
 }

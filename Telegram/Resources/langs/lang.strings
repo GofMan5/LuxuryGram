@@ -8826,6 +8826,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_WatchChatsHeader" = "Watched chats";
 "luxury_WatchChatsEmpty" = "No watched chats yet. Open the LuxuryGram menu in a chat and choose \"Watch Media\".";
 "luxury_WatchChatsRecordingNote" = "Media from these chats is saved even while the app is locked with your local passcode.";
+"luxury_DeletedHistoryEmptyTitle" = "No saved messages yet";
+"luxury_DeletedHistoryEmptyText" = "Messages that get deleted in this chat will appear here once \"Save Deleted Messages\" is on.";
+"luxury_DeletedHistoryNoResultsText" = "No saved messages in this chat contain \"{query}\".";
+"luxury_EditsHistoryEmptyTitle" = "No saved versions yet";
+"luxury_EditsHistoryEmptyText" = "Edits to this message will appear here once \"Save Edits History\" is on.";
 "luxury_DisableAds" = "Disable Ads";
 "luxury_DisableStories" = "Disable Stories";
 "luxury_DisableOpenLinkWarning" = "Disable Open Link Warning";

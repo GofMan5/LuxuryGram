@@ -58,6 +58,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Hovering a watcher event shows the exact date and time in one consistent format: the tooltip no longer disagrees with the compact label when the label drops the date part.
 - The Watcher list no longer relayouts every second while active-session durations tick; only a real geometry change triggers a relayout, so scrolling and selection stay stable.
 - Sort and tab segments whose labels do not fit now show the full text on hover instead of cutting it off with no way to read it.
+- The saved deleted-messages and edit-history lists no longer greet an empty list with a search-style "No results" line: the standing empty state explains that messages will appear once "Save Deleted Messages" (or "Save Edits History") is on, and searching now reports that nothing matched the query it searched for.
+- Watcher empty and loading text blocks are now exposed to screen readers instead of being painted text that assistive technology cannot see.
+- The Watcher sort and tab toggle rows now report their real on/off state to screen readers instead of always announcing themselves as checked.
+- The Watcher session card's accessible name keeps updating while the session duration ticks, so screen readers hear the current duration instead of the value from when the card was created.
 
 ## 1.0.19
 
