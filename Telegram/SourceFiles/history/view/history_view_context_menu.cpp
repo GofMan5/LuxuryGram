@@ -1316,6 +1316,17 @@ bool AddClearSelectionAction(
 	return true;
 }
 
+void AddSelectBetweenAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<ListWidget*> list) {
+	if (!list->canSelectItemsBetween()) {
+		return;
+	}
+	menu->addAction(tr::luxury_ContextSelectBetween(tr::now), [=] {
+		list->selectItemsBetween();
+	}, &st::menuIconSelect);
+}
+
 bool AddSelectMessageAction(
 		not_null<Ui::PopupMenu*> menu,
 		const ContextMenuRequest &request,
@@ -1356,6 +1367,9 @@ void AddSelectionAction(
 		not_null<Ui::PopupMenu*> menu,
 		const ContextMenuRequest &request,
 		not_null<ListWidget*> list) {
+	if (request.overSelection && !request.selectedItems.empty()) {
+		AddSelectBetweenAction(menu, list);
+	}
 	if (!AddClearSelectionAction(menu, request, list)) {
 		AddSelectMessageAction(menu, request, list);
 	}

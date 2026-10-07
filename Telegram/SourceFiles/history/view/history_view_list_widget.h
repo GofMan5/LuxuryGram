@@ -380,6 +380,8 @@ public:
 	void selectItemsUpTo(not_null<HistoryItem*> item);
 	[[nodiscard]] bool canSelectItemsUpTo(
 		not_null<HistoryItem*> item) const;
+	void selectItemsBetween();
+	[[nodiscard]] bool canSelectItemsBetween() const;
 	void showEditCaptionUploadLayer(not_null<HistoryItem*> item);
 	void setChooseReportReason(Data::ReportInput reportInput);
 	void clearChooseReportReason();
@@ -833,6 +835,8 @@ private:
 	void extendAccessibilitySelection(int oldIndex, int newIndex);
 	[[nodiscard]] std::vector<not_null<HistoryItem*>> selectionUpTo(
 		not_null<HistoryItem*> item) const;
+	[[nodiscard]] std::vector<not_null<HistoryItem*>> selectionBetween()
+		const;
 	[[nodiscard]] std::vector<not_null<HistoryItem*>> collectBetween(
 		not_null<HistoryItem*> from,
 		not_null<HistoryItem*> to,

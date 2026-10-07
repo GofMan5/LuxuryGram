@@ -3250,6 +3250,35 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				mapFromGlobal(_mousePosition),
 				Element::Moused())
 		) != HistoryView::PointState::GroupPart);
+	const auto collectBetween = [=](
+			not_null<HistoryItem*> from,
+			not_null<HistoryItem*> to,
+			int max) -> HistoryItemsList {
+		auto current = from;
+		auto collected = HistoryItemsList();
+		collected.reserve(max);
+		collected.push_back(from);
+		collected.push_back(to);
+		const auto toId = to->fullId();
+		while (true) {
+			if (collected.size() > max) {
+				return {};
+			}
+			const auto view = viewByItem(current);
+			const auto nextView = nextItem(view);
+			if (!nextView) {
+				return {};
+			}
+			const auto nextItem = nextView->data();
+			if (nextItem->fullId() == toId) {
+				return collected;
+			}
+			if (nextItem->canBeSelected()) {
+				collected.push_back(nextItem);
+			}
+			current = nextItem;
+		}
+	};
 	const auto addSelectMessageAction = [&](not_null<HistoryItem*> item) {
 		if (item->canBeSelected() && !hasSelectRestriction()) {
 			const auto itemId = item->fullId();
@@ -3271,36 +3300,6 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					}
 				}
 			}, &st::menuIconSelect);
-			const auto collectBetween = [=](
-					not_null<HistoryItem*> from,
-					not_null<HistoryItem*> to,
-					int max) -> HistoryItemsList {
-				auto current = from;
-				auto collected = HistoryItemsList();
-				collected.reserve(max);
-				collected.push_back(from);
-				collected.push_back(to);
-				const auto toId = to->fullId();
-				while (true) {
-					if (collected.size() > max) {
-						return {};
-					}
-					const auto view = viewByItem(current);
-					const auto nextView = nextItem(view);
-					if (!nextView) {
-						return {};
-					}
-					const auto nextItem = nextView->data();
-					if (nextItem->fullId() == toId) {
-						return collected;
-					}
-					if (nextItem->canBeSelected()) {
-						collected.push_back(nextItem);
-					}
-					current = nextItem;
-				}
-			};
-
 			[&] { // Select up to this message.
 				if (selectedState.count <= 0) {
 					return;
@@ -3517,6 +3516,54 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					selectedItemsForExport(),
 					this);
 			}
+			[&] { // Select messages between two selected.
+				if (selectedState.count < 2 || hasSelectRestriction()) {
+					return;
+				}
+				auto fromItem = (HistoryItem*)(nullptr);
+				auto toItem = (HistoryItem*)(nullptr);
+				for (const auto &item : _selected) {
+					const auto id = item->fullId().msg.bare;
+					if (!fromItem
+						|| id < fromItem->fullId().msg.bare) {
+						fromItem = item;
+					}
+					if (!toItem
+						|| id > toItem->fullId().msg.bare) {
+						toItem = item;
+					}
+				}
+				if (!fromItem || !toItem || fromItem == toItem) {
+					return;
+				}
+				const auto left = LuxuryMaxSelectedItems()
+					- selectedState.count
+					+ 2;
+				if (collectBetween(fromItem, toItem, left).size() <= 2) {
+					return;
+				}
+				const auto startId = fromItem->fullId();
+				const auto endId = toItem->fullId();
+				const auto callback = [=] {
+					const auto from = session->data().message(startId);
+					const auto to = session->data().message(endId);
+					if (from && to) {
+						for (const auto &i : collectBetween(from, to, left)) {
+							changeSelectionAsGroup(
+								&_selected,
+								i,
+								SelectAction::Select);
+						}
+						_accessibilitySelectionAnchor = nullptr;
+						update();
+						_widget->updateTopBarSelection();
+					}
+				};
+				_menu->addAction(
+					tr::luxury_ContextSelectBetween(tr::now),
+					callback,
+					&st::menuIconSelect);
+			}();
 			_menu->addAction(tr::lng_context_clear_selection(tr::now), [=] {
 				_widget->clearSelected();
 			}, &st::menuIconSelect);

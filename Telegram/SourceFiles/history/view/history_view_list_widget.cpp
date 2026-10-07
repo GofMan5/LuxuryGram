@@ -2083,6 +2083,41 @@ void ListWidget::selectItemsUpTo(not_null<HistoryItem*> item) {
 	update();
 }
 
+std::vector<not_null<HistoryItem*>> ListWidget::selectionBetween() const {
+	if (_selected.size() < 2) {
+		return {};
+	}
+	const auto front = session().data().message(_selected.front().first);
+	const auto back = session().data().message(_selected.back().first);
+	if (!front || !back) {
+		return {};
+	}
+	const auto left = LuxuryMaxSelectedItems()
+		- int(_selected.size())
+		+ 2;
+	return collectBetween(front, back, left);
+}
+
+bool ListWidget::canSelectItemsBetween() const {
+	return !hasSelectRestriction() && selectionBetween().size() > 2;
+}
+
+void ListWidget::selectItemsBetween() {
+	if (hasSelectRestriction()) {
+		return;
+	}
+	const auto list = selectionBetween();
+	if (list.size() <= 2) {
+		return;
+	}
+	clearTextSelection();
+	for (const auto &i : list) {
+		changeSelectionAsGroup(_selected, i, SelectAction::Select);
+	}
+	pushSelectedItems();
+	update();
+}
+
 void ListWidget::showEditCaptionUploadLayer(not_null<HistoryItem*> item) {
 	if (const auto view = viewForItem(item)) {
 		if (item->isUploading()) {

@@ -9178,3 +9178,4 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ConfirmationVoice" = "Do you want to send this voice message?";
 "luxury_ConfirmationRound" = "Do you want to send this round video?";
 "luxury_UpdateLuxuryGram" = "Update LuxuryGram";
+"luxury_ContextSelectBetween" = "Select messages between";
