@@ -78,6 +78,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - The saved-music button now paints its press ripple with adaptive cover colors enabled, not only with the flat cover fill.
 - Saved-music track titles and performer names now sit one padding away from the cover image, matching where the cover is drawn, instead of being pushed out twice as far.
 - The message-shot box title now updates when the interface language changes instead of keeping the wording from when the box was opened.
+- A voice (or round video) recording left paused in the record bar when the automatic app lock triggers is no longer silently lost after unlocking: the paused draft survives the unlock and can be resumed, while explicitly discarding it (trash, cancel) still works at once.
 
 ## 1.0.19
 

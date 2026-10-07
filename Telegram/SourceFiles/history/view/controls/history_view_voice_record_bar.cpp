@@ -75,6 +75,7 @@ constexpr auto kLockArcAngle = 15.;
 
 constexpr auto kHideWaveformBgOffset = 50;
 constexpr auto kTrimPlaybackEpsilon = 0.0001;
+constexpr auto kPostUnlockDraftGuardMs = crl::time(1000);
 
 enum class FilterType {
 	Continue,
@@ -2469,6 +2470,13 @@ void VoiceRecordBar::init() {
 		hideAnimated();
 	});
 
+	Core::App().passcodeLockChanges(
+	) | rpl::on_next([=](bool locked) {
+		if (!locked) {
+			_draftGuardUntil = crl::now() + kPostUnlockDraftGuardMs;
+		}
+	}, lifetime());
+
 	initLockGeometry();
 	initLevelGeometry();
 }
@@ -2855,6 +2863,15 @@ void VoiceRecordBar::finish() {
 }
 
 void VoiceRecordBar::hideFast() {
+	// A section re-show right after the passcode is unlocked used to
+	// silently discard a paused voice draft: keep it for a short time.
+	if (isListenState() && (crl::now() < _draftGuardUntil)) {
+		return;
+	}
+	hideFastUnchecked();
+}
+
+void VoiceRecordBar::hideFastUnchecked() {
 	hide();
 	_lock->hide();
 	_level->hide();
@@ -3218,7 +3235,7 @@ void VoiceRecordBar::hideAnimated() {
 	}
 	_lockShowing = false;
 	visibilityAnimate(false, [=] {
-		hideFast();
+		hideFastUnchecked();
 		stopRecording(StopType::Cancel);
 	});
 }
@@ -3387,7 +3404,7 @@ void VoiceRecordBar::showDiscardBox(
 	}
 	auto sure = [=, callback = std::move(callback)](Fn<void()> &&close) {
 		if (animated == anim::type::instant) {
-			hideFast();
+			hideFastUnchecked();
 			stopRecording(StopType::Cancel);
 		} else {
 			hideAnimated();
