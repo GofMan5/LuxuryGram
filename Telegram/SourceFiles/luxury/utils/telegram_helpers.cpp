@@ -169,7 +169,7 @@ void MarkAsReadChatList(not_null<Dialogs::MainList*> list, bool sendReadReceipt)
 			mark.push_back(history);
 		}
 	}
-	for (const auto history : mark) MarkAsReadThread(history, sendReadReceipt);
+	for (const auto &history : mark) MarkAsReadThread(history, sendReadReceipt);
 }
 
 void readMentions(base::weak_ptr<Data::Thread> weakThread) {

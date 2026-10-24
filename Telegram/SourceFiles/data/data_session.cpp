@@ -407,7 +407,7 @@ Session::Session(not_null<Main::Session*> session)
 		for (const auto &[item, views] : _views) {
 			items.push_back(views.front()->data());
 		}
-		for (const auto item : items) {
+		for (const auto &item : items) {
 			if (_views.contains(item)) {
 				notifyItemDataChange(item);
 				requestItemResize(item);
