@@ -288,7 +288,7 @@ void Histories::readInboxTill(
 	Core::App().notifications().clearIncomingFromHistory(history);
 
 	if (!sendReadReceipt.value_or(LuxurySettings::ghost(&session()).sendReadMessages())) {
-		for (const auto item : history->clientSideMessages()) readClientSideMessage(item);
+		for (const auto &item : history->clientSideMessages()) readClientSideMessage(item);
 		history->setUnreadMark(false);
 		const auto stillUnread = history->countStillUnreadLocal(tillId);
 		history->setInboxReadTill(tillId);
