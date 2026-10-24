@@ -9,6 +9,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "data/data_peer.h"
 #include "data/data_saved_music.h"
+#include "data/data_session.h"
+#include "main/main_session.h"
 #include "data/data_saved_sublist.h"
 #include "history/history_item.h"
 #include "info/info_controller.h"
@@ -97,6 +99,9 @@ void SetupSavedMusic(
 				musicButton->ease = anim::easeOutCubic;
 				musicButton->setDuration(250);
 				musicButton->entity()->setAcceptBoth(true);
+				const auto itemId = item->fullId();
+				const auto session = base::make_weak(&peer->session());
+				const auto button = base::make_weak(musicButton);
 				musicButton->entity()->clicks() | rpl::filter([=](Qt::MouseButton mouseButton)
 				{
 					return mouseButton == Qt::RightButton;
@@ -105,7 +110,7 @@ void SetupSavedMusic(
 											  const auto &settings = LuxurySettings::getInstance();
 
 											  const auto contextMenu = new Ui::PopupMenu(
-												  nullptr,
+												  musicButton->entity(),
 												  st::popupMenuWithIcons);
 											  contextMenu->setAttribute(Qt::WA_DeleteOnClose);
 
@@ -117,7 +122,11 @@ void SetupSavedMusic(
 												  {
 													  LuxurySettings::getInstance().setAdaptiveCoverColor(!LuxurySettings::getInstance().adaptiveCoverColor());
 
-													  const auto mediaRefreshed = item ? item->media() : nullptr;
+													  const auto owner = session.get();
+													  const auto strong = button.get();
+													  const auto current = owner ? owner->data().message(itemId) : nullptr;
+													  if (!strong || !current) return;
+													  const auto mediaRefreshed = current->media();
 													  const auto documentRefreshed = mediaRefreshed
 														  ? mediaRefreshed->document()
 														  : nullptr;
@@ -125,8 +134,8 @@ void SetupSavedMusic(
 													  if (!documentRefreshed) {
 														  return;
 													  }
-													  musicButton->entity()->updateData(
-														  DocumentMusicButtonData(documentRefreshed, item));
+													  strong->entity()->updateData(
+														  DocumentMusicButtonData(documentRefreshed, current));
 												  },
 												  &st::menuIconPalette);
 

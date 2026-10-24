@@ -387,6 +387,18 @@ void LogNativeMessageRejected(
 	return ::Platform::IsWayland();
 }
 
+[[nodiscard]] QSize PanelInnerSize() {
+	const auto &settings = LuxurySettings::getInstance();
+	auto size = QSize(st::botWebViewPanelSize);
+	if (settings.increaseWebviewHeight()) {
+		size.setHeight(st::botWebViewPanelHeightIncreased);
+	}
+	if (settings.increaseWebviewWidth()) {
+		size.setWidth(st::botWebViewPanelWidthIncreased);
+	}
+	return size;
+}
+
 [[nodiscard]] QString MiniAppWindowTitle(const QString &title) {
 	return tr::lng_credits_box_history_entry_miniapp(tr::now)
 		+ u": "_q
@@ -1253,16 +1265,7 @@ Panel::Panel(Args &&args)
 	}
 	_widget->setWindowFlag(Qt::WindowStaysOnTopHint, false);
 
-	const auto &settings = LuxurySettings::getInstance();
-	auto size = QSize(st::botWebViewPanelSize);
-	if (settings.increaseWebviewHeight()) {
-		size.setHeight(st::botWebViewPanelHeightIncreased);
-	}
-	if (settings.increaseWebviewWidth()) {
-		size.setWidth(st::botWebViewPanelWidthIncreased);
-	}
-
-	_widget->setInnerSize(size, true);
+	_widget->setInnerSize(PanelInnerSize(), true);
 
 	const auto panel = _widget.get();
 	rpl::duplicate(
@@ -2186,7 +2189,7 @@ bool Panel::createWebview(const Webview::ThemeParams &params) {
 				? LinuxShell::Unscaled(st::botWebViewShellShadowPadding)
 				: QMargins(),
 			.initialSize = _externalShell
-				? LinuxShell::WindowSize(st::botWebViewPanelSize)
+				? LinuxShell::WindowSize(PanelInnerSize())
 				: QSize(),
 			.shellMessageToken = _externalShell
 				? _externalShellToken

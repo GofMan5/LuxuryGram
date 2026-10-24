@@ -7,7 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "media/stories/media_stories_header.h"
 
+#include "base/event_filter.h"
 #include "base/unixtime.h"
+#include "base/weak_qptr.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "core/ui_integration.h"
 #include "data/stickers/data_custom_emoji.h"
@@ -28,11 +30,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/fade_wrap.h"
 #include "ui/painter.h"
 #include "ui/rp_widget.h"
+#include "ui/screen_reader_mode.h"
 #include "ui/ui_utility.h"
+#include "crl/crl_on_main.h"
 #include "styles/style_calls.h"
 #include "styles/style_media_view.h"
 
 #include <QtGui/QGuiApplication>
+#include <QtGui/QKeyEvent>
+#include <QtWidgets/QApplication>
 
 namespace Media::Stories {
 namespace {
@@ -44,6 +50,34 @@ constexpr auto kControlOpacityOver = 1.;
 constexpr auto kControlOpacityDisabled = 0.45;
 constexpr auto kVolumeHideTimeoutShort = crl::time(20);
 constexpr auto kVolumeHideTimeoutLong = crl::time(200);
+
+class VolumeToggle final : public Ui::AbstractButton {
+public:
+	VolumeToggle(QWidget *parent, bool silent)
+	: AbstractButton(parent) {
+		setPointerCursor(!silent);
+		setAccessibleName(silent
+			? tr::lng_stories_about_silent(tr::now)
+			: tr::lng_ringtones_box_volume(tr::now));
+	}
+
+	void paintFocus(QPainter &p) const {
+		paintKeyboardFocus(
+			p,
+			rect(),
+			height() / 2,
+			st::mediaviewPlaybackIconFgOver->c);
+	}
+
+};
+
+void MakeVolumeControlFocusable(not_null<Ui::RpWidget*> widget) {
+	widget->setFocusPolicy(Qt::TabFocus);
+	Ui::ScreenReaderModeActiveValue() | rpl::on_next([=] {
+		// FocusManager removes ordinary tab stops when screen-reader mode ends.
+		crl::on_main(widget, [=] { widget->setFocusPolicy(Qt::TabFocus); });
+	}, widget->lifetime());
+}
 
 struct Timestamp {
 	QString text;
@@ -480,8 +514,8 @@ void Header::show(HeaderData data, rpl::producer<int> videoStreamViewers) {
 		}
 	} else {
 		_playPause = nullptr;
-		_volumeToggle = nullptr;
 		_volume = nullptr;
+		_volumeToggle = nullptr;
 	}
 
 	rpl::combine(
@@ -639,87 +673,205 @@ void Header::createVolumeToggle() {
 		bool over = false;
 		bool silent = false;
 		bool dropdownOver = false;
+		uint64 activation = 0;
+		bool activationPending = false;
+		bool dismissed = false;
 	};
-	_volumeToggle = std::make_unique<Ui::RpWidget>(_widget.get());
+	_volume = nullptr;
+	const auto silent = _data->silent;
+	auto toggle = std::make_unique<VolumeToggle>(_widget.get(), silent);
+	const auto opener = toggle.get();
+	_volumeToggle = std::move(toggle);
 	_volume = std::make_unique<Ui::FadeWrap<Ui::RpWidget>>(
 		_widget->parentWidget(),
 		object_ptr<Ui::RpWidget>(_widget->parentWidget()));
+	const auto volume = _volume.get();
 
-	auto &lifetime = _volume->lifetime();
+	auto &lifetime = volume->lifetime();
 	const auto state = lifetime.make_state<VolumeState>();
-	state->silent = _data->silent;
+	state->silent = silent;
+	const auto ownsFocus = [=] {
+		const auto focused = QApplication::focusWidget();
+		return focused && (focused == opener
+			|| focused == volume
+			|| volume->isAncestorOf(focused));
+	};
 	state->hideTimer.setCallback([=] {
-		_volume->toggle(false, anim::type::normal);
+		if (!state->over && !state->dropdownOver && !ownsFocus()) {
+			volume->toggle(false, anim::type::normal);
+		}
 	});
+	const auto refreshTooltip = [=] {
+		if (state->silent) {
+			const auto show = state->over || opener->hasFocus();
+			toggleTooltip(Tooltip::SilentVideo, show);
+		}
+	};
+	const auto focusConnection = QObject::connect(
+		qApp,
+		&QApplication::focusChanged,
+		volume,
+		[=] {
+			if (ownsFocus()) {
+				state->hideTimer.cancel();
+			}
+			crl::on_main(volume, [=] {
+				const auto weak = base::make_weak(volume);
+				refreshTooltip();
+				if (weak
+					&& !ownsFocus()
+					&& !state->over
+					&& !state->dropdownOver) {
+					state->hideTimer.callOnce(kVolumeHideTimeoutShort);
+				}
+			});
+		});
+	lifetime.add([=] { QObject::disconnect(focusConnection); });
+	MakeVolumeControlFocusable(opener);
+	opener->setClickedCallback([=] {
+		const auto activation = ++state->activation;
+		state->activationPending = true;
+		crl::on_main(volume, [=] {
+			if (activation != state->activation) {
+				return;
+			}
+			state->activationPending = false;
+			if (state->silent) {
+				refreshTooltip();
+				return;
+			} else if (!opener->isVisible()
+				|| !opener->isEnabled()
+				|| opener->isDisabled()) {
+				return;
+			}
+			state->hideTimer.cancel();
+			state->dismissed = false;
+			const auto weak = base::make_weak(volume);
+			volume->toggle(true, anim::type::instant);
+			if (!weak) {
+				return;
+			}
+			for (const auto child : volume->entity()->children()) {
+				if (const auto slider = dynamic_cast<Ui::MediaSlider*>(child)) {
+					slider->setFocus(Qt::OtherFocusReason);
+					break;
+				}
+			}
+		});
+	});
+	const auto filter = [=](not_null<QEvent*> e) {
+		if (e->type() == QEvent::FocusIn) {
+			state->hideTimer.cancel();
+			crl::on_main(volume, refreshTooltip);
+		} else if (e->type() == QEvent::KeyPress
+			|| e->type() == QEvent::KeyRelease) {
+			const auto key = static_cast<QKeyEvent*>(e.get());
+			if (key->isAutoRepeat()
+				&& (key->key() == Qt::Key_Space
+					|| key->key() == Qt::Key_Enter
+					|| key->key() == Qt::Key_Return
+					|| key->key() == Qt::Key_Escape)) {
+				key->accept();
+				return base::EventFilterResult::Cancel;
+			} else if (e->type() == QEvent::KeyPress
+				&& key->key() == Qt::Key_Escape
+				&& (volume->toggled()
+					|| state->activationPending
+					|| opener->isDown())) {
+				key->accept();
+				++state->activation;
+				state->activationPending = false;
+				state->hideTimer.cancel();
+				state->dismissed = true;
+				const auto weak = base::make_weak(volume);
+				opener->clearState();
+				if (weak) {
+					volume->toggle(false, anim::type::instant);
+					if (weak) {
+						opener->setFocus(Qt::OtherFocusReason);
+					}
+				}
+				return base::EventFilterResult::Cancel;
+			}
+		}
+		return base::EventFilterResult::Continue;
+	};
+	base::install_event_filter(opener, filter, lifetime);
+	base::install_event_filter(volume->entity(), filter, lifetime);
 
-	_volumeToggle->events(
-	) | rpl::on_next([=](not_null<QEvent*> e) {
+	opener->events() | rpl::on_next([=](not_null<QEvent*> e) {
 		const auto type = e->type();
 		if (type == QEvent::Enter || type == QEvent::Leave) {
-			const auto over = (e->type() == QEvent::Enter);
+			const auto over = (type == QEvent::Enter);
+			if (!over) {
+				state->dismissed = false;
+			}
 			if (state->over != over) {
 				state->over = over;
 				if (state->silent) {
-					toggleTooltip(Tooltip::SilentVideo, over);
-				} else if (over) {
+					refreshTooltip();
+				} else if (over && !state->dismissed) {
 					state->hideTimer.cancel();
-					_volume->toggle(true, anim::type::normal);
-				} else if (!state->dropdownOver) {
+					volume->toggle(true, anim::type::normal);
+				} else if (!state->dropdownOver && !ownsFocus()) {
 					state->hideTimer.callOnce(kVolumeHideTimeoutShort);
 				}
 			}
 		}
 	}, lifetime);
 
-	_volumeToggle->paintRequest() | rpl::on_next([=] {
-		auto p = QPainter(_volumeToggle.get());
+	opener->paintRequest() | rpl::on_next([=] {
+		auto p = QPainter(opener);
 		p.setOpacity(state->silent
 			? kControlOpacityDisabled
 			: kControlOpacity);
 		_volumeIcon.current()->paint(
 			p,
 			st::storiesVolumeButton.iconPosition,
-			_volumeToggle->width());
+			opener->width());
+		opener->paintFocus(p);
 	}, lifetime);
 	updateVolumeIcon();
 
-	_volume->toggle(false, anim::type::instant);
-	_volume->events(
-	) | rpl::on_next([=](not_null<QEvent*> e) {
+	volume->toggle(false, anim::type::instant);
+	volume->events() | rpl::on_next([=](not_null<QEvent*> e) {
 		const auto type = e->type();
 		if (type == QEvent::Enter || type == QEvent::Leave) {
-			const auto over = (e->type() == QEvent::Enter);
+			const auto over = (type == QEvent::Enter);
 			if (state->dropdownOver != over) {
 				state->dropdownOver = over;
-				if (over) {
+				if (over && !state->dismissed) {
 					state->hideTimer.cancel();
-					_volume->toggle(true, anim::type::normal);
-				} else if (!state->over) {
+					volume->toggle(true, anim::type::normal);
+				} else if (!state->over && !ownsFocus()) {
 					state->hideTimer.callOnce(kVolumeHideTimeoutLong);
 				}
 			}
 		}
 	}, lifetime);
-	rebuildVolumeControls(_volume->entity(), false);
+	if (!silent) {
+		rebuildVolumeControls(volume->entity(), false);
+	}
 
 	rpl::combine(
 		_widget->positionValue(),
-		_volumeToggle->positionValue(),
+		opener->positionValue(),
 		rpl::mappers::_1 + rpl::mappers::_2
 	) | rpl::on_next([=](QPoint position) {
-		_volume->move(position);
-	}, _volume->lifetime());
+		volume->move(position);
+	}, lifetime);
 
-	_volumeToggle->resize(
+	opener->resize(
 		st::storiesVolumeButton.width,
 		st::storiesVolumeButton.height);
-	_volumeToggle->show();
-	if (!state->silent) {
-		_volumeToggle->setCursor(style::cur_pointer);
-	}
+	opener->show();
 }
 
 void Header::toggleTooltip(Tooltip type, bool show) {
+	if ((!show && type != Tooltip::None && type != _tooltipType)
+		|| (show && _tooltip && type == _tooltipType)) {
+		return;
+	}
 	const auto guard = gsl::finally([&] {
 		_tooltipShown = (_tooltip != nullptr);
 	});
@@ -856,12 +1008,28 @@ void Header::rebuildVolumeControls(
 		st::storiesVolumeButton);
 	_volumeIcon.value(
 	) | rpl::on_next([=](const style::icon *icon) {
-		button->setIconOverride(icon, icon);
+		const auto weak = base::make_weak(button);
+		button->setAccessibleName(icon == &st::mediaviewVolumeIcon0Over
+			? tr::lng_call_unmute_audio(tr::now)
+			: tr::lng_call_mute_audio(tr::now));
+		if (weak) {
+			button->setIconOverride(icon, icon);
+		}
 	}, button->lifetime());
 
 	const auto slider = Ui::CreateChild<Ui::MediaSlider>(
 		dropdown.get(),
 		st::storiesVolumeSlider);
+	MakeVolumeControlFocusable(button);
+	MakeVolumeControlFocusable(slider);
+	slider->setAccessibleName(tr::lng_ringtones_box_volume(tr::now));
+	const auto updateFocus = [=](not_null<QEvent*> e) {
+		if (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut) {
+			dropdown->update();
+		}
+	};
+	button->events() | rpl::on_next(updateFocus, button->lifetime());
+	slider->events() | rpl::on_next(updateFocus, slider->lifetime());
 	slider->setMoveByWheel(true);
 	slider->setAlwaysDisplayMarker(true);
 	using Direction = Ui::MediaSlider::Direction;
@@ -913,6 +1081,16 @@ void Header::rebuildVolumeControls(
 		p.setPen(Qt::NoPen);
 		p.setBrush(st::mediaviewSaveMsgBg);
 		p.drawRoundedRect(dropdown->rect(), radius, radius);
+		if (slider->hasFocus()) {
+			p.setPen(QPen(st::mediaviewPlaybackIconFgOver->c, st::lineWidth));
+			p.setBrush(Qt::NoBrush);
+			const auto area = slider->geometry().marginsRemoved(QMargins(
+				st::buttonFocusInset,
+				st::buttonFocusInset,
+				st::buttonFocusInset,
+				st::buttonFocusInset));
+			p.drawRoundedRect(area, area.width() / 2., area.width() / 2.);
+		}
 	}, button->lifetime());
 }
 

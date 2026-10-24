@@ -33,6 +33,7 @@ struct SendOptions {
 	int64 stakeNanoTon = 0;
 	int starsApproved = 0;
 	bool silent = false;
+	bool ignoreGhostSilent = false;
 	bool handleSupportSwitch = false;
 	bool invertCaption = false;
 	bool hideViaBot = false;
@@ -40,6 +41,9 @@ struct SendOptions {
 	bool welcomeTemplate = false;
 	crl::time ttlSeconds = 0;
 	SuggestOptions suggest;
+	// Local-only send-job ownership; not serialized or sent over the wire.
+	std::shared_ptr<Fn<bool(FullMsgId)>> localIdAllocated;
+	std::shared_ptr<Fn<void(FullMsgId, bool)>> localSendFinished;
 
 	friend inline bool operator==(
 		const SendOptions &,

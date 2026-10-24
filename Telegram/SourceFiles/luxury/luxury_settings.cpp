@@ -15,6 +15,7 @@
 #include "luxury/luxury_worker.h"
 #include "luxury/features/streamer_mode/streamer_mode.h"
 #include "luxury/ui/luxury_logo.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "base/debug_log.h"
 #include "base/timer.h"
 #include "core/application.h"
@@ -86,8 +87,13 @@ QString getSettingsPath() {
 }
 
 constexpr auto kSaveDelay = crl::time(500);
+bool SettingsWriteBlocked = false;
 
 void writeSettings() {
+	if (SettingsWriteBlocked) {
+		LOG(("LuxuryGramSettings: not overwriting an unrecovered settings file"));
+		return;
+	}
 	json p = LuxurySettings::getInstance();
 	const auto data = QByteArray::fromStdString(p.dump(4));
 	QSaveFile file(getSettingsPath());
@@ -105,27 +111,53 @@ void writeSettings() {
 // keys instead, so a broken value costs that one setting.
 //
 // The expected shape comes from a default-constructed instance, so it cannot go
-// stale as settings are added.
-void dropMismatchedKeys(json &p, const json &shape, const QString &path) {
+// stale as settings are added. Dynamic account IDs share the ghost shape, not
+// the empty default account map. Report repairs so load() preserves the original.
+bool dropMismatchedKeys(json &p, const json &shape, const QString &path) {
 	if (!p.is_object() || !shape.is_object()) {
-		return;
+		return false;
 	}
+	const auto ghostAccounts = (path == u"ghostModeSettings."_q);
+	const auto accountShape = ghostAccounts
+		? json(GhostModeAccountSettings())
+		: json();
+	auto modified = false;
 	for (auto i = p.begin(); i != p.end();) {
 		const auto known = shape.find(i.key());
 		const auto name = path + QString::fromStdString(i.key());
-		if (known == shape.end()) {
+		if (ghostAccounts) {
+			const auto &key = i.key();
+			auto id = uint64(0);
+			const auto [end, error] = std::from_chars(
+				key.data(),
+				key.data() + key.size(),
+				id);
+			if (error != std::errc()
+				|| end != key.data() + key.size()
+				|| !i->is_object()) {
+				LOG(("LuxuryGramSettings: dropping %1, invalid ghost account").arg(name));
+				i = p.erase(i);
+				modified = true;
+			} else {
+				modified |= dropMismatchedKeys(i.value(), accountShape, name + '.');
+				++i;
+			}
+		} else if (known == shape.end()) {
 			++i; // A key from a newer or older build; from_json ignores it.
 		} else if (known->is_object() && i->is_object()) {
-			dropMismatchedKeys(i.value(), *known, name + '.');
+			modified |= dropMismatchedKeys(i.value(), *known, name + '.');
 			++i;
 		} else if (known->type() == i->type()
-			|| (known->is_number() && i->is_number())) {
+			|| (known->is_number() && i->is_number())
+			|| (i.key() == "sendWithoutSound" && i->is_boolean())) {
 			++i;
 		} else {
 			LOG(("LuxuryGramSettings: dropping %1, unexpected type").arg(name));
 			i = p.erase(i);
+			modified = true;
 		}
 	}
+	return modified;
 }
 
 // Single-shot, so it has already cancelled itself by the time it fires. A
@@ -173,39 +205,44 @@ GhostModeAccountSettings::GhostModeAccountSettings() {
 			bool online, bool onlineLocked,
 			bool upload, bool uploadLocked,
 			bool offline, bool offlineLocked) {
-		_ghostModeActive = (readMsgLocked || !readMsg)
+		_ghostModeActive.force_assign((readMsgLocked || !readMsg)
 			&& (readStoriesLocked || !readStories)
 			&& (onlineLocked || !online)
 			&& (uploadLocked || !upload)
-			&& (offlineLocked || offline);
+			&& (offlineLocked || offline));
 	}, _lifetime);
 }
 
 void GhostModeAccountSettings::setSendReadMessages(bool val) {
+	++_privacyRevisions[0];
 	if (_sendReadMessages.current() == val) return;
 	_sendReadMessages = val;
 	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendReadStories(bool val) {
+	++_privacyRevisions[1];
 	if (_sendReadStories.current() == val) return;
 	_sendReadStories = val;
 	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendOnlinePackets(bool val) {
+	++_privacyRevisions[2];
 	if (_sendOnlinePackets.current() == val) return;
 	_sendOnlinePackets = val;
 	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendUploadProgress(bool val) {
+	++_privacyRevisions[3];
 	if (_sendUploadProgress.current() == val) return;
 	_sendUploadProgress = val;
 	LuxurySettings::save();
 }
 
 void GhostModeAccountSettings::setSendOfflinePacketAfterOnline(bool val) {
+	++_privacyRevisions[4];
 	if (_sendOfflinePacketAfterOnline.current() == val) return;
 	_sendOfflinePacketAfterOnline = val;
 	LuxurySettings::save();
@@ -254,6 +291,11 @@ void GhostModeAccountSettings::setSuggestGhostModeBeforeViewingStory(bool val) {
 }
 
 void GhostModeAccountSettings::setGhostModeEnabled(bool val) {
+	const auto unlocked = std::array{ !sendReadMessagesLocked(), !sendReadStoriesLocked(),
+		!sendOnlinePacketsLocked(), !sendUploadProgressLocked(), !sendOfflinePacketAfterOnlineLocked() };
+	for (auto i = 0; i != int(unlocked.size()); ++i) {
+		if (unlocked[i]) ++_privacyRevisions[i];
+	}
 	if (!_sendReadMessagesLocked.current()) _sendReadMessages = !val;
 	if (!_sendReadStoriesLocked.current()) _sendReadStories = !val;
 	if (!_sendOnlinePacketsLocked.current()) _sendOnlinePackets = !val;
@@ -413,7 +455,8 @@ void MessageShotSettings::setEmbeddedTheme(int type, uint32 accentColor) {
 }
 
 void MessageShotSettings::setCloudTheme(uint64 accountId, uint64 id, uint64 accessHash, uint64 documentId, const QString &title) {
-	const auto validatedTitle = title.left(kMaxThemeTitleLength);
+	const auto validatedTitle = title.left(
+		safeCutPosition(title, kMaxThemeTitleLength));
 	if (_embeddedThemeType.current() == -1
 		&& _embeddedThemeAccentColor.current() == 0
 		&& _cloudThemeAccountId.current() == accountId
@@ -492,20 +535,35 @@ LuxurySettings &LuxurySettings::getInstance() {
 }
 
 void LuxurySettings::load() {
+	const auto startupGuard = gsl::finally([] {
+		if (!cGhost()) return;
+		auto &settings = getInstance();
+		auto &global = ghostProfile(0);
+		applyStartupGhost(global);
+		for (auto &[id, profile] : settings._ghostAccounts) {
+			applyStartupGhost(*profile);
+		}
+	});
 	QFile file(getSettingsPath());
 	if (!file.open(QIODevice::ReadOnly)) {
+		SettingsWriteBlocked = QFile::exists(getSettingsPath());
 		return;
 	}
-	// Every path below that gives up leaves the instance holding defaults, and
-	// the next save() -- which fires on nearly any interaction -- would write
-	// those over this file. Move it aside first: a file this could not read is
-	// still the user's to recover.
+	SettingsWriteBlocked = false;
+	// A repaired or unreadable file is still the user's to recover. Never
+	// replace an earlier recovery copy, or overwrite this file if rescue fails.
 	const auto rescue = [&] {
 		file.close();
-		const auto broken = getSettingsPath() + u".broken"_q;
-		QFile::remove(broken);
-		if (QFile::rename(getSettingsPath(), broken)) {
-			LOG(("LuxuryGramSettings: moved the unreadable file to %1"
+		const auto brokenBase = getSettingsPath() + u".broken"_q;
+		auto broken = brokenBase;
+		for (auto suffix = 1; QFile::exists(broken); ++suffix) {
+			broken = brokenBase + '.' + QString::number(suffix);
+		}
+		SettingsWriteBlocked = !QFile::rename(getSettingsPath(), broken);
+		if (SettingsWriteBlocked) {
+			LOG(("LuxuryGramSettings: failed to preserve the settings file, saving disabled"));
+		} else {
+			LOG(("LuxuryGramSettings: moved the damaged file to %1"
 				).arg(broken));
 		}
 	};
@@ -523,29 +581,29 @@ void LuxurySettings::load() {
 
 	auto &settings = getInstance();
 
-	auto loadFailed = false;
+	auto damaged = false;
 	try {
 		auto p = json::parse(data.constData(), data.constData() + data.size());
+		if (!p.is_object()) {
+			LOG(("LuxuryGramSettings: settings root is not an object"));
+			rescue();
+			return;
+		}
 
 		if (!p.contains("ghostModeSettings")) {
-			p["ghostModeSettings"] = nlohmann::json::object({
-				{"0", {
-					{"sendReadMessages", p.value("sendReadMessages", true)},
-					{"sendReadStories", p.value("sendReadStories", true)},
-					{"sendOnlinePackets", p.value("sendOnlinePackets", true)},
-					{"sendUploadProgress", p.value("sendUploadProgress", true)},
-					{"sendOfflinePacketAfterOnline", p.value("sendOfflinePacketAfterOnline", false)},
-					{"markReadAfterAction", p.value("markReadAfterAction", true)},
-					{"useScheduledMessages", p.value("useScheduledMessages", false)},
-					{"sendWithoutSound", p.value("sendWithoutSound", false)}
-				}}
-			});
+			auto account = json(GhostModeAccountSettings());
+			for (auto &[key, value] : account.items()) {
+				if (p.contains(key)) {
+					value = p[key];
+				}
+			}
+			p["ghostModeSettings"] = json::object({ {"0", std::move(account)} });
 			p["useGlobalGhostMode"] = true;
 
 			LOG(("LuxuryGramSettings: migrated ghost mode settings to per-account format"));
 		}
 
-		dropMismatchedKeys(p, json(LuxurySettings()), QString());
+		damaged = dropMismatchedKeys(p, json(LuxurySettings()), QString());
 
 		auto loaded = LuxurySettings();
 		from_json(p, loaded);
@@ -553,22 +611,13 @@ void LuxurySettings::load() {
 	} catch (const std::exception &ex) {
 		LOG(("LuxuryGramSettings: failed to read settings file: %1"
 			).arg(ex.what()));
-		loadFailed = true;
+		damaged = true;
 	} catch (...) {
 		LOG(("LuxuryGramSettings: failed to read settings file"));
-		loadFailed = true;
+		damaged = true;
 	}
-	if (loadFailed) {
+	if (damaged) {
 		rescue();
-	}
-
-	if (cGhost()) {
-		auto &ghost = LuxurySettings::ghost();
-		ghost._sendReadMessages = false;
-		ghost._sendReadStories = false;
-		ghost._sendOnlinePackets = false;
-		ghost._sendUploadProgress = false;
-		ghost._sendOfflinePacketAfterOnline = true;
 	}
 
 	settings.validate();
@@ -637,6 +686,7 @@ bool LuxurySettings::reset() {
 	}
 	FiltersCacheController::dropResults();
 	repaintApp();
+	Core::App().tray().updateMenuText();
 
 	save();
 	return needsRestart;
@@ -647,9 +697,21 @@ GhostModeAccountSettings &LuxurySettings::ghost(not_null<Main::Session*> session
 }
 
 GhostModeAccountSettings &LuxurySettings::ghost(uint64 userId) {
-	auto &settings = getInstance();
-	auto overriddenId = settings.getOverriddenGhostUserId(userId);
+	return ghostProfile(getInstance().getOverriddenGhostUserId(userId));
+}
 
+void LuxurySettings::applyStartupGhost(GhostModeAccountSettings &profile) {
+	if (!cGhost() || profile._startupGhostApplied) return;
+	profile._startupGhostApplied = true;
+	profile._sendReadMessages = false;
+	profile._sendReadStories = false;
+	profile._sendOnlinePackets = false;
+	profile._sendUploadProgress = false;
+	profile._sendOfflinePacketAfterOnline = true;
+}
+
+GhostModeAccountSettings &LuxurySettings::ghostProfile(uint64 overriddenId) {
+	auto &settings = getInstance();
 	auto it = settings._ghostAccounts.find(overriddenId);
 	if (it == settings._ghostAccounts.end()) {
 		if (settings._ghostAccounts.size() >= kMaxGhostAccounts) {
@@ -662,12 +724,14 @@ GhostModeAccountSettings &LuxurySettings::ghost(uint64 userId) {
 			// a rejected account shares this dummy and its writes are
 			// never saved by design.
 			static GhostModeAccountSettings dummy;
+			applyStartupGhost(dummy);
 			return dummy;
 		}
 		auto account = std::make_unique<GhostModeAccountSettings>();
 		it = settings._ghostAccounts.emplace(overriddenId, std::move(account)).first;
 	}
 
+	applyStartupGhost(*it->second);
 	return *it->second;
 }
 
@@ -741,7 +805,8 @@ void LuxurySettings::validate() {
 	};
 	auto validateText = [&](auto &var, int maxLength) {
 		if (var.current().size() > maxLength) {
-			var = var.current().left(maxLength);
+			var = var.current().left(
+				safeCutPosition(var.current(), maxLength));
 			modified = true;
 		}
 	};
@@ -884,6 +949,8 @@ void LuxurySettings::setDisableCustomBackgrounds(bool val) {
 void LuxurySettings::setHidePremiumStatuses(bool val) {
 	if (_hidePremiumStatuses.current() == val) return;
 	_hidePremiumStatuses = val;
+	// Badges and name statuses read this flag only while painting.
+	repaintApp();
 	save();
 }
 
@@ -1020,14 +1087,14 @@ void LuxurySettings::setReplaceBottomInfoWithIcons(bool val) {
 }
 
 void LuxurySettings::setDeletedMark(const QString &val) {
-	const auto validated = val.left(kMaxMarkLength);
+	const auto validated = val.left(safeCutPosition(val, kMaxMarkLength));
 	if (_deletedMark.current() == validated) return;
 	_deletedMark = validated;
 	save();
 }
 
 void LuxurySettings::setEditedMark(const QString &val) {
-	const auto validated = val.left(kMaxMarkLength);
+	const auto validated = val.left(safeCutPosition(val, kMaxMarkLength));
 	if (_editedMark.current() == validated) return;
 	_editedMark = validated;
 	save();
@@ -1250,7 +1317,8 @@ void LuxurySettings::setShowStreamerToggleInTray(bool val) {
 }
 
 void LuxurySettings::setMonoFont(const QString &val) {
-	const auto validated = val.left(kMaxFontFamilyLength);
+	const auto validated = val.left(
+		safeCutPosition(val, kMaxFontFamilyLength));
 	if (_monoFont.current() == validated) return;
 	_monoFont = validated;
 	save();
@@ -1687,13 +1755,32 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 
 namespace LuxuryRussian {
 
-// Russian overlay for the settings-visible luxury_* keys. Server
-// language packs never carry our keys, so without this RU users
-// read English here. Applied through applyValue() on every language
-// switch (see Lang::Instance::reset), EN originals restored first.
+// Russian overlay for every luxury_* key. Server language packs
+// never carry our keys, so without this RU users read English here. Applied through applyValue() on every language
+// switch (see Lang::Instance::reset), EN originals restored first, and
+// again after the cached pack is loaded at startup (fillFromSerialized).
 // Every key listed here must keep an entry in lang.strings;
 // check_ru_mirror.py verifies the two stay in sync.
 const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
+	{ "luxury_PremiumPreviewPrevious", "Предыдущая функция" },
+	{ "luxury_PremiumPreviewNext", "Следующая функция" },
+	{ "luxury_SearchPreviousResult", "Предыдущий результат" },
+	{ "luxury_SearchNextResult", "Следующий результат" },
+	{ "luxury_SearchResultsList", "Результаты поиска" },
+	{ "luxury_BackgroundPreviewLight", "Предпросмотр в светлом режиме" },
+	{ "luxury_BackgroundPreviewDark", "Предпросмотр в тёмном режиме" },
+	{ "luxury_ShowAccounts", "Показать аккаунты" },
+	{ "luxury_HideAccounts", "Скрыть аккаунты" },
+	{ "luxury_ResetScaleAndRestart", "Вернуть масштаб интерфейса к 100% и перезапустить LuxuryGram" },
+	{ "luxury_MessageSelfDestructingOpened", "Самоуничтожающееся медиа открыто" },
+	{ "luxury_PassportRowReady", "Готово" },
+	{ "luxury_PassportRowMissing", "Не хватает данных" },
+	{ "luxury_PassportRowError", "Требуется внимание" },
+	{ "luxury_PlayerEnterFullscreen", "Открыть на весь экран" },
+	{ "luxury_PlayerExitFullscreen", "Выйти из полноэкранного режима" },
+	{ "luxury_PlayerPictureInPicture", "Открыть картинку в картинке" },
+	{ "luxury_PlayerPosition", "Позиция воспроизведения" },
+	{ "luxury_PlayerSettings", "Скорость и качество воспроизведения" },
 	{ "luxury_AppIconHeader", "Иконка приложения" },
 	{ "luxury_AppIconPickerAccessible", "Выбор иконки приложения. Перемещайтесь стрелками и нажимайте Enter, чтобы применить." },
 	{ "luxury_AvatarCorners", "Углы аватаров" },
@@ -1720,11 +1807,11 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_DeletedMarkText", "Пометка удалённых" },
 	{ "luxury_DisableAds", "Отключить рекламу" },
 	{ "luxury_DisableChatSelectionLimit", "Без лимита выделения" },
-	{ "luxury_DisableCustomBackgrounds", "Отключить свои фоны" },
-	{ "luxury_DisableGreetingSticker", "Отключить приветственный стикер" },
-	{ "luxury_DisableNotificationsDelay", "Отключить задержку уведомлений" },
-	{ "luxury_DisableOpenLinkWarning", "Отключить предупреждение о ссылках" },
-	{ "luxury_DisableSimilarChannels", "Отключить похожие каналы" },
+	{ "luxury_DisableCustomBackgrounds", "Скрыть обои отдельных чатов" },
+	{ "luxury_DisableGreetingSticker", "Без приветственного стикера" },
+	{ "luxury_DisableNotificationsDelay", "Без задержки уведомлений" },
+	{ "luxury_DisableOpenLinkWarning", "Не предупреждать о ссылках" },
+	{ "luxury_DisableSimilarChannels", "Без похожих каналов" },
 	{ "luxury_DisableStories", "Отключить истории" },
 	{ "luxury_DontReadMessages", "Не читать сообщения" },
 	{ "luxury_DontReadStories", "Не читать истории" },
@@ -1751,7 +1838,9 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_GIFConfirmation", "GIF" },
 	{ "luxury_GhostEssentialsHeader", "Главное для госта" },
 	{ "luxury_GhostModeGlobalSettings", "Общие настройки" },
-	{ "luxury_GhostModeOptionShiftDescription", "Клик с SHIFT по опции запретит её смену при переключении гост-режима." },
+	{ "luxury_GhostModeOptionShiftDescription", "Shift-клик или Shift+Пробел блокирует и разблокирует опцию. Заблокированные опции не меняются при переключении гост-режима." },
+	{ "luxury_GhostModeOptionLocked", "Заблокировано. Для разблокировки используйте Shift-клик, Shift+Пробел или действие доступности «Переключить блокировку опции»." },
+	{ "luxury_GhostModeToggleOptionLock", "Переключить блокировку опции" },
 	{ "luxury_GhostModeSwitchedToGlobalSettings", "Единые настройки для всех аккаунтов." },
 	{ "luxury_GhostModeSwitchedToIndividualSettings", "Отдельные настройки для каждого аккаунта." },
 	{ "luxury_GhostModeToggle", "Гост-режим" },
@@ -1764,8 +1853,8 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_HideReactionsInChannels", "Каналы" },
 	{ "luxury_HideReactionsInGroups", "Группы" },
 	{ "luxury_HideReactionsInPrivateChats", "Личные чаты" },
-	{ "luxury_HideShareButton", "Скрыть боковую кнопку «Поделиться»" },
-	{ "luxury_HideSimilarChannelsTab", "Скрыть вкладку похожих каналов" },
+	{ "luxury_HideShareButton", "Скрыть «Поделиться» сбоку" },
+	{ "luxury_HideSimilarChannelsTab", "Скрыть вкладку «Похожие»" },
 	{ "luxury_ImproveLinkPreviews", "Улучшить превью ссылок" },
 	{ "luxury_LReadMessages", "Читать локально" },
 	{ "luxury_LinksContributing", "Контрибьютинг" },
@@ -1781,10 +1870,11 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_MessageBubbleRadius", "Радиус облачков сообщений" },
 	{ "luxury_MessageDetailsPC", "Детали" },
 	{ "luxury_MessageDetailsIdPC", "ID" },
+	{ "luxury_MessageDetailsPackOwnerFetchingPC", "поиск…" },
 	{ "luxury_MessageFieldElementAttach", "Вложения" },
 	{ "luxury_MessageFieldElementCommands", "Команды" },
 	{ "luxury_MessageFieldElementEmoji", "Эмодзи" },
-	{ "luxury_MessageFieldElementTTL", "TTL" },
+	{ "luxury_MessageFieldElementTTL", "Автоудаление" },
 	{ "luxury_MessageFieldElementVoice", "Голос" },
 	{ "luxury_MessageFieldElementsHeader", "Элементы поля ввода" },
 	{ "luxury_MessageFieldPopupsHeader", "Всплывашки поля ввода" },
@@ -1798,6 +1888,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_RegexFilterQuickAdd", "Добавить фильтр" },
 	{ "luxury_RegexFilters", "Фильтры сообщений" },
 	{ "luxury_RegexFiltersAdd", "Добавить фильтр" },
+	{ "luxury_RegexFiltersAddError", "Синтаксическая ошибка" },
 	{ "luxury_RegexFiltersAmount#one", "{count} фильтр" },
 	{ "luxury_RegexFiltersAmount#few", "{count} фильтра" },
 	{ "luxury_RegexFiltersAmount#many", "{count} фильтров" },
@@ -1817,7 +1908,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_RegexFiltersShared", "Общие фильтры" },
 	{ "luxury_RegisterURLScheme", "Зарегистрировать URL-схему" },
 	{ "luxury_RemoveMessageTail", "Убирать хвост сообщений" },
-	{ "luxury_RepeatMessage", "Повторять сообщение" },
+	{ "luxury_RepeatMessage", "Повторить сообщение" },
 	{ "luxury_ReplaceMarksWithIcons", "Заменить на иконки" },
 	{ "luxury_ResetSettings", "Сбросить настройки" },
 	{ "luxury_ResetSettingsConfirmation", "Сбросить **все** настройки LuxuryGram к значениям по умолчанию?" },
@@ -1829,15 +1920,15 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_SaveDeletedMessagesEvenWhenLockedDescription", "Удалённые сообщения сохраняются, даже пока приложение заперто локальным паролем; выключите, чтобы приостановить сохранение при блокировке." },
 	{ "luxury_SaveMessagesHistory", "Сохранять историю правок" },
 	{ "luxury_SemiTransparentDeletedMessages", "Полупрозрачные удалённые" },
-	{ "luxury_SendOfflinePacketAfterOnline", "Уходить в офлайн автоматически" },
+	{ "luxury_SendOfflinePacketAfterOnline", "Сразу уходить в офлайн" },
 	{ "luxury_SendWithoutSoundByDefault", "Отправлять без звука" },
 	{ "luxury_SendWithoutSoundByDefaultAlways", "Всегда" },
 	{ "luxury_SendWithoutSoundByDefaultDescription", "Исходящие сообщения по умолчанию отправляются без звука." },
 	{ "luxury_SendWithoutSoundByDefaultInGhostMode", "В гост-режиме" },
 	{ "luxury_SendWithoutSoundByDefaultNever", "Никогда" },
 	{ "luxury_SettingsBiggerWindow", "Большее окно" },
-	{ "luxury_SettingsContextMenuDescription", "Расширенные пункты показываются при правом клике с зажатыми CTRL или SHIFT." },
-	{ "luxury_SettingsContextMenuItemExtended", "Расширенное меню" },
+	{ "luxury_SettingsContextMenuDescription", "Пункты «С Ctrl/Shift» появляются, если при правом клике по сообщению зажать Ctrl или Shift." },
+	{ "luxury_SettingsContextMenuItemExtended", "С Ctrl/Shift" },
 	{ "luxury_SettingsContextMenuItemHidden", "Скрыто" },
 	{ "luxury_SettingsContextMenuItemShown", "Показано" },
 	{ "luxury_SettingsContextMenuReactionsPanel", "Панель реакций" },
@@ -1852,15 +1943,18 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_SettingsShowMessageSeconds", "Показывать секунды сообщений" },
 	{ "luxury_SettingsShowMessageShot", "Снимок сообщений" },
 	{ "luxury_SettingsShowMessageShotDescription", "Позволяет делать снимок выбранных сообщений." },
+	{ "luxury_SettingsMiniAppsHeader", "Мини-приложения" },
 	{ "luxury_SettingsSpoofWebviewAsAndroid", "Притворяться Android" },
-	{ "luxury_SettingsUnlimitedRecentStickers", "Неограниченные недавние стикеры" },
-	{ "luxury_SettingsUnlimitedFavedStickers", "Неограниченные избранные стикеры" },
-	{ "luxury_SettingsFavedReorderHint", "Клик правой кнопкой по избранному стикеру — «Move to Front»; клик средней кнопкой перемещает сразу. Неограниченные избранные живут на этом устройстве: переставленные сохраняют порядок, а обрезанный сервером список следует серверу." },
+	{ "luxury_SettingsUnlimitedRecentStickers", "Недавние стикеры без лимита" },
+	{ "luxury_SettingsUnlimitedFavedStickers", "Избранные стикеры без лимита" },
+	{ "luxury_SettingsFavedReorderHint", "Клик правой кнопкой по избранному стикеру — «Переместить в начало»; клик средней кнопкой перемещает сразу. Неограниченные избранные живут на этом устройстве: переставленные сохраняют порядок, а обрезанный сервером список следует серверу." },
 	{ "luxury_SettingsWideMultiplier", "Множитель ширины сообщений" },
 	{ "luxury_SettingsWideMultiplierDescription", "Меняйте ширину сообщений для широких мониторов." },
 	{ "luxury_ShadowBanEnabled", "Сообщения от этого отправителя скрыты в ваших чатах." },
 	{ "luxury_ShadowBanDisabled", "Сообщения от этого отправителя снова видны в ваших чатах." },
-	{ "luxury_ShowOnlyAddedEmojisAndStickers", "Только добавленные эмодзи и стикеры" },
+	{ "luxury_ShadowBanListHeader", "Скрытые отправители" },
+	{ "luxury_ShadowBanListEmpty", "Скрытых отправителей пока нет. Нажмите + вверху и выберите пользователя или бота, чьи сообщения будут скрыты в ваших чатах." },
+	{ "luxury_ShowOnlyAddedEmojisAndStickers", "Только мои эмодзи и стикеры" },
 	{ "luxury_SimpleQuotesAndReplies", "Отключить цветные ответы" },
 	{ "luxury_SingleCornerRadius", "Единый радиус углов" },
 	{ "luxury_SingleCornerRadiusDescription", "У форумов будет та же форма аватаров, что у чатов." },
@@ -1868,7 +1962,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_SpyEssentialsHeader", "Главное для шпиона" },
 	{ "luxury_StickerConfirmation", "Стикеры" },
 	{ "luxury_StreamerModeToggle", "Режим стримера" },
-	{ "luxury_SuggestGhostModeBeforeViewingStory", "Предупреждение перед историей" },
+	{ "luxury_SuggestGhostModeBeforeViewingStory", "Спрашивать перед историей" },
 	{ "luxury_SuggestGhostModeBeforeViewingStoryDescription", "Показывает предупреждение перед открытием истории с предложением включить гост-режим." },
 	{ "luxury_TrackOnlineEvenWhenLocked", "Следить под паролем" },
 	{ "luxury_TrackOnlineEvenWhenLockedDescription", "История онлайна записывается, даже пока приложение заперто локальным паролем; выключите, чтобы приостановить запись при блокировке." },
@@ -1876,6 +1970,9 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_TranslationProvider", "Провайдер перевода" },
 	{ "luxury_TrayElementsHeader", "Элементы трея" },
 	{ "luxury_UnknownDC", "Неизвестно" },
+	{ "luxury_DCLocationMiami", "Майами, США" },
+	{ "luxury_DCLocationAmsterdam", "Амстердам, Нидерланды" },
+	{ "luxury_DCLocationSingapore", "Сингапур" },
 	{ "luxury_UnknownPeer", "Неизвестно (ID: {id})" },
 	{ "luxury_UnknownSection", "Неизвестный раздел." },
 	{ "luxury_UseScheduledMessages", "Откладывать сообщения" },
@@ -1928,7 +2025,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_WatcherTrackingPaused", "Запись приостановлена. Сохранённая история доступна." },
 	{ "luxury_WatcherUpdatesPaused", "Пауза, пока зажата кнопка мыши" },
 	{ "luxury_WatcherMenuHeader", "Наблюдатель" },
-	{ "luxury_WatcherOpenSettings", "Открыть настройки Luxury…" },
+	{ "luxury_WatcherOpenSettings", "Открыть настройки LuxuryGram…" },
 	{ "luxury_WatcherLockDisclosure", "История онлайна записывается, даже пока приложение заперто локальным паролем; выключите «Следить под паролем», чтобы приостановить её." },
 	{ "luxury_WatcherMediaSaveFailed#one", "Не удалось сохранить {count} медиафайл из отслеживаемого чата" },
 	{ "luxury_WatcherMediaSaveFailed#few", "Не удалось сохранить {count} медиафайла из отслеживаемого чата" },
@@ -1959,11 +2056,11 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_WatchChatDisabled", "Наблюдение остановлено. Уже сохранённые вложения остаются." },
 	{ "luxury_WatchChatLimit", "Отслеживаемых чатов уже слишком много." },
 	{ "luxury_WatchGiftSent", "Вы отправили подарок за {cost} пользователю {user}" },
-	{ "luxury_WatchGiftReceived", "{user} отправил вам подарок за {cost}" },
+	{ "luxury_WatchGiftReceived", "{user} отправил(а) вам подарок за {cost}" },
 	{ "luxury_WatchGiftReceivedAnonymous", "Неизвестный пользователь отправил вам подарок за {cost}" },
-	{ "luxury_WatchNameChanged", "Изменил имя" },
-	{ "luxury_WatchUsernameChanged", "Изменил username" },
-	{ "luxury_WatchPhotoUpdated", "Обновил фото профиля" },
+	{ "luxury_WatchNameChanged", "Изменил(а) имя" },
+	{ "luxury_WatchUsernameChanged", "Изменил(а) имя пользователя" },
+	{ "luxury_WatchPhotoUpdated", "Обновил(а) фото профиля" },
 	{ "luxury_BoxActionReset", "Сбросить" },
 	{ "luxury_CustomizeFontTitle", "Настройка шрифта" },
 	{ "luxury_NoFontsFound", "Шрифты не найдены." },
@@ -1972,6 +2069,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_FiltersImportClipboard", "Вставить из буфера обмена" },
 	{ "luxury_FiltersImportURL", "Импортировать по ссылке" },
 	{ "luxury_MessageShotAnonymous", "Анонимно" },
+	{ "luxury_MessageShotCopied", "Изображение скопировано в буфер обмена." },
 	{ "luxury_MessageShotCopy", "Скопировать" },
 	{ "luxury_MessageShotEmpty", "Нечего сохранять: снимок слишком большой, либо сообщения пропали." },
 	{ "luxury_MessageShotPreferences", "Настройки" },
@@ -1999,6 +2097,135 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_PreviewMessageText", "Тебе бы выйти на улицу и потрогать траву..." },
 	{ "luxury_PreviewAvatarRowText", "Лучше поздно, чем никогда" },
 	{ "luxury_PreviewAvatarAccessibleName", "Пример строки чата для углов аватара; открывает страницу релизов LuxuryGram." },
+	{ "luxury_WatchShowSavedMedia", "Показать сохранённый файл" },
+	{ "luxury_StickersMoveToFront", "Переместить в начало" },
+	{ "luxury_DatabaseError", "Не удалось сохранить изменения в базе данных." },
+	{ "luxury_RegexFiltersPatternTooLong", "Слишком длинный шаблон." },
+	{ "luxury_TranslateBatchFailed", "Не удалось перевести: {text}." },
+	{ "luxury_TranslateBatchOthersDone#one", "Ещё {count} сообщение переведено." },
+	{ "luxury_TranslateBatchOthersDone#few", "Ещё {count} сообщения переведены." },
+	{ "luxury_TranslateBatchOthersDone#many", "Ещё {count} сообщений переведено." },
+	{ "luxury_TranslateBatchOthersDone#other", "Ещё {count} сообщения переведено." },
+	{ "luxury_FiltersToastFailUnsupported", "Резервная копия не поддерживается или содержит слишком много записей." },
+	{ "luxury_MessageShotAnonymousName", "Пользователь {index}" },
+	{ "luxury_LuxuryForwardStatusPreparing", "Пересылка сообщений" },
+	{ "luxury_LuxuryForwardStatusLoadingMedia", "Загрузка файлов" },
+	{ "luxury_LuxuryForwardStatusForwarding", "Пересылка сообщений" },
+	{ "luxury_LuxuryForwardStatusFinished", "Готово" },
+	{ "luxury_LuxuryForwardStatusSentCount", "отправлено {count1} из {count2}" },
+	{ "luxury_LuxuryForwardStatusChunkCount", "часть {count1} из {count2}" },
+	{ "luxury_LuxuryForwardStatusSkippedCount#one", "пропущено {count}" },
+	{ "luxury_LuxuryForwardStatusSkippedCount#few", "пропущено {count}" },
+	{ "luxury_LuxuryForwardStatusSkippedCount#many", "пропущено {count}" },
+	{ "luxury_LuxuryForwardStatusSkippedCount#other", "пропущено {count}" },
+	{ "luxury_LuxuryForwardStopSure", "Остановить пересылку? Уже отправленные сообщения останутся в чате." },
+	{ "luxury_RegistrationDateUnavailable", "Не удалось узнать дату создания." },
+	{ "luxury_LastSeenAgo", "({elapsed} назад)" },
+	{ "luxury_UpdateLuxuryGram", "Обновить LuxuryGram" },
+	{ "luxury_ContextSelectBetween", "Выделить сообщения между" },
+	{ "luxury_PlayerExpand", "Открыть расширенный плеер" },
+	{ "luxury_PlayerTitle", "Сейчас играет" },
+	{ "luxury_PlayerSaveCover", "Сохранить обложку" },
+	{ "luxury_PlayerSaveCoverFailed", "Не удалось сохранить обложку." },
+	{ "luxury_SavedMusicLoadError", "Не удалось загрузить музыку" },
+	{ "luxury_SavedMusicRetry", "Попробовать снова" },
+	{ "luxury_StartupInterface", "Загрузка интерфейса…" },
+	{ "luxury_StartupWindow", "Подготовка окна…" },
+	{ "luxury_StartupAccounts", "Открытие аккаунтов…" },
+	{ "luxury_StartupShowing", "Почти готово…" },
+	{ "luxury_ClearDeletedMenuText", "Очистить удалённые" },
+	{ "luxury_ClearDeletedMessagesActionText", "Очистить" },
+	{ "luxury_ClearDeletedMessagesText", "Очистить все удалённые сообщения в этом чате?" },
+	{ "luxury_ConfirmationGIF", "Отправить этот GIF?" },
+	{ "luxury_ConfirmationRound", "Отправить это видеосообщение?" },
+	{ "luxury_ConfirmationSticker", "Отправить этот стикер?" },
+	{ "luxury_ConfirmationVoice", "Отправить это голосовое сообщение?" },
+	{ "luxury_ContextCopyCallbackData", "Копировать callback-данные" },
+	{ "luxury_ContextCopyID", "Копировать ID" },
+	{ "luxury_CreationDateChat", "**{item1}**: дата создания **{item2}**." },
+	{ "luxury_CreationDateSelfApproximately", "Ваш аккаунт создан примерно **{item}**." },
+	{ "luxury_CreationDateSelfEarlier", "Ваш аккаунт создан до **{item}**." },
+	{ "luxury_CreationDateSelfLater", "Ваш аккаунт создан после **{item}**." },
+	{ "luxury_CreationDateUserApproximately", "**{item1}**: аккаунт создан примерно **{item2}**." },
+	{ "luxury_CreationDateUserEarlier", "**{item1}**: аккаунт создан до **{item2}**." },
+	{ "luxury_CreationDateUserLater", "**{item1}**: аккаунт создан после **{item2}**." },
+	{ "luxury_JoinDateChat", "**{item1}**: вы присоединились **{item2}**." },
+	{ "luxury_DeleteOwnMessages", "Удалить свои сообщения" },
+	{ "luxury_DeleteOwnMessagesConfirmation", "Удалить все ваши сообщения в этой группе?" },
+	{ "luxury_DisableColorfulCover", "Отключить адаптивный цвет" },
+	{ "luxury_EnableColorfulCover", "Включить адаптивный цвет" },
+	{ "luxury_DisableGhostModeTray", "Выключить гост-режим" },
+	{ "luxury_DisableStreamerModeTray", "Выключить режим стримера" },
+	{ "luxury_GhostModeShortcut", "Запустить в гост-режиме" },
+	{ "luxury_ExpiringVideoMessageNote", "Это видеосообщение можно смотреть сколько угодно раз." },
+	{ "luxury_ExpiringVoiceMessageNote", "Это голосовое сообщение можно слушать сколько угодно раз." },
+	{ "luxury_OncePhotoMessageNote", "Это фото можно смотреть сколько угодно раз." },
+	{ "luxury_OnceVideoMessageNote", "Это видео можно смотреть сколько угодно раз." },
+	{ "luxury_FiltersQuickShadowBan", "Теневой бан" },
+	{ "luxury_FiltersQuickUnshadowBan", "Снять теневой бан" },
+	{ "luxury_FiltersSheetTitle", "Применить фильтры?" },
+	{ "luxury_FiltersSheetNewFilters#one", "**{count}** новый фильтр" },
+	{ "luxury_FiltersSheetNewFilters#few", "**{count}** новых фильтра" },
+	{ "luxury_FiltersSheetNewFilters#many", "**{count}** новых фильтров" },
+	{ "luxury_FiltersSheetNewFilters#other", "**{count}** нового фильтра" },
+	{ "luxury_FiltersSheetRemovedFilters#one", "**{count}** удалённый фильтр" },
+	{ "luxury_FiltersSheetRemovedFilters#few", "**{count}** удалённых фильтра" },
+	{ "luxury_FiltersSheetRemovedFilters#many", "**{count}** удалённых фильтров" },
+	{ "luxury_FiltersSheetRemovedFilters#other", "**{count}** удалённого фильтра" },
+	{ "luxury_FiltersSheetUpdatedFilters#one", "**{count}** обновлённый фильтр" },
+	{ "luxury_FiltersSheetUpdatedFilters#few", "**{count}** обновлённых фильтра" },
+	{ "luxury_FiltersSheetUpdatedFilters#many", "**{count}** обновлённых фильтров" },
+	{ "luxury_FiltersSheetUpdatedFilters#other", "**{count}** обновлённого фильтра" },
+	{ "luxury_FiltersSheetNewExclusions#one", "**{count}** новое исключение" },
+	{ "luxury_FiltersSheetNewExclusions#few", "**{count}** новых исключения" },
+	{ "luxury_FiltersSheetNewExclusions#many", "**{count}** новых исключений" },
+	{ "luxury_FiltersSheetNewExclusions#other", "**{count}** нового исключения" },
+	{ "luxury_FiltersSheetRemovedExclusions#one", "**{count}** удалённое исключение" },
+	{ "luxury_FiltersSheetRemovedExclusions#few", "**{count}** удалённых исключения" },
+	{ "luxury_FiltersSheetRemovedExclusions#many", "**{count}** удалённых исключений" },
+	{ "luxury_FiltersSheetRemovedExclusions#other", "**{count}** удалённого исключения" },
+	{ "luxury_FiltersSheetDialogsToResolve#one", "**{count}** чат будет загружен" },
+	{ "luxury_FiltersSheetDialogsToResolve#few", "**{count}** чата будут загружены" },
+	{ "luxury_FiltersSheetDialogsToResolve#many", "**{count}** чатов будут загружены" },
+	{ "luxury_FiltersSheetDialogsToResolve#other", "**{count}** чата будут загружены" },
+	{ "luxury_FiltersToastFailFetch", "Не удалось загрузить фильтры." },
+	{ "luxury_FiltersToastFailImport", "Не удалось импортировать фильтры." },
+	{ "luxury_FiltersToastFailNoChanges", "Фильтры совпадают с текущими." },
+	{ "luxury_FiltersToastFailPublish", "Не удалось опубликовать фильтры." },
+	{ "luxury_FiltersToastSuccess", "Фильтры импортированы." },
+	{ "luxury_HideFilteredMessagesMenuText", "Скрыть отфильтрованные" },
+	{ "luxury_ShowFilteredMessagesMenuText", "Показать отфильтрованные" },
+	{ "luxury_ViewFiltersMenuText", "Показать фильтры" },
+	{ "luxury_ViewDeletedMenuText", "Показать удалённые" },
+	{ "luxury_IDCopiedToast", "ID скопирован в буфер обмена." },
+	{ "luxury_JumpToBeginning", "В начало" },
+	{ "luxury_LocalPremiumNotice", "Вы используете **локальный** Telegram Premium.\nОн **не даёт** никаких преимуществ.\n**Наслаждайтесь звездой рядом с именем!**" },
+	{ "luxury_MessageDetailsDatacenterPC", "Дата-центр" },
+	{ "luxury_MessageDetailsDatePC", "Дата" },
+	{ "luxury_MessageDetailsEditedDatePC", "Дата изменения" },
+	{ "luxury_MessageDetailsFileNamePC", "Имя файла" },
+	{ "luxury_MessageDetailsFileSizePC", "Размер файла" },
+	{ "luxury_MessageDetailsForwardedDatePC", "Дата пересылки" },
+	{ "luxury_MessageDetailsMimeTypePC", "MIME-тип" },
+	{ "luxury_MessageDetailsPackOwnerNotFoundPC", "не найден" },
+	{ "luxury_MessageDetailsPackOwnerPC", "Владелец набора" },
+	{ "luxury_MessageDetailsResolutionPC", "Разрешение" },
+	{ "luxury_MessageDetailsSharesPC", "Пересылки" },
+	{ "luxury_MessageDetailsViewsPC", "Просмотры" },
+	{ "luxury_MutualContactInfo", "Это взаимный контакт." },
+	{ "luxury_ReadConfirmationBoxActionText", "Прочитать" },
+	{ "luxury_ReadConfirmationBoxQuestion", "Прочитать все сообщения?" },
+	{ "luxury_SearchByIDResults", "Найдено по ID" },
+	{ "luxury_SendAsSticker", "Отправить как стикер" },
+	{ "luxury_SendWithSound", "Отправить со звуком" },
+	{ "luxury_SessionInfoOfficialApp", "Официальное приложение" },
+	{ "luxury_SuggestGhostModeTitle", "Гост-режим" },
+	{ "luxury_SuggestGhostModeStoryText", "Включить **гост-режим** перед просмотром истории?" },
+	{ "luxury_SuggestGhostModeStoryActionTextYes", "Да" },
+	{ "luxury_SuggestGhostModeStoryActionTextNo", "Нет" },
+	{ "luxury_UnforwardableContextMenuText", "Обычная пересылка запрещена." },
+	{ "luxury_UserNotFoundMessage", "Пользователь не найден." },
+	{ "luxury_ChatNotFoundMessage", "Чат не найден." },
 };
 
 void applyIfRussian(not_null<Lang::Instance*> instance, const QString &id) {

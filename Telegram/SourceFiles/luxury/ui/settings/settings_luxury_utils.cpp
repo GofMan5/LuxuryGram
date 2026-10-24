@@ -39,6 +39,89 @@
 class PainterHighQualityEnabler;
 
 namespace Settings {
+namespace {
+
+class NestedCheckbox final : public Ui::Checkbox {
+public:
+	using Ui::Checkbox::Checkbox;
+
+	void setActivationCallback(
+			Fn<void(Qt::KeyboardModifiers)> callback,
+			Fn<bool()> locked) {
+		_activate = std::move(callback);
+		_locked = std::move(locked);
+	}
+
+	void refreshLockState() {
+		const auto weak = base::make_weak(this);
+		if (_locked && _locked()) {
+			auto *effect = new QGraphicsOpacityEffect(this);
+			effect->setOpacity(0.4);
+			setGraphicsEffect(effect);
+		} else {
+			setGraphicsEffect(nullptr);
+		}
+		accessibilityDescriptionChanged();
+		if (weak) {
+			accessibilityStateChanged({ .readOnly = true });
+		}
+	}
+
+	void activate(Qt::KeyboardModifiers modifiers) {
+		if (!isDisabled()) {
+			if (const auto callback = _activate) {
+				callback(modifiers);
+			}
+		}
+	}
+
+	QString accessibilityDescription() override {
+		return !_locked ? QString() : (_locked()
+			? tr::luxury_GhostModeOptionLocked(tr::now)
+			: tr::luxury_GhostModeOptionShiftDescription(tr::now));
+	}
+
+	Ui::AccessibilityState accessibilityState() const override {
+		return {
+			.checkable = true,
+			.checked = checked(),
+			.readOnly = _locked && _locked(),
+		};
+	}
+
+	QStringList accessibilityActionNames() override {
+		return _locked
+			? QStringList{ tr::luxury_GhostModeToggleOptionLock(tr::now) }
+			: QStringList();
+	}
+
+	void accessibilityDoAction(const QString &name) override {
+		if (name == QAccessibleActionInterface::pressAction()
+			|| name == QAccessibleActionInterface::toggleAction()) {
+			activate(Qt::NoModifier);
+		} else if (_locked
+			&& name == tr::luxury_GhostModeToggleOptionLock(tr::now)) {
+			activate(Qt::ShiftModifier);
+		}
+	}
+
+protected:
+	void handlePress() override {
+		activate(base::take(_activationModifiers));
+	}
+
+	void keyReleaseEvent(QKeyEvent *e) override {
+		_activationModifiers = e->modifiers();
+		Ui::Checkbox::keyReleaseEvent(e);
+	}
+
+private:
+	Fn<void(Qt::KeyboardModifiers)> _activate;
+	Fn<bool()> _locked;
+	Qt::KeyboardModifiers _activationModifiers = Qt::NoModifier;
+};
+
+} // namespace
 
 void ShowRestartPrompt(not_null<Window::SessionController*> controller) {
 	controller->show(Ui::MakeConfirmBox({
@@ -215,16 +298,15 @@ not_null<Ui::RpWidget*> AddInnerToggle(not_null<Ui::VerticalLayout*> container,
 		) | on_next([=](const QRect &r)
 							{
 								const auto w = st::rightsButtonToggleWidth;
-								constexpr auto kLineWidth = 1;
 								toggleButton->setGeometry(
 									r.x() + r.width() - w,
 									r.y(),
 									w,
 									r.height());
 								separator->setGeometry(
-									toggleButton->x() - kLineWidth,
+									toggleButton->x() - st::lineWidth,
 									r.y() + (r.height() - separatorHeight) / 2,
-									kLineWidth,
+									st::lineWidth,
 									separatorHeight);
 							},
 							toggleButton->lifetime());
@@ -282,7 +364,7 @@ not_null<Ui::RpWidget*> AddInnerToggle(not_null<Ui::VerticalLayout*> container,
 				+ QString::number(totalInnerChecks));
 			return TextWithEntities::Simple(t).append(std::move(count));
 		}),
-		st::boxLabel);
+		st::luxuryCollapsibleToggleLabel);
 	label->setAttribute(Qt::WA_TransparentForMouseEvents);
 	const auto arrow = Ui::CreateChild<Ui::RpWidget>(button);
 	{
@@ -308,8 +390,10 @@ not_null<Ui::RpWidget*> AddInnerToggle(not_null<Ui::VerticalLayout*> container,
 							},
 							arrow->lifetime());
 	}
-	button->sizeValue(
-	) | on_next([=, &st](const QSize &s)
+	combine(
+		button->sizeValue(),
+		label->naturalWidthValue()
+	) | on_next([=, &st](const QSize &s, int naturalWidth)
 						{
 							const auto labelLeft = st.padding.left();
 							const auto labelRight = s.width() - toggleButton->width();
@@ -320,7 +404,7 @@ not_null<Ui::RpWidget*> AddInnerToggle(not_null<Ui::VerticalLayout*> container,
 								(s.height() - label->height()) / 2);
 							arrow->moveToLeft(
 								std::min(
-									labelLeft + label->naturalWidth(),
+									labelLeft + naturalWidth,
 									labelRight - arrow->width()),
 								(s.height() - arrow->height()) / 2);
 						},
@@ -371,7 +455,7 @@ CollapsibleToggleResult AddCollapsibleToggle(not_null<Ui::VerticalLayout*> conta
 						  QString description) {
 	struct CheckboxEntry {
 		not_null<Ui::AbstractCheckView*> checkView;
-		Ui::Checkbox *checkbox = nullptr;
+		NestedCheckbox *checkbox = nullptr;
 		Ui::RippleButton *button = nullptr;
 	};
 
@@ -397,7 +481,7 @@ CollapsibleToggleResult AddCollapsibleToggle(not_null<Ui::VerticalLayout*> conta
 	for (auto i = 0u; i < cState->checkboxes.size(); ++i) {
 		const auto &entry = cState->checkboxes[i];
 		const auto checkbox = verticalLayout->add(
-			object_ptr<Ui::Checkbox>(
+			object_ptr<NestedCheckbox>(
 				verticalLayout,
 				entry.checkboxLabel,
 				entry.getter(),
@@ -419,11 +503,10 @@ CollapsibleToggleResult AddCollapsibleToggle(not_null<Ui::VerticalLayout*> conta
 		const auto checkView = checkbox->checkView();
 
 		const auto idx = i;
-		button->setClickedCallback([=]
-		{
+		checkbox->setActivationCallback([=](Qt::KeyboardModifiers modifiers) {
 			const auto &e = cState->checkboxes[idx];
 			if (e.lockGetter && e.lockSetter) {
-				if (button->clickModifiers() & Qt::ShiftModifier) {
+				if (modifiers & Qt::ShiftModifier) {
 					const auto currentlyLocked = e.lockGetter();
 					if (!currentlyLocked) {
 						// Count already locked entries, deny if would lock all.
@@ -437,17 +520,14 @@ CollapsibleToggleResult AddCollapsibleToggle(not_null<Ui::VerticalLayout*> conta
 							return;
 						}
 					}
+					const auto weak = base::make_weak(checkbox);
 					e.lockSetter(!currentlyLocked);
-					// Update opacity.
-					const auto &ce = cState->entries[idx];
-					if (!currentlyLocked) {
-						auto *effect = new QGraphicsOpacityEffect(ce.checkbox);
-						effect->setOpacity(0.4);
-						ce.checkbox->setGraphicsEffect(effect);
-					} else {
-						ce.checkbox->setGraphicsEffect(nullptr);
+					if (weak) {
+						checkbox->refreshLockState();
 					}
-					cState->lockChanges.fire({});
+					if (weak) {
+						cState->lockChanges.fire({});
+					}
 					return;
 				}
 				// Normal click on locked entry: ignore.
@@ -455,9 +535,10 @@ CollapsibleToggleResult AddCollapsibleToggle(not_null<Ui::VerticalLayout*> conta
 					return;
 				}
 			}
-			checkView->setChecked(
-				!checkView->checked(),
-				anim::type::normal);
+			checkbox->setChecked(!checkbox->checked());
+		}, entry.lockGetter);
+		button->setClickedCallback([=] {
+			checkbox->activate(button->clickModifiers());
 		});
 
 		checkView->checkedValue(
@@ -482,14 +563,9 @@ CollapsibleToggleResult AddCollapsibleToggle(not_null<Ui::VerticalLayout*> conta
 		Ui::AddSkip(verticalLayout);
 	}
 
-	// Apply initial lock visuals.
-	for (auto i = 0u; i < cState->entries.size(); ++i) {
-		const auto &entry = cState->checkboxes[i];
-		if (entry.lockGetter && entry.lockGetter()) {
-			auto *effect = new QGraphicsOpacityEffect(cState->entries[i].checkbox);
-			effect->setOpacity(0.4);
-			cState->entries[i].checkbox->setGraphicsEffect(effect);
-		}
+	// Apply initial lock visuals and accessibility state.
+	for (const auto &entry : cState->entries) {
+		entry.checkbox->refreshLockState();
 	}
 
 	const auto raw = wrap.data();
@@ -514,20 +590,11 @@ CollapsibleToggleResult AddCollapsibleToggle(not_null<Ui::VerticalLayout*> conta
 	return {
 		.refresh = [cState] {
 			for (auto i = 0u; i < cState->entries.size(); ++i) {
-				cState->entries[i].checkView->setChecked(
-					cState->checkboxes[i].getter(), anim::type::normal);
-				// Refresh lock visuals.
-				const auto &entry = cState->checkboxes[i];
-				if (entry.lockGetter) {
-					if (entry.lockGetter()) {
-						auto *effect = new QGraphicsOpacityEffect(cState->entries[i].checkbox);
-						effect->setOpacity(0.4);
-						cState->entries[i].checkbox->setGraphicsEffect(effect);
-					} else {
-						cState->entries[i].checkbox->setGraphicsEffect(nullptr);
-					}
-				}
+				cState->entries[i].checkbox->setChecked(
+					cState->checkboxes[i].getter());
+				cState->entries[i].checkbox->refreshLockState();
 			}
+			cState->lockChanges.fire({});
 		},
 		.widget = toggleWidget,
 	};

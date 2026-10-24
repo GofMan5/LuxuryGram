@@ -288,6 +288,34 @@ void TestFiles(const QString &parent, const QString &sentinel) {
 	Check(Read(sentinel) == "outside unchanged", "external sentinel unchanged");
 }
 
+void TestLegacyAlpha(const QString &parent, const QString &sentinel) {
+	Case("authenticated legacy alpha header uses explicit alpha contract");
+	constexpr auto kAlpha = quint64(kVersion) * 1000 + 7;
+	const auto expectedVersion = MakeUpdateVersion(0x7FFFFFFF, 0);
+	const auto body = Serialize({ { QString::fromLatin1("file"), "bytes" } });
+	auto payload = QByteArray();
+	{
+		auto stream = QDataStream(&payload, QIODevice::WriteOnly);
+		stream.setVersion(QDataStream::Qt_5_1);
+		stream << quint32(0x7FFFFFFF) << kAlpha;
+		Check(stream.status() == QDataStream::Ok, "alpha header serialization");
+	}
+	payload += body.mid(4);
+	const auto directory = NewDirectory(parent);
+	Check(ExtractUpdateFiles(payload, expectedVersion, directory, nullptr, kAlpha),
+		"matching alpha version extracts through bounded parser");
+	Check(Read(directory + QLatin1String("/file")) == "bytes", "alpha file bytes");
+	Check(!ExtractUpdateFiles(payload, expectedVersion, NewDirectory(parent)),
+		"v2 parser does not implicitly accept alpha header");
+	Check(!ExtractUpdateFiles(payload, expectedVersion, NewDirectory(parent), nullptr, kAlpha + 1),
+		"alpha mismatch rejected");
+	Check(!ExtractUpdateFiles(body, kSignedVersion, NewDirectory(parent), nullptr, kAlpha),
+		"stable header cannot impersonate alpha");
+	Check(!ExtractUpdateFiles(payload.first(10), expectedVersion, NewDirectory(parent), nullptr, kAlpha),
+		"truncated alpha header rejected");
+	Check(Read(sentinel) == "outside unchanged", "alpha controls preserve external sentinel");
+}
+
 void TestCompression() {
 	const auto plain = Serialize({ { QString::fromLatin1("file"), "bytes" } });
 	const auto compressed = Compress(plain);
@@ -342,6 +370,7 @@ int main() {
 		Check(file.flush(), "sentinel flushed");
 	}
 	TestFiles(temporary.path(), sentinel);
+	TestLegacyAlpha(temporary.path(), sentinel);
 	TestCompression();
 	std::cout << "Cases: " << TotalCases << ", checks: " << TotalChecks
 		<< ", failures: " << FailedChecks << std::endl;

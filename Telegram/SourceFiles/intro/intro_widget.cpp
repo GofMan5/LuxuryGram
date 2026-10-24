@@ -864,18 +864,23 @@ void Widget::updateControlsGeometry() {
 			(width() - _changeLanguage->width()) / 2,
 			_next->y() + _next->height() + _changeLanguage->height());
 	}
+	const auto footerTop = height() - _footer->height() - st::lineWidth * 6;
+	const auto footerShown = (getStep()->contentTop() + st::introHeight
+		<= footerTop);
+	const auto bottom = footerShown ? footerTop : height();
 	if (_resetAccount) {
 		_resetAccount->moveToLeft(
 			(width() - _resetAccount->width()) / 2,
-			height() - st::introResetBottom - _resetAccount->height());
+			bottom - st::introResetBottom - _resetAccount->height());
 	}
 	if (_terms) {
 		_terms->moveToLeft(
 			(width() - _terms->width()) / 2,
-			height() - st::introTermsBottom - _terms->height());
+			bottom - st::introTermsBottom - _terms->height());
 	}
 
-	_footer->move((width() - _footer->width()) / 2, height() - _footer->height() - st::lineWidth * 6);
+	_footer->move((width() - _footer->width()) / 2, footerTop);
+	_footer->setVisible(footerShown);
 }
 
 void Widget::keyPressEvent(QKeyEvent *e) {

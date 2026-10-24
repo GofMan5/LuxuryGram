@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/invoke_queued.h"
 #include "settings/settings_common.h"
+#include "settings/detailed_settings_button.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/checkbox.h"
 #include "ui/widgets/continuous_sliders.h"
@@ -17,6 +18,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/ui_utility.h"
 
 #include "styles/style_settings.h"
+
+#include <QtCore/QCoreApplication>
+#include <QtGui/QKeyEvent>
 
 namespace Settings {
 namespace {
@@ -54,6 +58,9 @@ auto KeyNavigation::list() const -> std::vector<Entry> {
 		auto ownBackground = false;
 		const auto button = [&]() -> Ui::AbstractButton* {
 			if (const auto row = dynamic_cast<Ui::SettingsButton*>(widget)) {
+				ownBackground = true;
+				return row;
+			} else if (const auto row = dynamic_cast<DetailedSettingsButton*>(widget)) {
 				ownBackground = true;
 				return row;
 			} else if (const auto check = dynamic_cast<Ui::Checkbox*>(widget)) {
@@ -113,7 +120,8 @@ bool KeyNavigation::handle(not_null<QKeyEvent*> e) {
 	const auto submitKey = (key == Qt::Key_Return)
 		|| (key == Qt::Key_Enter)
 		|| (key == Qt::Key_Space);
-	if ((modifiers != Qt::NoModifier)
+	if ((modifiers != Qt::NoModifier
+			&& !(submitKey && modifiers == Qt::ShiftModifier))
 		|| (!navigationKey && !horizontalKey && !submitKey)) {
 		return false;
 	}
@@ -246,15 +254,17 @@ bool KeyNavigation::handle(not_null<QKeyEvent*> e) {
 void KeyNavigation::activate(
 		not_null<Ui::AbstractButton*> button,
 		Qt::KeyboardModifiers modifiers) {
-	if (const auto checkbox = dynamic_cast<Ui::Checkbox*>(button.get())) {
-		const auto radio = dynamic_cast<Ui::Radiobutton*>(button.get());
-		if (!radio) {
-			checkbox->setChecked(!checkbox->checked());
-		} else if (!checkbox->checked()) {
-			checkbox->setChecked(true);
-		}
+	const auto weak = base::make_weak(button.get());
+	auto press = QKeyEvent(QEvent::KeyPress, Qt::Key_Space, modifiers);
+	QCoreApplication::sendEvent(button, &press);
+	if (weak) {
+		auto release = QKeyEvent(QEvent::KeyRelease, Qt::Key_Space, modifiers);
+		QCoreApplication::sendEvent(button, &release);
 	}
-	button->clicked(modifiers, Qt::LeftButton);
+	if (weak && !button->isDisabled()
+		&& dynamic_cast<Ui::Checkbox*>(button.get())) {
+		button->clicked(modifiers, Qt::LeftButton);
+	}
 }
 
 void KeyNavigation::select(const std::vector<Entry> &entries, int index) {

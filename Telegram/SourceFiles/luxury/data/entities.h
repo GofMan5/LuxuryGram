@@ -40,9 +40,9 @@ public:
 // row. Dropping these fourteen took a 12 GB table through fourteen rewrites and
 // hung the client at startup for as long as it was left running.
 //
-// EditedMessage deliberately does not get them: that table is already down to
-// sixteen columns in the wild, so declaring them there would create the very
-// mismatch this avoids.
+// EditedMessage deliberately does not get them: databases written by this fork
+// already have the sixteen-column shape, and a table still in AyuGram's wider
+// shape is rewritten to it once by convergeTable in luxury_database.cpp.
 class DeletedMessage : public LuxuryMessageBase
 {
 public:

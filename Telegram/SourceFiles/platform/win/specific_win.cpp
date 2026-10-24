@@ -29,6 +29,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/crash_reports.h"
 #include "core/version.h"
 
+// LuxuryGram includes
+#include "luxury/features/streamer_mode/streamer_mode.h"
+
 #include <QtCore/QOperatingSystemVersion>
 #include <QtWidgets/QApplication>
 #include <QtGui/QDesktopServices>
@@ -533,12 +536,15 @@ bool AmbientScreenshotProtectionSupported() {
 }
 
 void SetWindowScreenshotProtection(not_null<QWidget*> window, bool enabled) {
+	const auto excluded = LuxuryFeatures::StreamerMode::excludedWithProtection(
+		window,
+		enabled);
 	const auto handle = window->internalWinId();
 	if (!handle) {
 		return;
 	}
 	const auto hwnd = reinterpret_cast<HWND>(handle);
-	if (!enabled) {
+	if (!excluded) {
 		SetWindowDisplayAffinity(hwnd, WDA_NONE);
 	} else if (!SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)) {
 		SetWindowDisplayAffinity(hwnd, WDA_MONITOR);

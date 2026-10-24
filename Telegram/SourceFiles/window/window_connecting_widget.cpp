@@ -92,7 +92,7 @@ public:
 		const Layout &layout);
 
 	QAccessible::Role accessibilityRole() override {
-		return QAccessible::Role::StatusBar;
+		return QAccessible::Role::Button;
 	}
 
 	void refreshRetryLink(bool hasRetry);

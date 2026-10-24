@@ -111,6 +111,7 @@ public:
 	, _active(active)
 	, _st(st)
 	, _height(st::defaultWhoRead.photoSkip * 2 + st::defaultWhoRead.photoSize) {
+		_dummyAction->setText(user->name());
 		setAcceptBoth(true);
 		fitToMenuWidth();
 
@@ -132,6 +133,9 @@ public:
 
 	not_null<QAction*> action() const override { return _dummyAction; }
 	bool isEnabled() const override { return true; }
+	QAccessible::Role accessibilityRole() override;
+	QString accessibilityName() override;
+	void handleKeyPress(not_null<QKeyEvent*> e) override;
 
 protected:
 	int contentHeight() const override { return _height; }
@@ -176,6 +180,7 @@ private:
 	const style::Menu &_st;
 	Ui::Text::String _text;
 	const int _height;
+
 };
 
 class GlobalAction final : public Ui::Menu::ItemBase {
@@ -191,6 +196,7 @@ public:
 	, _active(active)
 	, _st(st)
 	, _height(st::defaultWhoRead.photoSkip * 2 + st::defaultWhoRead.photoSize) {
+		_dummyAction->setText(text);
 		setAcceptBoth(true);
 		fitToMenuWidth();
 
@@ -212,6 +218,9 @@ public:
 
 	not_null<QAction*> action() const override { return _dummyAction; }
 	bool isEnabled() const override { return true; }
+	QAccessible::Role accessibilityRole() override;
+	QString accessibilityName() override;
+	void handleKeyPress(not_null<QKeyEvent*> e) override;
 
 protected:
 	int contentHeight() const override { return _height; }
@@ -265,7 +274,50 @@ private:
 	const style::Menu &_st;
 	Ui::Text::String _text;
 	const int _height;
+
 };
+
+QAccessible::Role AccountAction::accessibilityRole() {
+	return QAccessible::MenuItem;
+}
+
+QString AccountAction::accessibilityName() {
+	return _dummyAction->text();
+}
+
+void AccountAction::handleKeyPress(not_null<QKeyEvent*> e) {
+	if (!isSelected()) {
+		return;
+	}
+	switch (e->key()) {
+	case Qt::Key_Enter:
+	case Qt::Key_Return:
+	case Qt::Key_Space:
+		setClicked(Ui::Menu::TriggeredSource::Keyboard);
+		break;
+	}
+}
+
+QAccessible::Role GlobalAction::accessibilityRole() {
+	return QAccessible::MenuItem;
+}
+
+QString GlobalAction::accessibilityName() {
+	return _dummyAction->text();
+}
+
+void GlobalAction::handleKeyPress(not_null<QKeyEvent*> e) {
+	if (!isSelected()) {
+		return;
+	}
+	switch (e->key()) {
+	case Qt::Key_Enter:
+	case Qt::Key_Return:
+	case Qt::Key_Space:
+		setClicked(Ui::Menu::TriggeredSource::Keyboard);
+		break;
+	}
+}
 
 QString GetAccountName(uint64 userId) {
 	for (const auto &account : Core::App().domain().orderedAccounts()) {
@@ -738,6 +790,7 @@ void BuildWatchedChats(SectionBuilder &builder) {
 				AddDividerText(
 					container,
 					tr::luxury_WatchChatsEmpty());
+				AddSkip(container);
 				return;
 			}
 
@@ -758,6 +811,9 @@ void BuildWatchedChats(SectionBuilder &builder) {
 					ctrl),
 				QMargins(0, -st::peerListBox.padding.top(), 0, -st::peerListBox.padding.bottom()));
 			const auto content = container->add(std::move(list));
+			AddSkip(container);
+			AddSkip(container);
+			AddDivider(container);
 			AddSkip(container);
 			auto delegate = container->lifetime().make_state<PeerListContentDelegateSimple>();
 			delegate->setContent(content->entity());
@@ -798,12 +854,11 @@ const auto kMeta = BuildHelper({
 	builder.addSkip();
 	BuildSpyEssentials(builder, luxury);
 
-	builder.addSkip();
+	luxury.addSectionDivider();
 	BuildLuxuryExtra(builder, luxury);
 
 	BuildWatchedChats(builder);
 
-	luxury.addSectionDivider();
 	BuildOther(builder, luxury);
 	builder.addSkip();
 });

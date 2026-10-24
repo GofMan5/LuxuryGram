@@ -1188,10 +1188,10 @@ void StickerSetBox::updateButtons() {
 						[=] { _inner->archiveStickers(); },
 						&st::menuIconArchive);
 				}
+				addPackIdActions(raw);
 				if (fillSetCreatorFooter) {
 					fillSetCreatorFooter(raw);
 				}
-				addPackIdActions(raw);
 				raw->setForcedOrigin(
 					Ui::PanelAnimation::Origin::TopRight);
 				top->setForceRippled(true);
@@ -1859,6 +1859,7 @@ void StickerSetBox::Inner::contextMenuEvent(QContextMenuEvent *e) {
 								 [=]
 								 {
 									 QGuiApplication::clipboard()->setText(QString::number(_pack[index]->id));
+									 _show->showToast(tr::luxury_IDCopiedToast(tr::now));
 								 },
 								 &st::menuIconCopy);
 			}

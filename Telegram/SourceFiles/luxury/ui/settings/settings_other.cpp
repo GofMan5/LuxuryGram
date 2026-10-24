@@ -13,6 +13,7 @@
 #include "luxury/ui/settings/settings_main.h"
 #include "boxes/abstract_box.h"
 #include "core/application.h"
+#include "core/crash_reports.h"
 #include "lang/lang_text_entity.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common.h"
@@ -35,6 +36,9 @@ namespace {
 
 void BuildCrashReporting(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 #ifndef TDESKTOP_DISABLE_AUTOUPDATE
+	if (!*CrashReports::kReportEndpoint) {
+		return;
+	}
 	builder.addSkip();
 	builder.addSubsectionTitle(tr::luxury_CategoryOther());
 
@@ -95,7 +99,6 @@ const auto kMeta = BuildHelper({
 }, [](SectionBuilder &builder) {
 	auto luxury = LuxurySectionBuilder(builder);
 
-	builder.addSkip();
 	BuildCrashReporting(builder, luxury);
 	BuildOtherThings(builder);
 });

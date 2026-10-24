@@ -1423,7 +1423,11 @@ void AddRegistrationOrCreationButton(
 		getRegistrationDate(
 			peer,
 			[=](const TextWithEntities &result) {
-				if (result.empty() || !weak) {
+				if (!weak) {
+					return;
+				} else if (result.empty()) {
+					controller->showToast(
+						tr::luxury_RegistrationDateUnavailable(tr::now));
 					return;
 				}
 				const auto parent = weak->window();

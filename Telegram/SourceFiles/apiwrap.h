@@ -609,7 +609,7 @@ private:
 		const QString &firstName,
 		const QString &lastName,
 		UserId userId,
-		const SendAction &action,
+		SendAction action,
 		Fn<void(bool)> done);
 
 	void deleteHistory(

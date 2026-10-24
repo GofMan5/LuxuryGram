@@ -774,7 +774,13 @@ void Preview::validateBubbleCache() {
 	if (!_bubbleCorners.p[0].isNull()) {
 		return;
 	}
-	const auto radius = scaled(Ui::BubbleRadiusLarge());
+	// Ui::BubbleRadiusLarge() is already in the current interface scale, and
+	// scaled() would apply the previewed one on top: keep the chosen rounding
+	// as a share of the full radius instead.
+	const auto full = scaled(16); // st::bubbleRadiusLarge
+	const auto radius = (st::bubbleRadiusLarge > 0)
+		? (full * Ui::BubbleRadiusLarge() / st::bubbleRadiusLarge)
+		: full;
 	_bubbleCorners = Ui::PrepareCornerPixmaps(radius, st::msgInBg);
 	_bubbleCorners.p[2] = {};
 	_bubbleTail = scaled(st::historyBubbleTailInLeft, st::msgInBg->c);

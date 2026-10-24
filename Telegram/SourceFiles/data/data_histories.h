@@ -58,7 +58,9 @@ public:
 	void unloadAll();
 	void clearAll();
 
-	void readInbox(not_null<History*> history);
+	void readInbox(
+		not_null<History*> history,
+		std::optional<bool> sendReadReceipt = std::nullopt);
 	void readInboxTill(not_null<HistoryItem*> item);
 	void readInboxTill(not_null<History*> history, MsgId tillId);
 	void readInboxOnNewMessage(not_null<HistoryItem*> item);
@@ -157,6 +159,7 @@ private:
 		MsgId sentReadTill = 0;
 		crl::time willReadWhen = 0;
 		bool sentReadDone = false;
+		MsgId explicitReadTill = 0;
 		bool postponedRequestEntry = false;
 	};
 	struct ChatListGroupRequest {
@@ -192,7 +195,11 @@ private:
 		}
 	}
 
-	void readInboxTill(not_null<History*> history, MsgId tillId, bool force);
+	void readInboxTill(
+		not_null<History*> history,
+		MsgId tillId,
+		bool force,
+		std::optional<bool> sendReadReceipt = std::nullopt);
 	void sendReadRequests();
 	void sendReadRequest(not_null<History*> history, State &state);
 	[[nodiscard]] State *lookup(not_null<History*> history);

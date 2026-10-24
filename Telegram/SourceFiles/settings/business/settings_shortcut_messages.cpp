@@ -1178,6 +1178,7 @@ Api::SendAction ShortcutMessages::prepareSendAction(
 		Api::SendOptions options) const {
 	auto result = Api::SendAction(_history, options);
 	result.replyTo = replyTo();
+	result.options.scheduled = 0;
 	result.options.shortcutId = _shortcutId.current();
 	result.options.sendAs = _composeControls->sendAsPeer();
 	return result;

@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "history/history_item_helpers.h" // ShouldSendSilent
 #include "main/main_session.h"
+#include "luxury/utils/telegram_helpers.h"
 
 namespace Api {
 namespace {
@@ -39,6 +40,7 @@ void TodoLists::create(
 		Fn<void()> done,
 		Fn<void(QString)> fail) {
 	StripUnsendableReply(_session, action.replyTo);
+	applyGhostScheduling(_session, action.options);
 	_session->api().sendAction(action);
 
 	const auto history = action.history;

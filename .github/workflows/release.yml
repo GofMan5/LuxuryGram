@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: luxury-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
 
   version:
@@ -52,6 +56,15 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "update=$UPDATE" >> $GITHUB_OUTPUT
           echo "Release version: $VERSION (update counter $UPDATE)"
+
+      - name: Refuse published versions and existing update packages.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          UPDATE_VERSION: ${{ steps.resolve.outputs.update }}
+        run: |
+          python3 Telegram/build/check_release_mutability.py "$TAG" \
+            --package "tx64upd$UPDATE_VERSION" --package "tlinuxupd$UPDATE_VERSION"
 
   windows-libraries:
     name: Windows x64 libraries
@@ -613,23 +626,33 @@ jobs:
           cat assets/current4
           (cd assets && sha256sum current4 current6 >> SHA256SUMS.txt)
 
+      - name: Recheck before changing release assets.
+        id: mutable
+        run: |
+          python3 Telegram/build/check_release_mutability.py "$TAG" \
+            --package "tx64upd$UPDATE_VERSION" --package "tlinuxupd$UPDATE_VERSION"
+
       - name: Publish update packages.
         run: |
           # Packages go live before the feed points at them; the feed is copied
           # over by hand once the draft release has been verified and published.
-          if ! gh release view updates >/dev/null 2>&1; then
+          if [ "${{ steps.mutable.outputs.updates }}" = "absent" ]; then
             gh release create updates --target "$(git rev-parse HEAD)" --latest=false \
               --title "LuxuryGram update feed" \
               --notes "Signed update packages and the feed the LuxuryGram updater polls. Not a downloadable release: see the Releases page for installable builds."
           fi
-          gh release upload updates updates/* --clobber
+          # Versioned updater packages are immutable, including on retries.
+          gh release upload updates updates/*
           gh release view updates --json assets --jq '.assets[].name'
 
       - name: Create or update draft release.
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --draft --title "LuxuryGram $VERSION" --notes-file notes.md
-            gh release upload "$TAG" assets/* --clobber
+          # Re-read immediately: another run may have published the draft.
+          python3 Telegram/build/check_release_mutability.py "$TAG"
+          if [ "${{ steps.mutable.outputs.product }}" = "draft" ]; then
+            gh release edit "$TAG" --title "LuxuryGram $VERSION" --notes-file notes.md
+            python3 Telegram/build/check_release_mutability.py "$TAG"
+            gh release upload "$TAG" assets/*
           else
             gh release create "$TAG" --draft --verify-tag \
               --title "LuxuryGram $VERSION" --notes-file notes.md assets/*

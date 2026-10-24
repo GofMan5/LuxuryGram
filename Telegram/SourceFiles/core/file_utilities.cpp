@@ -25,6 +25,16 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QStandardPaths>
 #include <QtGui/QDesktopServices>
 
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+namespace {
+
+constexpr auto kFolderCheckTimeout = crl::time(2000);
+
+} // namespace
+
 bool filedialogGetSaveFile(
 		QPointer<QWidget> parent,
 		QString &file,
@@ -70,7 +80,9 @@ QString filedialogDefaultName(
 		if (cDialogLastPath().isEmpty()) {
 			Platform::FileDialog::InitLastPath();
 		}
-		directoryPath = cDialogLastPath();
+		directoryPath = skipExistance
+			? cDialogLastPath()
+			: FileDialog::internal::ReachableFolder(cDialogLastPath());
 	}
 
 	QString base;
@@ -372,6 +384,32 @@ void InitLastPathDefault() {
 	cSetDialogLastPath(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
 }
 
+QString ReachableFolder(const QString &path) {
+	const auto fallback = QStandardPaths::writableLocation(
+		QStandardPaths::DownloadLocation);
+	if (path.isEmpty()) {
+		return fallback;
+	}
+	struct State {
+		std::mutex mutex;
+		std::condition_variable checked;
+		std::optional<bool> exists;
+	};
+	const auto state = std::make_shared<State>();
+	std::thread([=] {
+		const auto exists = QDir(path).exists();
+		const auto lock = std::lock_guard(state->mutex);
+		state->exists = exists;
+		state->checked.notify_one();
+	}).detach();
+	auto lock = std::unique_lock(state->mutex);
+	const auto checked = state->checked.wait_for(
+		lock,
+		std::chrono::milliseconds(kFolderCheckTimeout),
+		[&] { return state->exists.has_value(); });
+	return (checked && *state->exists) ? path : fallback;
+}
+
 bool GetDefault(
 		QPointer<QWidget> parent,
 		QStringList &files,
@@ -386,7 +424,7 @@ bool GetDefault(
 
 	remoteContent = QByteArray();
 	if (startFile.isEmpty() || startFile.at(0) != '/') {
-		startFile = cDialogLastPath() + '/' + startFile;
+		startFile = ReachableFolder(cDialogLastPath()) + '/' + startFile;
 	}
 	QString file;
 

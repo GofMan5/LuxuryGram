@@ -450,6 +450,13 @@ bool UiIntegration::handleUrlClick(
 		}
 	}
 
+	// Everything above stayed inside the app; from here the url goes to the
+	// shell, which would happily open a share, a file or a script host.
+	if (LuxuryUrlHandlers::IsUnsafeExternalUrl(url)) {
+		LOG(("LuxuryGram: Blocked opening unsafe url: %1").arg(url));
+		return true;
+	}
+
 	if (LuxuryUrlHandlers::TryHandleSpotify(url)) {
 		return true;
 	}

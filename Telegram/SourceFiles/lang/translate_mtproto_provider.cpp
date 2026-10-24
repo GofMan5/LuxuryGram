@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "lang/translate_mtproto_provider.h"
 
+#include "lang/translate_provider.h"
+
 #include "api/api_text_entities.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
@@ -158,6 +160,10 @@ private:
 };
 
 } // namespace
+
+bool SupportsRichMessageTranslation(not_null<TranslateProvider*> provider) {
+	return dynamic_cast<MTProtoTranslateProvider*>(provider.get()) != nullptr;
+}
 
 std::unique_ptr<TranslateProvider> CreateMTProtoTranslateProvider(
 		not_null<Main::Session*> session) {

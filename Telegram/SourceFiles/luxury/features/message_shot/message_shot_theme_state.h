@@ -54,6 +54,7 @@ SavedThemeApplyResult applySavedThemePalette(
 void subscribeToCloudThemeLoad(
 	not_null<Window::SessionController*> controller,
 	std::shared_ptr<style::palette> palette,
-	Fn<void(bool applied)> onApplied);
+	Fn<void(bool applied)> onApplied,
+	rpl::lifetime &lifetime);
 
 }

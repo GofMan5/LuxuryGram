@@ -117,7 +117,9 @@ FixedBar::FixedBar(
 	_backButton->moveToLeft(0, 0);
 	_backButton->setClickedCallback([=] { goBack(); });
 	_search->setClickedCallback([=] { showSearch(); });
+	_search->setAccessibleName(tr::lng_dlg_filter(tr::now));
 	_cancel->setClickedCallback([=] { cancelSearch(); });
+	_cancel->setAccessibleName(tr::lng_sr_cancel_search(tr::now));
 	_field->hide();
 	_field->cancelled() | rpl::on_next([=] {
 		cancelSearch();

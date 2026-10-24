@@ -76,10 +76,18 @@ PlaybackControls::PlaybackControls(
 		fadeUpdated(opacity);
 	});
 
-	_speedToggle->setSpeed(_speedControllable
-		? _delegate->playbackControlsCurrentSpeed(false)
-		: 1.);
-	updateSpeedToggleQuality();
+	if (_speedToggle) {
+		_speedToggle->setSpeed(_speedControllable
+			? _delegate->playbackControlsCurrentSpeed(false)
+			: 1.);
+		_speedToggle->setAccessibleName(tr::luxury_PlayerSettings(tr::now));
+		updateSpeedToggleQuality();
+	}
+	_playPauseResume->setAccessibleName(tr::lng_shortcuts_media_play(tr::now));
+	_fullScreenToggle->setAccessibleName(tr::luxury_PlayerEnterFullscreen(tr::now));
+	_pictureInPicture->setAccessibleName(tr::luxury_PlayerPictureInPicture(tr::now));
+	_playbackSlider->setAccessibleName(tr::luxury_PlayerPosition(tr::now));
+	_volumeController->setAccessibleName(tr::lng_ringtones_box_volume(tr::now));
 
 	if (const auto controller = _speedController.get()) {
 		controller->menuToggledValue(
@@ -238,7 +246,9 @@ void PlaybackControls::updateSpeedToggleQuality() {
 			_speedController->setQualities(qualities);
 		}
 	}
-	_speedToggle->setQuality(_delegate->playbackControlsCurrentQuality());
+	if (_speedToggle) {
+		_speedToggle->setQuality(_delegate->playbackControlsCurrentQuality());
+	}
 }
 
 void PlaybackControls::updatePlaybackSpeed(float64 speed) {
@@ -256,6 +266,9 @@ void PlaybackControls::updatePlayback(const Player::TrackState &state) {
 
 void PlaybackControls::updateVolumeToggleIcon() {
 	const auto volume = _delegate->playbackControlsCurrentVolume();
+	_volumeToggle->setAccessibleName(volume <= 0.
+		? tr::lng_call_unmute_audio(tr::now)
+		: tr::lng_call_mute_audio(tr::now));
 	_volumeToggle->setIconOverride([&] {
 		return (volume <= 0.)
 			? nullptr
@@ -404,6 +417,9 @@ void PlaybackControls::updatePlayPauseResumeState(const Player::TrackState &stat
 		_showPause = showPause;
 		_playPauseResume->setIconOverride(_showPause ? &st::mediaviewPauseIcon : nullptr, _showPause ? &st::mediaviewPauseIconOver : nullptr);
 	}
+	_playPauseResume->setAccessibleName(_showPause
+		? tr::lng_shortcuts_media_pause(tr::now)
+		: tr::lng_shortcuts_media_play(tr::now));
 }
 
 void PlaybackControls::updateTimeTexts(const Player::TrackState &state) {
@@ -459,6 +475,9 @@ void PlaybackControls::setInFullScreen(bool inFullScreen) {
 			_inFullScreen ? &st::mediaviewFullScreenOutIcon : nullptr,
 			_inFullScreen ? &st::mediaviewFullScreenOutIconOver : nullptr);
 	}
+	_fullScreenToggle->setAccessibleName(_inFullScreen
+		? tr::luxury_PlayerExitFullscreen(tr::now)
+		: tr::luxury_PlayerEnterFullscreen(tr::now));
 }
 
 void PlaybackControls::resizeEvent(QResizeEvent *e) {

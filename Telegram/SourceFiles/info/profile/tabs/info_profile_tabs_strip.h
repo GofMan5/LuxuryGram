@@ -39,9 +39,24 @@ public:
 	[[nodiscard]] rpl::producer<QString> activated() const;
 	[[nodiscard]] rpl::producer<QString> contextMenuRequests() const;
 
+	QAccessible::Role accessibilityRole() override;
+	std::optional<Qt::Orientation> accessibilityOrientation() const override;
+	bool accessibilitySelectionList() const override;
+	int accessibilityChildCount() const override;
+	QAccessible::Role accessibilityChildRole() const override;
+	QString accessibilityChildName(int index) const override;
+	QAccessible::State accessibilityChildState(int index) const override;
+	QRect accessibilityChildRect(int index) const override;
+	bool accessibilityChildSupportsActions(int index) const override;
+	quintptr accessibilityChildIdentity(int index) const override;
+	int accessibilityChildIndexByIdentity(quintptr identity) const override;
+	void accessibilityChildSetFocus(quintptr identity) override;
+	void accessibilityChildActivate(quintptr identity) override;
+
 private:
 	struct Button {
 		StripTab tab;
+		quintptr identity = 0;
 		QRect geometry;
 		Ui::Text::String text;
 		std::unique_ptr<Ui::RippleAnimation> ripple;
@@ -54,6 +69,9 @@ private:
 	void mouseReleaseEvent(QMouseEvent *e) override;
 	void contextMenuEvent(QContextMenuEvent *e) override;
 	void paintEvent(QPaintEvent *e) override;
+	void keyPressEvent(QKeyEvent *e) override;
+	void focusInEvent(QFocusEvent *e) override;
+	void focusOutEvent(QFocusEvent *e) override;
 	bool eventHook(QEvent *e) override;
 
 	void validateContent(QRect island);
@@ -61,6 +79,9 @@ private:
 
 	void setSelected(int index);
 	void setActive(int index);
+	void setFocused(int index);
+	void activateTab(int index);
+	void notifyActiveChanged(int previous);
 	void scrollToTab(int index);
 	void scrollTo(float64 value);
 	void addRipple(int index, QPoint position);
@@ -102,6 +123,9 @@ private:
 	int _pressed = -1;
 	int _active = -1;
 	int _wasActive = -1;
+	int _focused = -1;
+	quintptr _identityCounter = 0;
+	bool _keyboardFocus = false;
 	bool _contentValid = false;
 	bool _pointerAimed = false;
 

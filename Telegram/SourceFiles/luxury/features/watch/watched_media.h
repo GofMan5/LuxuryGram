@@ -26,24 +26,23 @@ void processNewMessage(not_null<HistoryItem*> item);
 // directory moves with a portable build, and an absolute path would not survive
 // it. The deleted-messages viewer never sees that column though -- the query it
 // runs hands back the base class, without it -- so the file is found by the two
-// things the viewer does have. Empty when nothing was kept for the message.
-[[nodiscard]] QString keptFileForMessage(ID dialogId, MsgId messageId);
+// things the viewer does have, scoped to its account and full typed PeerId. Legacy files without an
+// account remain on disk for manual recovery and are never exposed by lookup.
+// Empty when nothing was kept for the message.
+[[nodiscard]] QString keptFileForMessage(uint64 sessionId, ID dialogId, MsgId messageId);
 
 // True for the files this fetches on its own. A failure writing one of those is
 // not the user's download failing: nobody asked for it, so it must not put a
 // modal in front of them or be read as a problem with their download path.
 [[nodiscard]] bool ownsFetchedPath(const QString &path);
 
-// Deletes every kept file: the ones that outlived their message on purpose
-// and are exempt from the budget. A clear can be large, so the walk runs on
-// a pool thread with no completion callback. Deleted-message rows keep
-// their stored names; a file missing from disk already shows up as
-// "nothing was kept".
+// Invalidates queued saves/keeps, cancels only Watch-owned loaders and deletes
+// a snapshot of v2 pending/kept files on a pool thread. Later work uses fresh
+// names and survives the clear. Ambiguous legacy files remain untouched.
 void clearKeptMedia();
 
-// Deletes one dialog's kept files, by the name prefix every kept file
-// carries, so unwatching a chat does not orphan its media. Runs as the
-// same fire-and-forget walk as clearKeptMedia().
-void clearKeptMediaForDialog(ID dialogId);
+// The same clear restricted to one account/dialog; another account's files
+// and queues are never included.
+void clearKeptMediaForDialog(uint64 sessionId, ID dialogId);
 
 } // namespace LuxuryFeatures::Watch

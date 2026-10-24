@@ -33,6 +33,8 @@ void runOnce();
 // every writer is a timer callback or an API response handler.
 std::unordered_map<uint64, bool> State;
 
+std::unordered_map<uint64, mtpRequestId> Requests;
+
 base::Timer &workerTimer() {
 	static base::Timer timer([] {
 		runOnce();
@@ -45,38 +47,51 @@ void runOnce() {
 		return;
 	}
 
-	const auto t = base::unixtime::now();
 	auto active = std::unordered_set<uint64>();
 	// sendOfflinePacketAfterOnline is off by default, so for almost every user
 	// this used to be a three-second wake-up for the whole life of the process
 	// that did nothing at all -- enough to keep a laptop out of its deeper idle
 	// states. Stop when there is nothing owed: every event that can owe one goes
 	// through markAsOnline(), and enabling the setting goes through wake().
-	auto pending = false;
-
 	for (const auto &[index, account] : Core::App().domain().accounts()) {
 		if (account) {
 			if (const auto session = account->maybeSession()) {
 				const auto id = session->uniqueId();
 				active.insert(id);
 				if (!State.contains(id)) {
-					State[id] = true;
+					State[id] = false;
 				}
 
 				const auto &ghost = LuxurySettings::ghost(session);
 				if (!ghost.sendOfflinePacketAfterOnline()) {
+					if (const auto request = Requests.find(id); request != end(Requests)) {
+						session->api().request(request->second).cancel();
+						Requests.erase(request);
+					}
 					continue;
 				}
 
-				if (State[id] || session->user()->lastseen().isOnline(t)) {
-					session->api().request(MTPaccount_UpdateStatus(
+				if (State[id] && !Requests.contains(id)) {
+					Requests[id] = session->api().request(MTPaccount_UpdateStatus(
 						MTP_bool(true)
-					)).send();
+					)).done([id](const auto &, mtpRequestId requestId) {
+						if (const auto i = Requests.find(id)
+							; i != end(Requests) && i->second == requestId) {
+							Requests.erase(i);
+							if (State[id]) {
+								wake();
+							}
+						}
+					}).fail([id](const MTP::Error &, mtpRequestId requestId) {
+						if (const auto i = Requests.find(id)
+							; i != end(Requests) && i->second == requestId) {
+							Requests.erase(i);
+							if (State[id]) {
+								wake();
+							}
+						}
+					}).send();
 					State[id] = false;
-					// The server has not answered yet, so our own lastseen can
-					// still read online on the next tick. Keep going until it
-					// does not.
-					pending = true;
 
 					DEBUG_LOG(("[LuxuryGram] Sent offline for account with id %1").arg(id));
 				}
@@ -87,13 +102,12 @@ void runOnce() {
 		if (active.contains(i->first)) {
 			++i;
 		} else {
+			Requests.erase(i->first);
 			i = State.erase(i);
 		}
 	}
 
-	if (!pending) {
-		workerTimer().cancel();
-	}
+	workerTimer().cancel();
 }
 
 } // namespace

@@ -224,6 +224,7 @@ EmbedOverlay::EmbedOverlay(
 
 	_close = Ui::CreateChild<Ui::IconButton>(this, st::markdownEmbedOverlayClose);
 	_close->setObjectName(u"nativeIvEmbedOverlayClose"_q);
+	_close->setAccessibleName(tr::lng_close(tr::now));
 	_close->setClickedCallback([=] {
 		closeEmbed();
 	});

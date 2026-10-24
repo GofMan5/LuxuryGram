@@ -14,6 +14,8 @@
 
 #include <array>
 #include <mutex>
+#include <set>
+#include <stdexcept>
 
 using namespace sqlite_orm;
 auto storage = make_storage(
@@ -156,7 +158,8 @@ std::recursive_mutex DatabaseMutex;
 // would be torn down first, while a pass of it may still be inside an insert.
 crl::queue DatabaseQueue;
 
-// Set when convergeDeletedMessage() could not restore the columns 1.0.2 dropped.
+// Set when convergeMessageTables() could not bring a message table to its
+// declared shape.
 // sync_schema()'s answer to a shape it cannot match is to drop the table, and the
 // recovery path moves the file aside -- either one takes every saved deleted
 // message with it, for a failure that is usually a full disk or a locked file.
@@ -166,6 +169,19 @@ bool ConvergeFailed = false;
 // that a stuck writer surfaces as a logged failure instead of a frozen UI. Also
 // what bounds the drain at quit: a task cannot park on a lock, it fails.
 constexpr auto kBusyTimeoutMs = 3000;
+
+// SQLite's LIKE folds case for ASCII only, so "привет" never found "Привет".
+struct ContainsIgnoringCase {
+	bool operator()(const std::string &text, const std::string &query) const {
+		return QString::fromStdString(text).contains(
+			QString::fromStdString(query),
+			Qt::CaseInsensitive);
+	}
+
+	static const char *name() {
+		return "luxury_contains_ignoring_case";
+	}
+};
 
 } // namespace
 
@@ -321,24 +337,54 @@ bool moveCurrentDatabase() {
 	return true;
 }
 
-// True when the statement runs. Used only to ask whether a table or a column is
-// there: SQLite refuses to prepare a SELECT naming something that does not
-// exist, and LIMIT 0 means nothing is read even when it does.
-bool sqlAccepts(sqlite3 *db, const std::string &query) {
-	try {
-		sqlite_orm::internal::perform_void_exec(db, query);
-		return true;
-	} catch (...) {
-		return false;
+std::set<std::string> tableColumns(sqlite3 *db, const std::string &table) {
+	const auto statement = statement_finalizer{
+		sqlite_orm::internal::prepare_stmt(
+			db,
+			"PRAGMA table_xinfo(" + quote_identifier(table) + ")")
+	};
+	auto result = std::set<std::string>();
+	while (true) {
+		const auto status = sqlite3_step(statement.get());
+		if (status == SQLITE_DONE) {
+			return result;
+		} else if (status != SQLITE_ROW) {
+			throw_translated_sqlite_error(db);
+		}
+		if (sqlite3_column_int(statement.get(), 6) != 0) {
+			throw std::runtime_error(
+				"Unexpected generated or hidden " + table + " column.");
+		}
+		result.emplace(reinterpret_cast<const char*>(
+			sqlite3_column_text(statement.get(), 1)));
 	}
 }
 
-// Bring a DeletedMessage table up to the shape make_table declares, keeping its
-// rows, before sync_schema gets a chance to do it the lossy way.
+struct KnownColumn {
+	const char *name = nullptr;
+	const char *definition = nullptr;
+	// What a row from a shape without the column gets. nullptr when every shape
+	// in the wild has it, so its absence means a table we do not know.
+	const char *fallback = nullptr;
+	// Declared with default_value, so sync_schema adds it in place: its absence
+	// alone is no reason to rewrite the table.
+	bool addedInPlace = false;
+};
+
+struct KnownTable {
+	std::string name;
+	std::vector<KnownColumn> columns;
+	// AyuGram columns this fork never reads. Released builds dropped them while
+	// syncing; a table still carrying them cannot equal the declaration.
+	std::set<std::string> legacy;
+};
+
+// Bring a message table up to the shape make_table declares, keeping its rows,
+// before sync_schema gets a chance to do it the lossy way.
 //
-// 1.0.2 shipped a declaration missing fourteen columns and dropped them from
-// every database it opened. Those databases now have sixteen columns, and
-// against the restored declaration sync_schema puts the fourteen in
+// 1.0.2 shipped a declaration missing fourteen DeletedMessage columns and dropped
+// them from every database it opened. Those databases now have sixteen columns,
+// and against the restored declaration sync_schema puts the fourteen in
 // columnsToAdd -- where each one being NOT NULL with no default clears
 // attempt_to_preserve, so sync_table takes the drop_create_with_loss branch and
 // the rows are gone. There is no way to add a NOT NULL column without a default
@@ -346,76 +392,165 @@ bool sqlAccepts(sqlite3 *db, const std::string &query) {
 // no longer compares equal to the declaration. So the table gets rewritten once,
 // here, in a single pass that carries the rows across.
 //
-// The literals match what a real database holds in these columns, which is
-// nothing: mediaPath is "/" everywhere and the rest are empty or zero.
-void convergeDeletedMessage(sqlite3 *db) {
-	if (!sqlAccepts(db, "SELECT 1 FROM \"DeletedMessage\" LIMIT 0")) {
-		return; // No table yet -- sync_schema creates it at the right shape.
-	}
-	if (sqlAccepts(db, "SELECT \"mediaPath\" FROM \"DeletedMessage\" LIMIT 0")) {
-		return; // Already the declared shape. This is the common path.
-	}
-	LOG(("Database: DeletedMessage is missing the 1.0.2-dropped columns, "
-		"rewriting it once to add them back."));
-	static const auto kCarried = std::string(
-		"\"fakeId\", \"userId\", \"dialogId\", \"groupedId\", \"peerId\", "
-		"\"fromId\", \"topicId\", \"messageId\", \"date\", \"flags\", "
-		"\"editDate\", \"views\", \"postAuthor\", \"entityCreateDate\", "
-		"\"text\", \"textEntities\"");
+// A table still in AyuGram's 33-column shape is the opposite case: it has the
+// legacy columns and lacks postAuthor. syncSchemaWithoutLoss rightly refuses to
+// let sync_schema reshape it, which used to leave edit history unsaveable for
+// good ("no column named postAuthor" on every edit), so it is rewritten here too.
+//
+// Defaults are used only for absent historical fields. A partial migration
+// must carry existing values, not overwrite them because mediaPath is absent.
+void convergeTable(sqlite3 *db, const KnownTable &table) {
 	try {
+		const auto existing = tableColumns(db, table.name);
+		if (existing.empty()) {
+			return; // No table yet -- sync_schema creates it at the right shape.
+		}
+		const auto quotedTable = quote_identifier(table.name);
+		auto definitions = std::string();
+		auto columns = std::string();
+		auto values = std::string();
+		auto known = std::size_t();
+		auto rewrite = false;
+		for (const auto &column : table.columns) {
+			const auto present = existing.contains(column.name);
+			if (!present && !column.fallback) {
+				throw std::runtime_error(
+					"Missing required " + table.name + " column.");
+			}
+			if (!columns.empty()) {
+				definitions += ", ";
+				columns += ", ";
+				values += ", ";
+			}
+			const auto quoted = quote_identifier(column.name);
+			definitions += quoted + ' ' + column.definition;
+			columns += quoted;
+			values += present ? quotedTable + '.' + quoted : column.fallback;
+			known += present;
+			rewrite |= !present && !column.addedInPlace;
+		}
+		for (const auto &name : existing) {
+			if (table.legacy.contains(name)) {
+				++known;
+				rewrite = true;
+			}
+		}
+		if (known != existing.size()) {
+			throw std::runtime_error(
+				"Unknown " + table.name + " columns; refusing data loss.");
+		} else if (!rewrite) {
+			return;
+		}
+		LOG(("Database: rewriting %1 to the declared shape without dropping "
+			"rows.").arg(QString::fromStdString(table.name)));
+		const auto rewritten = table.name + "_luxury_new";
+		const auto quotedRewritten = quote_identifier(rewritten);
 		sqlite_orm::internal::perform_void_exec(db, "BEGIN");
 		sqlite_orm::internal::perform_void_exec(db,
-			"CREATE TABLE \"DeletedMessage_luxury_new\" ("
-			"\"fakeId\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, "
-			"\"userId\" INTEGER NOT NULL, \"dialogId\" INTEGER NOT NULL, "
-			"\"groupedId\" INTEGER NOT NULL, \"peerId\" INTEGER NOT NULL, "
-			"\"fromId\" INTEGER NOT NULL, \"topicId\" INTEGER NOT NULL, "
-			"\"messageId\" INTEGER NOT NULL, \"date\" INTEGER NOT NULL, "
-			"\"flags\" INTEGER NOT NULL, \"editDate\" INTEGER NOT NULL, "
-			"\"views\" INTEGER NOT NULL, \"postAuthor\" TEXT NOT NULL DEFAULT '', "
-			"\"entityCreateDate\" INTEGER NOT NULL, \"text\" TEXT NOT NULL, "
-			"\"textEntities\" BLOB NOT NULL, \"fwdPostAuthor\" TEXT NOT NULL, "
-			"\"replyFlags\" INTEGER NOT NULL, \"replyMessageId\" INTEGER NOT NULL, "
-			"\"replyPeerId\" INTEGER NOT NULL, \"replyTopId\" INTEGER NOT NULL, "
-			"\"replyForumTopic\" INTEGER NOT NULL, "
-			"\"replySerialized\" BLOB NOT NULL, \"mediaPath\" TEXT NOT NULL, "
-			"\"hqThumbPath\" TEXT NOT NULL, \"documentType\" INTEGER NOT NULL, "
-			"\"documentSerialized\" BLOB NOT NULL, "
-			"\"thumbsSerialized\" BLOB NOT NULL, "
-			"\"documentAttributesSerialized\" BLOB NOT NULL, "
-			"\"mimeType\" TEXT NOT NULL)");
+			"CREATE TABLE " + quotedRewritten + " (" + definitions + ")");
 		sqlite_orm::internal::perform_void_exec(db,
-			"INSERT INTO \"DeletedMessage_luxury_new\" (" + kCarried
-			+ ", \"fwdPostAuthor\", \"replyFlags\", \"replyMessageId\", "
-			"\"replyPeerId\", \"replyTopId\", \"replyForumTopic\", "
-			"\"replySerialized\", \"mediaPath\", \"hqThumbPath\", "
-			"\"documentType\", \"documentSerialized\", \"thumbsSerialized\", "
-			"\"documentAttributesSerialized\", \"mimeType\") SELECT " + kCarried
-			+ ", '', 0, 0, 0, 0, 0, x'', '/', '', 0, x'', x'', x'', '' "
-			"FROM \"DeletedMessage\"");
+			"INSERT INTO " + quotedRewritten + " (" + columns
+			+ ") SELECT " + values + " FROM " + quotedTable);
 		sqlite_orm::internal::perform_void_exec(db,
-			"DROP TABLE \"DeletedMessage\"");
+			"UPDATE sqlite_sequence SET seq = max(seq, coalesce("
+			"(SELECT seq FROM sqlite_sequence WHERE name = '" + table.name
+			+ "'), 0)) WHERE name = '" + rewritten + "'");
 		sqlite_orm::internal::perform_void_exec(db,
-			"ALTER TABLE \"DeletedMessage_luxury_new\" "
-			"RENAME TO \"DeletedMessage\"");
+			"DROP TABLE " + quotedTable);
+		sqlite_orm::internal::perform_void_exec(db,
+			"ALTER TABLE " + quotedRewritten + " RENAME TO " + quotedTable);
 		sqlite_orm::internal::perform_void_exec(db, "COMMIT");
-		LOG(("Database: DeletedMessage rewritten, columns restored."));
+		LOG(("Database: %1 rewritten, rows kept."
+			).arg(QString::fromStdString(table.name)));
 	} catch (const std::exception &ex) {
-		// Leave the old table alone. sync_schema would drop it with loss, so the
-		// caller turns this into the recovery path instead.
+		// Leave the old table alone and disable recovery that would move it aside.
 		try {
 			sqlite_orm::internal::perform_void_exec(db, "ROLLBACK");
 		} catch (...) {
 		}
-		LOG(("Database: failed to restore DeletedMessage columns: %1"
-			).arg(ex.what()));
+		LOG(("Database: failed to converge %1: %2"
+			).arg(QString::fromStdString(table.name), ex.what()));
 		ConvergeFailed = true;
 		throw;
 	}
 }
 
+void convergeMessageTables(sqlite3 *db) {
+	static const auto base = std::vector<KnownColumn>{
+		{ "fakeId", "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL" },
+		{ "userId", "INTEGER NOT NULL" },
+		{ "dialogId", "INTEGER NOT NULL" },
+		{ "groupedId", "INTEGER NOT NULL" },
+		{ "peerId", "INTEGER NOT NULL" },
+		{ "fromId", "INTEGER NOT NULL" },
+		{ "topicId", "INTEGER NOT NULL" },
+		{ "messageId", "INTEGER NOT NULL" },
+		{ "date", "INTEGER NOT NULL" },
+		{ "flags", "INTEGER NOT NULL" },
+		{ "editDate", "INTEGER NOT NULL" },
+		{ "views", "INTEGER NOT NULL" },
+		{ "postAuthor", "TEXT NOT NULL DEFAULT ''", "''", true },
+		{ "entityCreateDate", "INTEGER NOT NULL" },
+		{ "text", "TEXT NOT NULL" },
+		{ "textEntities", "BLOB NOT NULL" },
+	};
+	static const auto deleted = [] {
+		auto result = KnownTable{
+			.name = "DeletedMessage",
+			.columns = base,
+			.legacy = { "fwdFlags", "fwdFromId", "fwdName", "fwdDate" },
+		};
+		result.columns.insert(result.columns.end(), {
+			{ "fwdPostAuthor", "TEXT NOT NULL", "''" },
+			{ "replyFlags", "INTEGER NOT NULL", "0" },
+			{ "replyMessageId", "INTEGER NOT NULL", "0" },
+			{ "replyPeerId", "INTEGER NOT NULL", "0" },
+			{ "replyTopId", "INTEGER NOT NULL", "0" },
+			{ "replyForumTopic", "INTEGER NOT NULL", "0" },
+			{ "replySerialized", "BLOB NOT NULL", "x''" },
+			{ "mediaPath", "TEXT NOT NULL", "'/'" },
+			{ "hqThumbPath", "TEXT NOT NULL", "''" },
+			{ "documentType", "INTEGER NOT NULL", "0" },
+			{ "documentSerialized", "BLOB NOT NULL", "x''" },
+			{ "thumbsSerialized", "BLOB NOT NULL", "x''" },
+			{ "documentAttributesSerialized", "BLOB NOT NULL", "x''" },
+			{ "mimeType", "TEXT NOT NULL", "''" },
+		});
+		return result;
+	}();
+	static const auto edited = KnownTable{
+		.name = "EditedMessage",
+		.columns = base,
+		.legacy = {
+			"fwdFlags", "fwdFromId", "fwdName", "fwdDate", "fwdPostAuthor",
+			"replyFlags", "replyMessageId", "replyPeerId", "replyTopId",
+			"replyForumTopic", "replySerialized", "mediaPath", "hqThumbPath",
+			"documentType", "documentSerialized", "thumbsSerialized",
+			"documentAttributesSerialized", "mimeType",
+		},
+	};
+	convergeTable(db, deleted);
+	convergeTable(db, edited);
+}
+
+template <typename Storage>
+void syncSchemaWithoutLoss(Storage &database) {
+	auto guard = database.immediate_transaction_guard();
+	for (const auto &[table, status] : database.sync_schema_simulate(true)) {
+		if (status == sync_schema_result::dropped_and_recreated
+			|| status == sync_schema_result::old_columns_removed
+			|| status == sync_schema_result::new_columns_added_and_old_columns_removed) {
+			ConvergeFailed = true;
+			throw std::runtime_error("Refusing destructive schema sync for " + table);
+		}
+	}
+	database.sync_schema(true);
+	guard.commit();
+}
+
 void initialize() {
 	const auto lock = std::lock_guard(DatabaseMutex);
+	ConvergeFailed = false;
 	// A missing file means a first run: sync_schema() below builds everything at
 	// its current shape, so the migration list must not touch it. Check before
 	// sync_schema, which creates the file.
@@ -426,13 +561,13 @@ void initialize() {
 	// SQLITE_BUSY instead of a short wait.
 	//
 	// The schema converge rides along here because this is the one hook that is
-	// guaranteed to run before any statement sync_schema issues. Both of its
-	// probes are a prepare that reads nothing, so the repeated opens before
-	// open_forever() cost almost nothing once the shape is right.
+	// guaranteed to run before any statement sync_schema issues. Read metadata,
+	// not a quoted SELECT: SQLite DQS treats a missing column as a string literal.
 	storage.on_open = [](sqlite3 *db) {
 		sqlite3_busy_timeout(db, kBusyTimeoutMs);
-		convergeDeletedMessage(db);
+		convergeMessageTables(db);
 	};
+	storage.create_scalar_function<ContainsIgnoringCase>();
 	auto needRecovery = false;
 	try {
 		// Without these, sqlite defaults to a rollback journal with
@@ -444,7 +579,7 @@ void initialize() {
 		storage.pragma.journal_mode(journal_mode::WAL);
 		storage.pragma.synchronous(1); // NORMAL
 
-		storage.sync_schema(true);
+		syncSchemaWithoutLoss(storage);
 
 		needRecovery = !runMigrations(storage, freshDatabase);
 	} catch (const std::exception &ex) {
@@ -468,7 +603,7 @@ void initialize() {
 			return;
 		}
 		try {
-			storage.sync_schema(true);
+			syncSchemaWithoutLoss(storage);
 			// A database sync_schema just built is at the current version, not at
 			// 0. Stamping 0 here made the next launch run every migration against
 			// it, and migrateToV1 drops RegexFilter -- so any filter created after
@@ -634,15 +769,6 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 			);
 		}
 
-		std::string escaped;
-		escaped.reserve(searchQuery.size());
-		for (const auto c : searchQuery) {
-			if (c == '%' || c == '_' || c == '\\') {
-				escaped += '\\';
-			}
-			escaped += c;
-		}
-		const auto pattern = "%" + escaped + "%";
 		return storage.get_all<DeletedMessage>(
 			where(
 				column<DeletedMessage>(&DeletedMessage::userId) == userId and
@@ -651,7 +777,9 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 					column<DeletedMessage>(&DeletedMessage::topicId) == 0 or anyTopic) and
 				(column<DeletedMessage>(&DeletedMessage::messageId) > minId or minId == 0) and
 				(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0) and
-				like(column<DeletedMessage>(&DeletedMessage::text), pattern, "\\")
+				sqlite_orm::func<ContainsIgnoringCase>(
+					column<DeletedMessage>(&DeletedMessage::text),
+					searchQuery)
 			),
 			order_by(column<DeletedMessage>(&DeletedMessage::messageId)).desc(),
 			limit(totalLimit)

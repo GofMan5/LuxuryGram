@@ -22,6 +22,7 @@
 #include <QSvgRenderer>
 
 static QString LAST_LOADED_NAME;
+static int LAST_LOADED_RATIO = 0;
 static QImage LAST_LOADED;
 static QImage LAST_LOADED_PAD;
 
@@ -90,7 +91,10 @@ QImage CreateImage(const QString &name, const QSize resultImageSize, const int p
 
 	const auto pngPath = qsl(":/gui/art/luxury/%1/app.png").arg(name);
 	if (QFile::exists(pngPath)) {
-		const auto loaded = QImage(pngPath).scaled(iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+		const auto loaded = QImage(pngPath).scaled(
+			iconSize * style::DevicePixelRatio(),
+			Qt::KeepAspectRatio,
+			Qt::SmoothTransformation);
 		auto res = QImage(
 			resultImageSize * style::DevicePixelRatio(),
 			QImage::Format_ARGB32_Premultiplied);
@@ -141,8 +145,10 @@ void loadIcons() {
 	constexpr auto kIconPad = 12;
 
 	const auto iconName = safeAppIconName();
-	if (LAST_LOADED_NAME != iconName) {
+	const auto ratio = style::DevicePixelRatio();
+	if (LAST_LOADED_NAME != iconName || LAST_LOADED_RATIO != ratio) {
 		LAST_LOADED_NAME = iconName;
+		LAST_LOADED_RATIO = ratio;
 		LAST_LOADED = CreateImage(iconName, Size(256));
 		LAST_LOADED_PAD = CreateImage(iconName, Size(256), kIconPad);
 	}

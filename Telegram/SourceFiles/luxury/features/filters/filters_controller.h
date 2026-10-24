@@ -15,7 +15,6 @@
 
 namespace FiltersController {
 
-bool isEnabled(not_null<PeerData*> peer);
 bool isBlocked(not_null<HistoryItem*> item);
 bool isBlocked(not_null<PeerData*> peer);
 bool filtered(not_null<HistoryItem*> historyItem);

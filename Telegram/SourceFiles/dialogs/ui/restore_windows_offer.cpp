@@ -74,6 +74,7 @@ RestoreWindowsOffer::RestoreWindowsOffer(not_null<Ui::RpWidget*> parent)
 	_wideAlways->setClickedCallback(choose(RestoreWindowsChoice::Always));
 	_wideRestore->setClickedCallback(choose(RestoreWindowsChoice::Once));
 	_wideNever->setClickedCallback(choose(RestoreWindowsChoice::Never));
+	_close->setAccessibleName(tr::lng_close(tr::now));
 	_close->setClickedCallback(choose(RestoreWindowsChoice::Dismiss));
 }
 

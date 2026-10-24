@@ -621,7 +621,7 @@ void SetupRows(
 
 	const auto copyPhone = [=] {
 		QGuiApplication::clipboard()->setText(self->phone());
-		controller->showToast(tr::lng_text_copied(tr::now), 500);
+		controller->showToast(tr::lng_text_copied(tr::now));
 	};
 	const auto phoneButton = AddRow(
 		container,

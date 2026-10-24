@@ -62,10 +62,10 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 	req.setHeader(QNetworkRequest::ContentTypeHeader,
 				  QStringLiteral("application/x-www-form-urlencoded"));
 
-	QUrlQuery postData;
-	postData.addQueryItem(QStringLiteral("lang"), to);
-	postData.addQueryItem(QStringLiteral("text"), Html::entitiesToHtml(text));
-	const auto postDataEncoded = postData.toString(QUrl::FullyEncoded).toUtf8();
+	// QUrlQuery keeps "+" and "%XX" as written, and a form body reads them
+	// as a space and an escape: "C++" would arrive as "C  ".
+	const auto postDataEncoded = "lang=" + QUrl::toPercentEncoding(to)
+		+ "&text=" + QUrl::toPercentEncoding(text.text);
 
 	QPointer<QNetworkReply> reply = _nam.post(req, postDataEncoded);
 	QObject::connect(

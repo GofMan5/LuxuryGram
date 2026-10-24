@@ -46,6 +46,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat.h"
 #include "styles/style_chat_helpers.h"
 
+// LuxuryGram includes
+#include "luxury/features/message_shot/message_shot.h"
+
+
 namespace HistoryView {
 namespace {
 
@@ -160,6 +164,10 @@ WelcomeMessagesWidget::WelcomeMessagesWidget(
 	_topBar->deleteSelectionRequest(
 	) | rpl::on_next([=] {
 		confirmDeleteSelected();
+	}, _topBar->lifetime());
+	_topBar->messageShotSelectionRequest(
+	) | rpl::on_next([=] {
+		LuxuryFeatures::MessageShot::Wrapper(_inner, [=] { clearSelected(); });
 	}, _topBar->lifetime());
 	_topBar->clearSelectionRequest(
 	) | rpl::on_next([=] {
@@ -554,6 +562,7 @@ bool WelcomeMessagesWidget::checkLimit() const {
 Api::SendAction WelcomeMessagesWidget::prepareSendAction(
 		Api::SendOptions options) const {
 	auto result = Api::SendAction(_history, options);
+	result.options.scheduled = 0;
 	result.options.welcomeTemplate = true;
 	return result;
 }

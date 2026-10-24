@@ -151,7 +151,8 @@ void applyCloudThemeAsync(
 		not_null<Main::Session*> session,
 		const Data::CloudTheme &theme,
 		std::shared_ptr<style::palette> palette,
-		Fn<void(bool applied)> onApplied) {
+		Fn<void(bool applied)> onApplied,
+		rpl::lifetime &lifetime) {
 	if (!theme.documentId) {
 		LOG(("MessageShot: theme %1 has no document file, skipping apply").arg(theme.id));
 		if (onApplied) {
@@ -207,7 +208,7 @@ void applyCloudThemeAsync(
 		return documentView->loaded();
 	}) | rpl::take(1) | rpl::on_next([=] {
 		apply();
-	}, controller->lifetime());
+	}, lifetime);
 }
 
 }
@@ -284,7 +285,7 @@ void ensureChatThemesRefreshed() {
 		return;
 	}
 
-	const auto session = getSession(accountId);
+	const auto session = getSessionByUniqueId(accountId);
 	if (!session) {
 		refreshedThemeAccounts.erase(accountId);
 		return;
@@ -342,7 +343,7 @@ SavedThemeApplyResult applySavedThemePalette(
 		return SavedThemeApplyResult::Failed;
 	}
 
-	const auto session = getSession(shot.cloudThemeAccountId());
+	const auto session = getSessionByUniqueId(shot.cloudThemeAccountId());
 	if (!session) {
 		return SavedThemeApplyResult::Failed;
 	}
@@ -374,13 +375,14 @@ SavedThemeApplyResult applySavedThemePalette(
 void subscribeToCloudThemeLoad(
 		not_null<Window::SessionController*> controller,
 		std::shared_ptr<style::palette> palette,
-		Fn<void(bool applied)> onApplied) {
+		Fn<void(bool applied)> onApplied,
+		rpl::lifetime &lifetime) {
 	const auto &shot = LuxurySettings::getInstance().messageShotSettings();
 	if (shot.cloudThemeId() == 0) {
 		return;
 	}
 
-	const auto session = getSession(shot.cloudThemeAccountId());
+	const auto session = getSessionByUniqueId(shot.cloudThemeAccountId());
 	if (!session) {
 		LOG(("MessageShot: session for saved theme account %1 not found").arg(shot.cloudThemeAccountId()));
 		return;
@@ -392,8 +394,8 @@ void subscribeToCloudThemeLoad(
 
 	const auto id = shot.cloudThemeId();
 	const auto weak = base::make_weak(controller);
-	const auto tryApplyFromTheme = [=](const Data::CloudTheme &theme) {
-		applyCloudThemeAsync(controller, session, theme, palette, onApplied);
+	const auto tryApplyFromTheme = [=, &lifetime](const Data::CloudTheme &theme) {
+		applyCloudThemeAsync(controller, session, theme, palette, onApplied, lifetime);
 	};
 
 	if (const auto theme = findCloudThemeById(session, id)) {
@@ -414,9 +416,9 @@ void subscribeToCloudThemeLoad(
 	};
 
 	session->data().cloudThemes().chatThemesUpdated(
-	) | rpl::on_next(tryFind, controller->lifetime());
+	) | rpl::on_next(tryFind, lifetime);
 	session->data().cloudThemes().updated(
-	) | rpl::on_next(tryFind, controller->lifetime());
+	) | rpl::on_next(tryFind, lifetime);
 }
 
 }

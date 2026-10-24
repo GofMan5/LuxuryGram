@@ -2671,7 +2671,7 @@ void GroupCall::applyOtherParticipantUpdate(
 	}
 	_otherParticipantStateValue.fire(Group::ParticipantState{
 		.peer = participantPeer,
-		.volume = data.vvolume().value_or_empty(),
+		.volume = data.vvolume().value_or(Group::kDefaultVolume),
 		.mutedByMe = data.is_muted_by_you(),
 	});
 }

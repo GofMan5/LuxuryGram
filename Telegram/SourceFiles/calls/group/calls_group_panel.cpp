@@ -2341,6 +2341,7 @@ void Panel::showNiceTooltip(
 		const auto button = Ui::CreateChild<Ui::IconButton>(
 			container,
 			st::groupCallStickedTooltipClose);
+		button->setAccessibleName(tr::lng_close(tr::now));
 		rpl::combine(
 			label->sizeValue(),
 			button->sizeValue()

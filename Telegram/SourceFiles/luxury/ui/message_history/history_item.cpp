@@ -122,7 +122,7 @@ void GenerateItems(
 
 	const auto addSimpleTextMessage = [&](TextWithEntities &&text)
 	{
-		addPart(makeSimpleTextMessage(std::move(text)));
+		addPart(makeSimpleTextMessage(std::move(text)), 0, MsgId(message.messageId));
 	};
 
 	const auto text = QString::fromStdString(message.text);

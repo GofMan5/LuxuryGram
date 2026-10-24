@@ -22,6 +22,7 @@ enum class EventFilterResult;
 namespace Ui {
 class IconButton;
 class FlatLabel;
+class LinkButton;
 class UserpicButton;
 class PopupMenu;
 class ScrollArea;
@@ -71,7 +72,7 @@ private:
 	void setupUserpicButton();
 	void setupAccounts();
 	void setupAccountsToggle();
-	void setupSetEmojiStatus();
+	void setupPreferencesButton();
 	void setupEmojiStatusDismiss();
 	void setupArchive();
 	void setupMenu();
@@ -92,7 +93,7 @@ private:
 	Ui::Text::String _name;
 	int _nameVersion = 0;
 	object_ptr<ToggleAccountsButton> _toggleAccounts;
-	object_ptr<Ui::FlatLabel> _setEmojiStatus;
+	object_ptr<Ui::LinkButton> _preferencesButton;
 	std::unique_ptr<Info::Profile::EmojiStatusPanel> _emojiStatusPanel;
 	std::unique_ptr<Info::Profile::Badge> _badge;
 	object_ptr<ResetScaleButton> _resetScaleButton = { nullptr };

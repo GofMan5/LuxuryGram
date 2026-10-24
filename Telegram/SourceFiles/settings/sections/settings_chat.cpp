@@ -58,7 +58,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/themes/window_themes_embedded.h"
 #include "window/themes/window_theme_editor_box.h"
 #include "window/themes/window_themes_cloud_list.h"
-#include "window/window_adaptive.h"
 #include "window/window_session_controller.h"
 #include "window/window_controller.h"
 #include "info/downloads/info_downloads_widget.h"
@@ -2072,14 +2071,12 @@ void SetupChatBackground(
 				st::settingsCheckbox),
 			st::settingsSendTypePadding));
 	const auto adaptive = inner->add(
-		object_ptr<Ui::SlideWrap<Ui::Checkbox>>(
+		object_ptr<Ui::Checkbox>(
 			inner,
-			object_ptr<Ui::Checkbox>(
-				inner,
-				tr::lng_settings_adaptive_wide(tr::now),
-				Core::App().settings().adaptiveForWide(),
-				st::settingsCheckbox),
-			st::settingsSendTypePadding));
+			tr::lng_settings_adaptive_wide(tr::now),
+			Core::App().settings().adaptiveForWide(),
+			st::settingsCheckbox),
+		st::settingsSendTypePadding);
 
 	tile->entity()->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
@@ -2102,19 +2099,14 @@ void SetupChatBackground(
 		tile->toggle(shown(), anim::type::instant);
 	}, tile->lifetime());
 
-	adaptive->toggleOn(controller->adaptive().chatLayoutValue(
-	) | rpl::map([](Window::Adaptive::ChatLayout layout) {
-		return (layout == Window::Adaptive::ChatLayout::Wide);
-	}));
-
-	adaptive->entity()->checkedChanges(
+	adaptive->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
 		Core::App().settings().setAdaptiveForWide(checked);
 		Core::App().saveSettingsDelayed();
 	}, adaptive->lifetime());
 	if (highlights) {
 		highlights->push_back({ u"chat/adaptive-layout"_q, {
-			adaptive->entity(),
+			adaptive,
 			{ .radius = st::boxRadius },
 		} });
 	}

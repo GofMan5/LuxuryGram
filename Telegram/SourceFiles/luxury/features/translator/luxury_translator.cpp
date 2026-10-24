@@ -184,6 +184,9 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 		uncachedIndices = std::move(uncachedIndices),
 		weakSession
 	](const std::vector<TextWithEntities> &translated) mutable {
+		if (!_pending.contains(id)) {
+			return;
+		}
 		const auto session = weakSession.get();
 		if (!session) {
 			_pending.erase(id);
@@ -241,7 +244,12 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 			triggerFail(id);
 			return id;
 		}
-		translator->startTranslation(args);
+		auto cancel = translator->startTranslation(args);
+		if (const auto current = _pending.find(id); current != _pending.end()) {
+			current->second.cancel = std::move(cancel);
+		} else if (cancel) {
+			cancel();
+		}
 	}
 
 	return id;
@@ -269,11 +277,13 @@ void TranslateManager::resetCache() {
 	_cacheList.clear();
 	_cacheMap.clear();
 
-	// Whatever is still in flight was sent to the provider we just left, so
-	// let the callers know instead of leaving them on a spinner forever. The
-	// pending map is moved out first, so a callback that starts a new request
-	// does not invalidate what we are iterating.
-	for (const auto &[id, pending] : base::take(_pending)) {
+	const auto pendingRequests = base::take(_pending);
+	for (const auto &[id, pending] : pendingRequests) {
+		if (pending.cancel) {
+			pending.cancel();
+		}
+	}
+	for (const auto &[id, pending] : pendingRequests) {
 		if (pending.fail) {
 			pending.fail(MTP::Error(MTP::Error::MTPLocal(
 				"REQUEST_CANCELED",
@@ -290,6 +300,11 @@ TranslateManager *TranslateManager::instance = nullptr;
 
 TranslateManager::~TranslateManager() {
 	instance = nullptr;
+	for (const auto &[id, pending] : base::take(_pending)) {
+		if (pending.cancel) {
+			pending.cancel();
+		}
+	}
 }
 
 void TranslateManager::init() {

@@ -2012,7 +2012,10 @@ std::vector<not_null<HistoryItem*>> ListWidget::collectBetween(
 		return {};
 	}
 	auto result = std::vector<not_null<HistoryItem*>>();
-	result.reserve(max);
+	if (max < 2) {
+		return {};
+	}
+	result.reserve(std::min<size_t>(max, toIt - fromIt + 1));
 	result.push_back(from);
 	result.push_back(to);
 	for (auto i = fromIt + 1; i != toIt; ++i) {

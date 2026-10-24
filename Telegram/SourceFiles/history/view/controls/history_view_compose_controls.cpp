@@ -1346,6 +1346,8 @@ ComposeControls::ComposeControls(
 				_scheduled = base::make_unique_q<Ui::IconButton>(
 					_wrap.get(),
 					st::historyScheduledToggle);
+				_scheduled->setAccessibleName(
+					tr::lng_scheduled_messages(tr::now));
 				_scheduled->show();
 				_scheduled->clicks(
 				) | rpl::filter(
@@ -1618,6 +1620,8 @@ void ComposeControls::initEditStarsButton() {
 		_wrap.get(),
 		_st.editStars);
 	_editStars->show();
+	_editStars->setAccessibleName(
+		tr::lng_video_stream_edit_stars(tr::now));
 	_editStars->setClickedCallback([=] {
 		editStarsFrom();
 	});
@@ -1826,6 +1830,7 @@ void ComposeControls::setToggleCommentsButton(
 		_commentsShown = Ui::CreateChild<Ui::IconButton>(
 			_wrap.get(),
 			_st.commentsShow);
+		_commentsShown->setAccessibleName(tr::lng_comments_header_none(tr::now));
 		_commentsShown->setClickedCallback([=] {
 			_commentsShownToggles.fire({});
 		});
@@ -2961,6 +2966,7 @@ void ComposeControls::init() {
 		LuxurySettings::getInstance().showEmojiButtonInMessageFieldChanges() | rpl::to_empty,
 		LuxurySettings::getInstance().showMicrophoneButtonInMessageFieldChanges() | rpl::to_empty,
 		LuxurySettings::getInstance().showAutoDeleteButtonInMessageFieldChanges() | rpl::to_empty,
+		LuxurySettings::getInstance().showGiftButtonInMessageFieldChanges() | rpl::to_empty,
 		session().data().aiComposeTones().updated() | rpl::to_empty,
 		LuxurySettings::getInstance().showAiEditorButtonInMessageFieldChanges() | rpl::to_empty,
 		LuxurySettings::getInstance().showAttachPopupChanges() | rpl::to_empty,
@@ -3434,10 +3440,13 @@ void ComposeControls::fieldChanged() {
 		|| likeShown
 		|| (giftToUserVisible != (_giftToUser
 			&& (_mode == Mode::Normal)
-			&& !hideExtra))
+			&& !hideExtra
+			&& LuxurySettings::getInstance().showGiftButtonInMessageField()))
 		|| (silentVisible != (_silent && !hideExtra))
 		|| (scheduledVisible != (_scheduled && !hideExtra))
-		|| (ttlVisible != (_ttlInfo && !hideExtra));
+		|| (ttlVisible != (_ttlInfo
+			&& !hideExtra
+			&& LuxurySettings::getInstance().showAutoDeleteButtonInMessageField()));
 	if (refreshControls) {
 		updateControlsVisibility();
 		updateControlsGeometry(_wrap->size());
@@ -4555,6 +4564,8 @@ void ComposeControls::initSendAsFileButton() {
 		return;
 	}
 	_sendAsFile->hide();
+	_sendAsFile->setAccessibleName(
+		tr::lng_send_as_file_tooltip(tr::now));
 	_sendAsFile->setClickedCallback([=] {
 		if (_sendAsFileTooltipManager) {
 			_sendAsFileTooltipManager->hideAndRemember();
@@ -4972,7 +4983,15 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		&& !_commentsShown->isHidden();
 	const auto giftToUser = _giftToUser
 		&& !_giftToUser->isHidden();
-	const auto attachShown = _attachToggle && !_attachToggle->isHidden();
+	// The attach button and the replace-media button of an edit share a slot.
+	const auto replaceShown = _replaceMedia && !_replaceMedia->isHidden();
+	const auto attachShown = replaceShown
+		|| (_attachToggle && !_attachToggle->isHidden());
+	const auto attachWidth = !attachShown
+		? 0
+		: replaceShown
+		? _replaceMedia->width()
+		: _attachToggle->width();
 	const auto fieldWidth = size.width()
 		- (commentsShown
 			? (_commentsShown->width() + _st.commentsSkip)
@@ -4981,7 +5000,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		- (_botMenu.button
 			? (st::historyBotMenuSkip + _botMenu.button->width())
 			: 0)
-		- (attachShown ? _attachToggle->width() : 0)
+		- attachWidth
 		- (_sendAs ? _sendAs->width() : 0)
 		- _st.padding.right()
 		- _send->width()
@@ -5047,8 +5066,10 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		_replaceMedia->moveToLeft(left, buttonsTop);
 	}
 	if (attachShown) {
-		_attachToggle->moveToLeft(left, buttonsTop);
-		left += _attachToggle->width();
+		if (_attachToggle) {
+			_attachToggle->moveToLeft(left, buttonsTop);
+		}
+		left += attachWidth;
 	}
 	if (_sendAs) {
 		_sendAs->moveToLeft(left, buttonsTop);
@@ -5156,7 +5177,9 @@ void ComposeControls::updateControlsVisibility() {
 	const auto hide = hideExtraButtons()
 		|| isEditingMessage()
 		|| textExceedsMaxSize();
-	const auto showGiftToUser = (_mode == Mode::Normal) && !hide;
+	const auto showGiftToUser = (_mode == Mode::Normal)
+		&& !hide
+		&& settings.showGiftButtonInMessageField();
 	if (_botCommandStart) {
 		SWITCH_BUTTON(
 			_botCommandStart,

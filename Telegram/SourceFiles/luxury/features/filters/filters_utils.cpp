@@ -66,7 +66,8 @@ bool BackupExceedsEntryLimit(const QJsonObject &root) {
 
 QString TruncatedPattern(const QString &pattern) {
 	return (pattern.size() > kMaxToastPatternLength)
-		? pattern.left(kMaxToastPatternLength) + u"…"_q
+		? (pattern.left(safeCutPosition(pattern, kMaxToastPatternLength))
+			+ u"…"_q)
 		: pattern;
 }
 
@@ -78,10 +79,12 @@ bool CompilesPattern(const QString &text, bool caseInsensitive) {
 	if (caseInsensitive) flags |= UREGEX_CASE_INSENSITIVE;
 
 	auto status = U_ZERO_ERROR;
-	return icu::RegexPattern::compile(
-		icu::UnicodeString::fromUTF8(text.toStdString()),
-		flags,
-		status) != nullptr;
+	const auto pattern = std::unique_ptr<icu::RegexPattern>(
+		icu::RegexPattern::compile(
+			icu::UnicodeString::fromUTF8(text.toStdString()),
+			flags,
+			status));
+	return U_SUCCESS(status) && pattern;
 }
 
 enum class PeerResolveHintType {
@@ -453,7 +456,7 @@ void FilterUtils::publishFilters() {
 				url.append(".txt");
 				QGuiApplication::clipboard()->setText(url);
 
-				Ui::Toast::Show(tr::lng_stickers_copied(tr::now));
+				Ui::Toast::Show(tr::lng_channel_public_link_copied(tr::now));
 			} else {
 				LOG(("Failed to publish filters to dpaste, error: %1").arg(reply->errorString()));
 

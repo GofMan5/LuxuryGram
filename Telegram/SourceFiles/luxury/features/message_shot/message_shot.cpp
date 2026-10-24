@@ -12,6 +12,7 @@
 #include "luxury/ui/boxes/message_shot_box.h"
 #include "base/call_delayed.h"
 #include "boxes/abstract_box.h"
+#include "core/application.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
 #include "data/data_file_origin.h"
@@ -38,6 +39,7 @@
 #include "ui/layers/box_content.h"
 #include "ui/toast/toast.h"
 #include "window/themes/window_theme.h"
+#include "window/window_controller.h"
 
 namespace LuxuryFeatures::MessageShot {
 
@@ -283,7 +285,39 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 		messageIds.push_back(message->fullId());
 	}
 
-	auto createdViews = std::make_shared<std::unordered_map<not_null<HistoryItem*>, std::shared_ptr<HistoryView::Element>>>();
+	using Views = std::unordered_map<
+		not_null<HistoryItem*>,
+		std::shared_ptr<HistoryView::Element>>;
+	struct ShotState {
+		bool finished = false;
+		std::shared_ptr<Views> views;
+		rpl::lifetime lifetime;
+		Fn<void(bool)> render;
+
+		~ShotState() {
+			cancel();
+		}
+
+		void cancel() {
+			finished = true;
+			// Element destruction reads HistoryItem and its delegate.
+			views->clear();
+			render = nullptr;
+			lifetime.destroy();
+		}
+
+		void finish() {
+			if (finished || !render) {
+				return;
+			}
+			finished = true;
+			const auto call = base::take(render);
+			const auto guard = gsl::finally([&] { cancel(); });
+			call(true);
+		}
+	};
+	const auto state = std::make_shared<ShotState>();
+	auto createdViews = state->views = std::make_shared<Views>();
 	createdViews->reserve(messages.size());
 	for (const auto &message : messages) {
 		createdViews->emplace(message, message->createView(delegate.get()));
@@ -357,7 +391,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 		sizeRejected = false
 	](bool final) mutable
 	{
-		if (sizeRejected) {
+		if (sizeRejected || createdViews->empty()) {
 			return;
 		}
 		for (auto i = 0; i != int(messages.size()); ++i) {
@@ -365,186 +399,189 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 				return;
 			}
 		}
-		takingShot = true;
-		const auto anonymous = LuxurySettings::getInstance()
-			.messageShotSettings().anonymous();
-		const auto takingShotGuard = gsl::finally([&] {
-			takingShot = false;
-			if (anonymous) {
-				// HistoryMessageForwarded::text is cached on the item itself, so it
-				// is shared with the real chat view, and the layout pass below has
-				// just rebuilt it around a pseudonym. create() is a pure function of
-				// the item, so calling it again with the shot over restores byte for
-				// byte what was there -- widths the real view already cached
-				// included, which is why no resize has to be asked for.
-				for (const auto &message : messages) {
-					if (const auto forwarded
-							= message->Get<HistoryMessageForwarded>()) {
-						forwarded->create(
-							message->Get<HistoryMessageVia>(),
-							message);
+		auto result = QImage();
+		{
+			takingShot = true;
+			const auto anonymous = LuxurySettings::getInstance()
+				.messageShotSettings().anonymous();
+			const auto takingShotGuard = gsl::finally([&] {
+				takingShot = false;
+				if (anonymous) {
+					// HistoryMessageForwarded::text is cached on the item itself, so it
+					// is shared with the real chat view, and the layout pass below has
+					// just rebuilt it around a pseudonym. create() is a pure function of
+					// the item, so calling it again with the shot over restores byte for
+					// byte what was there -- widths the real view already cached
+					// included, which is why no resize has to be asked for.
+					for (const auto &message : messages) {
+						if (const auto forwarded
+								= message->Get<HistoryMessageForwarded>()) {
+							forwarded->create(
+								message->Get<HistoryMessageVia>(),
+								message);
+						}
 					}
 				}
+			});
+
+			// calculate the size of the image
+			int width = st::msgMaxWidth + (st::boxPadding.left() + st::boxPadding.right());
+			auto height = qint64(0);
+
+			for (int i = 0; i < messages.size(); i++) {
+				const auto &message = messages[i];
+				const auto view = getView(message);
+
+				if (anonymous) {
+					// The guard above puts the real forwarded header back after every
+					// pass, so every pass has to lay the message out again to get the
+					// pseudonym into it.
+					view->setPendingResize();
+				}
+				view->itemDataChanged(); // refresh reactions
+				height += view->resizeGetHeight(width);
+				if (LuxurySettings::getInstance().messageShotSettings().revealSpoilers()) {
+					view->revealSpoilers();
+				}
 			}
-		});
 
-		// calculate the size of the image
-		int width = st::msgMaxWidth + (st::boxPadding.left() + st::boxPadding.right());
-		auto height = qint64(0);
-
-		for (int i = 0; i < messages.size(); i++) {
-			const auto &message = messages[i];
-			const auto view = getView(message);
-
-			if (anonymous) {
-				// The guard above puts the real forwarded header back after every
-				// pass, so every pass has to lay the message out again to get the
-				// pseudonym into it.
-				view->setPendingResize();
+			const auto pixelWidth = qint64(width) * style::DevicePixelRatio();
+			const auto pixelHeight = qint64(height) * style::DevicePixelRatio();
+			if (pixelWidth <= 0
+				|| pixelHeight <= 0
+				|| pixelWidth > (kMaxMessageShotPixels / pixelHeight)) {
+				sizeRejected = true;
+				controller->showToast(tr::luxury_MessageShotTooLarge(tr::now));
+				return;
 			}
-			view->itemDataChanged(); // refresh reactions
-			height += view->resizeGetHeight(width);
-			if (LuxurySettings::getInstance().messageShotSettings().revealSpoilers()) {
-				view->revealSpoilers();
+			width = int(pixelWidth);
+			height = int(pixelHeight);
+
+			// create the image
+			QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
+			if (image.isNull()) {
+				sizeRejected = true;
+				controller->showToast(tr::luxury_MessageShotTooLarge(tr::now));
+				return;
 			}
-		}
+			image.setDevicePixelRatio(style::DevicePixelRatio());
+			image.fill(Qt::transparent);
 
-		const auto pixelWidth = qint64(width) * style::DevicePixelRatio();
-		const auto pixelHeight = qint64(height) * style::DevicePixelRatio();
-		if (pixelWidth <= 0
-			|| pixelHeight <= 0
-			|| pixelWidth > (kMaxMessageShotPixels / pixelHeight)) {
-			sizeRejected = true;
-			Ui::Toast::Show(tr::luxury_MessageShotTooLarge(tr::now));
-			return;
-		}
-		width = int(pixelWidth);
-		height = int(pixelHeight);
+			const auto viewport = QRect(0, 0, width, height);
 
-		// create the image
-		QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
-		if (image.isNull()) {
-			sizeRejected = true;
-			Ui::Toast::Show(tr::luxury_MessageShotTooLarge(tr::now));
-			return;
-		}
-		image.setDevicePixelRatio(style::DevicePixelRatio());
-		image.fill(Qt::transparent);
+			base::flat_map<not_null<PeerData*>, Ui::PeerUserpicView> userpics;
+			base::flat_map<MsgId, Ui::PeerUserpicView> hiddenSenderUserpics;
 
-		const auto viewport = QRect(0, 0, width, height);
+			Painter p(&image);
 
-		base::flat_map<not_null<PeerData*>, Ui::PeerUserpicView> userpics;
-		base::flat_map<MsgId, Ui::PeerUserpicView> hiddenSenderUserpics;
+			// draw the messages
+			int y = 0;
+			for (int i = 0; i < messages.size(); i++) {
+				const auto &message = messages[i];
+				const auto view = getView(message);
 
-		Painter p(&image);
+				const auto displayUserpic = view->displayFromPhoto() || message->isPost();
 
-		// draw the messages
-		int y = 0;
-		for (int i = 0; i < messages.size(); i++) {
-			const auto &message = messages[i];
-			const auto view = getView(message);
+				const auto rect = QRect(0, 0, width, view->height());
 
-			const auto displayUserpic = view->displayFromPhoto() || message->isPost();
+				auto context = controller->defaultChatTheme()->preparePaintContext(
+					st.get(),
+					viewport,
+					rect,
+					rect,
+					true);
 
-			const auto rect = QRect(0, 0, width, view->height());
+				p.translate(0, y);
+				view->draw(p, context);
+				p.translate(0, -y);
 
-			auto context = controller->defaultChatTheme()->preparePaintContext(
-				st.get(),
-				viewport,
-				rect,
-				rect,
-				true);
+				if (displayUserpic) {
+					const auto picX = st::msgMargin.left();
+					const auto picY = y + view->height() - st::msgPhotoSize;
+					const auto from = message->displayFrom();
+					const auto pseudonym = from ? AnonymousEntry(from) : nullptr;
 
-			p.translate(0, y);
-			view->draw(p, context);
-			p.translate(0, -y);
-
-			if (displayUserpic) {
-				const auto picX = st::msgMargin.left();
-				const auto picY = y + view->height() - st::msgPhotoSize;
-				const auto from = message->displayFrom();
-				const auto pseudonym = from ? AnonymousEntry(from) : nullptr;
-
-				if (pseudonym) {
-					// The header says "User 1"; the real photo would say who that is.
-					Ui::EmptyUserpic(
-						Ui::EmptyUserpic::UserpicColor(pseudonym->colorIndex),
-						pseudonym->name
-					).paintCircle(p, picX, picY, width, st::msgPhotoSize);
-				} else if (from) {
-					Dialogs::Ui::PaintUserpic(
-						p,
-						from,
-						nullptr,
-						userpics[from],
-						picX,
-						picY,
-						width,
-						st::msgPhotoSize,
-						context.paused);
-				} else if (const auto info = message->displayHiddenSenderInfo()) {
-					if (info->customUserpic.empty()) {
-						info->emptyUserpic.paintCircle(
+					if (pseudonym) {
+						// The header says "User 1"; the real photo would say who that is.
+						Ui::EmptyUserpic(
+							Ui::EmptyUserpic::UserpicColor(pseudonym->colorIndex),
+							pseudonym->name
+						).paintCircle(p, picX, picY, width, st::msgPhotoSize);
+					} else if (from) {
+						Dialogs::Ui::PaintUserpic(
 							p,
+							from,
+							nullptr,
+							userpics[from],
 							picX,
 							picY,
 							width,
-							st::msgPhotoSize);
+							st::msgPhotoSize,
+							context.paused);
+					} else if (const auto info = message->displayHiddenSenderInfo()) {
+						if (info->customUserpic.empty()) {
+							info->emptyUserpic.paintCircle(
+								p,
+								picX,
+								picY,
+								width,
+								st::msgPhotoSize);
+						}
 					}
 				}
+
+				y += view->height();
 			}
 
-			y += view->height();
+			result = addPadding(removeEmptySpaceAround(image));
+			if (showBackground) {
+				auto background = QImage(result.size(), QImage::Format_ARGB32_Premultiplied);
+				background.setDevicePixelRatio(style::DevicePixelRatio());
+				background.fill(makeDefaultBackgroundColor());
+				Painter painter(&background);
+				painter.drawImage(0, 0, result);
+				painter.end();
+				result = std::move(background);
+			}
 		}
-
-		auto result = addPadding(removeEmptySpaceAround(image));
-		if (!showBackground) {
-			callback(result, final);
-			return;
-		}
-
-		auto newResult = QImage(result.size(), QImage::Format_ARGB32_Premultiplied);
-		newResult.setDevicePixelRatio(style::DevicePixelRatio());
-		newResult.fill(makeDefaultBackgroundColor());
-
-		Painter painter(&newResult);
-		painter.drawImage(0, 0, result);
-
-		callback(newResult, final);
+		callback(result, final);
 	};
 
+	state->render = crl::guard(box, std::move(render));
+	const auto weakState = std::weak_ptr<ShotState>(state);
+	const auto cancel = [weakState] {
+		if (const auto state = weakState.lock()) {
+			state->cancel();
+		}
+	};
+	QObject::connect(box, &QObject::destroyed, cancel);
+	auto &owner = controller->session().data();
+	owner.itemRemoved() | rpl::on_next([=](not_null<const HistoryItem*> item) {
+		if (ranges::contains(messageIds, item->fullId())) {
+			cancel();
+		}
+	}, state->lifetime);
+	owner.itemsAboutToBeDestroyed() | rpl::on_next([=](const auto &items) {
+		for (const auto &item : items) {
+			if (ranges::contains(messageIds, item->fullId())) {
+				cancel();
+				return;
+			}
+		}
+	}, state->lifetime);
+	owner.sessionDataAboutToBeCleared() | rpl::on_next(cancel, state->lifetime);
+
 	if (!preload->documents.empty() || !preload->photos.empty()) {
-		render(false); // render immediately to give box width
-
-		struct PreloadState {
-			bool finished = false;
-			rpl::lifetime lifetime;
-			Fn<void()> render;
-
-			void finish() {
-				if (finished || !render) {
-					return;
-				}
-				finished = true;
-				lifetime.destroy();
-				render();
-			}
-		};
-		const auto state = std::make_shared<PreloadState>();
-		state->render = crl::guard(box, [render = std::move(render)]() mutable {
-			render(true);
-		});
-		const auto weakState = std::weak_ptr<PreloadState>(state);
-		// The Elements built above live inside render, and Element's destructor
-		// dereferences its HistoryItem. crl::guard below only suppresses the call:
-		// base::call_delayed keeps the closure itself alive until it fires, so the
-		// Elements would outlive the box by up to the timeout. Drop them by hand.
-		QObject::connect(box, &QObject::destroyed, [weakState] {
-			if (const auto state = weakState.lock()) {
-				state->lifetime.destroy();
-				state->render = nullptr;
-			}
-		});
+		auto preview = base::take(state->render);
+		preview(false); // render immediately to give box width
+		if (state->finished) {
+			return;
+		}
+		state->render = std::move(preview);
+		base::call_delayed(
+			3 * crl::time(1000),
+			box,
+			[state] { state->finish(); });
 		rpl::single() | rpl::then(
 			config.controller->session().downloaderTaskFinished()
 		) | rpl::filter([=]
@@ -562,12 +599,8 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 				state->finish();
 			}
 		}, state->lifetime);
-		base::call_delayed(
-			3 * crl::time(1000),
-			box,
-			[state] { state->finish(); });
 	} else {
-		render(true);
+		state->finish();
 	}
 }
 
@@ -615,7 +648,7 @@ void ShowMessageShotBox(
 	{
 		if (raw->tookShot()) clearSelected();
 	}, raw->lifetime());
-	Ui::show(std::move(box));
+	controller->show(std::move(box));
 }
 
 template <typename Widget, typename GetIds>
@@ -629,7 +662,10 @@ void WrapperImpl(
 	}
 
 	const auto session = &widget->session();
-	const auto controller = widget->session().tryResolveWindow();
+	const auto window = Core::App().findWindow(widget);
+	const auto controller = (window && window->sessionController())
+		? window->sessionController()
+		: session->tryResolveWindow();
 	if (!controller) {
 		return;
 	}

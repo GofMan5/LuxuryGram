@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_schedule_box.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "history/history_item_helpers.h"
 #include "history/history_unread_things.h"
 #include "lang/lang_keys.h"
 #include "lottie/lottie_single_player.h"
@@ -752,11 +753,23 @@ FillMenuResult FillSendMenu(
 		const auto &ghost = maybeShow
 			? LuxurySettings::ghost(&maybeShow->session())
 			: LuxurySettings::ghost();
-		const auto sendWithoutSound = ghost.shouldSendWithoutSound();
+		const auto peer = maybeShow && details.barePeerId
+			? maybeShow->session().data().peerLoaded(PeerId(details.barePeerId))
+			: nullptr;
+		const auto sendWithSound = ghost.shouldSendWithoutSound()
+			&& peer
+			&& !ShouldSendSilent(peer, { .ignoreGhostSilent = true });
 		menu->addAction(
-			sendWithoutSound ? tr::luxury_SendWithSound(tr::now) : tr::lng_send_silent_message(tr::now),
-			[=] { action({ Api::SendOptions{ .silent = true } }, details); },
-			sendWithoutSound ? &icons.menuUnmute : &icons.menuMute);
+			sendWithSound
+				? tr::luxury_SendWithSound(tr::now)
+				: tr::lng_send_silent_message(tr::now),
+			[=] {
+				action({ Api::SendOptions{
+					.silent = !sendWithSound,
+					.ignoreGhostSilent = sendWithSound,
+				} }, details);
+			},
+			sendWithSound ? &icons.menuUnmute : &icons.menuMute);
 	}
 	if (sending && type != Type::SilentOnly) {
 		menu->addAction(

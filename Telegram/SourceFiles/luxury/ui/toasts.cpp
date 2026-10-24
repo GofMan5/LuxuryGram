@@ -1,6 +1,7 @@
 #include "luxury/ui/toasts.h"
 
 #include "lang_auto.h"
+#include "ui/layers/show.h"
 #include "ui/widgets/buttons.h"
 
 #include "styles/style_chat.h"
@@ -10,6 +11,7 @@
 namespace Luxury::Ui {
 
 void ShowToastWithAction(
+		const std::shared_ptr<::Ui::Show> &show,
 		::Ui::Toast::Config &&config,
 		const QString &buttonText,
 		Fn<void()> callback) {
@@ -19,7 +21,7 @@ void ShowToastWithAction(
 	config.st = st.get();
 	config.acceptinput = true;
 
-	const auto weak = ::Ui::Toast::Show(std::move(config));
+	const auto weak = show->showToast(std::move(config));
 	const auto strong = weak.get();
 	if (!strong) {
 		return;
@@ -65,8 +67,8 @@ void ShowToastWithAction(
 	});
 }
 
-void ShowDatabaseError() {
-	::Ui::Toast::Show(tr::luxury_DatabaseError(tr::now));
+void ShowDatabaseError(const std::shared_ptr<::Ui::Show> &show) {
+	show->showToast(tr::luxury_DatabaseError(tr::now));
 }
 
 }

@@ -53,13 +53,14 @@ public:
 	QAccessible::Role accessibilityRole() override;
 	QString accessibilityName() override;
 
+	std::vector<not_null<QWidget*>> accessibilityChildWidgets() const override;
+
 	int resizeGetHeight(int newWidth) override;
 
 	[[nodiscard]] rpl::producer<> disableClicks() const;
 
 private:
 	void paintEvent(QPaintEvent *e) override;
-	int accessibilityChildCount() const override;
 
 	object_ptr<InaccessibleLabel> _label;
 	object_ptr<DisableButton> _disable;
@@ -114,11 +115,11 @@ QPoint DisableButton::prepareRippleStartPosition() const {
 }
 
 QAccessible::Role DisableButton::accessibilityRole() {
-	return QAccessible::NoRole;
+	return QAccessible::Role::Button;
 }
 
 QString DisableButton::accessibilityName() {
-	return QString();
+	return _text;
 }
 
 QAccessible::Role InaccessibleLabel::accessibilityRole() {
@@ -175,15 +176,15 @@ rpl::producer<> Bar::disableClicks() const {
 }
 
 QAccessible::Role Bar::accessibilityRole() {
-	return QAccessible::NoRole;
+	return QAccessible::Role::AlertMessage;
 }
 
 QString Bar::accessibilityName() {
-	return QString();
+	return tr::lng_screen_reader_bar_text(tr::now);
 }
 
-int Bar::accessibilityChildCount() const {
-	return 0;
+std::vector<not_null<QWidget*>> Bar::accessibilityChildWidgets() const {
+	return { _disable.data() };
 }
 
 } // namespace

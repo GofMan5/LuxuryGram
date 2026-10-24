@@ -53,6 +53,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_media_player.h"
 
 #include <tgcalls/VideoCaptureInterface.h>
+#include <utility>
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
@@ -512,7 +513,13 @@ public:
 		const style::RecordBar &st,
 		bool recordingVideo);
 
-	void clearState() override;
+	void reset();
+	[[nodiscard]] bool active() const {
+		return _active;
+	}
+	Ui::AccessibilityState accessibilityState() const override {
+		return { .checkable = true, .checked = _active, .pressed = isDown() };
+	}
 
 protected:
 	QImage prepareRippleMask() const override;
@@ -523,6 +530,7 @@ private:
 	const QRect _rippleRect;
 
 	Ui::Animations::Simple _activeAnimation;
+	bool _active = false;
 	base::unique_qptr<Ui::ImportantTooltip> _tooltip;
 
 };
@@ -536,21 +544,21 @@ TTLButton::TTLButton(
 , _rippleRect(Rect(Size(st::historyRecordLockTopShadow.width()))
 	- (st::historyRecordLockRippleMargin)) {
 	QWidget::resize(Size(st::historyRecordLockTopShadow.width()));
-	Ui::AbstractButton::setDisabled(true);
-
 	Ui::AbstractButton::setClickedCallback([=] {
-		Ui::AbstractButton::setDisabled(!Ui::AbstractButton::isDisabled());
-		const auto isActive = !Ui::AbstractButton::isDisabled();
+		_active = !_active;
+		const auto isActive = _active;
 		_activeAnimation.start(
 			[=] { update(); },
 			isActive ? 0. : 1.,
 			isActive ? 1. : 0.,
 			st::universalDuration);
+		accessibilityStateChanged({ .checked = true });
 	});
 
 	Ui::RpWidget::shownValue() | rpl::on_next([=](bool shown) {
 		if (!shown) {
 			_tooltip = nullptr;
+			reset();
 			return;
 		} else if (_tooltip) {
 			return;
@@ -604,7 +612,7 @@ TTLButton::TTLButton(
 
 		clicks(
 		) | rpl::on_next([=] {
-			const auto toggled = !Ui::AbstractButton::isDisabled();
+			const auto toggled = _active;
 			_tooltip->toggleAnimated(toggled);
 
 			if (toggled) {
@@ -635,7 +643,7 @@ TTLButton::TTLButton(
 		Ui::RippleButton::paintRipple(p, _rippleRect.x(), _rippleRect.y());
 
 		const auto activeProgress = _activeAnimation.value(
-			!Ui::AbstractButton::isDisabled() ? 1 : 0);
+			_active ? 1 : 0);
 
 		p.setOpacity(1. - activeProgress);
 		st::historyRecordVoiceOnceInactive.paintInCenter(p, inner);
@@ -645,17 +653,25 @@ TTLButton::TTLButton(
 			st::historyRecordVoiceOnceBg.paintInCenter(p, inner);
 			st::historyRecordVoiceOnceFg.paintInCenter(p, inner);
 		}
-
+		paintKeyboardFocus(p, inner, inner.height() / 2);
 	}, lifetime());
 	setAccessibleName((recordingVideo
 		? tr::lng_in_dlg_video_message_ttl
 		: tr::lng_in_dlg_voice_message_ttl)(tr::now));
 }
 
-void TTLButton::clearState() {
-	Ui::AbstractButton::setDisabled(true);
-	QWidget::update();
-	Ui::RpWidget::hide();
+void TTLButton::reset() {
+	const auto wasActive = std::exchange(_active, false);
+	_activeAnimation.stop();
+	const auto weak = base::make_weak(this);
+	Ui::RippleButton::clearState();
+	if (weak && wasActive) {
+		accessibilityStateChanged({ .checked = true });
+	}
+	if (weak) {
+		QWidget::update();
+		Ui::RpWidget::hide();
+	}
 }
 
 QImage TTLButton::prepareRippleMask() const {
@@ -3164,27 +3180,33 @@ void VoiceRecordBar::drawMessage(QPainter &p, float64 recordActive) {
 
 void VoiceRecordBar::requestToSendWithOptions(Api::SendOptions options) {
 	if (isListenState()) {
-		if (takeTTLState()) {
-			options.ttlSeconds = std::numeric_limits<int>::max();
-		}
-		if (_listen) {
-			_listen->prepareForSendAnimation();
-			_listen->applyTrimBeforeSend();
-		}
-
 		const auto video = !_data.minithumbs.isNull();
 		const auto &settings = LuxurySettings::getInstance();
+		// Taking view-once, trimming and freezing the waveform for the send
+		// animation all wait for the confirmation: a cancelled send has to
+		// leave the draft playable and exactly as it was.
 		auto sendVoiceCallback = crl::guard(
 			this,
 			[=, this](Fn<void()> &&close)
 			{
-				_sendVoiceRequests.fire({
-					.bytes = _data.content,
-					.waveform = _data.waveform,
-					.duration = _data.duration,
-					.options = options,
-					.video = video,
-				});
+				if (isListenState()) {
+					auto sendOptions = options;
+					if (takeTTLState()) {
+						sendOptions.ttlSeconds
+							= std::numeric_limits<int>::max();
+					}
+					if (_listen) {
+						_listen->prepareForSendAnimation();
+						_listen->applyTrimBeforeSend();
+					}
+					_sendVoiceRequests.fire({
+						.bytes = _data.content,
+						.waveform = _data.waveform,
+						.duration = _data.duration,
+						.options = sendOptions,
+						.video = video,
+					});
+				}
 				close();
 			});
 
@@ -3341,15 +3363,15 @@ float64 VoiceRecordBar::calcLockProgress(QPoint globalPos) {
 }
 
 bool VoiceRecordBar::peekTTLState() const {
-	return _ttlButton && !_ttlButton->isDisabled();
+	return _ttlButton && static_cast<TTLButton*>(_ttlButton.get())->active();
 }
 
 bool VoiceRecordBar::takeTTLState() const {
 	if (!_ttlButton) {
 		return false;
 	}
-	const auto hasTtl = !_ttlButton->isDisabled();
-	_ttlButton->clearState();
+	const auto hasTtl = static_cast<TTLButton*>(_ttlButton.get())->active();
+	static_cast<TTLButton*>(_ttlButton.get())->reset();
 	return hasTtl;
 }
 

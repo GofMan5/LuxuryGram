@@ -370,15 +370,15 @@ void FiltersMenu::refresh() {
 	_reorder->cancel();
 
 	_reorder->clearPinnedIntervals();
-	const auto maxLimit = (reorderAll ? 1 : 0)
+	const auto hasAll = ranges::contains(filters->list(), FilterId(), &Data::ChatFilter::id);
+	const auto premiumFrom = (hasAll ? 1 : 0)
 		+ Data::PremiumLimits(&_session->session()).dialogFiltersCurrent();
-	const auto premiumFrom = (reorderAll ? 0 : 1) + maxLimit;
-	if (!reorderAll && !settings.hideAllChatsFolder()) {
+	if (!reorderAll && hasAll) {
 		_reorder->addPinnedInterval(0, 1);
 	}
 	_reorder->addPinnedInterval(
 		premiumFrom,
-		std::max(1, int(filters->list().size()) - maxLimit));
+		std::max(1, int(filters->list().size()) - premiumFrom));
 
 	// Remember which folder holds keyboard focus so the roving Tab-stop can be
 	// re-established on its replacement after the rebuild: the new buttons are
@@ -408,6 +408,11 @@ void FiltersMenu::refresh() {
 		now.emplace(filter.id(), std::move(button));
 	}
 	_filters = std::move(now);
+	if (settings.hideAllChatsFolder()
+		&& _session->widget()->sessionContent()
+		&& !_filters.contains(_session->activeChatsFilterCurrent())) {
+		_session->setActiveChatsFilter(filters->lookupId(0));
+	}
 	// Re-establish the list's Tab-stop on the folder that was focused (if it
 	// survived the rebuild), else on the active one, so a refresh - rename,
 	// deletion, Premium-state change - never leaves the list without a Tab-stop.
@@ -437,11 +442,6 @@ void FiltersMenu::refresh() {
 	// After the filters are refreshed, the scroll is reset,
 	// so we have to restore it.
 	_scroll.scrollToY(oldTop);
-
-	if (settings.hideAllChatsFolder()
-		&& _session->widget()->sessionContent()) {
-		_session->setActiveChatsFilter(filters->lookupId(0));
-	}
 
 	if (refocus) {
 		refocus->setFocus();
@@ -837,7 +837,7 @@ void FiltersMenu::applyReorder(
 	const auto filters = &_session->session().data().chatsFilters();
 	const auto &list = filters->list();
 	if (!settings.hideAllChatsFolder() && !premium()) {
-		if (list[0].id() != FilterId()) {
+		if (!list.empty() && list[0].id() != FilterId()) {
 			filters->moveAllToFront();
 		}
 	}

@@ -53,6 +53,7 @@ struct SearchDescriptor {
 	const style::TabbedSearch &st;
 	rpl::producer<std::vector<EmojiGroup>> groups;
 	Text::CustomEmojiFactory customEmojiFactory;
+	Fn<bool()> allowAutoFocus;
 };
 
 class SearchWithGroups final : public RpWidget {
@@ -91,6 +92,7 @@ private:
 	void ensureRounding(int size, float64 rounding);
 
 	const style::TabbedSearch &_st;
+	const Fn<bool()> _allowAutoFocus;
 	not_null<FadeWrap<IconButton>*> _search;
 	not_null<FadeWrap<IconButton>*> _back;
 	not_null<CrossButton*> _cancel;

@@ -614,7 +614,6 @@ void Controller::openInMediaView(Media::View::OpenRequest &&request) {
 				.text = tr::luxury_SuggestGhostModeStoryText(tr::now, tr::rich),
 				.confirmed = [=](Fn<void()> close) {
 					close();
-					LuxurySettings::ghost(&story->session()).setGhostModeEnabled(true);
 					LuxuryState::setDisableGhostModeOnStoryClose(&story->session());
 					_openInMediaViewRequests.fire(
 						Media::View::OpenRequest(controller, story, context));

@@ -96,6 +96,7 @@ private:
 
 	void opacityAnimationCallback();
 
+	void setAnimationsPaused(bool paused);
 	void hideFinished();
 	void showStarted();
 
@@ -106,6 +107,7 @@ private:
 	const object_ptr<TabbedSelector> _ownedSelector = { nullptr };
 	const not_null<TabbedSelector*> _selector;
 	rpl::event_stream<bool> _pauseAnimations;
+	bool _animationsPaused = false;
 
 	int _contentMaxHeight = 0;
 	int _contentHeight = 0;

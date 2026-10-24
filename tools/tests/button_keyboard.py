@@ -9,7 +9,7 @@ import tempfile
 root = Path(__file__).resolve().parents[2]
 source = (root / 'Telegram/lib_ui/ui/abstract_button.cpp').read_text('utf-8')
 start = 'bool AbstractButton::isSubmitEvent(not_null<QKeyEvent*> e) const'
-method = start + source.split(start, 1)[1].split('\nvoid AbstractButton::clicked(', 1)[0]
+method = start + source.split(start, 1)[1].split('\nvoid AbstractButton::focusInEvent(', 1)[0]
 program = r'''
 #include <cassert>
 #include <iostream>
@@ -51,6 +51,7 @@ struct AbstractButton : RpWidget {
     bool isSubmitEvent(not_null<QKeyEvent*> e) const;
     bool isDown() const { return down; }
     bool isOver() const { return over; }
+    bool isDisabled() const { return false; }
     void clicked(int, int) {
         ++clicks;
         if (destroyOnClick) alive = false;
@@ -106,5 +107,5 @@ with tempfile.TemporaryDirectory(prefix='luxury-button-test-') as tmp:
     cpp = Path(tmp) / 'check.cpp'
     exe = Path(tmp) / 'check.exe'
     cpp.write_text(program, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(exe)], check=True)
+    subprocess.run(['g++', '-std=c++20', '-O0', '-g', '-D_DEBUG', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

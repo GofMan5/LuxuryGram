@@ -1558,6 +1558,8 @@ void HistoryWidget::initAiButton() {
 
 void HistoryWidget::initSendAsFileButton() {
 	_sendAsFile->hide();
+	_sendAsFile->setAccessibleName(
+		tr::lng_send_as_file_tooltip(tr::now));
 	_sendAsFile->setClickedCallback([=] {
 		if (_sendAsFileTooltipManager) {
 			_sendAsFileTooltipManager->hideAndRemember();
@@ -7615,9 +7617,11 @@ void HistoryWidget::moveFieldControls() {
 	if (_replaceMedia) {
 		_replaceMedia->moveToLeft(left, buttonsBottom);
 	}
-	if (settings.showAttachButtonInMessageField()) {
+	// The replace-media button of an edit takes the attach button's slot even
+	// with the attach button hidden, or the field is laid over it.
+	if (_replaceMedia || settings.showAttachButtonInMessageField()) {
 		_attachToggle->moveToLeft(left, buttonsBottom);
-	left += _attachToggle->width();
+		left += _attachToggle->width();
 	}
 	if (_sendAs) {
 		_sendAs->moveToLeft(left, buttonsBottom);
@@ -7702,7 +7706,9 @@ void HistoryWidget::updateFieldSize() {
 
 	const auto kbShowShown = _history && !_kbShown && _keyboard->hasMarkup();
 	auto fieldWidth = width()
-		- (settings.showAttachButtonInMessageField() ? _attachToggle->width() : 0)
+		- ((_replaceMedia || settings.showAttachButtonInMessageField())
+			? _attachToggle->width()
+			: 0)
 		- st::historySendRight
 		- _send->width()
 		- (settings.showEmojiButtonInMessageField() ? _tabbedSelectorToggle->width() : 0);
@@ -8578,7 +8584,10 @@ void HistoryWidget::updateSendRestriction() {
 	}
 	_sendRestrictionKey = restriction.text;
 	if (LuxuryForward::isForwarding(_peer->id, session())) {
-		_sendRestriction = LuxuryForwardWriteRestriction(this, _peer->id, session());
+		_sendRestriction = LuxuryForwardWriteRestriction(
+			this,
+			controller()->uiShow(),
+			_peer->id);
 	} else if (!restriction) {
 		_sendRestriction = nullptr;
 	} else if (restriction.frozen) {
@@ -9051,8 +9060,7 @@ void HistoryWidget::updateBotKeyboard(History *h, bool force) {
 	} else {
 		if (!_scroll->isHidden()) {
 			_kbScroll->hide();
-			//SWITCH_BUTTON(_tabbedSelectorToggle, settings.showEmojiButtonInMessageField);
-			_tabbedSelectorToggle->show();
+			SWITCH_BUTTON(_tabbedSelectorToggle, settings.showEmojiButtonInMessageField());
 			_botKeyboardHide->hide();
 			_botKeyboardShow->hide();
 			_botCommandStart->setVisible(!_editMsgId && settings.showCommandsButtonInMessageField());

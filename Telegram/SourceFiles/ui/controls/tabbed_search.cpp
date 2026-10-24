@@ -285,6 +285,7 @@ SearchWithGroups::SearchWithGroups(
 	SearchDescriptor descriptor)
 : RpWidget(parent)
 , _st(descriptor.st)
+, _allowAutoFocus(std::move(descriptor.allowAutoFocus))
 , _search(CreateChild<FadeWrapScaled<IconButton>>(
 	this,
 	object_ptr<IconButton>(this, _st.search)))
@@ -554,7 +555,9 @@ void SearchWithGroups::stealFocus() {
 	if (!_focusTakenFrom) {
 		_focusTakenFrom = QApplication::focusWidget();
 	}
-	_field->setFocus();
+	if (!_allowAutoFocus || _allowAutoFocus()) {
+		_field->setFocus();
+	}
 }
 
 void SearchWithGroups::returnFocus() {

@@ -65,6 +65,10 @@ void SendAsButton::paintEvent(QPaintEvent *e) {
 			width(),
 			active);
 	}
+	paintKeyboardFocus(
+		p,
+		QRect(left, top, _st.size, _st.size),
+		_st.size / 2);
 }
 
 } // namespace Ui

@@ -40,6 +40,7 @@ DetailedSettingsButton::DetailedSettingsButton(
 			_style.description.style,
 			text,
 			kDefaultTextOptions);
+		accessibilityDescriptionChanged();
 		refreshLayout();
 	}, lifetime());
 	addClickHandler([=] {
@@ -66,15 +67,21 @@ QString DetailedSettingsButton::accessibilityName() {
 	return _title.toString();
 }
 
+QString DetailedSettingsButton::accessibilityDescription() {
+	return _description.toString();
+}
+
 Ui::AccessibilityState DetailedSettingsButton::accessibilityState() const {
 	return { .checkable = true, .checked = _toggle->checked() };
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
 QAccessible::Role DetailedSettingsButton::accessibilityRole() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0) || defined(QT_ACCESSIBLE_SWITCH_ROLE)
 	return QAccessible::Role::Switch;
-}
+#else
+	return QAccessible::Role::Button;
 #endif
+}
 
 bool DetailedSettingsButton::toggled() const {
 	return _toggle->checked();
@@ -96,6 +103,7 @@ void DetailedSettingsButton::setToggleLocked(bool locked) {
 
 void DetailedSettingsButton::finishAnimating() {
 	_toggle->finishAnimating();
+	Ui::RippleButton::finishAnimating();
 }
 
 void DetailedSettingsButton::onStateChanged(
@@ -107,7 +115,7 @@ void DetailedSettingsButton::onStateChanged(
 		RippleButton::onStateChanged(was, source);
 	}
 	_toggle->setStyle(
-		isOver()
+		(isOver() && !nowDisabled)
 			? _style.button.toggleOver
 			: _style.button.toggle);
 	if (nowDisabled != wasDisabled) {
@@ -118,7 +126,7 @@ void DetailedSettingsButton::onStateChanged(
 
 void DetailedSettingsButton::paintEvent(QPaintEvent *e) {
 	auto p = Painter(this);
-	const auto over = isOver() || isDown();
+	const auto over = (isOver() || isDown()) && !isDisabled();
 	p.fillRect(
 		e->rect(),
 		over ? _style.button.textBgOver : _style.button.textBg);
@@ -147,6 +155,7 @@ void DetailedSettingsButton::paintEvent(QPaintEvent *e) {
 
 	const auto toggle = toggleRect();
 	_toggle->paint(p, toggle.left(), toggle.top(), width());
+	paintKeyboardFocus(p);
 }
 
 int DetailedSettingsButton::resizeGetHeight(int newWidth) {
@@ -161,7 +170,12 @@ int DetailedSettingsButton::resizeGetHeight(int newWidth) {
 }
 
 void DetailedSettingsButton::refreshLayout() {
+	if (_layoutScheduled) {
+		return;
+	}
+	_layoutScheduled = true;
 	Ui::PostponeCall(crl::guard(this, [=] {
+		_layoutScheduled = false;
 		const auto current = widthNoMargins();
 		if (current > 0) {
 			resizeToWidth(current);
@@ -175,7 +189,9 @@ int DetailedSettingsButton::titleTop() const {
 }
 
 int DetailedSettingsButton::titleHeight() const {
-	return _style.button.height;
+	return std::max(
+		_style.button.style.lineHeight,
+		_style.button.style.font->height);
 }
 
 int DetailedSettingsButton::descriptionTopValue() const {
@@ -226,11 +242,11 @@ QRect DetailedSettingsButton::iconRect() const {
 	const auto padding = _style.iconPadding;
 	const auto width = std::max(1, area.width() - (2 * padding));
 	const auto height = std::max(1, area.height() - (2 * padding));
-	return QRect(
+	return myrtlrect(QRect(
 		area.x() + padding,
 		area.y() + padding,
 		width,
-		height);
+		height));
 }
 
 QRect DetailedSettingsButton::iconForegroundRect(QRect iconRect) const {

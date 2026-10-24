@@ -455,6 +455,7 @@ object_ptr<Ui::RpWidget> AddReactionsSelector(
 	const auto toggle = Ui::CreateChild<Ui::IconButton>(
 		parent.get(),
 		st::manageGroupReactions);
+	toggle->setAccessibleName(tr::lng_manage_peer_reactions(tr::now));
 
 	using SelectorState = ReactionsSelectorState;
 	std::move(

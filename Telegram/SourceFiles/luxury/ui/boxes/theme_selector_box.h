@@ -6,34 +6,42 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include "luxury/features/message_shot/message_shot_theme_state.h"
 #include "ui/layers/box_content.h"
 #include "ui/style/style_core_palette.h"
 #include "window/window_session_controller.h"
 
-using Callback = Fn<void(style::palette &)>;
+namespace Ui {
+class RoundButton;
+} // namespace Ui
+
+struct ShotThemeSelection {
+	QByteArray palette;
+	Window::Theme::EmbeddedType embedded = Window::Theme::EmbeddedType(-1);
+	std::optional<QColor> color;
+	std::optional<Data::CloudTheme> cloud;
+	QString name;
+};
 
 class ThemeSelectorBox : public Ui::BoxContent
 {
 public:
 	ThemeSelectorBox(QWidget *parent, not_null<Window::SessionController*> controller);
 
-	rpl::producer<style::palette> paletteSelected();
-	rpl::producer<QString> themeNameChanged();
+	rpl::producer<ShotThemeSelection> themeSelected();
 
 protected:
 	void prepare() override;
 
 private:
 	void setupContent();
+	void setApplyEnabled(bool enabled);
 
 	not_null<Window::SessionController*> _controller;
 
-	rpl::event_stream<style::palette> _palettes;
-	rpl::event_stream<QString> _themeNames;
-
-	style::palette _selectedPalette;
-	// An untouched palette is all-Initial, and palette::save() finalizes such a
-	// palette into the compiled-in default light one -- so firing it would look
-	// like the user picked the light theme.
-	bool _paletteChosen = false;
+	rpl::event_stream<ShotThemeSelection> _themes;
+	std::optional<ShotThemeSelection> _selection;
+	QPointer<Ui::RoundButton> _applyButton;
+	rpl::lifetime _selectionLifetime;
+	int _selectionGeneration = 0;
 };

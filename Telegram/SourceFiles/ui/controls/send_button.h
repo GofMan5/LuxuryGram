@@ -87,6 +87,7 @@ private:
 	[[nodiscard]] QRect sendEllipseRect() const;
 	[[nodiscard]] QRect scheduleEllipseRect() const;
 
+	void paintFocus(QPainter &p) const;
 	void paintRecord(QPainter &p, bool over);
 	void paintRound(QPainter &p, bool over);
 	void paintSave(QPainter &p, bool over);
@@ -115,6 +116,7 @@ private:
 
 	std::array<std::unique_ptr<Lottie::Icon>, 2> _voiceRoundIcons;
 	bool _voiceRoundAnimating = false;
+	bool _grabbingContent = false;
 	RippleShape _lastRippleShape = RippleShape::SendEllipse;
 
 };

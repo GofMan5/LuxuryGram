@@ -72,6 +72,12 @@ void EmojiButton::paintEvent(QPaintEvent *e) {
 			p.drawEllipse(inner);
 		}
 	}
+	paintKeyboardFocus(
+		p,
+		myrtlrect(QRect(
+			st.rippleAreaPosition,
+			QSize(st.rippleAreaSize, st.rippleAreaSize))),
+		st.rippleAreaSize / 2);
 }
 
 void EmojiButton::loadingAnimationCallback() {

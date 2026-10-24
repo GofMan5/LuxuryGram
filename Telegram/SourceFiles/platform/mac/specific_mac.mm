@@ -23,6 +23,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/platform/mac/base_utilities_mac.h"
 #include "base/platform/base_platform_info.h"
 
+// LuxuryGram includes
+#include "luxury/features/streamer_mode/streamer_mode.h"
+
 #include <QtCore/QDirIterator>
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QApplication>
@@ -500,6 +503,9 @@ bool AmbientScreenshotProtectionSupported() {
 }
 
 void SetWindowScreenshotProtection(not_null<QWidget*> window, bool enabled) {
+	const auto excluded = LuxuryFeatures::StreamerMode::excludedWithProtection(
+		window,
+		enabled);
 	const auto handle = window->internalWinId();
 	if (!handle) {
 		return;
@@ -513,7 +519,7 @@ void SetWindowScreenshotProtection(not_null<QWidget*> window, bool enabled) {
 	// NSWindowSharingNone the getter keeps returning that on macOS 26 even
 	// after the window is capturable again. The assignment itself works in
 	// both directions and takes effect immediately.
-	nsWindow.sharingType = enabled
+	nsWindow.sharingType = excluded
 		? NSWindowSharingNone
 		: NSWindowSharingReadOnly;
 }

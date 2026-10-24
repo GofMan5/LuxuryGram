@@ -13,10 +13,15 @@
 
 #include "styles/style_luxury_styles.h"
 
+#include <crl/crl_on_main.h>
+#include <algorithm>
 #include <QStyle>
 #include <QStyleOption>
 
 namespace {
+
+// Hover previews the selection frame at half strength.
+constexpr auto kHoverOpacity = 0.5f;
 
 const QVector<QString> icons{
 	LuxuryAssets::DEFAULT_ICON,
@@ -41,6 +46,7 @@ const auto rows = static_cast<int>(icons.size()) / IconPicker::kColumns
 IconPicker::IconPicker(QWidget *parent)
 	: RpWidget(parent) {
 	setFocusPolicy(Qt::StrongFocus);
+	setMouseTracking(true);
 	setAccessibleName(tr::luxury_AppIconPickerAccessible(tr::now));
 	widthValue() | rpl::on_next([=](int w) {
 		const auto cell = w / kColumns;
@@ -51,31 +57,133 @@ IconPicker::IconPicker(QWidget *parent)
 	}, lifetime());
 }
 
-void IconPicker::drawIcon(QPainter &p, const QImage &icon, int x, int y, float strokeOpacity) {
+QAccessible::Role IconPicker::accessibilityRole() {
+	return QAccessible::Role::List;
+}
+
+Qt::FocusPolicy IconPicker::accessibilityFocusPolicy() {
+	return Qt::TabFocus;
+}
+
+bool IconPicker::accessibilitySelectionList() const {
+	return true;
+}
+
+int IconPicker::accessibilityChildCount() const {
+	return int(icons.size());
+}
+
+QString IconPicker::accessibilityChildName(int index) const {
+	return (index >= 0 && index < int(icons.size()))
+		? (tr::luxury_AppIconHeader(tr::now)
+			+ QStringLiteral(": ")
+			+ icons[index])
+		: QString();
+}
+
+QAccessible::State IconPicker::accessibilityChildState(int index) const {
+	auto state = QAccessible::State();
+	if (index < 0 || index >= int(icons.size())) {
+		state.invisible = true;
+		return state;
+	}
+	state.disabled = !isEnabled();
+	state.focusable = isEnabled();
+	state.selectable = isEnabled();
+	state.selected = (LuxurySettings::getInstance().appIcon() == icons[index]);
+	state.focused = hasFocus() && (index == _focusedIndex);
+	state.invisible = !isVisible();
+	state.offscreen = accessibilityChildRect(index).isEmpty();
+	return state;
+}
+
+QAccessible::Role IconPicker::accessibilityChildRole() const {
+	return QAccessible::Role::ListItem;
+}
+
+QRect IconPicker::accessibilityChildRect(int index) const {
+	if (index < 0 || index >= int(icons.size())) {
+		return QRect();
+	}
+	const auto padding = st::iconPickerSelectedPadding;
+	return iconRect(index).marginsAdded(
+		QMargins(padding, padding, padding, padding)).intersected(rect());
+}
+
+bool IconPicker::accessibilityChildSupportsActions(int index) const {
+	return accessibilityChildIdentity(index) != 0;
+}
+
+quintptr IconPicker::accessibilityChildIdentity(int index) const {
+	return (index >= 0 && index < int(icons.size()))
+		? quintptr(index + 1)
+		: 0;
+}
+
+int IconPicker::accessibilityChildIndexByIdentity(quintptr identity) const {
+	return (identity >= 1 && identity <= quintptr(icons.size()))
+		? int(identity - 1)
+		: -1;
+}
+
+void IconPicker::accessibilityChildSetFocus(quintptr identity) {
+	crl::on_main(this, [=] {
+		const auto index = accessibilityChildIndexByIdentity(identity);
+		if (index < 0 || !isEnabled() || !isVisible()) {
+			return;
+		}
+		_focusedIndex = index;
+		if (!hasFocus()) {
+			setFocus(Qt::OtherFocusReason);
+		}
+		update();
+	});
+}
+
+void IconPicker::accessibilityChildActivate(quintptr identity) {
+	crl::on_main(this, [=] {
+		const auto index = accessibilityChildIndexByIdentity(identity);
+		if (index < 0 || !isEnabled() || !isVisible()) {
+			return;
+		}
+		_focusedIndex = index;
+		if (!hasFocus()) {
+			setFocus(Qt::OtherFocusReason);
+		}
+		activateIcon(index);
+	});
+}
+
+void IconPicker::drawIcon(
+		QPainter &p,
+		const QImage &icon,
+		QRect rect,
+		float strokeOpacity) {
 	{
 		PainterHighQualityEnabler hq(p);
 		p.save();
 		p.setPen(QPen(st::boxDividerBg, 0));
 		p.setBrush(QBrush(st::boxDividerBg));
 		p.setOpacity(strokeOpacity);
+		const auto padding = st::iconPickerSelectedPadding;
 		p.drawRoundedRect(
-			x + st::iconPickerSelectedPadding,
-			y + st::iconPickerSelectedPadding,
-			st::iconPickerIconSize + st::iconPickerSelectedPadding * 2,
-			st::iconPickerIconSize + st::iconPickerSelectedPadding * 2,
+			rect.marginsAdded(QMargins(padding, padding, padding, padding)),
 			st::iconPickerSelectedRounding,
-			st::iconPickerSelectedRounding
-		);
+			st::iconPickerSelectedRounding);
 		p.restore();
 	}
 
-	const auto rect = QRect(
-		x + st::iconPickerImagePadding,
-		y + st::iconPickerImagePadding,
-		st::iconPickerIconSize,
-		st::iconPickerIconSize
-	);
 	p.drawImage(rect, icon);
+}
+
+QRect IconPicker::iconRect(int index) const {
+	const auto cell = cellWidth();
+	const auto size = st::iconPickerIconSize;
+	return myrtlrect(QRect(
+		(index % kColumns) * cell + (cell - size) / 2,
+		(index / kColumns) * cell + st::iconPickerImagePadding,
+		size,
+		size));
 }
 
 int IconPicker::cellWidth() const {
@@ -84,9 +192,6 @@ int IconPicker::cellWidth() const {
 
 void IconPicker::paintEvent(QPaintEvent *e) {
 	Painter p(this);
-
-	const auto cell = cellWidth();
-	const auto iconSize = st::iconPickerIconSize;
 
 	for (int row = 0; row < rows; row++) {
 		const auto columns = std::min(kColumns, static_cast<int>(icons.size()) - row * kColumns);
@@ -110,19 +215,17 @@ void IconPicker::paintEvent(QPaintEvent *e) {
 				opacity = _wasSelected.isEmpty() ? 1.0f : _animation.value(1.0f);
 			}
 
-			const auto x = i * cell + (cell - iconSize) / 2;
-			const auto y = row * cell;
-
-			drawIcon(p, icon, x, y, opacity);
+			const auto rect = iconRect(idx);
+			if (idx == _hoveredIndex) {
+				opacity = std::max(opacity, kHoverOpacity);
+			}
+			drawIcon(p, icon, rect, opacity);
 
 			if (hasFocus() && idx == _focusedIndex) {
 				auto option = QStyleOptionFocusRect();
-				option.rect = QRect(
-					x + st::iconPickerSelectedPadding,
-					y + st::iconPickerSelectedPadding,
-					st::iconPickerIconSize + st::iconPickerSelectedPadding * 2,
-					st::iconPickerIconSize + st::iconPickerSelectedPadding * 2
-				);
+				const auto padding = st::iconPickerSelectedPadding;
+				option.rect = rect.marginsAdded(
+					QMargins(padding, padding, padding, padding));
 				option.state |= QStyle::State_KeyboardFocusChange;
 				style()->drawPrimitive(QStyle::PE_FrameFocusRect, &option, &p, this);
 			}
@@ -157,30 +260,61 @@ bool IconPicker::applyIcon(int index) {
 	return true;
 }
 
-void IconPicker::mousePressEvent(QMouseEvent *e) {
-	const auto cell = cellWidth();
-	const auto iconSize = st::iconPickerIconSize;
+void IconPicker::activateIcon(int index) {
+	if (index < 0 || index >= int(icons.size())) {
+		return;
+	}
+	const auto selected = std::find(
+		icons.cbegin(),
+		icons.cend(),
+		LuxurySettings::getInstance().appIcon());
+	const auto previous = (selected != icons.cend())
+		? int(selected - icons.cbegin())
+		: -1;
+	if (applyIcon(index)) {
+		if (previous >= 0 && previous != index) {
+			accessibilityChildSelectionChanged(previous);
+		}
+		accessibilityChildSelectionChanged(index);
+		LuxuryAssets::applyAppIcon();
+		repaint();
+	} else {
+		update();
+	}
+}
 
-	for (int row = 0; row < rows; row++) {
-		const auto columns = std::min(kColumns, static_cast<int>(icons.size()) - row * kColumns);
-		for (int i = 0; i < columns; i++) {
-			auto const idx = i + row * kColumns;
-
-			const auto x = i * cell + (cell - iconSize) / 2 + st::iconPickerImagePadding;
-			const auto y = row * cell + st::iconPickerImagePadding;
-
-			if (e->pos().x() >= x && e->pos().x() <= x + iconSize
-				&& e->pos().y() >= y && e->pos().y() <= y + iconSize) {
-				_focusedIndex = idx;
-				if (applyIcon(idx)) {
-					LuxuryAssets::applyAppIcon();
-
-					repaint();
-				}
-				return;
-			}
+int IconPicker::indexAt(QPoint point) const {
+	for (auto i = 0, count = int(icons.size()); i != count; ++i) {
+		if (!icons[i].isEmpty() && iconRect(i).contains(point)) {
+			return i;
 		}
 	}
+	return -1;
+}
+
+void IconPicker::setHovered(int index) {
+	if (_hoveredIndex == index) {
+		return;
+	}
+	_hoveredIndex = index;
+	setCursor((index >= 0) ? style::cur_pointer : style::cur_default);
+	update();
+}
+
+void IconPicker::mousePressEvent(QMouseEvent *e) {
+	if (const auto index = indexAt(e->pos()); index >= 0) {
+		_focusedIndex = index;
+		activateIcon(index);
+	}
+}
+
+void IconPicker::mouseMoveEvent(QMouseEvent *e) {
+	setHovered(indexAt(e->pos()));
+}
+
+void IconPicker::leaveEventHook(QEvent *e) {
+	setHovered(-1);
+	RpWidget::leaveEventHook(e);
 }
 
 void IconPicker::keyPressEvent(QKeyEvent *e) {
@@ -188,10 +322,10 @@ void IconPicker::keyPressEvent(QKeyEvent *e) {
 	auto index = _focusedIndex;
 	switch (e->key()) {
 	case Qt::Key_Left:
-		index = (index + count - 1) % count;
+		index = (index + count + (style::RightToLeft() ? 1 : -1)) % count;
 		break;
 	case Qt::Key_Right:
-		index = (index + 1) % count;
+		index = (index + count + (style::RightToLeft() ? -1 : 1)) % count;
 		break;
 	case Qt::Key_Up:
 		index = (index + count - kColumns) % count;
@@ -202,16 +336,17 @@ void IconPicker::keyPressEvent(QKeyEvent *e) {
 	case Qt::Key_Enter:
 	case Qt::Key_Return:
 	case Qt::Key_Space:
-		if (applyIcon(_focusedIndex)) {
-			LuxuryAssets::applyAppIcon();
-
-			repaint();
-		}
+		e->accept();
+		activateIcon(_focusedIndex);
 		return;
 	default:
 		RpWidget::keyPressEvent(e);
 		return;
 	}
+	e->accept();
 	_focusedIndex = index;
 	update();
+	if (hasFocus()) {
+		accessibilityChildFocused(index);
+	}
 }

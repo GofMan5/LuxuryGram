@@ -379,9 +379,11 @@ rpl::producer<Ui::GroupCallBarContent> GroupCallBarContentByCall(
 		}, lifetime);
 
 		call->participantsReloaded(
-		) | rpl::filter([=] {
-			return RegenerateUserpics(state, call, userpicSize);
-		}) | rpl::on_next(pushNext, lifetime);
+		) | rpl::on_next([=] {
+			state->userpics.clear();
+			RegenerateUserpics(state, call, userpicSize, true);
+			pushNext();
+		}, lifetime);
 
 		// The only stream here not owned by the call, so it can fire
 		// after the call was destroyed.

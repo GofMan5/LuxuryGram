@@ -26,6 +26,10 @@ public:
 		bool error,
 		anim::type animated);
 
+	QString accessibilityName() override;
+	QString accessibilityDescription() override;
+	QString accessibilityValue() const override;
+
 protected:
 	int resizeGetHeight(int newWidth) override;
 

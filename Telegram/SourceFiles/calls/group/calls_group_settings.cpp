@@ -824,12 +824,16 @@ void SettingsBox(
 			}
 		});
 
-		volumeItem->toggleMuteLocallyRequests(
+		rpl::merge(
+			volumeItem->toggleMuteLocallyRequests(),
+			volumeItem->toggleMuteRequests()
 		) | rpl::on_next([=](bool muted) {
 			toggleMute(muted, true);
 		}, volumeItem->lifetime());
 
-		volumeItem->changeVolumeLocallyRequests(
+		rpl::merge(
+			volumeItem->changeVolumeLocallyRequests(),
+			volumeItem->changeVolumeRequests()
 		) | rpl::on_next([=](int volume) {
 			changeVolume(volume, true);
 		}, volumeItem->lifetime());

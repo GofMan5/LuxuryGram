@@ -550,6 +550,10 @@ void Instance::fillFromSerialized(
 	for (auto i = 0, count = nonDefaultValuesCount * 2; i != count; i += 2) {
 		applyValue(nonDefaultStrings[i], nonDefaultStrings[i + 1]);
 	}
+	// LuxuryGram: the snapshot holds the overlay as it was at the last
+	// language switch; re-apply so keys added or reworded since then
+	// are not left in English.
+	LuxuryRussian::applyIfRussian(not_null<Lang::Instance*>(this), _id);
 	updatePluralRules();
 	updateChoosingStickerReplacement();
 
@@ -700,6 +704,10 @@ void Instance::applyDifferenceToMe(
 			resetValue(key);
 		});
 	}
+	notifyUpdated();
+}
+
+void Instance::notifyUpdated() {
 	if (!_derived) {
 		_updated.fire({});
 	} else {

@@ -19,6 +19,8 @@
 #include "iv/iv_rich_page.h"
 #include "storage/localimageloader.h"
 
+#include <atomic>
+
 namespace LuxuryForward {
 namespace {
 
@@ -27,8 +29,8 @@ using BlockKind = Iv::RichPage::BlockKind;
 
 struct RichMedia
 {
-	base::flat_map<PhotoId, not_null<PhotoData*>> photos;
-	base::flat_map<DocumentId, not_null<DocumentData*>> documents;
+	base::flat_map<PhotoId, PhotoId> photos;
+	base::flat_map<DocumentId, DocumentId> documents;
 };
 
 [[nodiscard]] PhotoData *resolvePhoto(not_null<Main::Session*> session, PhotoId id, PhotoData *photo) {
@@ -59,13 +61,13 @@ void collectMedia(not_null<Main::Session*> session, const std::vector<Block> &bl
 	const auto addPhoto = [&](PhotoId id, PhotoData *photo)
 	{
 		if (const auto resolved = resolvePhoto(session, id, photo)) {
-			media.photos.emplace(resolved->id, resolved);
+			media.photos.emplace(resolved->id, resolved->id);
 		}
 	};
 	const auto addDocument = [&](DocumentId id, DocumentData *document)
 	{
 		if (const auto resolved = resolveDocument(session, id, document)) {
-			media.documents.emplace(resolved->id, resolved);
+			media.documents.emplace(resolved->id, resolved->id);
 		}
 	};
 
@@ -80,6 +82,7 @@ void collectMedia(not_null<Main::Session*> session, const std::vector<Block> &bl
 			break;
 		case BlockKind::Video:
 		case BlockKind::Audio:
+		case BlockKind::File:
 			addDocument(block.documentId, block.document);
 			break;
 		case BlockKind::GroupedMedia:
@@ -102,103 +105,55 @@ void collectMedia(not_null<Main::Session*> session, const std::vector<Block> &bl
 	}
 }
 
-[[nodiscard]] RichMedia reuploadMedia(not_null<Main::Session*> session,
-									  not_null<PeerData*> peer,
-									  Data::FileOrigin origin,
-									  const RichMedia &source,
-									  const Fn<bool()> &cancelled) {
+[[nodiscard]] RichMedia reuploadMedia(
+		LuxurySync::WeakSession session,
+		PeerId peerId,
+		Data::FileOrigin origin,
+		const RichMedia &source,
+		const Fn<bool()> &cancelled) {
 	auto result = RichMedia();
-
-	const auto ensureUploaded = [&](const QString &path,
-									int64 expected,
-									const Fn<void()> &load,
-									SendMediaType type,
-									bool forceFile)
-	{
-		const auto ready = [&]
-		{
-			const auto size = LuxurySync::fileSize(path);
-			return size > 0 && size >= expected;
-		};
-		if (!ready()) {
-			load();
-			if (!ready()) {
-				return LuxurySync::UploadedFile();
+	for (const auto &[id, photoId] : source.photos) {
+		if (cancelled()) return result;
+		const auto path = LuxurySync::loadPhotoSync(session, photoId, origin, cancelled);
+		const auto uploaded = LuxurySync::uploadFileSync(
+			session, peerId, path, SendMediaType::Photo, false, {}, cancelled);
+		if (uploaded.photo) result.photos.emplace(id, uploaded.photo);
+	}
+	for (const auto &[id, documentId] : source.documents) {
+		if (cancelled()) return result;
+		auto playable = false;
+		auto name = QString();
+		crl::on_main_sync([&] {
+			if (cancelled()) return;
+			if (const auto strong = session.get()) {
+				const auto document = strong->data().document(documentId);
+				playable = document->isVideoFile() || document->isGifv()
+					|| document->isSong() || document->isAudioFile()
+					|| document->isVoiceMessage();
+				name = LuxurySync::documentFileName(document);
 			}
-		}
-		return LuxurySync::uploadFileSync(session, peer, path, type, forceFile);
-	};
-
-	for (const auto &[id, photo] : source.photos) {
-		if (cancelled()) {
-			return result;
-		}
-
-		const auto uploaded = ensureUploaded(
-			LuxurySync::filePath(session, photo),
-			photo->imageByteSize(Data::PhotoSize::Large),
-			[&] {
-				LuxurySync::loadPhotoSync(
-					session,
-					photo,
-					origin,
-					cancelled);
-			},
-			SendMediaType::Photo,
-			false);
-		if (uploaded.photo) {
-			result.photos.emplace(id, uploaded.photo);
-		} else {
-			LOG(("LuxuryForward: failed to transfer photo %1 for rich message").arg(id));
-		}
+		});
+		const auto path = LuxurySync::loadDocumentSync(session, documentId, origin, cancelled);
+		const auto uploaded = LuxurySync::uploadFileSync(
+			session, peerId, path, SendMediaType::File, !playable, name, cancelled);
+		if (uploaded.document) result.documents.emplace(id, uploaded.document);
 	}
-
-	for (const auto &[id, document] : source.documents) {
-		if (cancelled()) {
-			return result;
-		}
-
-		const auto playable = document->isVideoFile()
-			|| document->isGifv()
-			|| document->isSong()
-			|| document->isAudioFile()
-			|| document->isVoiceMessage();
-		const auto path = LuxurySync::loadDocumentSync(
-			session,
-			document,
-			origin,
-			cancelled);
-		const auto pathInfo = QFileInfo(path);
-		auto uploaded = LuxurySync::UploadedFile();
-		if (!path.isEmpty()
-			&& pathInfo.isFile()
-			&& pathInfo.size() == document->size) {
-			uploaded = LuxurySync::uploadFileSync(
-				session,
-				peer,
-				path,
-				SendMediaType::File,
-				!playable,
-				LuxurySync::documentFileName(document));
-		}
-		if (uploaded.document) {
-			result.documents.emplace(id, uploaded.document);
-		} else {
-			LOG(("LuxuryForward: failed to transfer document %1 for rich message").arg(id));
-		}
-	}
-
 	return result;
 }
 
-[[nodiscard]] bool runOnMainSync(Fn<void()> callback) {
-	auto latch = std::make_shared<TimedCountDownLatch>(1);
-	crl::on_main([latch, callback = std::move(callback)]
-	{
-		callback();
-		latch->countDown();
+[[nodiscard]] bool runOnMainSync(
+		LuxurySync::WeakSession session,
+		const Fn<bool()> &cancelled,
+		Fn<void(not_null<Main::Session*>)> callback) {
+	auto ran = false;
+	crl::on_main_sync([&] {
+		if (cancelled()) return;
+		if (const auto strong = session.get()) {
+			callback(strong);
+			ran = true;
+		}
 	});
-	return latch->await(std::chrono::minutes(1));
+	return ran;
 }
 
 void sanitizeRichText(Iv::RichPage::RichText &text) {
@@ -224,6 +179,22 @@ void sanitizeRichText(Iv::RichPage::RichText &text) {
 	text.text.entities.erase(removed.begin(), removed.end());
 }
 
+// A button the serializer cannot write fails the whole page, which then
+// goes out as plain text: drop the button instead, keep the page.
+[[nodiscard]] bool isSerializableButton(const HistoryMessageMarkupButton &button) {
+	using Type = HistoryMessageMarkupButton::Type;
+	switch (button.type) {
+	case Type::Url:
+	case Type::CopyText:
+	case Type::Disabled:
+		return true;
+	case Type::UserProfile:
+		return button.data.toULongLong() != 0;
+	default:
+		return false;
+	}
+}
+
 void pruneBlocks(not_null<Main::Session*> session, std::vector<Block> &blocks, const RichMedia &remap);
 
 [[nodiscard]] bool prepareBlock(not_null<Main::Session*> session, Block &block, const RichMedia &remap) {
@@ -238,8 +209,8 @@ void pruneBlocks(not_null<Main::Session*> session, std::vector<Block> &blocks, c
 		if (i == remap.photos.end()) {
 			return false;
 		}
-		photo = i->second;
-		id = i->second->id;
+		photo = session->data().photo(i->second).get();
+		id = i->second;
 		return true;
 	};
 	const auto remapDocument = [&](DocumentId &id, DocumentData *&document)
@@ -249,8 +220,8 @@ void pruneBlocks(not_null<Main::Session*> session, std::vector<Block> &blocks, c
 		if (i == remap.documents.end()) {
 			return false;
 		}
-		document = i->second;
-		id = i->second->id;
+		document = session->data().document(i->second).get();
+		id = i->second;
 		return true;
 	};
 
@@ -262,10 +233,26 @@ void pruneBlocks(not_null<Main::Session*> session, std::vector<Block> &blocks, c
 		break;
 	case BlockKind::Video:
 	case BlockKind::Audio:
+	case BlockKind::File:
 		if (!remapDocument(block.documentId, block.document)) {
 			return false;
 		}
 		break;
+	case BlockKind::ButtonRow: {
+		auto &buttons = block.buttons;
+		const auto removed = std::ranges::remove_if(buttons, [](
+				const Iv::RichPage::Button &button) {
+			return !isSerializableButton(button.button);
+		});
+		buttons.erase(removed.begin(), removed.end());
+		if (buttons.empty()) {
+			return false;
+		}
+		for (auto &button : buttons) {
+			sanitizeRichText(button.text);
+		}
+		break;
+	}
 	case BlockKind::GroupedMedia: {
 		auto &items = block.mediaItems;
 		for (auto i = items.begin(); i != items.end();) {
@@ -342,75 +329,85 @@ void pruneBlocks(not_null<Main::Session*> session, std::vector<Block> &blocks, c
 } // namespace
 
 bool forwardRichMessage(
-	not_null<Main::Session*> session,
+	base::weak_ptr<Main::Session> session,
 	FullMsgId itemId,
 	const Api::SendAction &action,
 	Fn<bool()> cancelled) {
-	if (!cancelled) {
-		cancelled = []
-		{
-			return false;
-		};
-	}
-
-	const auto source = LuxurySync::loadFullRichPageSync(session, itemId);
-	if (!source || cancelled()) {
-		return false;
-	}
+	const auto active = std::make_shared<std::atomic_bool>(true);
+	const auto lifetime = std::make_shared<rpl::lifetime>();
+	const auto stopped = [=] {
+		return !active->load() || !session.get() || (cancelled && cancelled());
+	};
+	crl::on_main_sync([&] {
+		if (const auto strong = session.get()) {
+			strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+				active->store(false);
+			}, *lifetime);
+		}
+	});
+	const auto cleanup = gsl::finally([&] {
+		active->store(false);
+		crl::on_main_sync([&] { lifetime->destroy(); });
+	});
+	if (stopped()) return false;
+	const auto source = LuxurySync::loadFullRichPageSync(session, itemId, stopped);
+	if (!source || stopped()) return false;
 
 	struct PrepareState
 	{
 		Iv::RichPage page;
 		RichMedia media;
 		bool premiumBlocked = false;
+		PeerId peerId;
 	};
 	const auto prepared = std::make_shared<PrepareState>();
 
-	const auto preparedOk = runOnMainSync([=]
+	const auto preparedOk = runOnMainSync(session, stopped, [=](not_null<Main::Session*> strong)
 	{
+		prepared->peerId = action.history->peer->id;
 		prepared->page = *source;
 		prepared->page.part = false;
 		prepared->page.views = 0;
-		prepared->premiumBlocked = !session->premium()
+		prepared->premiumBlocked = !strong->premium()
 			&& Iv::RichPageUsesPremiumFormatting(prepared->page);
 		if (!prepared->premiumBlocked) {
-			collectMedia(session, prepared->page.blocks, prepared->media);
+			collectMedia(strong, prepared->page.blocks, prepared->media);
 		}
 	});
-	if (!preparedOk || prepared->premiumBlocked || cancelled()) {
+	if (!preparedOk || prepared->premiumBlocked || stopped()) {
 		return false;
 	}
 
 	const auto uploaded = reuploadMedia(
 		session,
-		action.history->peer,
+		prepared->peerId,
 		itemId,
 		prepared->media,
-		cancelled);
-	if (cancelled()) {
+		stopped);
+	if (stopped()) {
 		return false;
 	}
 
 	const auto serialized = std::make_shared<std::optional<MTPInputRichMessage>>();
-	const auto serializedOk = runOnMainSync([=]
+	const auto serializedOk = runOnMainSync(session, stopped, [=](not_null<Main::Session*> strong)
 	{
-		pruneBlocks(session, prepared->page.blocks, uploaded);
+		pruneBlocks(strong, prepared->page.blocks, uploaded);
 		if (prepared->page.blocks.empty()) {
 			return;
 		}
 		const auto result = Iv::SerializeInputRichMessage(
-			session,
+			strong,
 			prepared->page,
 			Iv::SerializeInputRichMessageMode::FinalSubmit);
 		if (result.status == Iv::SerializeInputRichMessageStatus::Success) {
 			*serialized = result.value;
 		}
 	});
-	if (!serializedOk || !serialized->has_value() || cancelled()) {
+	if (!serializedOk || !serialized->has_value() || stopped()) {
 		return false;
 	}
 
-	return LuxurySync::sendRichMessageSync(session, **serialized, action);
+	return LuxurySync::sendRichMessageSync(session, **serialized, action, stopped);
 }
 
 } // namespace LuxuryForward

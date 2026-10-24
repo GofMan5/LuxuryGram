@@ -305,6 +305,7 @@ void AddUniqueCloseButton(not_null<GenericBox*> box) {
 	const auto close = Ui::CreateChild<IconButton>(
 		box,
 		st::uniqueCloseButton);
+	close->setAccessibleName(tr::lng_close(tr::now));
 	close->show();
 	close->raise();
 	box->widthValue() | rpl::on_next([=](int width) {

@@ -139,6 +139,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/luxury_settings.h"
 #include "luxury/luxury_state.h"
 #include "luxury/features/streamer_mode/streamer_mode.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 namespace Media {
@@ -1337,6 +1338,12 @@ void OverlayWidget::refreshTtlBadge(TimeId destroyAt) {
 						_message->history()->peer->shortName()
 					) | rpl::map(tr::rich),
 					tr::rich)
+			// The copy kept for us outlives the timer, so the sender's warning
+			// that it can be opened only once is no longer true here.
+			: isMessageSavable(_message)
+			? (isVideo
+				? tr::luxury_OnceVideoMessageNote
+				: tr::luxury_OncePhotoMessageNote)(tr::rich)
 			: (isVideo
 				? tr::lng_ttl_video_tooltip_in
 				: tr::lng_ttl_photo_tooltip_in)(tr::rich);

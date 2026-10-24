@@ -749,6 +749,7 @@ private:
 ProxyRow::ProxyRow(QWidget *parent, View &&view)
 : RippleButton(parent, st::proxyRowRipple)
 , _menuToggle(this, st::topBarMenuToggle) {
+	_menuToggle->setAccessibleName(tr::lng_proxy_settings(tr::now));
 	setupControls(std::move(view));
 }
 

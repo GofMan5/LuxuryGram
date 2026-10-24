@@ -191,6 +191,7 @@ rpl::producer<QString> LuxuryFilters::title() {
 }
 
 void LuxuryFilters::fillTopBarMenu(const Ui::Menu::MenuCallback &addAction) {
+	const auto show = controller()->uiShow();
 	addAction(
 		tr::luxury_FiltersMenuSelectChat(tr::now),
 		[=] {
@@ -242,7 +243,7 @@ void LuxuryFilters::fillTopBarMenu(const Ui::Menu::MenuCallback &addAction) {
 		.handler = [=] {
 			auto callback = [=](Fn<void()> &&close) {
 				close();
-				LuxuryDatabase::async([] {
+				LuxuryDatabase::async([=] {
 					// Both, always: && would leave the exclusions behind
 					// whenever clearing the filters themselves failed.
 					const auto filters = LuxuryDatabase::deleteAllFilters();
@@ -252,7 +253,7 @@ void LuxuryFilters::fillTopBarMenu(const Ui::Menu::MenuCallback &addAction) {
 					FiltersCacheController::reloadNow();
 					crl::on_main([=] {
 						if (!filters || !exclusions) {
-							Luxury::Ui::ShowDatabaseError();
+							Luxury::Ui::ShowDatabaseError(show);
 						}
 						FiltersCacheController::fireUpdate();
 					});

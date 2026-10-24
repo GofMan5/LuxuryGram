@@ -258,12 +258,26 @@ void LuxurySectionBuilder::addSlider(SliderArgs &&args) {
 				}
 			}
 
+			auto formatLabel = std::move(args.formatLabel);
+			auto indexToValue = std::move(args.indexToValue);
+			const auto &labelSt = st::settingsScaleLabel;
+			auto labelWidth = 0;
+			if (formatLabel) {
+				for (auto index = 0; index != args.steps; ++index) {
+					const auto value = indexToValue
+						? indexToValue(index)
+						: index;
+					labelWidth = std::max(
+						labelWidth,
+						labelSt.style.font->width(formatLabel(value)));
+				}
+			}
 			auto sliderWithLabel = MakeSliderWithLabel(
 				container,
 				st::autoDownloadLimitSlider,
-				st::settingsScaleLabel,
-				0,
-				args.showTitle ? st::settingsScaleLabel.style.font->width("8%%%") : 0,
+				labelSt,
+				formatLabel ? (st::normalFont->spacew * 2) : 0,
+				labelWidth,
 				true);
 			container->add(
 				std::move(sliderWithLabel.widget),
@@ -271,10 +285,12 @@ void LuxurySectionBuilder::addSlider(SliderArgs &&args) {
 			const auto slider = sliderWithLabel.slider;
 			const auto label = sliderWithLabel.label;
 
-			auto formatLabel = std::move(args.formatLabel);
-			auto indexToValue = std::move(args.indexToValue);
 			auto onChanged = std::move(args.onChanged);
 			auto onFinalChanged = std::move(args.onFinalChanged);
+			// The slider reports a finished change on every release and on
+			// wheel stops, also when the value stayed put; callers persist
+			// the value and may ask for a restart, so pass real changes only.
+			const auto committed = std::make_shared<int>(args.current);
 
 			if (formatLabel) {
 				label->setText(formatLabel(args.current));
@@ -298,7 +314,8 @@ void LuxurySectionBuilder::addSlider(SliderArgs &&args) {
 					if (formatLabel) {
 						label->setText(formatLabel(value));
 					}
-					if (onFinalChanged) {
+					if (onFinalChanged && (*committed != value)) {
+						*committed = value;
 						onFinalChanged(value);
 					}
 				});

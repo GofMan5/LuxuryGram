@@ -55,6 +55,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/rect.h"
 #include "ui/ui_utility.h"
 #include "ui/inactive_press.h"
+#include "ui/screen_reader_mode.h"
 #include "ui/text/text_utilities.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
@@ -80,9 +81,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_credits.h" // giftBoxHiddenMark
 #include "styles/style_chat_helpers.h"
 
+#include <algorithm>
+#include <iterator>
+
 #include <QtCore/QMimeData>
 #include <QtWidgets/QApplication>
 #include <QtGui/QClipboard>
+#include <QtGui/QKeyEvent>
 
 namespace Info {
 namespace Media {
@@ -520,6 +525,10 @@ void ListWidget::restart() {
 
 	_overLayout = nullptr;
 	_sections.clear();
+	_accessibilityIdentities.clear();
+	_accessibilitySelectedIdentities.clear();
+	_accessibilityFocusedIndex = -1;
+	_accessibilityFocusedItem = nullptr;
 	_heavyLayouts.clear();
 	_rowsScrollCache.clear();
 	invalidateGlobalMediaSliceView();
@@ -558,6 +567,12 @@ void ListWidget::itemRemoved(not_null<const HistoryItem*> item) {
 		removeItemSelection(i);
 	}
 
+	if (_accessibilityFocusedItem == item.get()) {
+		_accessibilityFocusedIndex = -1;
+		_accessibilityFocusedItem = nullptr;
+	}
+	_accessibilityIdentities.erase(item);
+
 	if (!_provider->isMyItem(item)) {
 		return;
 	}
@@ -592,6 +607,11 @@ void ListWidget::removeLayoutFromSections(not_null<BaseLayout*> layout) {
 	// the sections must forget the layout right away, otherwise a paint
 	// before that refresh would use the destroyed layout.
 	const auto item = layout->getItem();
+	_accessibilityIdentities.erase(item);
+	if (_accessibilityFocusedItem == item.get()) {
+		_accessibilityFocusedIndex = -1;
+		_accessibilityFocusedItem = nullptr;
+	}
 	for (auto i = begin(_sections); i != end(_sections); ++i) {
 		if (removeItemFromSection(item, i)) {
 			refreshHeightAfterRemoval();
@@ -683,6 +703,7 @@ MessageIdsList ListWidget::collectSelectedIds(
 }
 
 void ListWidget::pushSelectedItems() {
+	accessibilitySelectionChanged();
 	_selectedListStream.fire(collectSelectedItems());
 }
 
@@ -970,12 +991,379 @@ void ListWidget::refreshRows() {
 	if (globalMediaMusic) {
 		_globalMediaSliceViewChanges.fire_copy(_globalMediaSliceView);
 	}
+	for (auto i = begin(_accessibilityIdentities)
+		; i != end(_accessibilityIdentities);) {
+		if (accessibilityIndexOfItem(i->first.get()) < 0) {
+			i = _accessibilityIdentities.erase(i);
+		} else {
+			++i;
+		}
+	}
+	if (_accessibilityFocusedItem) {
+		_accessibilityFocusedIndex = accessibilityIndexOfItem(
+			_accessibilityFocusedItem);
+		if (_accessibilityFocusedIndex < 0) {
+			_accessibilityFocusedItem = nullptr;
+		}
+	}
 	if (embeddedGlobalMedia) {
 		_globalMediaSliceRefreshInProgress = false;
 		_checkMoveToOtherViewer.call();
 	}
 	mouseActionUpdate();
 	update();
+}
+
+int ListWidget::accessibilityChildCount() const {
+	return int(accessibilityItems().size());
+}
+
+std::vector<not_null<BaseLayout*>> ListWidget::accessibilityItems() const {
+	std::vector<not_null<BaseLayout*>> result;
+	for (const auto &section : _sections) {
+		const auto &items = section.items();
+		result.insert(result.end(), begin(items), end(items));
+	}
+	return result;
+}
+
+BaseLayout *ListWidget::accessibilityLayoutAt(int index) const {
+	const auto items = accessibilityItems();
+	return (index >= 0 && index < int(items.size()))
+		? items[index].get()
+		: nullptr;
+}
+
+HistoryItem *ListWidget::accessibilityItemAt(int index) const {
+	if (const auto layout = accessibilityLayoutAt(index)) {
+		return layout->getItem();
+	}
+	return nullptr;
+}
+
+int ListWidget::accessibilityIndexOfItem(const HistoryItem *item) const {
+	if (!item) {
+		return -1;
+	}
+	const auto items = accessibilityItems();
+	for (auto i = 0, count = int(items.size()); i != count; ++i) {
+		if (items[i]->getItem() == item) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void ListWidget::accessibilitySelectionChanged() {
+	if (_accessibilitySelectionUpdateScheduled) {
+		return;
+	}
+	_accessibilitySelectionUpdateScheduled = true;
+	crl::on_main(this, [=] {
+		_accessibilitySelectionUpdateScheduled = false;
+		auto selected = base::flat_set<quintptr>();
+		for (const auto &entry : _selected) {
+			const auto index = accessibilityIndexOfItem(entry.first);
+			if (index >= 0) {
+				selected.emplace(accessibilityChildIdentity(index));
+			}
+		}
+		auto changed = std::vector<quintptr>();
+		std::set_symmetric_difference(
+			begin(_accessibilitySelectedIdentities),
+			end(_accessibilitySelectedIdentities),
+			begin(selected),
+			end(selected),
+			std::back_inserter(changed));
+		_accessibilitySelectedIdentities = std::move(selected);
+		const auto weak = base::make_weak(this);
+		for (const auto identity : changed) {
+			if (!weak) {
+				return;
+			}
+			const auto index = weak->accessibilityChildIndexByIdentity(identity);
+			if (index >= 0) {
+				weak->accessibilityChildSelectionChanged(index);
+			}
+		}
+	});
+}
+
+QString ListWidget::accessibilityChildName(int index) const {
+	const auto layout = accessibilityLayoutAt(index);
+	if (!layout) {
+		return {};
+	}
+	const auto item = layout->getItem();
+	const auto notification = item->notificationText().text;
+	if (!notification.isEmpty()) {
+		return notification;
+	}
+	if (const auto document = layout->getDocument()) {
+		const auto filename = document->filename();
+		if (!filename.isEmpty()) {
+			return filename;
+		}
+	}
+	return QString::number(item->id.bare);
+}
+
+bool ListWidget::accessibilityItemCanActivate(int index) const {
+	const auto item = accessibilityItemAt(index);
+	if (!item || !item->media()) {
+		return false;
+	}
+	return item->media()->photo() || item->media()->document();
+}
+
+Ui::AccessibilityState ListWidget::accessibilityState() const {
+	return {
+		.extSelectable = true,
+		.multiSelectable = true,
+	};
+}
+
+QAccessible::State ListWidget::accessibilityChildState(int index) const {
+	QAccessible::State state;
+	const auto item = accessibilityItemAt(index);
+	if (!item) {
+		return state;
+	}
+	state.focusable = true;
+	state.selectable = true;
+	state.focused = (index == _accessibilityFocusedIndex)
+		&& (_accessibilityFocusedItem == item);
+	state.selected = (_selected.find(item) != _selected.cend());
+	return state;
+}
+
+QAccessible::Role ListWidget::accessibilityChildRole() const {
+	return QAccessible::Role::ListItem;
+}
+
+QAccessible::Role ListWidget::accessibilityChildRoleAt(int index) const {
+	return accessibilityItemAt(index)
+		? QAccessible::Role::ListItem
+		: QAccessible::Role();
+}
+
+QRect ListWidget::accessibilityChildRect(int index) const {
+	const auto items = accessibilityItems();
+	if (index < 0 || index >= int(items.size())) {
+		return {};
+	}
+	const auto layout = items[index];
+	for (const auto &section : _sections) {
+		const auto &sectionItems = section.items();
+		if (ranges::find(sectionItems, layout) != end(sectionItems)) {
+			return section.findItemDetails(layout).geometry.translated(
+				0,
+				section.top());
+		}
+	}
+	return {};
+}
+
+bool ListWidget::accessibilityChildSupportsActions(int index) const {
+	return accessibilityChildIdentity(index) != 0
+		&& accessibilityItemCanActivate(index);
+}
+
+quintptr ListWidget::accessibilityChildIdentity(int index) const {
+	const auto item = accessibilityItemAt(index);
+	if (!item) {
+		return 0;
+	}
+	const auto found = _accessibilityIdentities.find(item);
+	if (found != _accessibilityIdentities.end()) {
+		return found->second;
+	}
+	const auto identity = ++_accessibilityIdentityCounter;
+	_accessibilityIdentities.emplace(item, identity);
+	return identity;
+}
+
+int ListWidget::accessibilityChildIndexByIdentity(quintptr identity) const {
+	if (!identity) {
+		return -1;
+	}
+	const auto items = accessibilityItems();
+	for (auto i = 0, count = int(items.size()); i != count; ++i) {
+		const auto found = _accessibilityIdentities.find(items[i]->getItem());
+		if (found != _accessibilityIdentities.end()
+			&& found->second == identity) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void ListWidget::accessibilityFocusItem(int index, bool announce) {
+	const auto item = accessibilityItemAt(index);
+	if (!item) {
+		return;
+	}
+	const auto changed = (_accessibilityFocusedIndex != index)
+		|| (_accessibilityFocusedItem != item);
+	_accessibilityFocusedIndex = index;
+	_accessibilityFocusedItem = item;
+	if (hasFocus()) {
+		if (changed || announce) {
+			accessibilityChildNameChanged(index);
+			accessibilityChildFocused(index);
+		}
+	} else {
+		setFocus(Qt::OtherFocusReason);
+	}
+	const auto rect = accessibilityChildRect(index);
+	if (!rect.isEmpty()) {
+		if (rect.top() < _visibleTop) {
+			_scrollToRequests.fire_copy(rect.top());
+		} else if (rect.bottom() > _visibleBottom) {
+			_scrollToRequests.fire_copy(
+				rect.bottom() - (_visibleBottom - _visibleTop));
+		}
+	}
+}
+
+void ListWidget::accessibilityChildSetFocus(quintptr identity) {
+	crl::on_main(this, [=] {
+		const auto index = accessibilityChildIndexByIdentity(identity);
+		if (index >= 0) {
+			accessibilityFocusItem(index, true);
+		}
+	});
+}
+
+void ListWidget::accessibilityChildActivate(quintptr identity) {
+	crl::on_main(this, [=] {
+		const auto index = accessibilityChildIndexByIdentity(identity);
+		const auto item = accessibilityItemAt(index);
+		if (!item) {
+			return;
+		}
+		accessibilityFocusItem(index, true);
+		const auto media = item->media();
+		if (!media) {
+			return;
+		}
+		if (const auto photo = media->photo()) {
+			openPhoto(photo, item->fullId());
+		} else if (const auto document = media->document()) {
+			openDocument(document, item->fullId(), true);
+		}
+	});
+}
+
+void ListWidget::focusInEvent(QFocusEvent *e) {
+	RpWidget::focusInEvent(e);
+	InvokeQueued(this, [=] {
+		if (!hasFocus() || accessibilityChildCount() <= 0) {
+			return;
+		}
+		auto index = _accessibilityFocusedIndex;
+		if (index < 0 || !accessibilityItemAt(index)) {
+			index = 0;
+		}
+		accessibilityFocusItem(index, true);
+	});
+}
+
+void ListWidget::keyPressEvent(QKeyEvent *e) {
+	const auto count = accessibilityChildCount();
+	if (count > 0 && Ui::ScreenReaderModeActive()) {
+		if (_accessibilityFocusedItem) {
+			_accessibilityFocusedIndex = accessibilityIndexOfItem(
+				_accessibilityFocusedItem);
+			if (_accessibilityFocusedIndex < 0) {
+				_accessibilityFocusedItem = nullptr;
+			}
+		} else if (_accessibilityFocusedIndex >= count) {
+			_accessibilityFocusedIndex = -1;
+		}
+
+		const auto modifiers = e->modifiers()
+			& ~(Qt::KeypadModifier | Qt::GroupSwitchModifier);
+		const auto plainKey = (modifiers == Qt::NoModifier);
+		auto newIndex = _accessibilityFocusedIndex;
+		switch (e->key()) {
+		case Qt::Key_Down:
+			if (plainKey) {
+				newIndex = std::min(
+					(newIndex < 0) ? 0 : (newIndex + 1),
+					count - 1);
+			}
+			break;
+		case Qt::Key_Up:
+			if (plainKey) {
+				newIndex = std::max(
+					(newIndex < 0) ? (count - 1) : (newIndex - 1),
+					0);
+			}
+			break;
+		case Qt::Key_PageDown:
+			if (plainKey) {
+				const auto pageHeight = _visibleBottom - _visibleTop;
+				auto remaining = pageHeight;
+				while (newIndex + 1 < count && remaining > 0) {
+					++newIndex;
+					remaining -= accessibilityChildRect(newIndex).height();
+				}
+			}
+			break;
+		case Qt::Key_PageUp:
+			if (plainKey) {
+				const auto pageHeight = _visibleBottom - _visibleTop;
+				auto remaining = pageHeight;
+				while (newIndex - 1 >= 0 && remaining > 0) {
+					--newIndex;
+					remaining -= accessibilityChildRect(newIndex).height();
+				}
+			}
+			break;
+		case Qt::Key_Home:
+			if (plainKey) {
+				newIndex = 0;
+			}
+			break;
+		case Qt::Key_End:
+			if (plainKey) {
+				newIndex = count - 1;
+			}
+			break;
+		default:
+			break;
+		}
+		if (newIndex != _accessibilityFocusedIndex
+			&& newIndex >= 0
+			&& newIndex < count) {
+			accessibilityFocusItem(newIndex, true);
+			e->accept();
+			return;
+		}
+		if (plainKey && e->key() == Qt::Key_Space
+			&& _accessibilityFocusedIndex >= 0) {
+			const auto item = accessibilityItemAt(_accessibilityFocusedIndex);
+			if (item) {
+				toggleItemSelection(item);
+			}
+			e->accept();
+			return;
+		}
+		if (plainKey
+			&& (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter)
+			&& _accessibilityFocusedIndex >= 0) {
+			const auto identity = accessibilityChildIdentity(
+				_accessibilityFocusedIndex);
+			if (identity && accessibilityItemCanActivate(
+				_accessibilityFocusedIndex)) {
+				accessibilityChildActivate(identity);
+			}
+			e->accept();
+			return;
+		}
+	}
+	e->ignore();
 }
 
 bool ListWidget::preventAutoHide() const {
@@ -2098,6 +2486,7 @@ void ListWidget::clearSelected() {
 	if (hasSelectedText()) {
 		repaintItem(_selected.begin()->first);
 		_selected.clear();
+		accessibilitySelectionChanged();
 	} else {
 		_selected.clear();
 		pushSelectedItems();

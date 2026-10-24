@@ -170,6 +170,7 @@ MenuVolumeItem::MenuVolumeItem(
 	) | rpl::on_next([=](const Group::ParticipantState &state) {
 		const auto newMuted = state.mutedByMe;
 		const auto newVolume = state.volume.value_or(0);
+		const auto muteChanged = (_cloudMuted != newMuted);
 
 		_cloudMuted = _localMuted = newMuted;
 
@@ -182,8 +183,10 @@ MenuVolumeItem::MenuVolumeItem(
 			if ((localVolume != newVolume)
 				&& (_cloudVolume == newVolume)) {
 				_changeVolumeRequests.fire(int(localVolume));
+			} else if (newVolume != _cloudVolume) {
+				setCloudVolume(newVolume);
 			}
-		} else {
+		} else if (newVolume != _cloudVolume || muteChanged) {
 			setCloudVolume(newVolume);
 		}
 		_waitingForUpdateVolume = false;
@@ -242,9 +245,6 @@ QColor MenuVolumeItem::muteColor() const {
 }
 
 void MenuVolumeItem::setCloudVolume(int volume) {
-	if (_cloudVolume == volume) {
-		return;
-	}
 	_cloudVolume = volume;
 	if (!_slider->isChanging()) {
 		setSliderVolume(_cloudMuted ? 0. : volume);
@@ -254,7 +254,9 @@ void MenuVolumeItem::setCloudVolume(int volume) {
 void MenuVolumeItem::setSliderVolume(int volume) {
 	const auto value = float64(volume) / _maxVolume;
 	_slider->setValue(value);
+	_arcs->setValue(value);
 	updateSliderColor(value);
+	update(_speakerRect);
 }
 
 void MenuVolumeItem::updateSliderColor(float64 value) {

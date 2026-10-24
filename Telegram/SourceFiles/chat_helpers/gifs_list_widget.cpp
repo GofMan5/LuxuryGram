@@ -113,6 +113,7 @@ GifsListWidget::GifsListWidget(
 	descriptor.show,
 	descriptor.paused)
 , _show(std::move(descriptor.show))
+, _requireConfirmation(descriptor.requireConfirmation)
 , _api(&session().mtp())
 , _section(Section::Gifs)
 , _updateInlineItems([=] { updateInlineItems(); })
@@ -510,6 +511,18 @@ void GifsListWidget::selectInlineResult(
 	};
 
 	forceSend |= base::IsCtrlPressed();
+	const auto confirmSend = [&](Fn<void()> callback) {
+		const auto &settings = LuxurySettings::getInstance();
+		if (settings.gifConfirmation() && _requireConfirmation && !needsCaption) {
+			_show->showBox(Ui::MakeConfirmBox({
+				.text = tr::luxury_ConfirmationGIF(),
+				.confirmed = std::move(callback),
+				.confirmText = tr::lng_send_button(),
+			}));
+		} else {
+			callback();
+		}
+	};
 	if (const auto photo = item->getPhoto()) {
 		using Data::PhotoSize;
 		const auto media = photo->activeMediaView();
@@ -539,16 +552,7 @@ void GifsListWidget::selectInlineResult(
 					});
 				});
 
-			const auto &settings = LuxurySettings::getInstance();
-			if (settings.gifConfirmation() && !needsCaption) {
-				_show->showBox(Ui::MakeConfirmBox({
-					.text = tr::luxury_ConfirmationGIF(),
-					.confirmed = sendGIFCallback,
-					.confirmText = tr::lng_send_button()
-				}));
-			} else {
-				sendGIFCallback();
-			}
+			confirmSend(std::move(sendGIFCallback));
 		} else if (!preview.usingThumbnail()) {
 			if (preview.loading()) {
 				document->cancel();
@@ -561,12 +565,16 @@ void GifsListWidget::selectInlineResult(
 	} else if (const auto inlineResult = item->getResult()) {
 		if (inlineResult->onChoose(item)) {
 			options.hideViaBot = true;
-			_inlineResultChosen.fire({
-				.result = inlineResult,
-				.bot = _searchBot,
-				.options = options,
-				.messageSendingFrom = messageSendingFrom(),
-			});
+			const auto bot = _searchBot;
+			const auto from = messageSendingFrom();
+			confirmSend(crl::guard(this, [=] {
+				_inlineResultChosen.fire({
+					.result = inlineResult,
+					.bot = bot,
+					.options = options,
+					.messageSendingFrom = from,
+				});
+			}));
 		}
 	}
 }

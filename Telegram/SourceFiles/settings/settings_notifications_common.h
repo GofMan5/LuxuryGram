@@ -69,7 +69,7 @@ private:
 	QRect getScreenRect(int width) const;
 	int getContentLeft() const;
 	void prepareNotificationSampleSmall();
-	void prepareNotificationSampleLarge();
+	[[nodiscard]] QPixmap prepareNotificationSampleLarge(int w);
 	void prepareNotificationSampleUserpic();
 
 	const not_null<Window::SessionController*> _controller;
@@ -77,6 +77,7 @@ private:
 	QPixmap _notificationSampleUserpic;
 	QPixmap _notificationSampleSmall;
 	QPixmap _notificationSampleLarge;
+	QPixmap _notificationSampleLargeTopCenter;
 	ScreenCorner _chosenCorner;
 	std::vector<Ui::Animations::Simple> _sampleOpacities;
 

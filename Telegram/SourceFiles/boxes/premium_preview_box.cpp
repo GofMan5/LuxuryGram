@@ -1058,6 +1058,7 @@ void PreviewBox(
 	const auto close = Ui::CreateChild<Ui::IconButton>(
 		buttonsParent,
 		st::settingsPremiumTopBarClose);
+	close->setAccessibleName(tr::lng_close(tr::now));
 	close->setClickedCallback([=] { box->closeBox(); });
 
 	const auto gifts = (state->selected.current() == PremiumFeature::Gifts);
@@ -1066,6 +1067,8 @@ void PreviewBox(
 		buttonsParent,
 		st::settingsPremiumMoveLeft);
 	if (left) {
+		left->setAccessibleName(
+			tr::luxury_PremiumPreviewPrevious(tr::now));
 		left->setClickedCallback([=] { move(-1); });
 	}
 
@@ -1073,6 +1076,8 @@ void PreviewBox(
 		buttonsParent,
 		st::settingsPremiumMoveRight);
 	if (right) {
+		right->setAccessibleName(
+			tr::luxury_PremiumPreviewNext(tr::now));
 		right->setClickedCallback([=] { move(1); });
 	}
 

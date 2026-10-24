@@ -69,6 +69,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/features/forward/luxury_forward.h"
+#include "luxury/utils/telegram_helpers.h"
 
 
 class ShareBox::Inner final : public Ui::RpWidget {
@@ -1861,6 +1862,11 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 			return;
 		} else if (!checkPaid()) {
 			return;
+		}
+		if (ranges::none_of(items, [](not_null<HistoryItem*> item) {
+			return item->isEphemeral();
+		})) {
+			applyGhostScheduling(&history->session(), options);
 		}
 
 		using Flag = MTPmessages_ForwardMessages::Flag;

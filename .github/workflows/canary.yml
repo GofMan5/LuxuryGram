@@ -542,18 +542,8 @@ jobs:
       - name: Generate a stub DesktopPrivate.
         shell: bash
         run: |
-          # The Packer target includes packer_private.h at build time, but
-          # v2 canary packing never uses the v1 RSA keys, so random junk
-          # is enough (same approach as the nightly Release builds).
-          mkdir -p $TBUILD/DesktopPrivate
-          random_key() {
-            printf -- '-----BEGIN RSA PRIVATE KEY-----\\n%s\\n-----END RSA PRIVATE KEY-----\\n' \
-              "$(head -c 96 /dev/urandom | base64 | tr -d '\n')"
-          }
-          printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\n' \
-            "$(random_key)" "$(random_key)" > $TBUILD/DesktopPrivate/packer_private.h
-          printf 'static const char *AlphaPrivateKey = "%s";\n' \
-            "$(random_key)" > $TBUILD/DesktopPrivate/alpha_private.h
+          python3 "$TBUILD/$REPO_NAME/Telegram/build/write_packer_public.py" \
+            "$TBUILD/$REPO_NAME/Telegram/SourceFiles/_other" "$TBUILD/DesktopPrivate"
 
       - name: Free up some disk space.
         shell: bash
@@ -828,15 +818,8 @@ jobs:
 
       - name: Generate a stub DesktopPrivate.
         run: |
-          mkdir -p DesktopPrivate
-          random_key() {
-            printf -- '-----BEGIN RSA PRIVATE KEY-----\\n%s\\n-----END RSA PRIVATE KEY-----\\n' \
-              "$(head -c 96 /dev/urandom | base64 | tr -d '\n')"
-          }
-          printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\n' \
-            "$(random_key)" "$(random_key)" > DesktopPrivate/packer_private.h
-          printf 'static const char *AlphaPrivateKey = "%s";\n' \
-            "$(random_key)" > DesktopPrivate/alpha_private.h
+          python3 "$REPO_NAME/Telegram/build/write_packer_public.py" \
+            "$REPO_NAME/Telegram/SourceFiles/_other" DesktopPrivate
 
       - name: Free up some disk space.
         run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -name 'macos_toolchain.json' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete
@@ -1308,15 +1291,8 @@ jobs:
 
       - name: Generate a stub DesktopPrivate.
         run: |
-          mkdir -p ../DesktopPrivate
-          random_key() {
-            printf -- '-----BEGIN RSA PRIVATE KEY-----\\n%s\\n-----END RSA PRIVATE KEY-----\\n' \
-              "$(head -c 96 /dev/urandom | base64 | tr -d '\n')"
-          }
-          printf 'const char *PrivateKey = "%s";\nconst char *PrivateBetaKey = "%s";\n' \
-            "$(random_key)" "$(random_key)" > ../DesktopPrivate/packer_private.h
-          printf 'static const char *AlphaPrivateKey = "%s";\n' \
-            "$(random_key)" > ../DesktopPrivate/alpha_private.h
+          python3 Telegram/build/write_packer_public.py \
+            Telegram/SourceFiles/_other ../DesktopPrivate
 
       - name: Telegram Desktop build.
         run: |

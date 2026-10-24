@@ -26,6 +26,32 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/format_values.h"
 
 namespace HistoryView {
+namespace {
+
+[[nodiscard]] QString MessageDeliveryAccessibilityText(
+		not_null<const HistoryItem*> item) {
+	QStringList parts;
+	if (item->out()) {
+		if (item->isSending()) {
+			parts.push_back(tr::lng_sr_chat_sending(tr::now));
+		} else if (item->hasFailed()) {
+			parts.push_back(tr::lng_sr_chat_failed(tr::now));
+		} else {
+			parts.push_back(tr::lng_sr_chat_sent(tr::now));
+		}
+	} else {
+		parts.push_back(tr::lng_sr_chat_received(tr::now));
+	}
+	if (item->isDeleted()) {
+		parts.push_back(tr::luxury_WatcherMessageDeleted(tr::now));
+	}
+	if (item->isBurnt()) {
+		parts.push_back(tr::luxury_MessageSelfDestructingOpened(tr::now));
+	}
+	return parts.join(u" "_q);
+}
+
+} // namespace
 
 QString MessageAccessibilityName(
 		not_null<const Element*> view,
@@ -295,17 +321,7 @@ QString MessageAccessibilityName(
 	}
 
 	QStringList statusParts;
-	if (item->out()) {
-		if (item->isSending()) {
-			statusParts.push_back(tr::lng_sr_chat_sending(tr::now));
-		} else if (item->hasFailed()) {
-			statusParts.push_back(tr::lng_sr_chat_failed(tr::now));
-		} else {
-			statusParts.push_back(tr::lng_sr_chat_sent(tr::now));
-		}
-	} else {
-		statusParts.push_back(tr::lng_sr_chat_received(tr::now));
-	}
+	statusParts.push_back(MessageDeliveryAccessibilityText(item));
 	if (item->Has<HistoryMessageEdited>()) {
 		statusParts.push_back(tr::lng_edited(tr::now));
 	}
@@ -702,15 +718,7 @@ QString MessageSubItemValue(
 		return data->originalText().text;
 	}
 	case MessageSubItem::Delivery:
-		if (data->out()) {
-			if (data->isSending()) {
-				return tr::lng_sr_chat_sending(tr::now);
-			} else if (data->hasFailed()) {
-				return tr::lng_sr_chat_failed(tr::now);
-			}
-			return tr::lng_sr_chat_sent(tr::now);
-		}
-		return tr::lng_sr_chat_received(tr::now);
+		return MessageDeliveryAccessibilityText(data);
 	case MessageSubItem::Edited:
 		if (data->Has<HistoryMessageEdited>()) {
 			return tr::lng_edited(tr::now);

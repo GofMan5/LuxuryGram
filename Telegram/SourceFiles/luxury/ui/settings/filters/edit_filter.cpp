@@ -71,7 +71,10 @@ bool validateRegex(const icu::UnicodeString& pattern, std::string& errorMsg) {
 			errorCodeNormalized[0] = char(std::toupper(
 				static_cast<unsigned char>(errorCodeNormalized[0])));
 		}
-		errorMsg = errorCodeNormalized + " at " + std::to_string(parseError.offset);
+		// A no-break space keeps the position with its word when wrapping.
+		errorMsg = errorCodeNormalized
+			+ " at\xC2\xA0"
+			+ std::to_string(parseError.offset);
 
 		if (parseError.preContext[0] != 0 || parseError.postContext[0] != 0) {
 			icu::UnicodeString pre(parseError.preContext);
@@ -169,13 +172,18 @@ void RegexEditBuilder(
 	{
 		const auto text = regexValue->getTextWithTags().text;
 		if (text.isEmpty()) {
+			regexValue->showError();
 			return;
 		}
 
 		std::string error;
 		if (!validateRegex(icu::UnicodeString::fromUTF8(text.toStdString()), error)) {
-			errorText->entity()->setText(QString::fromStdString(error));
+			errorText->entity()->setText(
+				tr::luxury_RegexFiltersAddError(tr::now)
+				+ u":\n"_q
+				+ QString::fromStdString(error));
 			errorText->show(anim::type::normal);
+			regexValue->showError();
 			return;
 		}
 
@@ -196,6 +204,7 @@ void RegexEditBuilder(
 			newFilter.id.assign(bytes.cbegin(), bytes.cend());
 		}
 
+		const auto show = box->uiShow();
 		box->closeBox();
 
 		LuxuryDatabase::async([=]
@@ -209,7 +218,7 @@ void RegexEditBuilder(
 			crl::on_main([=]
 			{
 				if (!saved) {
-					Luxury::Ui::ShowDatabaseError();
+					Luxury::Ui::ShowDatabaseError(show);
 					return;
 				}
 
@@ -224,6 +233,7 @@ void RegexEditBuilder(
 					};
 					if (dialogId.has_value()) {
 						Luxury::Ui::ShowToastWithAction(
+							show,
 							std::move(config),
 							tr::luxury_RegexFilterBulletinAction(tr::now),
 							[=]() mutable {
@@ -239,7 +249,7 @@ void RegexEditBuilder(
 									}
 									crl::on_main([=] {
 										if (!scoped) {
-											Luxury::Ui::ShowDatabaseError();
+											Luxury::Ui::ShowDatabaseError(show);
 											return;
 										}
 										FiltersCacheController::fireUpdate();
@@ -247,7 +257,7 @@ void RegexEditBuilder(
 								});
 							});
 					} else {
-						Ui::Toast::Show(std::move(config));
+						show->showToast(std::move(config));
 					}
 				}
 			});

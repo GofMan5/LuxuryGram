@@ -254,6 +254,11 @@ bool SavedMusic::fullyLoaded(PeerId peerId) const {
 	return entry && entry->loaded;
 }
 
+bool SavedMusic::loadFailed(PeerId peerId) const {
+	const auto entry = lookupEntry(peerId);
+	return entry && entry->loadFailed;
+}
+
 const std::vector<not_null<HistoryItem*>> &SavedMusic::list(
 		PeerId peerId) const {
 	static const auto empty = std::vector<not_null<HistoryItem*>>();
@@ -285,6 +290,8 @@ void SavedMusic::loadMore(PeerId peerId, bool reload) {
 	const auto user = _owner->peer(peerId)->asUser();
 	Assert(user != nullptr);
 
+	const auto retrying = entry.loadFailed;
+	entry.loadFailed = false;
 	entry.reloading = reload;
 	entry.requestId = _owner->session().api().request(MTPusers_GetSavedMusic(
 		user->inputUser(),
@@ -294,6 +301,7 @@ void SavedMusic::loadMore(PeerId peerId, bool reload) {
 	)).done([=](const MTPusers_SavedMusic &result) {
 		auto &entry = _entries[peerId];
 		entry.requestId = 0;
+		entry.loadFailed = false;
 		const auto reloaded = base::take(entry.reloading);
 		result.match([&](const MTPDusers_savedMusicNotModified &) {
 		}, [&](const MTPDusers_savedMusic &data) {
@@ -317,10 +325,14 @@ void SavedMusic::loadMore(PeerId peerId, bool reload) {
 	}).fail([=](const MTP::Error &error) {
 		auto &entry = _entries[peerId];
 		entry.requestId = 0;
-		entry.total = int(entry.list.size());
-		entry.loaded = true;
+		const auto reloaded = base::take(entry.reloading);
+		entry.loadFailed = true;
+		entry.loaded = reloaded;
 		_changed.fire_copy(peerId);
 	}).send();
+	if (retrying) {
+		_changed.fire_copy(peerId);
+	}
 }
 
 uint64 SavedMusic::firstPageHash(const Entry &entry) const {
@@ -385,7 +397,7 @@ rpl::producer<SavedMusicSlice> SavedMusicList(
 			}
 			const auto hasAfter = int(i - begin(loaded));
 			const auto hasBefore = int(end(loaded) - i);
-			if (hasBefore < limit) {
+			if (hasBefore < limit && !savedMusic->loadFailed(peerId)) {
 				savedMusic->loadMore(peerId);
 			}
 			const auto takeAfter = std::min(hasAfter, limit);

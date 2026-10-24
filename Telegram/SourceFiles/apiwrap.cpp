@@ -2284,10 +2284,7 @@ void ApiWrap::updatePrivacyLastSeens() {
 			const auto &data = status.data();
 			const auto userId = UserId(data.vuser_id());
 			if (const auto user = _session->data().userLoaded(userId)) {
-				const auto status = LastseenFromMTP(
-					data.vstatus(),
-					user->lastseen());
-				if (user->updateLastseen(status)) {
+				if (user->updateServerLastseen(data.vstatus())) {
 					session().changes().peerUpdated(
 						user,
 						Data::PeerUpdate::Flag::OnlineStatus);
@@ -4042,6 +4039,11 @@ void ApiWrap::forwardMessages(
 		}
 		return;
 	}
+	if (ranges::none_of(draft.items, [](not_null<HistoryItem*> item) {
+		return item->isEphemeral();
+	})) {
+		applyGhostScheduling(_session, action.options);
+	}
 
 	struct SharedCallback {
 		int requestsLeft = 0;
@@ -4208,6 +4210,9 @@ void ApiWrap::forwardMessages(
 				}
 			},
 			[=](const MTP::Error &error, const MTP::Response &) {
+				if (action.options.localSendFinished) {
+					(*action.options.localSendFinished)(FullMsgId(), false);
+				}
 				if (idsCopy) {
 					for (const auto &[randomId, itemId] : *idsCopy) {
 						_session->api().sendMessageFail(
@@ -4315,8 +4320,14 @@ void ApiWrap::sendSharedContact(
 		const QString &firstName,
 		const QString &lastName,
 		UserId userId,
-		const SendAction &action,
+		SendAction action,
 		Fn<void(bool)> done) {
+	if (!_session->ephemeralMessages().wouldSendMedia(
+			action.history->peer,
+			action.replyTo,
+			QString())) {
+		applyGhostScheduling(_session, action.options);
+	}
 	sendAction(action);
 
 	const auto history = action.history;
@@ -4636,12 +4647,22 @@ void ApiWrap::sendRichMessage(
 
 	const auto history = action.history;
 	const auto peer = history->peer;
+	const auto summary = Iv::FlattenRichPageSummary(page).text;
+	// Ghost mode hides a send behind a schedule date like every other send, but
+	// not an ephemeral one: the check below would see the date and quietly send
+	// the reply as an ordinary message.
+	if (!_session->ephemeralMessages().wouldSendMedia(
+			peer,
+			action.replyTo,
+			summary)) {
+		applyGhostScheduling(_session, action.options);
+	}
 	const auto ephemeral = !action.options.scheduled
 		&& !action.options.shortcutId
 		&& _session->ephemeralMessages().wouldSendMedia(
 			peer,
 			action.replyTo,
-			Iv::FlattenRichPageSummary(page).text);
+			summary);
 	if (!ephemeral) {
 		StripUnsendableReply(_session, action.replyTo);
 	}
@@ -4975,6 +4996,8 @@ void ApiWrap::sendMessage(
 			localMessageId
 				? std::exchange(localMessageId, std::nullopt).value()
 				: _session->data().nextLocalMessageId());
+		if (action.options.localIdAllocated
+			&& !(*action.options.localIdAllocated)(newId)) return;
 		auto randomId = base::RandomValue<uint64>();
 
 		TextUtilities::Trim(sending);
@@ -5112,6 +5135,9 @@ void ApiWrap::sendMessage(
 		const auto fail = [=](
 				const MTP::Error &error,
 				const MTP::Response &response) {
+			if (action.options.localSendFinished) {
+				(*action.options.localSendFinished)(newId, false);
+			}
 			if (error.type() == u"MESSAGE_EMPTY"_q) {
 				lastMessage->destroy();
 			} else {
@@ -5273,6 +5299,7 @@ void ApiWrap::sendInlineResult(
 		std::optional<MsgId> localMessageId,
 		Fn<void(bool)> done) {
 	StripUnsendableReply(_session, action.replyTo);
+	applyGhostScheduling(_session, action.options);
 	sendAction(action);
 
 	const auto history = action.history;
@@ -5385,7 +5412,12 @@ void ApiWrap::uploadAlbumMedia(
 		const MTPInputMedia &media) {
 	const auto localId = item->fullId();
 	const auto failed = [=] {
-
+		const auto i = _sendingAlbums.find(groupId.raw());
+		if (i != _sendingAlbums.end()) {
+			if (const auto finished = i->second->options.localSendFinished) {
+				(*finished)(localId, false);
+			}
+		}
 	};
 	request(MTPmessages_UploadMedia(
 		MTP_flags(0),
@@ -5517,7 +5549,12 @@ void ApiWrap::sendMediaWithRandomId(
 	const auto replyTo = item->replyTo();
 	const auto peer = history->peer;
 
-	if (_session->ephemeralMessages().sendMedia(item, media)) {
+	const auto id = item->fullId();
+	if (options.localIdAllocated && !(*options.localIdAllocated)(id)) return;
+	const auto ephemeralDone = options.localSendFinished
+		? Fn<void(bool)>([=](bool success) { (*options.localSendFinished)(id, success); })
+		: Fn<void(bool)>();
+	if (_session->ephemeralMessages().sendMedia(item, media, {}, nullptr, ephemeralDone)) {
 		if (done) {
 			done(true);
 		}
@@ -5592,6 +5629,7 @@ void ApiWrap::sendMediaWithRandomId(
 			requestRecentStickers(std::nullopt, true);
 		}
 	}, [=](const MTP::Error &error, const MTP::Response &response) {
+		if (options.localSendFinished) (*options.localSendFinished)(itemId, false);
 		if (done) done(false);
 		sendMessageFail(error, peer, randomId, itemId);
 	});
@@ -5606,6 +5644,8 @@ void ApiWrap::sendMultiPaidMedia(
 	const auto groupId = album->groupId;
 	auto &options = album->options;
 	const auto randomId = album->items.front().randomId;
+	const auto parts = album->items;
+	const auto finished = options.localSendFinished;
 	auto medias = album->items | ranges::view::transform([](
 			const SendingAlbum::Item &part) {
 		Assert(part.media.has_value());
@@ -5687,9 +5727,13 @@ void ApiWrap::sendMultiPaidMedia(
 			}
 			history->owner().destroyMessagesWithCacheCleanup(items);
 		}
+		if (finished) {
+			for (const auto &part : parts) (*finished)(part.msgId, true);
+		}
 		if (done) done(true);
 	}, [=](const MTP::Error &error, const MTP::Response &response) {
 		_sendingAlbums.remove(groupId);
+		if (finished) (*finished)(itemId, false);
 		if (done) done(false);
 		sendMessageFail(error, peer, randomId, itemId);
 	});
@@ -5752,6 +5796,11 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 		_sendingAlbums.remove(groupId);
 		return;
 	}
+	if (const auto allocated = album->options.localIdAllocated) {
+		for (const auto &part : album->items) {
+			if (!(*allocated)(part.msgId)) return;
+		}
+	}
 	const auto replyTo = sample->replyTo();
 	if (const auto target = _session->data().message(replyTo.messageId)
 		; target && target->isEphemeral()) {
@@ -5767,9 +5816,14 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 				parts.emplace_back(partItem, part.media->data().vmedia());
 			}
 		}
+		const auto finished = album->options.localSendFinished;
 		_sendingAlbums.remove(groupId);
 		for (const auto &[partItem, media] : parts) {
-			_session->ephemeralMessages().sendMedia(partItem, media);
+			const auto id = partItem->fullId();
+			const auto done = finished
+				? Fn<void(bool)>([=](bool success) { (*finished)(id, success); })
+				: Fn<void(bool)>();
+			_session->ephemeralMessages().sendMedia(partItem, media, {}, nullptr, done);
 		}
 		return;
 	}
@@ -5838,6 +5892,9 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 	}, [=](const MTP::Error &error, const MTP::Response &response) {
 		if (const auto album = _sendingAlbums.take(groupId)) {
 			for (const auto &item : (*album)->items) {
+				if (const auto finished = (*album)->options.localSendFinished) {
+					(*finished)(item.msgId, false);
+				}
 				sendMessageFail(error, peer, item.randomId, item.msgId);
 			}
 		} else {

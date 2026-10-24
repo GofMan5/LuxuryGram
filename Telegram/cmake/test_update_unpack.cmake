@@ -23,6 +23,7 @@ PRIVATE
 target_link_libraries(test_update_unpack
 PRIVATE
     desktop-app::external_qt
+    desktop-app::external_openssl
     desktop-app::external_auto_updates
 )
 

@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/emoji_config.h"
 #include "base/random.h"
 #include "apiwrap.h"
+#include "luxury/luxury_settings.h"
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonArray>
@@ -318,6 +319,11 @@ void EmojiInteractions::sendAccumulatedOutgoing(
 	if (bunch.interactions.empty()) {
 		return;
 	}
+	// LuxuryGram: the peer sees these in the typing slot of the chat.
+	if (!LuxurySettings::ghost(_session).sendUploadProgress()) {
+		animations.erase(from, till);
+		return;
+	}
 	const auto peer = item->history()->peer;
 	const auto emoji = from->emoji;
 	const auto requestId = _session->api().request(MTPmessages_SetTyping(
@@ -471,6 +477,9 @@ void EmojiInteractions::setWaitingForDownload(bool waiting) {
 }
 
 void EmojiInteractions::playStarted(not_null<PeerData*> peer, QString emoji) {
+	if (!LuxurySettings::ghost(_session).sendUploadProgress()) {
+		return;
+	}
 	auto &map = _playStarted[peer];
 	const auto i = map.find(emoji);
 	const auto now = crl::now();

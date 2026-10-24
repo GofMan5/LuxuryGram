@@ -171,6 +171,32 @@ void MusicInner::setupEmpty() {
 
 void MusicInner::refreshEmpty() {
 	const auto savedMusic = &_controller->session().data().savedMusic();
+	if (savedMusic->loadFailed(_peer->id)) {
+		auto empty = object_ptr<Ui::VerticalLayout>(this);
+		empty->add(
+			object_ptr<Ui::FlatLabel>(
+				empty.get(),
+				tr::luxury_SavedMusicLoadError(tr::now),
+				st::collectionEmptyTitle),
+			st::collectionEmptyTitleMargin,
+			style::al_top);
+		const auto button = empty->add(
+			object_ptr<Ui::RoundButton>(
+				empty.get(),
+				rpl::single(QString()),
+				st::collectionEmptyButton),
+			st::collectionEmptyAddMargin,
+			style::al_top);
+		button->setText(tr::luxury_SavedMusicRetry());
+		button->setClickedCallback([=] {
+			savedMusic->loadMore(_peer->id);
+		});
+		empty->show();
+		_empty = std::move(empty);
+		_emptyLoading = false;
+		resizeToWidth(width());
+		return;
+	}
 	const auto knownEmpty = savedMusic->countKnown(_peer->id);
 	_empty = object_ptr<Ui::FlatLabel>(
 		this,
@@ -301,7 +327,11 @@ bool MusicWidget::showInternal(not_null<ContentMemento*> memento) {
 	if (!controller()->validateMementoPeer(memento)) {
 		return false;
 	}
-	return true;
+	if (const auto musicMemento = dynamic_cast<MusicMemento*>(memento.get())) {
+		restoreState(musicMemento);
+		return true;
+	}
+	return false;
 }
 
 void MusicWidget::setInternalState(

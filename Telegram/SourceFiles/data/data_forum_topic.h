@@ -120,7 +120,7 @@ public:
 	void discard();
 
 	void setRealRootId(MsgId realId);
-	void readTillEnd();
+	void readTillEnd(std::optional<bool> sendReadReceipt = std::nullopt);
 	void requestChatListMessage();
 
 	void applyTopic(const MTPDforumTopic &data);

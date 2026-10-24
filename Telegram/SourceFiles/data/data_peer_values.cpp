@@ -96,24 +96,29 @@ std::optional<QString> OnlineTextCommon(LastseenStatus status, TimeId now) {
 
 QString LastSeenAgoElapsed(qint64 elapsed) {
 	elapsed = std::max(elapsed, qint64(0));
+	const auto seconds = tr::lng_seconds_tiny(
+		tr::now,
+		lt_count,
+		int(elapsed % 60));
 	if (elapsed >= 3600) {
-		return QString::number(elapsed / 3600)
-			+ u" ч "_q
-			+ QString::number((elapsed % 3600) / 60)
-			+ u" мин "_q
-			+ QString::number(elapsed % 60)
-			+ u" с"_q;
+		return tr::lng_hours_tiny(tr::now, lt_count, int(elapsed / 3600))
+			+ ' '
+			+ tr::lng_minutes_tiny(
+				tr::now,
+				lt_count,
+				int((elapsed % 3600) / 60))
+			+ ' '
+			+ seconds;
 	} else if (elapsed >= 60) {
-		return QString::number(elapsed / 60)
-			+ u" мин "_q
-			+ QString::number(elapsed % 60)
-			+ u" с"_q;
+		return tr::lng_minutes_tiny(tr::now, lt_count, int(elapsed / 60))
+			+ ' '
+			+ seconds;
 	}
-	return QString::number(elapsed) + u" с"_q;
+	return seconds;
 }
 
 QString ExactLastSeenText(QDateTime tillFull, QDateTime nowFull) {
-	const auto onlineTime = QLocale().toString(tillFull.time(), "HH:mm:ss");
+	const auto onlineTime = formatTimeWithSeconds(tillFull.time());
 	const auto ago = tr::luxury_LastSeenAgo(
 		tr::now,
 		lt_elapsed,

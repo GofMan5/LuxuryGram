@@ -1,0 +1,111 @@
+# Maintainer: GofMan5 <maksimka.ushanov0 at gmail dot com>
+
+pkgname=luxurygram-bin
+_appname=LuxuryGram
+_appid=com.luxurygram.desktop
+pkgver=1.0.19
+pkgrel=1
+pkgdesc='Telegram Desktop fork with privacy controls, anti-recall tools and translation (prebuilt binary)'
+arch=('x86_64')
+url='https://github.com/GofMan5/LuxuryGram'
+# The OpenSSL linking exception is in the installed LICENSE: SPDX has no
+# identifier for it that namcap accepts after WITH.
+license=('GPL-3.0-or-later')
+# The binary links the first group directly; the second group is loaded
+# through implib-gen stubs, which abort the app when the library is missing.
+depends=(
+  'cairo'
+  'fontconfig'
+  'freetype2'
+  'glib2'
+  'glibc'
+  'hicolor-icon-theme'
+  'pango'
+
+  'gdk-pixbuf2'
+  'gtk3'
+  'libdrm'
+  'libglvnd'
+  'libva'
+  'libvdpau'
+  'libx11'
+  'libxcb'
+  'systemd-libs'
+  'wayland'
+)
+optdepends=(
+  'alsa-lib: audio without PulseAudio or PipeWire'
+  'libpulse: audio through PulseAudio or PipeWire'
+  'webkit2gtk-4.1: embedded browser for mini apps and Instant View'
+  'xcb-util-keysyms: global shortcuts on X11'
+  'xdg-desktop-portal: native file dialogs and desktop integration'
+  'xdg-utils: opening links and files in other applications'
+)
+provides=('luxurygram')
+conflicts=('luxurygram')
+options=('!strip' '!debug')
+_tag="luxury-v${pkgver}"
+_raw="https://raw.githubusercontent.com/GofMan5/LuxuryGram/${_tag}"
+source=(
+  "${_appname}-${pkgver}-linux-x64.tar.xz::${url}/releases/download/${_tag}/${_appname}-${pkgver}-linux-x64.tar.xz"
+  "${_appid}-${pkgver}.desktop::${_raw}/lib/xdg/${_appid}.desktop"
+  "${_appid}-${pkgver}.service::${_raw}/lib/xdg/${_appid}.service"
+  "${_appid}-${pkgver}.metainfo.xml::${_raw}/lib/xdg/${_appid}.metainfo.xml"
+  "icon16-${pkgver}.png::${_raw}/Telegram/Resources/art/icon16.png"
+  "icon32-${pkgver}.png::${_raw}/Telegram/Resources/art/icon32.png"
+  "icon48-${pkgver}.png::${_raw}/Telegram/Resources/art/icon48.png"
+  "icon64-${pkgver}.png::${_raw}/Telegram/Resources/art/icon64.png"
+  "icon128-${pkgver}.png::${_raw}/Telegram/Resources/art/icon128.png"
+  "icon256-${pkgver}.png::${_raw}/Telegram/Resources/art/icon256.png"
+  "icon512-${pkgver}.png::${_raw}/Telegram/Resources/art/icon512.png"
+  "tray-${pkgver}.svg::${_raw}/Telegram/Resources/icons/tray_monochrome.svg"
+  "tray-attention-${pkgver}.svg::${_raw}/Telegram/Resources/icons/tray_monochrome_attention.svg"
+  "tray-mute-${pkgver}.svg::${_raw}/Telegram/Resources/icons/tray_monochrome_mute.svg"
+  "LICENSE-${pkgver}::${_raw}/LICENSE"
+)
+sha256sums=(
+  'a30755b18c76d4440cb455e587ccf4fd88f228abd01cbf46715030054136a11a'
+  'b9fb27a1976d5bb53fb5a97d7c07c04612d7eb29528fd5585051384476197dcb'
+  '3bbe828e2f8f84e2017e5b59b935c2c18af60c4214ae1f84fc58a9c8c4e85a84'
+  '98cb0f4dc9c039e9663764d2593aa9f0686a922d7962201299109c62c4fd01e1'
+  '9271b3cfe9ab866c808141a5d6c78c439d16c1991818bca638ada6a975b8ebed'
+  '2ec7f2bc9b429a0b10579c80831877c33e8617b004a1d299893b731a831a781d'
+  '109343d244516d2afa3004679712c9e3bc33de2d684eed910936d134719015d1'
+  '00911c646d2a3426bf3d2ffeee9514136e123988178d9ca82f70c9316700e027'
+  '005566c3b10f9cffea9a452f5964a603d81ddb8e20834621167d1fe3104d4f70'
+  '0dbe205418476720c70ef13f852d72dd488e2fd8cb93c313e28c99525ff29aa2'
+  '480ae6f61038b6a2c267e2eaef9d4ba68cca914da0c470a52e70351893967083'
+  '6b9da469c1feadedc03fa2fa7953255d242a72cc630ce05757b7b673297e5ed3'
+  '2b67ee19839dbbb9f57f2d7433fd6dc1059634d6d081c5e4c422c14f53fcfcc7'
+  'efa1439bd60b58db7b755f5d21be854ea686a0e1e2f1aa6e43bf35c083ee72fc'
+  'a728b65d02eeaf6b50c075a33b76107c652c3e5a12ff67f53682c83d47a23e1e'
+)
+
+package() {
+  install -Dm755 "${_appname}/${_appname}" "${pkgdir}/usr/bin/${_appname}"
+  ln -s "${_appname}" "${pkgdir}/usr/bin/luxurygram"
+
+  # pacman owns updates: the built-in updater stays off for this path.
+  install -dm755 "${pkgdir}/usr/share/LuxuryGramDesktop/externalupdater.d"
+  echo "/usr/bin/${_appname}" \
+    > "${pkgdir}/usr/share/LuxuryGramDesktop/externalupdater.d/${pkgname}.conf"
+
+  install -Dm644 "${_appid}-${pkgver}.desktop" \
+    "${pkgdir}/usr/share/applications/${_appid}.desktop"
+  install -Dm644 "${_appid}-${pkgver}.metainfo.xml" \
+    "${pkgdir}/usr/share/metainfo/${_appid}.metainfo.xml"
+  sed "s|@CMAKE_INSTALL_FULL_BINDIR@|/usr/bin|" "${_appid}-${pkgver}.service" \
+    | install -Dm644 /dev/stdin "${pkgdir}/usr/share/dbus-1/services/${_appid}.service"
+
+  local size
+  for size in 16 32 48 64 128 256 512; do
+    install -Dm644 "icon${size}-${pkgver}.png" \
+      "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/${_appid}.png"
+  done
+  local symbolic="${pkgdir}/usr/share/icons/hicolor/symbolic/apps"
+  install -Dm644 "tray-${pkgver}.svg" "${symbolic}/${_appid}-symbolic.svg"
+  install -Dm644 "tray-attention-${pkgver}.svg" "${symbolic}/${_appid}-attention-symbolic.svg"
+  install -Dm644 "tray-mute-${pkgver}.svg" "${symbolic}/${_appid}-mute-symbolic.svg"
+
+  install -Dm644 "LICENSE-${pkgver}" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

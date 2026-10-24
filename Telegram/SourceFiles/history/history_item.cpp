@@ -3088,6 +3088,9 @@ void HistoryItem::destroyHistoryEntry() {
 
 Storage::SharedMediaTypesMask HistoryItem::sharedMediaTypes() const {
 	auto result = Storage::SharedMediaTypesMask{};
+	if (_deleted) {
+		return result;
+	}
 	const auto saved = Get<HistoryMessageSavedMediaData>();
 	const auto media = saved ? saved->media.get() : _media.get();
 	if (media) {
@@ -4177,8 +4180,12 @@ void HistoryItem::setPostAuthor(const QString &postAuthor) {
 }
 
 void HistoryItem::setDeleted() {
+	removeFromSharedMediaIndex();
 	_deleted = true;
 	_deletedAnimated = true;
+	if (isRegular()) {
+		_history->registerDeletedMessage(this);
+	}
 
 	// cleanup mentions and reactions as they tend to bug with deleted messages (e.g. can't remove mention)
 	if (isUnreadMention()) {

@@ -18,6 +18,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "ui/text/format_values.h"
 
+#include <utility>
+
 namespace Ui {
 namespace {
 
@@ -160,6 +162,7 @@ void SendButton::paintEvent(QPaintEvent *e) {
 
 	if (_voiceRoundAnimating) {
 		paintVoiceRoundIcon(p, over);
+		paintFocus(p);
 		return;
 	}
 
@@ -203,6 +206,7 @@ void SendButton::paintEvent(QPaintEvent *e) {
 			toRect.marginsAdded(
 				{ shownWidth, shownHeight, shownWidth, shownHeight }),
 			_contentTo);
+		paintFocus(p);
 		return;
 	}
 	switch (_state.type) {
@@ -222,6 +226,17 @@ void SendButton::paintEvent(QPaintEvent *e) {
 	case Type::Slowmode: paintSlowmode(p); break;
 	case Type::EditPrice: break;
 	}
+	paintFocus(p);
+}
+
+void SendButton::paintFocus(QPainter &p) const {
+	if (_grabbingContent) {
+		return;
+	}
+	const auto area = (currentRippleShape() == RippleShape::StarsRoundRect)
+		? starsGeometry().rounded
+		: rect();
+	paintKeyboardFocus(p, area, area.height() / 2);
 }
 
 void SendButton::paintRecord(QPainter &p, bool over) {
@@ -499,6 +514,10 @@ void SendButton::updateSize() {
 }
 
 QPixmap SendButton::grabContent() {
+	const auto wasGrabbing = std::exchange(_grabbingContent, true);
+	const auto guard = gsl::finally([&] {
+		_grabbingContent = wasGrabbing;
+	});
 	auto result = QImage(
 		kWideScale * size() * style::DevicePixelRatio(),
 		QImage::Format_ARGB32_Premultiplied);

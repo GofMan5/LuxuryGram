@@ -77,6 +77,14 @@ constexpr auto kCraftUnavailableOpacity = 0.5;
 	return allowLimited || (gift.info.starsToUpgrade && allowUnique);
 }
 
+[[nodiscard]] int UserpicCornerInset() {
+	const auto square = LuxuryUiSettings::kMaxAvatarCorners
+		- LuxuryUiSettings::getAvatarCorners();
+	return int(style::ConvertScale(6.)
+		* square
+		/ LuxuryUiSettings::kMaxAvatarCorners);
+}
+
 } // namespace
 
 std::strong_ordering operator<=>(const GiftBadge &a, const GiftBadge &b) {
@@ -816,15 +824,14 @@ void GiftButton::paint(QPainter &p, float64 craftProgress) {
 			width);
 	}
 
+	const auto userpicInset = _userpic ? UserpicCornerInset() : 0;
 	if (_userpic) {
 		if (!_subscribed) {
 			_subscribed = true;
 			_userpic->subscribeToUpdates([=] { update(); });
 		}
 		const auto image = _userpic->image(st::giftBoxUserpicSize);
-		const auto corners = LuxuryUiSettings::getAvatarCorners();
-		const auto extraSkip = int(double(LuxuryUiSettings::kMaxAvatarCorners - corners) / LuxuryUiSettings::kMaxAvatarCorners * 6.0);
-		const auto skip = st::giftBoxUserpicSkip + extraSkip;
+		const auto skip = st::giftBoxUserpicSkip + userpicInset;
 		p.drawImage(extend.left() + skip, extend.top() + skip, image);
 	} else if (_check) {
 		const auto skip = st::giftBoxUserpicSkip;
@@ -1009,7 +1016,7 @@ void GiftButton::paint(QPainter &p, float64 craftProgress) {
 
 	auto percentSkip = 0;
 	const auto statusShift = _userpic
-		? st::giftBoxUserpicSize + st::giftBoxUserpicSkip
+		? userpicInset + st::giftBoxUserpicSize + st::giftBoxUserpicSkip
 		: 0;
 	v::match(_descriptor, [](const GiftTypePremium &) {
 	}, [&](const GiftTypeStars &data) {
@@ -1024,7 +1031,7 @@ void GiftButton::paint(QPainter &p, float64 craftProgress) {
 			const auto rect = QRect(
 				QPoint(
 					extend.left() + skip + statusShift,
-					extend.top() + skip),
+					extend.top() + skip + userpicInset),
 				QSize(icon.width() + 2 * add, icon.height() + 2 * add));
 			p.drawEllipse(rect);
 			icon.paintInCenter(p, rect);
@@ -1044,12 +1051,12 @@ void GiftButton::paint(QPainter &p, float64 craftProgress) {
 			const auto rect = QRect(
 				QPoint(
 					extend.left() + skip + statusShift,
-					extend.top() + skip),
+					extend.top() + skip + userpicInset),
 				QSize(size.width() + 2 * add, size.height() + 2 * add));
 			p.drawEllipse(rect);
 			p.drawImage(
 				extend.left() + skip + statusShift + add,
-				extend.top() + skip + add,
+				extend.top() + skip + userpicInset + add,
 				_tonIcon);
 			percentSkip += st::giftBoxUserpicSize;
 		}

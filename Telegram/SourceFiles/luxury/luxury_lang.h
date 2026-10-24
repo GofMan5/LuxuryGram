@@ -6,6 +6,8 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include "rpl/lifetime.h"
+
 #include <QtNetwork/QNetworkReply>
 #include <QtXml/QDomDocument>
 
@@ -19,7 +21,6 @@ public:
 	static void init();
 	static LuxuryLanguage *instance;
 
-	void fetchLanguage(const QString &id, const QString &baseId);
 	void applyLanguageJson(QJsonDocument doc);
 
 public Q_SLOTS:
@@ -31,6 +32,9 @@ private:
 	~LuxuryLanguage() override;
 
 	void clearReply();
+	void reloadLanguage();
+	void fetchLanguage(const QString &id, const QString &baseId);
+	[[nodiscard]] bool currentLanguageMatches() const;
 	void loadCachedLanguage();
 	void saveCachedLanguage(const QByteArray &json, const QString &langId);
 	[[nodiscard]] QString getCacheDir() const;
@@ -40,4 +44,9 @@ private:
 	QNetworkReply *_chkReply = nullptr;
 	bool needFallback = false;
 	QString _currentLangId;
+	QString _languageId;
+	QString _languageBaseId;
+	quint64 _requestGeneration = 0;
+	rpl::lifetime _lifetime;
+
 };

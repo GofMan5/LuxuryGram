@@ -72,7 +72,7 @@ void FillImportFiltersBox(not_null<Ui::GenericBox*> box, bool import) {
 				object_ptr<Ui::InputField>(
 					container,
 					st::defaultInputField,
-					rpl::single(QString("URL")),
+					tr::lng_formatting_link_url(),
 					clipboardHasUrl ? clipboardText : QString()
 				)
 			);
@@ -88,6 +88,9 @@ void FillImportFiltersBox(not_null<Ui::GenericBox*> box, bool import) {
 	{
 		if (import) {
 			importURLWrap->toggle(value, anim::type::normal);
+			if (value) {
+				importURLField->setFocusFast();
+			}
 		}
 	});
 
@@ -99,8 +102,12 @@ void FillImportFiltersBox(not_null<Ui::GenericBox*> box, bool import) {
 
 			if (import) {
 				if (isURL) {
-					FilterUtils::getInstance().importFromLink(
-						importURLField->getLastText().trimmed());
+					const auto link = importURLField->getLastText().trimmed();
+					if (link.isEmpty()) {
+						importURLField->showError();
+						return;
+					}
+					FilterUtils::getInstance().importFromLink(link);
 				} else {
 					FilterUtils::getInstance().importFromJson(
 						QGuiApplication::clipboard()->text().toUtf8());

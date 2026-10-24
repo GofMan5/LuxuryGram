@@ -189,22 +189,26 @@ bool UserData::updateServerLastseen(const MTPUserStatus &status) {
 		&& !isServiceUser();
 	const auto online = status.type() == mtpc_userStatusOnline
 		&& _serverLastseen.isOnline(now);
-	const auto exact = online || status.type() == mtpc_userStatusOffline;
+	// was_online is exact only within the observed interval. A delayed
+	// snapshot must not close a newer start; an actual clock rollback can.
+	const auto offlineAt = _serverLastseen.onlineTill();
+	const auto exactOffline = status.type() == mtpc_userStatusOffline
+		&& offlineAt > 0
+		&& offlineAt <= now;
+	const auto start = _trackedPresence.start();
+	if (exactOffline && start && offlineAt < *start && now >= *start) {
+		_trackedPresence.reset();
+	}
+	const auto exact = online || exactOffline;
 	const auto transition = _trackedPresence.observe(
 		online,
 		enabled && exact,
 		now);
 	if (transition) {
-		// Offline statuses carry the server's exact was_online; prefer it
-		// over the arrival moment so tracked history keeps the real
-		// transition time. Clamped to now in case the server runs ahead.
-		const auto offlineAt = _serverLastseen.onlineTill();
-		const auto at = (!*transition && offlineAt > 0 && offlineAt < now)
-			? offlineAt
-			: now;
-		LuxuryOnline::recordTransition(this, *transition, at);
+		LuxuryOnline::recordTransition(this, *transition, online ? now : offlineAt);
 	}
-	return updateLastseen(LastseenFromMTP(status, _lastseen));
+	const auto changed = updateLastseen(LastseenFromMTP(status, _lastseen));
+	return changed || transition.has_value();
 }
 
 void UserData::resetTrackedPresence() {

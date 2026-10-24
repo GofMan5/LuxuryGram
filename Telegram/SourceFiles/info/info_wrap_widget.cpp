@@ -821,19 +821,25 @@ void WrapWidget::finishShowContent() {
 
 	FiltersCacheController::updates() | rpl::on_next([=]
 	{
-		auto contentMemento = _content->createMemento();
-		if (!contentMemento) {
-			return;
-		}
+		// Updates fire from inside clicks on this very page (a filters
+		// switch, a shadow-ban row), and rebuilding it there deletes the
+		// widget whose handler is still running. Queued on the content, so a
+		// page already replaced in the meantime is not rebuilt again.
+		crl::on_main(_content.data(), [=] {
+			auto contentMemento = _content->createMemento();
+			if (!contentMemento) {
+				return;
+			}
 
-		std::vector<std::shared_ptr<ContentMemento>> stack;
-		stack.push_back(std::move(contentMemento));
-		const auto sectionMemento = std::make_shared<Memento>(std::move(stack));
-		const auto params = Window::SectionShow(
-			Window::SectionShow::Way::Backward,
-			anim::type::instant);
+			std::vector<std::shared_ptr<ContentMemento>> stack;
+			stack.push_back(std::move(contentMemento));
+			const auto sectionMemento = std::make_shared<Memento>(std::move(stack));
+			const auto params = Window::SectionShow(
+				Window::SectionShow::Way::Backward,
+				anim::type::instant);
 
-		showInternal(sectionMemento.get(), params);
+			showInternal(sectionMemento.get(), params);
+		});
 	}, _content->lifetime());
 }
 

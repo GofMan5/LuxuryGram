@@ -705,6 +705,7 @@ void Updates::getDifference() {
 	_noUpdatesTimer.cancel();
 	_getDifferenceTimeAfterFail = 0;
 
+	session().data().resetTrackedPresence();
 	_ptsWaiter.setRequesting(true);
 
 	api().request(MTPupdates_GetDifference(
@@ -890,6 +891,7 @@ void Updates::channelRangeDifferenceDone(
 }
 
 void Updates::mtpNewSessionCreated() {
+	session().data().resetTrackedPresence();
 	Core::App().checkAutoLock();
 	_updatesSeq = 0;
 	MTP_LOG(0, ("getDifference { after new_session_created }%1"
@@ -1023,13 +1025,14 @@ void Updates::updateOnline(crl::time lastNonIdleTime, bool gotOtherOffline) {
 			Assert(updateIn >= 0);
 		}
 	}
+	_lastWasOnline = isOnlineOrig;
 	auto ms = crl::now();
-	if (isOnline != _lastWasOnline
+	if (isOnline != _lastStatusWasOnline
 		|| (isOnline && _lastSetOnline + config.onlineUpdatePeriod <= ms)
 		|| (isOnline && gotOtherOffline)) {
 		api().request(base::take(_onlineRequest)).cancel();
 
-		_lastWasOnline = isOnlineOrig;
+		_lastStatusWasOnline = isOnline;
 		_lastSetOnline = ms;
 		if (!Core::Quitting()) {
 			_onlineRequest = api().request(MTPaccount_UpdateStatus(
@@ -1090,7 +1093,7 @@ crl::time Updates::lastSetOnline() const {
 }
 
 bool Updates::isQuitPrevent() {
-	if (!_lastWasOnline) {
+	if (!_lastStatusWasOnline) {
 		return false;
 	}
 	LOG(("Api::Updates prevents quit, sending offline status..."));

@@ -398,6 +398,10 @@ Document::Document(
 					base::take(lifetime)->destroy();
 				}
 			}, *lifetime);
+			// The icon animation repaints this view, so it may not outlive it:
+			// a view refresh while the viewer is open rebuilds the Document.
+			// Weak, so the paint callback still sees the stop expire it.
+			_ttlLifetime = lifetime;
 			_drawTtl = CreateTtlPaintCallback(lifetime, [=] { repaint(); });
 		} else if (!_parent->data()->out()) {
 			const auto &data = &_parent->data()->history()->owner();
@@ -433,6 +437,9 @@ Document::Document(
 }
 
 Document::~Document() {
+	if (const auto lifetime = _ttlLifetime.lock()) {
+		lifetime->destroy();
+	}
 	if (_dataMedia) {
 		_data->owner().keepAlive(base::take(_dataMedia));
 		_parent->checkHeavyPart();

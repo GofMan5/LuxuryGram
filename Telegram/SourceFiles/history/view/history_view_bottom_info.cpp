@@ -186,6 +186,10 @@ TextState BottomInfo::textState(
 		const auto viewsWidth = _views.maxWidth();
 		const auto right = width()
 			- withTicksWidth
+			- ((_data.flags & Data::Flag::Silent) ? st::historySilentWidth : 0)
+			- ((_data.flags & Data::Flag::Ephemeral)
+				? st::historyEphemeralStateWidth
+				: 0)
 			- ((_data.flags & Data::Flag::Pinned) ? st::historyPinWidth : 0)
 			- st::historyViewsSpace
 			- st::historyViewsWidth
@@ -193,7 +197,7 @@ TextState BottomInfo::textState(
 		const auto inViews = QRect(
 			right,
 			0,
-			withTicksWidth + st::historyViewsWidth,
+			viewsWidth + st::historyViewsWidth,
 			st::msgDateFont->height
 		).contains(position);
 		if (inViews) {

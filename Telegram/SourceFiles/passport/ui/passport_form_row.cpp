@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "passport/ui/passport_form_row.h"
 
+#include "lang/lang_keys.h"
 #include "ui/text/text_options.h"
 #include "ui/painter.h"
 #include "styles/style_passport.h"
@@ -52,8 +53,38 @@ void FormRow::updateContent(
 				st::fadeWrapDuration);
 		}
 	}
+	const auto weak = base::make_weak(this);
 	resizeToWidth(width());
+	if (!weak) {
+		return;
+	}
 	update();
+	accessibilityNameChanged();
+	if (!weak) {
+		return;
+	}
+	accessibilityDescriptionChanged();
+	if (weak) {
+		accessibilityValueChanged();
+	}
+}
+
+QString FormRow::accessibilityName() {
+	return _title.toString();
+}
+
+QString FormRow::accessibilityDescription() {
+	const auto description = _description.toString();
+	const auto status = accessibilityValue();
+	return description.isEmpty() ? status : (description + '\n' + status);
+}
+
+QString FormRow::accessibilityValue() const {
+	return (_error
+		? tr::luxury_PassportRowError
+		: _ready
+		? tr::luxury_PassportRowReady
+		: tr::luxury_PassportRowMissing)(tr::now);
 }
 
 int FormRow::resizeGetHeight(int newWidth) {
@@ -121,6 +152,7 @@ void FormRow::paintEvent(QPaintEvent *e) {
 			(height() - icon.height()) / 2,
 			width());
 	}
+	paintKeyboardFocus(p);
 }
 
 } // namespace Passport::Ui

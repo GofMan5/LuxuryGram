@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_changes.h"
 #include "window/window_controller.h"
 #include "media/audio/media_audio.h"
+#include "mtproto/facade.h"
 #include "mtproto/mtproto_config.h"
 #include "mainwidget.h"
 #include "api/api_updates.h"
@@ -472,6 +473,11 @@ void Account::startMtp(std::unique_ptr<MTP::Config> config) {
 	});
 	_mtp->setStateChangedHandler([=](MTP::ShiftedDcId dc, int32 state) {
 		if (dc == _mtp->mainDcId()) {
+			if (state != MTP::ConnectedState) {
+				if (const auto session = maybeSession()) {
+					session->data().resetTrackedPresence();
+				}
+			}
 			Core::App().settings().proxy().connectionTypeChangesNotify();
 			Core::App().checkProxyRotation(this, state);
 		}
@@ -479,6 +485,7 @@ void Account::startMtp(std::unique_ptr<MTP::Config> config) {
 	_mtp->setSessionResetHandler([=](MTP::ShiftedDcId shiftedDcId) {
 		if (const auto session = maybeSession()) {
 			if (shiftedDcId == _mtp->mainDcId()) {
+				session->data().resetTrackedPresence();
 				session->updates().getDifference();
 			}
 		}

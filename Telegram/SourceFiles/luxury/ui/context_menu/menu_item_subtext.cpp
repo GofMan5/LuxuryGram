@@ -8,6 +8,7 @@
 
 #include "mainwindow.h"
 #include "base/unixtime.h"
+#include "core/application.h"
 #include "data/data_user.h"
 #include "lang/lang_keys.h"
 #include "luxury/utils/telegram_helpers.h"
@@ -15,6 +16,7 @@
 #include "ui/effects/ripple_animation.h"
 #include "ui/widgets/menu/menu_action.h"
 #include "ui/painter.h"
+#include "window/window_controller.h"
 #include "window/window_session_controller.h"
 
 #include "styles/style_chat.h"
@@ -48,6 +50,7 @@ protected:
 	int contentHeight() const override;
 
 	void prepare(const QString &title);
+	void setSubText(const QString &subtext);
 	void paint(Painter &p);
 
 	const not_null<QAction*> _dummyAction;
@@ -144,7 +147,9 @@ void ActionWithSubText::paint(Painter &p) {
 		_st.itemPadding.left(),
 		st::ttlItemPadding.top() + _st.itemStyle.font->height,
 		width(),
-		_subText);
+		st::ttlItemTimerFont->elided(
+			_subText,
+			width() - _st.itemPadding.left() - _st.itemPadding.right()));
 }
 
 void ActionWithSubText::prepare(const QString &title) {
@@ -169,6 +174,13 @@ void ActionWithSubText::prepare(const QString &title) {
 	_textWidth = w - (goodWidth - textWidth);
 	setMinWidth(w);
 	update();
+}
+
+// The width was fitted to the placeholder: a resolved name longer than it
+// would be painted past the menu's edge, so refit it to the new text.
+void ActionWithSubText::setSubText(const QString &subtext) {
+	_subText = subtext;
+	prepare(_title.toString());
 }
 
 bool ActionWithSubText::isEnabled() const {
@@ -237,15 +249,14 @@ void ActionStickerPackAuthor::searchAuthor(ID authorId) {
 			}
 
 			if (username.isEmpty() && !user) {
-				strong->_subText = tr::luxury_MessageDetailsPackOwnerNotFoundPC(tr::now);
+				strong->setSubText(
+					tr::luxury_MessageDetailsPackOwnerNotFoundPC(tr::now));
 				strong->setActionTriggered(
-					[authorId, session]
+					[authorId]
 					{
 						QGuiApplication::clipboard()->setText(QString::number(authorId));
-						if (const auto window = session->tryResolveWindow()) {
-							if (const auto mainWidget = window->widget()->sessionController()) {
-								mainWidget->showToast(tr::luxury_IDCopiedToast(tr::now));
-							}
+						if (const auto window = Core::App().activeWindow()) {
+							window->showToast(tr::luxury_IDCopiedToast(tr::now));
 						}
 					});
 
@@ -274,7 +285,7 @@ void ActionStickerPackAuthor::searchAuthor(ID authorId) {
 			};
 
 			strong->setActionTriggered(callback);
-			strong->_subText = title;
+			strong->setSubText(title);
 			crl::on_main(
 				[weak]
 				{
@@ -298,6 +309,9 @@ base::unique_qptr<Menu::ItemBase> ContextActionWithSubText(
 		callback = [=]()
 		{
 			QGuiApplication::clipboard()->setText(subtext);
+			if (const auto window = Core::App().activeWindow()) {
+				window->showToast(tr::lng_text_copied(tr::now));
+			}
 		};
 	}
 

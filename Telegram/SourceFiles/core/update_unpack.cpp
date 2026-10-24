@@ -16,10 +16,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QSet>
 #include <QtCore/QStringList>
 
+#include <array>
 #include <cstring>
 #include <memory>
+#include <utility>
 
 #ifndef TDESKTOP_DISABLE_AUTOUPDATE
+#include <openssl/pem.h>
+#include <openssl/sha.h>
+
 #if defined Q_OS_WIN && !defined TDESKTOP_USE_PACKAGED
 #include <LzmaLib.h>
 #else // Q_OS_WIN && !TDESKTOP_USE_PACKAGED
@@ -39,6 +44,18 @@ void SetError(QString *error, const char *text) {
 #ifndef TDESKTOP_DISABLE_AUTOUPDATE
 
 constexpr auto kMaxUncompressedSize = 1024 * 1024 * 1024;
+
+struct BioDeleter {
+	void operator()(BIO *value) const {
+		BIO_free(value);
+	}
+};
+
+struct RsaDeleter {
+	void operator()(RSA *value) const {
+		RSA_free(value);
+	}
+};
 
 #if !defined Q_OS_WIN || defined TDESKTOP_USE_PACKAGED
 struct LzmaDeleter {
@@ -110,6 +127,78 @@ struct LzmaDeleter {
 #endif // !TDESKTOP_DISABLE_AUTOUPDATE
 
 } // namespace
+
+std::optional<LegacyUpdate> VerifyLegacyUpdate(
+		const QByteArray &bytes,
+		const char *publicKeyPem,
+		Channel buildChannel,
+		QString *error) {
+#ifndef TDESKTOP_DISABLE_AUTOUPDATE
+	if (buildChannel == Channel::CanaryPublic
+		|| buildChannel == Channel::CanaryPrivate) {
+		SetError(error, "Canary builds accept only v2 updates.");
+		return std::nullopt;
+	}
+	constexpr auto kSignatureSize = 512;
+	constexpr auto kDigestSize = 32;
+	constexpr auto kPrefixSize = kSignatureSize + kDigestSize;
+	if (bytes.size() <= kPrefixSize
+		|| bytes.size() > kMaxPayloadSize) {
+		SetError(error, "Bad legacy package size.");
+		return std::nullopt;
+	}
+	const auto data = bytes.constData();
+	auto digest = std::array<uchar, kDigestSize>();
+	if (!SHA256(
+			reinterpret_cast<const uchar*>(data + kPrefixSize),
+			bytes.size() - kPrefixSize,
+			digest.data())
+		|| memcmp(data + kSignatureSize, digest.data(), kDigestSize)) {
+		SetError(error, "Bad SHA256 hash of legacy update.");
+		return std::nullopt;
+	}
+	const auto bio = std::unique_ptr<BIO, BioDeleter>(
+		publicKeyPem ? BIO_new_mem_buf(publicKeyPem, -1) : nullptr);
+	const auto key = std::unique_ptr<RSA, RsaDeleter>(
+		bio ? PEM_read_bio_RSAPublicKey(bio.get(), nullptr, nullptr, nullptr)
+			: nullptr);
+	if (!key || RSA_size(key.get()) != kSignatureSize) {
+		SetError(error, "Bad legacy update public RSA key.");
+		return std::nullopt;
+	}
+	if (RSA_verify(
+			NID_sha256,
+			reinterpret_cast<const uchar*>(data + kSignatureSize),
+			kDigestSize,
+			reinterpret_cast<const uchar*>(data),
+			kSignatureSize,
+			key.get()) != 1) {
+		SetError(error, "Bad RSA signature of legacy update.");
+		return std::nullopt;
+	}
+	auto verified = VerifiedUpdate();
+	verified.envelope.payload = bytes.mid(kPrefixSize);
+	auto uncompressed = DecompressUpdatePayload(verified, error);
+	if (!uncompressed) {
+		return std::nullopt;
+	}
+	auto result = LegacyUpdate{ .uncompressed = std::move(*uncompressed) };
+	auto stream = QDataStream(result.uncompressed);
+	stream.setVersion(QDataStream::Qt_5_1);
+	stream >> result.version;
+	if (result.version == 0x7FFFFFFF) {
+		stream >> result.alphaVersion;
+	}
+	if (stream.status() != QDataStream::Ok) {
+		SetError(error, "Truncated legacy update version.");
+		return std::nullopt;
+	}
+	return result;
+#else // !TDESKTOP_DISABLE_AUTOUPDATE
+	SetError(error, "Automatic updates are disabled.");
+	return std::nullopt;
+#endif // TDESKTOP_DISABLE_AUTOUPDATE
+}
 
 // WHY: Callers authenticate bytes before this parser reads the payload:
 // [lzma props on Windows,] original size, compressed bytes.
@@ -184,7 +273,8 @@ bool ExtractUpdateFiles(
 		const QByteArray &uncompressed,
 		quint64 expectedVersion,
 		const QString &directory,
-		QString *error) {
+		QString *error,
+		quint64 expectedLegacyAlphaVersion) {
 #ifndef TDESKTOP_DISABLE_AUTOUPDATE
 	if (uncompressed.size() > kMaxUncompressedSize) {
 		SetError(error, "Uncompressed payload is too large.");
@@ -193,10 +283,19 @@ bool ExtractUpdateFiles(
 	auto stream = QDataStream(uncompressed);
 	stream.setVersion(QDataStream::Qt_5_1);
 	auto version = quint32(0);
+	auto alphaVersion = quint64(0);
 	auto count = quint32(0);
-	stream >> version >> count;
+	stream >> version;
+	if (expectedLegacyAlphaVersion) {
+		stream >> alphaVersion;
+	}
+	stream >> count;
 	if (stream.status() != QDataStream::Ok
-		|| version != UpdateVersionBase(expectedVersion)) {
+		|| (expectedLegacyAlphaVersion
+			? (version != 0x7FFFFFFF
+				|| alphaVersion != expectedLegacyAlphaVersion)
+			: (version == 0x7FFFFFFF
+				|| version != UpdateVersionBase(expectedVersion)))) {
 		SetError(error, "Inner update version does not match envelope.");
 		return false;
 	}

@@ -1424,9 +1424,9 @@ void AddMessageActions(
 		not_null<ListWidget*> list) {
 	if (request.item) {
 		const auto context = request.view ? request.view->context() : Context::History;
-		LuxuryUi::AddHistoryAction(menu, request.item);
+		LuxuryUi::AddHistoryAction(menu, list->controller(), request.item);
 		LuxuryUi::AddHideMessageAction(menu, request.item);
-		LuxuryUi::AddUserMessagesAction(menu, request.item);
+		LuxuryUi::AddUserMessagesAction(menu, list->controller(), request.item);
 		LuxuryUi::AddRepeatMessageAction(menu, request.item, context);
 		LuxuryUi::AddMessageDetailsAction(menu, request.item);
 	}

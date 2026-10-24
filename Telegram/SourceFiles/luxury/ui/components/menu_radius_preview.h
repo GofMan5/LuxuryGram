@@ -7,6 +7,7 @@
 #pragma once
 
 #include "ui/rp_widget.h"
+#include "ui/widgets/shadow.h"
 
 namespace Ui {
 class RippleAnimation;
@@ -24,8 +25,13 @@ protected:
 	void leaveEventHook(QEvent *e) override;
 
 private:
+	[[nodiscard]] QRect plate() const;
+	[[nodiscard]] int rowHeight() const;
+	[[nodiscard]] int rowAt(QPoint position) const;
+
+	Ui::BoxShadow _shadow;
 	std::unique_ptr<Ui::RippleAnimation> _ripple;
-	int _rippleRadius = -1;
+	int _rippleRow = -1;
 	int _hoverRow = -1;
 
 };

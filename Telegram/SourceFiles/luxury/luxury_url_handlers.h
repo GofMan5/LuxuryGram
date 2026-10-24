@@ -9,6 +9,8 @@
 #include "base/qthelp_regex.h"
 #include "window/window_session_controller.h"
 
+#include <QtCore/QUrl>
+
 namespace LuxuryUrlHandlers {
 
 using Match = qthelp::RegularExpressionMatch;
@@ -34,5 +36,11 @@ bool HandleLuxurySettings(
 	const QVariant &context);
 
 bool TryHandleSpotify(const QString &url);
+
+[[nodiscard]] bool IsWebUrl(const QUrl &url);
+
+// A scheme the shell would hand to a local handler -- a file, a network
+// share, a search or a script host -- rather than to a browser.
+[[nodiscard]] bool IsUnsafeExternalUrl(const QString &url);
 
 }

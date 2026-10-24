@@ -6820,6 +6820,7 @@ void InnerWidget::announceSelectedFocus() {
 	} else if (_state == WidgetState::Filtered) {
 		const auto h = int(_hashtagResults.size());
 		const auto f = int(_filterResults.size());
+		const auto i = int(_idSearchResults.size());
 		const auto p = int(_peerSearchResults.size());
 		const auto v = int(_previewResults.size());
 		auto index = -1;
@@ -6827,15 +6828,17 @@ void InnerWidget::announceSelectedFocus() {
 			index = _hashtagSelected;
 		} else if (base::in_range(_filteredSelected, 0, f)) {
 			index = h + _filteredSelected;
+		} else if (base::in_range(_idSearchSelected, 0, i)) {
+			index = h + f + _idSearchSelected;
 		} else if (base::in_range(_peerSearchSelected, 0, p)) {
-			index = h + f + _peerSearchSelected;
+			index = h + f + i + _peerSearchSelected;
 		} else if (base::in_range(_previewSelected, 0, v)) {
-			index = h + f + p + _previewSelected;
+			index = h + f + i + p + _previewSelected;
 		} else if (base::in_range(
 				_searchedSelected,
 				0,
 				int(_searchResults.size()))) {
-			index = h + f + p + v + _searchedSelected;
+			index = h + f + i + p + v + _searchedSelected;
 		}
 		if (index >= 0) {
 			accessibilityChildNameChanged(index);
@@ -6877,14 +6880,17 @@ bool InnerWidget::selectChildByIndex(int index) {
 		if (!ref) {
 			return false;
 		}
-		_hashtagSelected = _filteredSelected = _peerSearchSelected
-			= _previewSelected = _searchedSelected = -1;
+		_hashtagSelected = _filteredSelected = _idSearchSelected
+			= _peerSearchSelected = _previewSelected = _searchedSelected = -1;
 		switch (ref->cohort) {
 		case AccessibilityCohort::Hashtag:
 			_hashtagSelected = ref->local;
 			break;
 		case AccessibilityCohort::Filtered:
 			_filteredSelected = ref->local;
+			break;
+		case AccessibilityCohort::IdSearch:
+			_idSearchSelected = ref->local;
 			break;
 		case AccessibilityCohort::PeerSearch:
 			_peerSearchSelected = ref->local;
@@ -6951,6 +6957,7 @@ Ui::AccessibilityState InnerWidget::accessibilityState() const {
 int InnerWidget::filteredChildCount() const {
 	return int(_hashtagResults.size()
 		+ _filterResults.size()
+		+ _idSearchResults.size()
 		+ _peerSearchResults.size()
 		+ _previewResults.size()
 		+ _searchResults.size());
@@ -6963,6 +6970,7 @@ auto InnerWidget::filteredChildAt(int index) const
 	}
 	const auto h = int(_hashtagResults.size());
 	const auto f = int(_filterResults.size());
+	const auto i = int(_idSearchResults.size());
 	const auto p = int(_peerSearchResults.size());
 	const auto v = int(_previewResults.size());
 	const auto s = int(_searchResults.size());
@@ -6976,20 +6984,25 @@ auto InnerWidget::filteredChildAt(int index) const
 			AccessibilityCohort::Filtered,
 			index - h,
 		};
-	} else if (index < h + f + p) {
+	} else if (index < h + f + i) {
 		return FilteredChildRef{
-			AccessibilityCohort::PeerSearch,
+			AccessibilityCohort::IdSearch,
 			index - h - f,
 		};
-	} else if (index < h + f + p + v) {
+	} else if (index < h + f + i + p) {
+		return FilteredChildRef{
+			AccessibilityCohort::PeerSearch,
+			index - h - f - i,
+		};
+	} else if (index < h + f + i + p + v) {
 		return FilteredChildRef{
 			AccessibilityCohort::Preview,
-			index - h - f - p,
+			index - h - f - i - p,
 		};
-	} else if (index < h + f + p + v + s) {
+	} else if (index < h + f + i + p + v + s) {
 		return FilteredChildRef{
 			AccessibilityCohort::Searched,
-			index - h - f - p - v,
+			index - h - f - i - p - v,
 		};
 	}
 	return std::nullopt;
@@ -7073,6 +7086,12 @@ QString InnerWidget::accessibilityChildName(int index) const {
 			return RowAccessibilityName(
 				_filterResults[ref->local].row,
 				_filterId);
+		case AccessibilityCohort::IdSearch: {
+			const auto &r = _idSearchResults[ref->local];
+			return PeerSearchResultAccessibilityName(
+				r->peer,
+				r->sponsored != nullptr);
+		}
 		case AccessibilityCohort::PeerSearch: {
 			const auto &r = _peerSearchResults[ref->local];
 			return PeerSearchResultAccessibilityName(
@@ -7123,6 +7142,8 @@ QAccessible::State InnerWidget::accessibilityChildState(int index) const {
 				return ref->local == _hashtagSelected;
 			case AccessibilityCohort::Filtered:
 				return ref->local == _filteredSelected;
+			case AccessibilityCohort::IdSearch:
+				return ref->local == _idSearchSelected;
 			case AccessibilityCohort::PeerSearch:
 				return ref->local == _peerSearchSelected;
 			case AccessibilityCohort::Preview:
@@ -7189,6 +7210,12 @@ QRect InnerWidget::accessibilityChildRect(int index) const {
 				width(),
 				r.row->height());
 		}
+		case AccessibilityCohort::IdSearch:
+			return QRect(
+				0,
+				idSearchOffset() + ref->local * st::dialogsRowHeight,
+				width(),
+				st::dialogsRowHeight);
 		case AccessibilityCohort::PeerSearch:
 			return QRect(
 				0,
@@ -7357,6 +7384,10 @@ quintptr InnerWidget::accessibilityChildIdentity(int index) const {
 			return fromPointer(
 				Kind::Chat,
 				_filterResults[ref->local].key().entry().get());
+		case AccessibilityCohort::IdSearch:
+			return fromPointer(
+				Kind::Peer,
+				_idSearchResults[ref->local]->peer.get());
 		case AccessibilityCohort::PeerSearch:
 			return fromPointer(
 				Kind::Peer,

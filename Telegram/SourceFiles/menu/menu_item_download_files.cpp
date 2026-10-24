@@ -189,7 +189,10 @@ void AddAction(
 					base::FileNameFromUserString(document->filename());
 				document->save(origin, folderPath + name);
 			} else {
-				DocumentSaveClickHandler::SaveAndTrack(origin, document);
+				DocumentSaveClickHandler::SaveAndTrack(
+					origin,
+					document,
+					DocumentSaveClickHandler::Mode::ToFile);
 			}
 		}
 	};

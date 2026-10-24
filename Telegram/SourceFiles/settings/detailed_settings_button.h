@@ -24,10 +24,9 @@ public:
 		const style::DetailedSettingsButtonStyle &rowStyle);
 
 	QString accessibilityName() override;
+	QString accessibilityDescription() override;
 	Ui::AccessibilityState accessibilityState() const override;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
 	QAccessible::Role accessibilityRole() override;
-#endif
 
 	[[nodiscard]] bool toggled() const;
 	[[nodiscard]] rpl::producer<bool> toggledChanges() const;
@@ -66,6 +65,7 @@ private:
 	int _descriptionTop = 0;
 	int _descriptionHeight = 0;
 	bool _toggleLocked = false;
+	bool _layoutScheduled = false;
 
 };
 

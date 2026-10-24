@@ -12,6 +12,7 @@
 #include "luxury/luxury_worker.h"
 #include "luxury/data/luxury_database.h"
 #include "luxury/features/filters/filters_cache_controller.h"
+#include "luxury/features/streamer_mode/streamer_mode.h"
 #include "luxury/ui/luxury_logo.h"
 #include "features/translator/luxury_translator.h"
 #include "lang/lang_instance.h"
@@ -24,14 +25,7 @@
 namespace LuxuryInfra {
 
 void initLang() {
-	QString id = Lang::GetInstance().id();
-	QString baseId = Lang::GetInstance().baseId();
-	if (id.isEmpty()) {
-		LOG(("Language is not loaded"));
-		return;
-	}
 	LuxuryLanguage::init();
-	LuxuryLanguage::currentInstance()->fetchLanguage(id, baseId);
 }
 
 void initUiSettings() {
@@ -97,6 +91,9 @@ void init() {
 	initLang();
 	initDatabase();
 	initUiSettings();
+	if (LuxurySettings::getInstance().streamerMode()) {
+		LuxuryFeatures::StreamerMode::apply(true);
+	}
 	initIcon();
 	initWorker();
 	initTranslator();

@@ -163,9 +163,7 @@ rpl::producer<Ui::RequestsBarContent> RequestsBarContentByPeer(
 
 		Info::Profile::PendingRequestsCountValue(
 			peer
-		) | rpl::filter([=](int count) {
-			return (state->current.count != count);
-		}) | rpl::on_next([=](int count) {
+		) | rpl::on_next([=](int count) {
 			const auto &requesters = peer->isChat()
 				? peer->asChat()->recentRequesters()
 				: peer->asChannel()->recentRequesters();

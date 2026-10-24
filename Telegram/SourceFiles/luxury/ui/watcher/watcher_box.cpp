@@ -11,6 +11,7 @@
 #include "base/unique_qptr.h"
 #include "base/weak_ptr.h"
 #include "crl/crl_on_main.h"
+#include "data/data_changes.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
@@ -289,9 +290,10 @@ struct TimestampLabel {
 	const auto time = base::unixtime::parse(at);
 	const auto today = QDateTime::currentDateTime().date();
 	const auto date = time.date();
-	const auto timePart = u" "_q + time.toString(u"HH:mm:ss"_q);
+	const auto clock = formatTimeWithSeconds(time.time());
+	const auto timePart = u" "_q + clock;
 	if (date == today) {
-		return { time.toString(u"HH:mm:ss"_q), FullStamp(time) };
+		return { clock, FullStamp(time) };
 	}
 	if (date.year() == today.year()) {
 		return { date.toString(u"dd.MM"_q) + timePart, FullStamp(time) };
@@ -509,6 +511,7 @@ private:
 	bool _loading = false;
 	bool _reloadAgain = false;
 	bool _rebuildPending = false;
+	uint64 _rebuildGeneration = 0;
 	Tab _tab = Tab::All;
 	Order _order = Order::Newest;
 	int _sessionOverflow = 0;
@@ -740,6 +743,7 @@ void SessionCard::setActive(bool active) {
 	if (_active == active) {
 		return;
 	}
+	const auto weak = base::make_weak(this);
 	_active = active;
 	_endValue = active
 		? tr::luxury_OnlineHistoryOpen(tr::now)
@@ -753,10 +757,18 @@ void SessionCard::setActive(bool active) {
 		computeLayout(width());
 		update();
 	}
+	if (!weak) {
+		return;
+	}
 	setToolTip(_startLabel + u" "_q + _startValue
 		+ u"\n"_q + _endLabel + u" "_q + _endValue);
-	updateAccessibleName();
+	if (!weak) {
+		return;
+	}
 	resizeToWidth(width());
+	if (weak) {
+		updateAccessibleName();
+	}
 }
 
 void SessionCard::tick() {
@@ -772,11 +784,11 @@ void SessionCard::tick() {
 		return;
 	}
 	_durationText = duration;
+	computeLayout(width());
+	update();
 	// The painted duration is part of the accessible name; keep the
 	// two in step as the running session ages.
 	updateAccessibleName();
-	computeLayout(width());
-	update();
 }
 
 void SessionCard::computeLayout(int newWidth) {
@@ -1200,23 +1212,39 @@ bool WatcherBody::sessionActive(const OnlineSession &session) const {
 }
 
 void WatcherBody::tick() {
+	const auto weak = base::make_weak(this);
 	// A deferred rebuild waits for the press to end, so swapping the
 	// list never yanks the row being held.
 	if (_rebuildPending && !QApplication::mouseButtons()) {
-		_rebuildPending = false;
 		rebuild();
+		if (!weak) {
+			return;
+		}
 		_counts.fire(counts());
+		if (!weak) {
+			return;
+		}
 		_reloads.fire_copy(true);
+		if (!weak) {
+			return;
+		}
 		// Data that landed during the press is already stored; one
 		// fresh fetch picks up anything that arrived after it, now
 		// that applying it cannot interrupt a press.
 		reload();
 	}
+	const auto generation = _rebuildGeneration;
 	auto relayout = false;
 	for (const auto card : _sessionCards) {
 		const auto heightBefore = card->height();
 		card->setActive(sessionActive(card->session()));
+		if (!weak || generation != _rebuildGeneration) {
+			return;
+		}
 		card->tick();
+		if (!weak || generation != _rebuildGeneration) {
+			return;
+		}
 		// Only a real geometry change needs the body relayout; the
 		// per-second duration repaint does not.
 		relayout |= (card->height() != heightBefore);
@@ -1302,8 +1330,17 @@ void WatcherBody::reload() {
 			} else {
 				tick();
 			}
+			if (!weak) {
+				return;
+			}
 			_counts.fire(counts());
+			if (!weak) {
+				return;
+			}
 			_reloads.fire_copy(rebuilt);
+			if (!weak) {
+				return;
+			}
 			if (_reloadAgain) {
 				_reloadAgain = false;
 				reload();
@@ -1418,7 +1455,13 @@ void WatcherBody::refreshEarlier() {
 }
 
 void WatcherBody::rebuild() {
+	_rebuildPending = false;
+	const auto generation = ++_rebuildGeneration;
+	const auto weak = base::make_weak(this);
 	_rebuilds.fire({});
+	if (!weak || generation != _rebuildGeneration) {
+		return;
+	}
 	// Rebuild swaps the card children; deleteLater keeps the destruction
 	// out of this paint event, hiding them so nothing overlaps first.
 	for (const auto card : _sessionCards) {
@@ -1447,10 +1490,14 @@ void WatcherBody::rebuild() {
 	_sessionsTitle->setVisible(sessionsVisible);
 	_eventsTitle->setVisible(eventsVisible);
 	if (sessionsVisible) {
-		_sessionsTitle->setText(
-			tr::luxury_OnlineHistorySessions(tr::now)
-			+ u" · "_q
-			+ QString::number(_sessions.size()));
+		// Nothing is counted yet while the block under the title says
+		// "Loading…".
+		const auto counted = !_loading || !sessionList.empty();
+		_sessionsTitle->setText(counted
+			? (tr::luxury_OnlineHistorySessions(tr::now)
+				+ u" · "_q
+				+ QString::number(_sessions.size()))
+			: tr::luxury_OnlineHistorySessions(tr::now));
 		if (sessionList.empty()) {
 			_sessionEmpty->setText(_loading
 				? tr::luxury_WatcherLoading(tr::now)
@@ -1472,9 +1519,10 @@ void WatcherBody::rebuild() {
 		_sessionEmpty->hide();
 	}
 	if (eventsVisible) {
-		auto title = tr::luxury_OnlineHistoryEvents(tr::now)
-			+ u" · "_q
-			+ QString::number(eventList.size());
+		auto title = tr::luxury_OnlineHistoryEvents(tr::now);
+		if (!_loading || !eventList.empty()) {
+			title += u" · "_q + QString::number(eventList.size());
+		}
 		if (_eventEarlier > 0) {
 			// The events window is capped while the tables it reads
 			// are not; the count is the real hidden remainder.
@@ -1660,6 +1708,11 @@ void FillWatcherBox(
 		state->scrollTop = box->scrollTop();
 		body->refresh();
 	};
+	peer->session().changes().peerUpdates(
+		peer,
+		Data::PeerUpdate::Flag::OnlineStatus
+	) | rpl::on_next(refresh, box->lifetime());
+
 	body->rebuilds(
 	) | rpl::on_next([=] { state->scrollTop = box->scrollTop(); }, box->lifetime());
 	body->reloads(

@@ -293,7 +293,7 @@ void BuildQoLToggles(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 
 	luxury.addSectionDivider();
 
-	builder.addSubsectionTitle(rpl::single(QString("Webview")));
+	builder.addSubsectionTitle(tr::luxury_SettingsMiniAppsHeader());
 
 	luxury.addSettingToggle({
 		.id = u"luxury/spoofWebviewAsAndroid"_q,

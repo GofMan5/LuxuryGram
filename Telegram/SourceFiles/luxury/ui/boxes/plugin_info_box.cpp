@@ -15,6 +15,8 @@
 #include "data/data_document_media.h"
 #include "data/data_file_origin.h"
 #include "data/data_session.h"
+#include "luxury/luxury_url_handlers.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "history/view/media/history_view_sticker_player.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
@@ -45,6 +47,10 @@ namespace {
 constexpr auto kMaxRequirementsTextLength = 8192;
 constexpr auto kMaxRequirementLength = 128;
 constexpr auto kMaxRequirements = 64;
+
+QString Truncated(const QString &text, int limit) {
+	return text.left(safeCutPosition(text, limit));
+}
 
 QString ExtractField(const QString &data, const QString &key) {
 	// supports probably all kinds of weird python syntax + both " and '
@@ -102,6 +108,13 @@ TextWithEntities ParsePluginDescriptionLinks(const QString &text) {
 		const auto match = matches.next();
 		const auto url = match.capturedView(2);
 		if (!Ui::InputField::IsValidMarkdownLink(url)) {
+			continue;
+		}
+		// A plugin file is someone else's text: its links may lead to a web
+		// page or inside Telegram, never to a local handler.
+		const auto parsed = QUrl(url.toString());
+		if (!LuxuryUrlHandlers::IsWebUrl(parsed)
+			&& parsed.scheme().compare(u"tg"_q, Qt::CaseInsensitive) != 0) {
 			continue;
 		}
 		result.append(ParsePluginDescriptionPlain(
@@ -440,20 +453,26 @@ PluginMetadata ParsePluginMetadata(const QByteArray &data) {
 	auto metadata = PluginMetadata();
 	const auto text = QString::fromUtf8(data);
 
-	metadata.id = ExtractField(text, u"id"_q).left(64);
-	metadata.name = ExtractField(text, u"name"_q).left(100);
-	metadata.description = ExtractField(text, u"description"_q).left(8000);
-	metadata.author = ExtractField(text, u"author"_q).left(200);
-	metadata.version = ExtractField(text, u"version"_q).left(32);
-	metadata.icon = ExtractField(text, u"icon"_q).left(128);
-	metadata.minVersion = ExtractField(text, u"min_version"_q).left(32);
+	metadata.id = Truncated(ExtractField(text, u"id"_q), 64);
+	metadata.name = Truncated(ExtractField(text, u"name"_q), 100);
+	metadata.description = Truncated(
+		ExtractField(text, u"description"_q),
+		8000);
+	metadata.author = Truncated(ExtractField(text, u"author"_q), 200);
+	metadata.version = Truncated(ExtractField(text, u"version"_q), 32);
+	metadata.icon = Truncated(ExtractField(text, u"icon"_q), 128);
+	metadata.minVersion = Truncated(
+		ExtractField(text, u"min_version"_q),
+		32);
 
-	const auto reqString = ExtractField(
-		text,
-		u"requirements"_q).left(kMaxRequirementsTextLength);
+	const auto reqString = Truncated(
+		ExtractField(text, u"requirements"_q),
+		kMaxRequirementsTextLength);
 	if (!reqString.isEmpty()) {
 		for (const auto &part : reqString.split(',')) {
-			const auto trimmed = part.trimmed().left(kMaxRequirementLength);
+			const auto trimmed = Truncated(
+				part.trimmed(),
+				kMaxRequirementLength);
 			if (!trimmed.isEmpty()) {
 				metadata.requirements.append(trimmed);
 				if (metadata.requirements.size() >= kMaxRequirements) {
@@ -548,7 +567,7 @@ void ShowPluginInfoBox(
 
 		media->automaticLoad(doc->stickerSetOrigin(), nullptr);
 		rpl::single() | rpl::then(
-			session->downloaderTaskFinished()
+			DocumentLoadUpdates(session, doc)
 		) | rpl::filter([=] {
 			return media->loaded() || !doc->loading();
 		}) | rpl::take(1) | rpl::on_next([=] {

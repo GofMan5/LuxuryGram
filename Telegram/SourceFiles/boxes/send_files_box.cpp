@@ -2574,7 +2574,7 @@ rpl::producer<TextWithTags> SendFilesBox::takeTextWithTagsRequests() const {
 }
 
 void SendFilesBox::requestToTakeTextWithTags() {
-	if (_caption->isHidden()) {
+	if (_caption->isHidden() || !_textWithTagsRequests.has_consumers()) {
 		return;
 	}
 	const auto text = _caption->getTextWithTags();
@@ -2635,18 +2635,6 @@ void SendFilesBox::send(
 		showToast(tr::lng_ttl_no_schedule(tr::now));
 		return;
 	}
-	if (!anyTtl) {
-		// LuxuryGram: ghost mode sends as scheduled to hide the read receipt,
-		// which the server refuses for self-destructing media. Skip it there
-		// rather than turning a valid send into the toast above.
-		const auto sumSize = ranges::accumulate(
-			_list.files, int64(0),
-			[](int64 sum, const auto &file) { return sum + file.size; });
-		applyGhostScheduling(
-			&_show->session(),
-			options,
-			getScheduleTime(sumSize));
-	}
 
 	if ((_sendType == Api::SendType::Scheduled
 		|| _sendType == Api::SendType::ScheduledToUser)
@@ -2659,6 +2647,18 @@ void SendFilesBox::send(
 		return SendMenu::DefaultCallback(_show, sendCallback())(
 			{ .type = SendMenu::ActionType::Schedule },
 			child);
+	}
+	if (!anyTtl) {
+		// LuxuryGram: ghost mode sends as scheduled to hide the read receipt,
+		// which the server refuses for self-destructing media. Skip it there
+		// rather than turning a valid send into the toast above.
+		const auto sumSize = ranges::accumulate(
+			_list.files, int64(0),
+			[](int64 sum, const auto &file) { return sum + file.size; });
+		applyGhostScheduling(
+			&_show->session(),
+			options,
+			getScheduleTime(sumSize));
 	}
 	if (_preparing) {
 		_whenReadySend = [=] {
@@ -2764,6 +2764,7 @@ SendFilesBox::~SendFilesBox() = default;
 // LuxuryGram files reordering
 
 bool SendFilesBox::isFileBlock(int i) const {
+	if (i < 0 || i >= _list.files.size()) return false;
 	using Type = Ui::PreparedFile::Type;
 	const auto &f = _list.files[i];
 	return (f.type == Type::File)
@@ -2826,8 +2827,9 @@ void SendFilesBox::setupDragForBlock(not_null<Ui::RpWidget*> w, int index) {
 					case QEvent::DragMove: {
 						const auto ev = static_cast<QDragMoveEvent *>(e.get());
 						if (ev->mimeData()->hasFormat(kDragMime)) {
-							const auto from = ev->mimeData()->data(kDragMime).toInt();
-							if (isFileBlock(from) && isFileBlock(index)) {
+							auto valid = false;
+							const auto from = ev->mimeData()->data(kDragMime).toInt(&valid);
+							if (valid && isFileBlock(from) && isFileBlock(index)) {
 								ev->acceptProposedAction();
 							}
 						}
@@ -2836,8 +2838,9 @@ void SendFilesBox::setupDragForBlock(not_null<Ui::RpWidget*> w, int index) {
 					case QEvent::Drop: {
 						const auto ev = static_cast<QDropEvent *>(e.get());
 						if (ev->mimeData()->hasFormat(kDragMime)) {
-							const auto from = ev->mimeData()->data(kDragMime).toInt();
-							if (isFileBlock(from) && isFileBlock(index)) {
+							auto valid = false;
+							const auto from = ev->mimeData()->data(kDragMime).toInt(&valid);
+							if (valid && isFileBlock(from) && isFileBlock(index)) {
 								crl::on_main(this, [=] { moveFile(from, index); });
 								ev->acceptProposedAction();
 							}

@@ -150,6 +150,7 @@ void AddPollOptionWidget::setupField() {
 	_emoji = Ui::CreateChild<Ui::IconButton>(
 		this,
 		st::historyPollAddOptionEmoji);
+	_emoji->setAccessibleName(tr::lng_article_insert_emoji(tr::now));
 
 	_attach = Ui::CreateChild<PollMediaUpload::PollMediaButton>(
 		this,

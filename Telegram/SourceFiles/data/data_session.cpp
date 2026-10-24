@@ -375,13 +375,7 @@ Session::Session(not_null<Main::Session*> session)
 	setupPeerNameViewer();
 	setupUserIsContactViewer();
 
-	const auto resetPresence = [=] {
-		for (const auto &[id, peer] : _peers) {
-			if (const auto user = peer->asUser()) {
-				user->resetTrackedPresence();
-			}
-		}
-	};
+	const auto resetPresence = [=] { resetTrackedPresence(); };
 	LuxurySettings::getInstance().trackOnlineHistoryChanges(
 	) | rpl::on_next(resetPresence, _lifetime);
 	LuxurySettings::getInstance().trackOnlineEvenWhenLockedChanges(
@@ -394,6 +388,30 @@ Session::Session(not_null<Main::Session*> session)
 	) | rpl::on_next([=] {
 		if (!LuxurySettings::getInstance().trackOnlineEvenWhenLocked()) {
 			resetPresence();
+		}
+	}, _lifetime);
+
+	// Shown messages keep the date line and share button they were laid out
+	// with; refresh them so these toggles apply without reopening the chat.
+	const auto &luxury = LuxurySettings::getInstance();
+	rpl::merge(
+		luxury.showMessageSecondsChanges() | rpl::to_empty,
+		luxury.replaceBottomInfoWithIconsChanges() | rpl::to_empty,
+		luxury.deletedMarkChanges() | rpl::to_empty,
+		luxury.editedMarkChanges() | rpl::to_empty,
+		luxury.hideFastShareChanges() | rpl::to_empty,
+		luxury.semiTransparentDeletedMessagesChanges() | rpl::to_empty
+	) | rpl::on_next([=] {
+		auto items = std::vector<not_null<HistoryItem*>>();
+		items.reserve(_views.size());
+		for (const auto &[item, views] : _views) {
+			items.push_back(views.front()->data());
+		}
+		for (const auto item : items) {
+			if (_views.contains(item)) {
+				notifyItemDataChange(item);
+				requestItemResize(item);
+			}
 		}
 	}, _lifetime);
 
@@ -1571,6 +1589,14 @@ std::shared_ptr<GroupCall> Session::sharedConferenceCallFind(
 		}
 	}
 	return empty;
+}
+
+void Session::resetTrackedPresence() {
+	for (const auto &[id, peer] : _peers) {
+		if (const auto user = peer->asUser()) {
+			user->resetTrackedPresence();
+		}
+	}
 }
 
 void Session::watchForOffline(not_null<UserData*> user, TimeId now) {
@@ -3201,9 +3227,8 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 		LuxuryMessages::addEditedMessage(existing, afterText);
 	}
 
-	FiltersController::invalidate(existing);
-
 proceed:
+	FiltersController::invalidate(existing);
 
 	if (existing->isLocalUpdateMedia() && data.type() == mtpc_message) {
 		updateExistingMessage(data.c_message());

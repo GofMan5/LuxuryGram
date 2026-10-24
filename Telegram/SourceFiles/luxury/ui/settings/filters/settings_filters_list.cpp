@@ -44,22 +44,15 @@ rpl::producer<QString> LuxuryFiltersList::title() {
 	}
 
 	const auto did = getBareDialogId(*dialogId);
-	const auto from = getPeerFromDialogId(did);
+	const auto from = getPeerFromDialogId(*dialogId);
 
-	// todo: shorten based on available space
-	// because it may break on custom fonts
-	QString res;
-	if (from) {
-		auto name = from->topBarNameText();
-		if (name.length() > 18) {
-			name = name.left(17) + "…";
-		}
-		res = name;
-	} else {
-		res = tr::luxury_RegexFiltersHeader(tr::now) + " (" + QString::number(did) + ")";
-	}
-
-	return rpl::single(res);
+	// The top bar label elides by its real width, so the name goes whole.
+	return rpl::single(from
+		? from->topBarNameText()
+		: (tr::luxury_RegexFiltersHeader(tr::now)
+			+ " ("
+			+ QString::number(did)
+			+ ")"));
 }
 
 LuxuryFiltersList::LuxuryFiltersList(
@@ -91,6 +84,8 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 	if (!state->enabled) {
 		button->setColorOverride(st::storiesComposeGrayText->c);
 	}
+
+	const auto show = _controller->uiShow();
 
 	auto defaultClickHandler = [=, dialogId = dialogId]() mutable
 	{
@@ -125,7 +120,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 							FiltersCacheController::fireUpdate();
 							return;
 						}
-						Luxury::Ui::ShowDatabaseError();
+						Luxury::Ui::ShowDatabaseError(show);
 						// state belongs to the section's lifetime.
 						if (weak) {
 							state->enabled = !state->enabled;
@@ -152,7 +147,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 					FiltersCacheController::reloadNow();
 					crl::on_main([=] {
 						if (!removed || !cleaned) {
-							Luxury::Ui::ShowDatabaseError();
+							Luxury::Ui::ShowDatabaseError(show);
 						}
 						FiltersCacheController::fireUpdate();
 					});
@@ -204,7 +199,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 			}
 			crl::on_main([=] {
 				if (!saved) {
-					Luxury::Ui::ShowDatabaseError();
+					Luxury::Ui::ShowDatabaseError(show);
 					return;
 				}
 				FiltersCacheController::fireUpdate();
@@ -244,7 +239,7 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 					}
 					crl::on_main([=] {
 						if (!removed) {
-							Luxury::Ui::ShowDatabaseError();
+							Luxury::Ui::ShowDatabaseError(show);
 							return;
 						}
 						FiltersCacheController::fireUpdate();
@@ -370,7 +365,7 @@ void LuxuryFiltersList::initializeShadowBan(not_null<Ui::VerticalLayout*> contai
 	if (LuxurySettings::getInstance().shadowBanIds().size() > 0) {
 		AddSkip(container);
 
-		filtersTitle = AddSubsectionTitle(container, tr::luxury_RegexFiltersHeader());
+		filtersTitle = AddSubsectionTitle(container, tr::luxury_ShadowBanListHeader());
 		const auto content = container->add(std::move(list));
 
 		AddSkip(container);
@@ -379,7 +374,7 @@ void LuxuryFiltersList::initializeShadowBan(not_null<Ui::VerticalLayout*> contai
 		delegate->setContent(content->entity());
 		ctrl->setDelegate(delegate);
 	} else {
-		Ui::AddDividerText(container, tr::luxury_RegexFiltersListEmpty());
+		Ui::AddDividerText(container, tr::luxury_ShadowBanListEmpty());
 	}
 }
 

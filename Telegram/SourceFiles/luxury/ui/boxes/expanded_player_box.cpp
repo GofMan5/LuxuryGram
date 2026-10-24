@@ -14,6 +14,7 @@
 #include "data/data_file_origin.h"
 #include "data/data_session.h"
 #include "lang_auto.h"
+#include "luxury/ui/utils/box_buttons.h"
 #include "luxury/ui/utils/itunes_search.h"
 #include "main/main_session.h"
 #include "media/audio/media_audio.h"
@@ -38,6 +39,7 @@
 #include "styles/style_layers.h"
 #include "styles/style_luxury_styles.h"
 #include "styles/style_media_player.h"
+#include "styles/style_widgets.h"
 
 #include <QPainterPath>
 #include <QSvgRenderer>
@@ -174,16 +176,23 @@ public:
 	, _durationLabel(this, st::mediaPlayerTime) {
 		setAttribute(Qt::WA_TransparentForMouseEvents);
 		setFixedHeight(st::mediaPlayerTime.font->height);
+		widthValue() | rpl::on_next([=] {
+			layoutLabels();
+		}, lifetime());
 	}
 
 	void updateTexts(const QString &position, const QString &duration) {
 		_positionLabel.setText(position);
 		_durationLabel.setText(duration);
+		layoutLabels();
+	}
+
+private:
+	void layoutLabels() {
 		_positionLabel.moveToLeft(0, 0);
 		_durationLabel.moveToRight(0, 0);
 	}
 
-private:
 	Ui::LabelSimple _positionLabel;
 	Ui::LabelSimple _durationLabel;
 
@@ -263,6 +272,7 @@ private:
 
 void ExpandedPlayerBox::setupContent() {
 	setTitle(tr::luxury_PlayerTitle());
+	addTopButton(st::boxTitleClose, [=] { closeBox(); });
 
 	auto wrap = object_ptr<Ui::VerticalLayout>(this);
 	const auto content = wrap.data();
@@ -280,9 +290,10 @@ void ExpandedPlayerBox::setupContent() {
 			object_ptr<Ui::FlatLabel>(content, st::luxuryPlayerPerformer)),
 		st::luxuryPlayerPerformerPadding);
 	_playbackSlider = content->add(
-		object_ptr<Ui::FilledSlider>(content, st::mediaPlayerPlayback),
+		object_ptr<Ui::MediaSlider>(content, st::defaultContinuousSlider),
 		st::luxuryPlayerSliderPadding);
-	_playbackSlider->setFixedHeight(st::mediaPlayerPlayback.fullWidth);
+	_playbackSlider->setFixedHeight(
+		st::defaultContinuousSlider.seekSize.height());
 	_timeRow = content->add(
 		object_ptr<TimeWidget>(content),
 		st::luxuryPlayerTimePadding);
@@ -308,7 +319,7 @@ void ExpandedPlayerBox::setupContent() {
 	_saveCoverButton = addButton(
 		tr::luxury_PlayerSaveCover(),
 		[=] { saveCover(); });
-	_saveCoverButton->setDisabled(true);
+	Luxury::Ui::SetBoxButtonEnabled(_saveCoverButton.data(), false);
 
 	Media::Player::instance()->updatedNotifier(
 	) | rpl::on_next([=](const Media::Player::TrackState &state) {
@@ -375,6 +386,7 @@ void ExpandedPlayerBox::refreshCover(
 		const AudioMsgId &current) {
 	const auto generation = ++_coverGeneration;
 	_coverDownloadLifetime.destroy();
+	setCover(QImage());
 	_mediaView = document->createMediaView();
 	_mediaView->thumbnailWanted(Data::FileOrigin(current.contextId()));
 
@@ -406,13 +418,14 @@ void ExpandedPlayerBox::refreshCover(
 		return;
 	}
 	const auto sizeHint = int(st::luxuryPlayerCoverFetchSize);
+	const auto weak = base::make_weak(this);
 	crl::async([=] {
 		auto image = Luxury::Ui::Itunes::FetchCover(
 			performer,
 			title,
 			sizeHint);
-		crl::on_main(this, [=, image = std::move(image)]() mutable {
-			if (_coverGeneration != generation
+		crl::on_main([=, image = std::move(image)]() mutable {
+			if (!weak || _coverGeneration != generation
 				|| image.isNull()
 				|| !_cover->image().isNull()) {
 				return;
@@ -424,7 +437,11 @@ void ExpandedPlayerBox::refreshCover(
 
 void ExpandedPlayerBox::setCover(QImage image) {
 	_cover->setImage(std::move(image));
-	_saveCoverButton->setDisabled(_cover->image().isNull());
+	if (_saveCoverButton) {
+		Luxury::Ui::SetBoxButtonEnabled(
+			_saveCoverButton.data(),
+			!_cover->image().isNull());
+	}
 }
 
 void ExpandedPlayerBox::saveCover() {
@@ -447,11 +464,12 @@ void ExpandedPlayerBox::saveCover() {
 			const auto path = result.endsWith(u".png"_q, Qt::CaseInsensitive)
 				? result
 				: (result + u".png"_q);
+			const auto controller = _controller;
 			closeBox();
 			crl::async([=] {
 				if (!image.save(path)) {
-					crl::on_main([] {
-						Ui::Toast::Show(
+					crl::on_main(controller, [=] {
+						controller->showToast(
 							tr::luxury_PlayerSaveCoverFailed(tr::now));
 					});
 				}

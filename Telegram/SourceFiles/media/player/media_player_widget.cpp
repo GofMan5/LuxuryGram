@@ -102,7 +102,7 @@ Widget::Widget(
 	_close->setAccessibleName(tr::lng_sr_player_close(tr::now));
 	_expand->setAccessibleName(tr::luxury_PlayerExpand(tr::now));
 	_expand->setClickedCallback([=] {
-		Ui::show(Box<ExpandedPlayerBox>(_controller, _type));
+		_controller->show(Box<ExpandedPlayerBox>(_controller, _type));
 	});
 
 	_nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -290,6 +290,11 @@ void Widget::setupRightControls() {
 	raw->paintRequest(
 	) | rpl::on_next([=](QRect clip) {
 		auto p = QPainter(raw);
+		if (style::RightToLeft()) {
+			p.translate(raw->width(), 0);
+			p.scale(-1., 1.);
+			clip = style::rtlrect(clip, raw->width());
+		}
 		const auto &icon = st::mediaPlayerControlsFade;
 		const auto fade = QRect(0, 0, icon.width(), raw->height());
 		if (fade.intersects(clip)) {
@@ -452,11 +457,10 @@ void Widget::updateControlsWrapGeometry() {
 	const auto fade = st::mediaPlayerControlsFade.width();
 	const auto controls = getTimeRight() + _timeLabel->width() + fade;
 	rightControls()->resize(controls, _repeatToggle->height());
-	_rightControls->move(
-		width() - st::mediaPlayerCloseRight
-			- _close->width()
-			- _expand->width()
-			- controls,
+	_rightControls->moveToRight(
+		st::mediaPlayerCloseRight
+			+ _close->width()
+			+ _expand->width(),
 		st::mediaPlayerPlayTop);
 }
 
@@ -555,9 +559,9 @@ void Widget::mouseReleaseEvent(QMouseEvent *e) {
 
 void Widget::updateOverLabelsState(QPoint pos) {
 	const auto left = getNameLeft();
-	const auto right = width()
-		- _rightControls->x()
-		- _rightControls->width()
+	const auto right = st::mediaPlayerCloseRight
+		+ _close->width()
+		+ _expand->width()
 		+ getTimeRight();
 	const auto labels = myrtlrect(left, 0, width() - right - left, height() - st::mediaPlayerPlayback.fullWidth);
 	const auto over = labels.contains(pos);

@@ -21,6 +21,9 @@ namespace Ui {
 [[nodiscard]] std::unique_ptr<TranslateProvider> CreateTranslateProvider(
 	not_null<Main::Session*> session);
 
+[[nodiscard]] bool SupportsRichMessageTranslation(
+	not_null<TranslateProvider*> provider);
+
 [[nodiscard]] TranslateProviderRequest PrepareTranslateProviderRequest(
 	not_null<TranslateProvider*> provider,
 	not_null<PeerData*> peer,

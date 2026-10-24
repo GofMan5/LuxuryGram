@@ -488,6 +488,7 @@ void ShowAgeVerification(
 		const auto close = Ui::CreateChild<Ui::IconButton>(
 			box.get(),
 			st::boxTitleClose);
+		close->setAccessibleName(tr::lng_close(tr::now));
 		close->setClickedCallback([=] {
 			box->closeBox();
 		});

@@ -342,11 +342,18 @@ void Panel::chooseShippingOption(const ShippingOptions &options) {
 				int64(0),
 				std::plus<>(),
 				&LabeledPrice::price);
+			const auto formattedPrice = FillAmountAndCurrency(
+				total,
+				options.currency);
 			const auto price = CreateChild<FlatLabel>(
 				layout.get(),
-				FillAmountAndCurrency(total, options.currency),
+				formattedPrice,
 				st::paymentsShippingPrice);
+			button->setAccessibleName(option.title);
+			button->setAccessibleDescription(formattedPrice);
 			const auto area = CreateChild<AbstractButton>(layout.get());
+			area->setAccessibleName(option.title);
+			area->setAccessibleDescription(formattedPrice);
 			area->setClickedCallback([=] { group->setValue(index); });
 			button->geometryValue(
 			) | rpl::on_next([=](QRect geometry) {

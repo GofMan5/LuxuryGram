@@ -44,18 +44,33 @@ void BuildLogo(SectionBuilder &builder) {
 			QSize(st::settingsCloudPasswordIconSize,
 				st::settingsCloudPasswordIconSize));
 		logoRaw->setNaturalWidth(st::settingsCloudPasswordIconSize);
+		struct LogoCache {
+			qint64 source = 0;
+			int ratio = 0;
+			int size = 0;
+			QImage image;
+		};
+		const auto cache = logoRaw->lifetime().make_state<LogoCache>();
 		logoRaw->paintRequest(
 		) | rpl::on_next([=] {
 			auto p = QPainter(logoRaw);
 			const auto image = LuxuryAssets::currentAppLogoPad();
 			if (!image.isNull()) {
 				const auto size = st::settingsCloudPasswordIconSize;
-				const auto scaled = image.scaled(
-					size * style::DevicePixelRatio(),
-					size * style::DevicePixelRatio(),
-					Qt::KeepAspectRatio,
-					Qt::SmoothTransformation);
-				p.drawImage(QRect(0, 0, size, size), scaled);
+				const auto ratio = style::DevicePixelRatio();
+				if (cache->source != image.cacheKey()
+					|| cache->ratio != ratio
+					|| cache->size != size) {
+					cache->source = image.cacheKey();
+					cache->ratio = ratio;
+					cache->size = size;
+					cache->image = image.scaled(
+						size * ratio,
+						size * ratio,
+						Qt::KeepAspectRatio,
+						Qt::SmoothTransformation);
+				}
+				p.drawImage(QRect(0, 0, size, size), cache->image);
 			}
 		}, logoRaw->lifetime());
 		return { .widget = std::move(logo), .align = style::al_top };
@@ -78,20 +93,20 @@ void BuildVersionInfo(SectionBuilder &builder) {
 	builder.addSkip();
 
 	builder.add([](const WidgetContext &ctx) -> SectionBuilder::WidgetToAdd {
+		auto description = object_ptr<Ui::FlatLabel>(
+			ctx.container,
+			tr::luxury_SettingsDescription(),
+			st::centeredBoxLabel);
+		description->setTryMakeSimilarLines(true);
 		return {
-			.widget = object_ptr<Ui::FlatLabel>(
-				ctx.container,
-				tr::luxury_SettingsDescription(),
-				st::centeredBoxLabel),
+			.widget = std::move(description),
+			.margin = st::boxRowPadding,
 			.align = style::al_top,
 		};
 	});
 }
 
 void BuildCategories(SectionBuilder &builder) {
-	builder.addSkip();
-	builder.addSkip();
-	builder.addSkip();
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
@@ -151,7 +166,6 @@ void BuildLinks(SectionBuilder &builder) {
 		.id = u"luxury/issues"_q,
 		.title = tr::luxury_LinksIssues(),
 		.icon = { &st::menuIconChats },
-		.label = rpl::single(QString("Issues")),
 		.onClick = [=] {
 			QDesktopServices::openUrl(
 				QString("https://github.com/GofMan5/LuxuryGram/issues"));
@@ -161,7 +175,6 @@ void BuildLinks(SectionBuilder &builder) {
 		.id = u"luxury/contributing"_q,
 		.title = tr::luxury_LinksContributing(),
 		.icon = { &st::menuIconTranslate },
-		.label = rpl::single(QString("Contributing")),
 		.onClick = [=] {
 			QDesktopServices::openUrl(
 				QString("https://github.com/GofMan5/LuxuryGram/blob/dev/CONTRIBUTING.md"));
@@ -171,7 +184,6 @@ void BuildLinks(SectionBuilder &builder) {
 		.id = u"luxury/documentation"_q,
 		.title = tr::luxury_LinksDocumentation(),
 		.icon = { &st::menuIconIpAddress },
-		.label = rpl::single(QString("Docs")),
 		.onClick = [=] {
 			QDesktopServices::openUrl(
 				QString("https://github.com/GofMan5/LuxuryGram/tree/dev/docs"));
@@ -197,7 +209,7 @@ const auto kMeta = BuildHelper({
 } // namespace
 
 rpl::producer<QString> LuxuryMain::title() {
-	return rpl::single(QString(""));
+	return tr::luxury_LuxuryPreferences();
 }
 
 LuxuryMain::LuxuryMain(

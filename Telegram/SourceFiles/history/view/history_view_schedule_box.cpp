@@ -141,6 +141,7 @@ void FillSendUntilOnlineMenu(
 		Fn<void()> callback,
 		const ScheduleBoxStyleArgs &style) {
 	const auto menu = std::make_shared<base::unique_qptr<Ui::PopupMenu>>();
+	button->setAccessibleName(tr::lng_scheduled_send_until_online(tr::now));
 	button->setClickedCallback([=] {
 		*menu = base::make_unique_q<Ui::PopupMenu>(
 			button,
@@ -397,14 +398,16 @@ void ScheduleBox(
 		: Type::SilentOnly;
 	const auto childDetails = Details{
 		.type = childType,
+		.barePeerId = details.barePeerId,
 		.effectAllowed = details.effectAllowed,
 	};
 	const auto sendAction = crl::guard(box, [=](Action action, Details) {
 		Expects(action.type == ActionType::Send);
 
 		auto options = with(descriptor.collect());
-		if (action.options.silent) {
+		if (action.options.silent || action.options.ignoreGhostSilent) {
 			options.silent = action.options.silent;
+			options.ignoreGhostSilent = action.options.ignoreGhostSilent;
 		}
 		if (action.options.effectId) {
 			options.effectId = action.options.effectId;

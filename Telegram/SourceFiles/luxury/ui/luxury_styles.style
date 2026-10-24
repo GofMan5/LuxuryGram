@@ -22,6 +22,7 @@ iconPickerIconSize: 64px;
 recentStickersLimitPadding: margins(22px, 4px, 22px, 8px);
 imageViewPadding: margins(22px, 10px, 22px, 10px);
 imageViewInnerPadding: margins(16px, 16px, 16px, 16px);
+menuRadiusPreviewPadding: margins(16px, 12px, 16px, 12px);
 
 botWebViewPanelHeightIncreased: 782px;
 botWebViewPanelWidthIncreased: 512px;
@@ -107,6 +108,11 @@ ghostPickerButton: LinkButton(defaultLinkButton) {
 
 luxuryBetaBadgePadding: margins(4px, 1px, 4px, 1px);
 
+luxuryCollapsibleToggleLabel: FlatLabel(boxLabel) {
+	minWidth: 0px;
+	maxHeight: 22px;
+}
+
 // Two-line settings rows built on settings/detailed_settings_button.cpp.
 // The upstream st::detailedSettingsButtonStyle reserves icon space on the
 // left, which misaligns rows shown next to settingsButtonNoIcon neighbors.
@@ -114,8 +120,8 @@ luxuryDetailedButton: DetailedSettingsButtonStyle {
 	button: SettingsButton(settingsButtonNoIcon) {
 		style: defaultTextStyle;
 		textBg: transparent;
-		textBgOver: transparent;
-		padding: margins(22px, 8px, 22px, 8px);
+		textBgOver: windowBgOver;
+		padding: margins(22px, 10px, 22px, 8px);
 	}
 	description: FlatLabel(defaultFlatLabel) {
 		textFg: windowSubTextFg;
@@ -123,8 +129,8 @@ luxuryDetailedButton: DetailedSettingsButtonStyle {
 	iconRadius: 10px;
 	iconPadding: 6px;
 	iconForegroundPadding: 3px;
-	descriptionTopSkip: 0px;
-	descriptionBottomSkip: 8px;
+	descriptionTopSkip: 4px;
+	descriptionBottomSkip: 10px;
 	descriptionRightSkip: 4px;
 }
 
@@ -258,3 +264,17 @@ luxuryPlayerExpandButton: IconButton(mediaPlayerNextButton) {
 		{ "player/player_pip_enlarge", mediaPlayerActiveFg }
 	};
 }
+
+luxuryStartupWidth: 300px;
+luxuryStartupPadding: margins(28px, 28px, 28px, 24px);
+luxuryStartupRadius: 10px;
+luxuryStartupShadow: roundShadowRadius8px;
+luxuryStartupLogoSize: 72px;
+luxuryStartupTitleSkip: 14px;
+luxuryStartupTitleFont: font(18px semibold);
+luxuryStartupVersionSkip: 2px;
+luxuryStartupVersionFont: font(13px);
+luxuryStartupStageSkip: 20px;
+luxuryStartupStageFont: font(13px);
+luxuryStartupBarSkip: 10px;
+luxuryStartupBarHeight: 4px;

@@ -58,6 +58,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/ui_utility.h"
 #include "ui/unread_badge_paint.h"
 #include "ui/vertical_list.h"
+#include "ui/widgets/buttons.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/widgets/scroll_area.h"
@@ -108,10 +109,13 @@ constexpr auto kPlayStatusLimit = 12;
 		|| (now.month() == 1 && now.day() == 1);
 }
 
-[[nodiscard]] rpl::producer<TextWithEntities> SetStatusLabel(
-		not_null<Main::Session*> session) {
-	return tr::luxury_LuxuryPreferences() | rpl::map([](const QString& text) {
-		return tr::link(text);
+[[nodiscard]] rpl::producer<QString> AccountsToggleLabel() {
+	return rpl::combine(
+		Core::App().settings().mainMenuAccountsShownValue(),
+		tr::luxury_ShowAccounts(),
+		tr::luxury_HideAccounts()
+	) | rpl::map([](bool shown, const QString &show, const QString &hide) {
+		return shown ? hide : show;
 	});
 }
 
@@ -120,6 +124,11 @@ constexpr auto kPlayStatusLimit = 12;
 class MainMenu::ToggleAccountsButton final : public Ui::AbstractButton {
 public:
 	ToggleAccountsButton(QWidget *parent, not_null<Main::Account*> current);
+
+	QString accessibilityName() override;
+	Ui::AccessibilityState accessibilityState() const override;
+	QStringList accessibilityActionNames() override;
+	void accessibilityDoAction(const QString &name) override;
 
 	[[nodiscard]] int rightSkip() const {
 		return _rightSkip.current();
@@ -180,6 +189,7 @@ MainMenu::ToggleAccountsButton::ToggleAccountsButton(
 	) | rpl::filter([=](bool value) {
 		return (_toggled != value);
 	}) | rpl::on_next([=](bool value) {
+		const auto weak = base::make_weak(this);
 		_toggled = value;
 		_toggledAnimation.start(
 			[=] { update(); },
@@ -187,8 +197,51 @@ MainMenu::ToggleAccountsButton::ToggleAccountsButton(
 			_toggled ? 1. : 0.,
 			st::slideWrapDuration);
 		validateUnreadBadge();
+		if (!weak) {
+			return;
+		}
+		crl::on_main(this, [=] {
+			const auto weak = base::make_weak(this);
+			accessibilityNameChanged();
+			if (weak) {
+				accessibilityStateChanged({ .expanded = true, .collapsed = true });
+			}
+		});
 	}, lifetime());
 	_toggledAnimation.stop();
+
+	Lang::Updated() | rpl::on_next([=] {
+		crl::on_main(this, [=] { accessibilityNameChanged(); });
+	}, lifetime());
+}
+
+QString MainMenu::ToggleAccountsButton::accessibilityName() {
+	return _toggled
+		? tr::luxury_HideAccounts(tr::now)
+		: tr::luxury_ShowAccounts(tr::now);
+}
+
+Ui::AccessibilityState MainMenu::ToggleAccountsButton::accessibilityState() const {
+	auto result = AbstractButton::accessibilityState();
+	result.expandable = true;
+	result.expanded = _toggled;
+	result.collapsed = !_toggled;
+	return result;
+}
+
+QStringList MainMenu::ToggleAccountsButton::accessibilityActionNames() {
+	return { QAccessibleActionInterface::showMenuAction() };
+}
+
+void MainMenu::ToggleAccountsButton::accessibilityDoAction(const QString &name) {
+	if (name == QAccessibleActionInterface::showMenuAction()) {
+		if (!_toggled) {
+			AbstractButton::accessibilityDoAction(
+				QAccessibleActionInterface::pressAction());
+		}
+	} else {
+		AbstractButton::accessibilityDoAction(name);
+	}
 }
 
 void MainMenu::ToggleAccountsButton::paintEvent(QPaintEvent *e) {
@@ -205,6 +258,7 @@ void MainMenu::ToggleAccountsButton::paintEvent(QPaintEvent *e) {
 	p.fillPath(path, st::windowSubTextFg);
 
 	paintUnreadBadge(p);
+	paintKeyboardFocus(p);
 }
 
 void MainMenu::ToggleAccountsButton::paintUnreadBadge(Painter &p) {
@@ -259,6 +313,10 @@ QString MainMenu::ToggleAccountsButton::computeUnreadBadge() const {
 
 MainMenu::ResetScaleButton::ResetScaleButton(QWidget *parent)
 : AbstractButton(parent) {
+	setFocusPolicy(Qt::TabFocus);
+	tr::luxury_ResetScaleAndRestart() | rpl::on_next([=](const QString &text) {
+		setAccessibleName(text);
+	}, lifetime());
 	const auto margin = st::mainMenuCloudButton.height
 		- st::mainMenuCloudSize;
 	const auto textWidth = st::mainMenuResetScaleFont->width(kText);
@@ -299,6 +357,11 @@ void MainMenu::ResetScaleButton::paintEvent(QPaintEvent *e) {
 		left + st::mainMenuResetScaleLeft,
 		top + st::mainMenuResetScaleTop + st::mainMenuResetScaleFont->ascent,
 		kText);
+	paintKeyboardFocus(
+		p,
+		QRect(left, top, innerWidth, innerHeight),
+		radius,
+		st::mainMenuCloudFg->c);
 }
 
 MainMenu::MainMenu(
@@ -311,7 +374,7 @@ MainMenu::MainMenu(
 	_controller->session().user(),
 	st::mainMenuUserpic)
 , _toggleAccounts(this, &controller->session().account())
-, _setEmojiStatus(this, SetStatusLabel(&controller->session()))
+, _preferencesButton(this, tr::luxury_LuxuryPreferences(tr::now))
 , _emojiStatusPanel(std::make_unique<Info::Profile::EmojiStatusPanel>())
 , _badge(std::make_unique<Info::Profile::Badge>(
 	this,
@@ -344,7 +407,7 @@ MainMenu::MainMenu(
 
 	setupUserpicButton();
 	setupAccountsToggle();
-	setupSetEmojiStatus();
+	setupPreferencesButton();
 	setupAccounts();
 	setupArchive();
 	setupMenu();
@@ -586,6 +649,10 @@ void MainMenu::setupArchive() {
 }
 
 void MainMenu::setupUserpicButton() {
+	_userpicButton->setFocusPolicy(Qt::TabFocus);
+	AccountsToggleLabel() | rpl::on_next([=](const QString &text) {
+		_userpicButton->setAccessibleName(text);
+	}, _userpicButton->lifetime());
 	_userpicButton->setClickedCallback([=] { toggleAccounts(); });
 	_userpicButton->show();
 }
@@ -617,6 +684,7 @@ void MainMenu::setupAccounts() {
 }
 
 void MainMenu::setupAccountsToggle() {
+	_toggleAccounts->setFocusPolicy(Qt::TabFocus);
 	_toggleAccounts->show();
 	_toggleAccounts->setAcceptBoth();
 	_toggleAccounts->addClickHandler([=](Qt::MouseButton button) {
@@ -626,8 +694,18 @@ void MainMenu::setupAccountsToggle() {
 	});
 }
 
-void MainMenu::setupSetEmojiStatus() {
-	_setEmojiStatus->overrideLinkClickHandler([=] {
+void MainMenu::setupPreferencesButton() {
+	_preferencesButton->setFocusPolicy(Qt::TabFocus);
+	rpl::combine(
+		_preferencesButton->naturalWidthValue(),
+		_toggleAccounts->rightSkipValue()
+	) | rpl::on_next([=] { updateControlsGeometry(); }, lifetime());
+
+	tr::luxury_LuxuryPreferences() | rpl::on_next([=](const QString &text) {
+		_preferencesButton->setText(text);
+	}, _preferencesButton->lifetime());
+
+	_preferencesButton->setClickedCallback([=] {
 		_controller->showSettings(Settings::LuxuryMain::Id());
 	});
 }
@@ -641,7 +719,7 @@ void MainMenu::showFinished() {
 
 	_controller->checkHighlightControl(
 		u"main-menu/emoji-status"_q,
-		_setEmojiStatus,
+		_preferencesButton,
 		Settings::SubsectionTitleHighlight());
 	_controller->checkHighlightControl(
 		u"main-menu/night-mode"_q,
@@ -732,31 +810,15 @@ void MainMenu::setupMenu() {
 				{&st::luxuryLReadMenuIcon}
 			)->setClickedCallback([=]() mutable
 			{
-				auto &ghost = LuxurySettings::ghost(&controller->session());
-				const auto prev = ghost.sendReadMessages();
-				ghost.setSendReadMessages(false);
-
 				const auto chats = controller->session().data().chatsList();
-				MarkAsReadChatList(chats);
-
-				ghost.setSendReadMessages(prev);
+				MarkAsReadChatList(chats, false);
 			});
 		}
 
 		if (settings.showSReadToggleInDrawer()) {
 			auto callback = [=](Fn<void()> &&close) mutable {
-				auto &ghost = LuxurySettings::ghost(&controller->session());
-				const auto prev = ghost.sendReadMessages();
-				ghost.setSendReadMessages(true);
-
-				auto chats = controller->session().data().chatsList();
-				MarkAsReadChatList(chats);
-
-				// slight delay for forums to send packets
-				dispatchToMainThread(crl::guard(controller, [=] {
-					auto &ghost = LuxurySettings::ghost(&controller->session());
-					ghost.setSendReadMessages(prev);
-				}), 200);
+				const auto chats = controller->session().data().chatsList();
+				MarkAsReadChatList(chats, true);
 				close();
 			};
 
@@ -770,7 +832,7 @@ void MainMenu::setupMenu() {
 					.confirmed = callback,
 					.confirmText = tr::luxury_ReadConfirmationBoxActionText()
 				});
-				Ui::show(std::move(box));
+				controller->show(std::move(box));
 			});
 		}
 	} else {
@@ -896,7 +958,10 @@ void MainMenu::updateControlsGeometry() {
 	if (_resetScaleButton) {
 		_resetScaleButton->moveToRight(0, 0);
 	}
-	_setEmojiStatus->moveToLeft(
+	_preferencesButton->resizeToNaturalWidth(std::max(
+		width() - st::mainMenuCoverStatusLeft - _toggleAccounts->rightSkip(),
+		0));
+	_preferencesButton->moveToLeft(
 		st::mainMenuCoverStatusLeft,
 		st::mainMenuCoverStatusTop,
 		width());
@@ -1062,7 +1127,10 @@ OthersUnreadState OtherAccountsUnreadStateCurrent(
 rpl::producer<OthersUnreadState> OtherAccountsUnreadState(
 		not_null<Main::Account*> current) {
 	return rpl::single(rpl::empty) | rpl::then(
-		Core::App().unreadBadgeChanges()
+		rpl::merge(
+			Core::App().unreadBadgeChanges(),
+			LuxurySettings::getInstance().hideNotificationCountersChanges()
+				| rpl::to_empty)
 	) | rpl::map([=] {
 		return OtherAccountsUnreadStateCurrent(current);
 	});

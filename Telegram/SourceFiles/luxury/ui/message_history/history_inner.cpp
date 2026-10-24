@@ -721,6 +721,7 @@ void InnerWidget::saveState(not_null<SectionMemento*> memento) {
 		_items.clear();
 		_messageIds.clear();
 		_itemsByData.clear();
+		_sourceMessageIds.clear();
 		// Keyed by HistoryItem*, and the clear above destroyed them.
 		_itemDates.clear();
 		_upLoaded = false;
@@ -738,6 +739,7 @@ void InnerWidget::saveState(not_null<SectionMemento*> memento) {
 		_downLoaded);
 	memento->setSearchQuery(base::take(_searchQuery));
 	base::take(_itemsByData);
+	_sourceMessageIds.clear();
 	_upLoaded = _downLoaded = true; // Don't load or handle anything anymore.
 }
 
@@ -747,6 +749,7 @@ void InnerWidget::restoreState(not_null<SectionMemento*> memento) {
 		_items.clear();
 		_messageIds.clear();
 		_itemsByData.clear();
+		_sourceMessageIds.clear();
 		_itemDates.clear();
 		_upLoaded = false;
 		_downLoaded = true;
@@ -789,6 +792,7 @@ void InnerWidget::applySearch(const QString &query) {
 		_items.clear();
 		_messageIds.clear();
 		_itemsByData.clear();
+		_sourceMessageIds.clear();
 		_itemDates.clear();
 		updateMinMaxIds();
 		updateEmptyText();
@@ -898,6 +902,7 @@ void InnerWidget::addMessages(Direction direction, const std::vector<LuxuryMessa
 				_itemDates.emplace(item->data(), sentDate);
 			}
 			_messageIds.emplace(id);
+			_sourceMessageIds.emplace(item->data(), realId);
 			_itemsByData.emplace(item->data(), item.get());
 			addToItems.push_back(std::move(item));
 		};
@@ -1433,10 +1438,11 @@ void InnerWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 	// deleted view: the edited view numbers its items by fakeId, which would look
 	// up somebody else's file. Revealed in the folder rather than opened -- the
 	// bytes came from whoever sent them, and launching those is their business.
-	if (!_itemId && view) {
+	if (!_itemId && view && _sourceMessageIds.contains(view->data())) {
 		const auto saved = LuxuryFeatures::Watch::keptFileForMessage(
-			getDialogIdFromPeer(_peer),
-			view->data()->id);
+			_peer->session().uniqueId(),
+			ID(_peer->id.value),
+			_sourceMessageIds.find(view->data())->second);
 		if (!saved.isEmpty()) {
 			_menu->addAction(tr::luxury_WatchShowSavedMedia(tr::now),
 							 [=]

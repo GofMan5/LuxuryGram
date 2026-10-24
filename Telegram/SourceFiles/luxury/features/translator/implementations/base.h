@@ -18,6 +18,7 @@ namespace Luxury::Translator {
 
 using CallbackSuccess = std::function<void(const std::vector<TextWithEntities> &)>;
 using CallbackFail = std::function<void()>;
+using CallbackCancel = std::function<void()>;
 
 using MultiThreadCallbackSuccess = std::function<void(const TextWithEntities &)>;
 
@@ -76,7 +77,7 @@ public:
 
 	~BaseTranslator() override = default;
 
-	virtual void startTranslation(
+	[[nodiscard]] virtual CallbackCancel startTranslation(
 		const StartTranslationArgs &args
 	) = 0;
 };
@@ -96,7 +97,7 @@ public:
 	[[nodiscard]] virtual int getMaxRetries() const { return 3; }
 	[[nodiscard]] virtual int getBaseWaitTimeMs() const { return 1000; }
 
-	void startTranslation(
+	[[nodiscard]] CallbackCancel startTranslation(
 		const StartTranslationArgs &args
 	) override;
 

@@ -8,6 +8,8 @@
 
 #include "lang_auto.h"
 #include "luxury/features/message_shot/message_shot_theme_state.h"
+#include "luxury/ui/utils/box_buttons.h"
+#include "luxury/utils/telegram_helpers.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
 #include "data/data_file_origin.h"
@@ -31,16 +33,18 @@ ThemeSelectorBox::ThemeSelectorBox(
 	: _controller(controller) {
 }
 
-rpl::producer<style::palette> ThemeSelectorBox::paletteSelected() {
-	return _palettes.events();
-}
-
-rpl::producer<QString> ThemeSelectorBox::themeNameChanged() {
-	return _themeNames.events();
+rpl::producer<ShotThemeSelection> ThemeSelectorBox::themeSelected() {
+	return _themes.events();
 }
 
 void ThemeSelectorBox::prepare() {
 	setupContent();
+}
+
+void ThemeSelectorBox::setApplyEnabled(bool enabled) {
+	if (_applyButton) {
+		Luxury::Ui::SetBoxButtonEnabled(_applyButton.data(), enabled);
+	}
 }
 
 void ThemeSelectorBox::setupContent() {
@@ -128,6 +132,10 @@ void ThemeSelectorBox::setupContent() {
 	) | rpl::on_next(
 		[=](Data::CloudTheme theme)
 		{
+			const auto generation = ++_selectionGeneration;
+			_selectionLifetime.destroy();
+			_selection.reset();
+			setApplyEnabled(false);
 			const auto document = _controller->session().data().document(theme.documentId);
 			const auto documentView = document->createMediaView();
 
@@ -137,32 +145,38 @@ void ThemeSelectorBox::setupContent() {
 
 			const auto innerCallback = [=]
 			{
+				if (generation != _selectionGeneration) {
+					return;
+				}
 				auto preview = Window::Theme::PreviewFromFile(
 					documentView->bytes(),
 					document->location().name(),
 					theme);
 				if (!preview) {
-					Ui::Toast::Show(
+					showToast(
 						tr::luxury_MessageShotThemePreviewFailed(
 							tr::now));
 					return;
 				}
 
-				_selectedPalette = preview->instance.palette;
-				_paletteChosen = true;
-
-				auto name = theme.title;
-				_themeNames.fire(std::move(name));
+				_selection = ShotThemeSelection{
+					.palette = preview->instance.palette.save(),
+					.cloud = theme,
+					.name = theme.title,
+				};
+				setApplyEnabled(true);
 			};
 
 			if (documentView->loaded()) {
 				innerCallback();
 			} else {
-				_controller->session().downloaderTaskFinished(
+				DocumentLoadUpdates(
+					&_controller->session(),
+					document
 				) | rpl::filter(
 					[=]
 					{
-						return documentView->loaded();
+						return documentView->loaded() || !document->loading();
 					}) | rpl::take(
 					1 // Or every later downloader tick re-parses the theme.
 					) | rpl::on_next(
@@ -170,7 +184,7 @@ void ThemeSelectorBox::setupContent() {
 					{
 						innerCallback();
 					},
-					lifetime());
+					_selectionLifetime);
 			}
 		},
 		lifetime());
@@ -178,24 +192,34 @@ void ThemeSelectorBox::setupContent() {
 	LuxuryFeatures::MessageShot::paletteChosen(
 	) | rpl::on_next([=](const auto &palette)
 							 {
+								 ++_selectionGeneration;
+								 _selectionLifetime.destroy();
 								 const auto type = LuxuryFeatures::MessageShot::getSelectedFromDefault();
 								 const auto name = (type != Window::Theme::EmbeddedType(-1))
 									 ? LuxuryFeatures::MessageShot::embeddedThemeDisplayName(type)
 									 : tr::luxury_MessageShotThemeDefault(tr::now);
-								 _themeNames.fire(QString(name));
-								 _selectedPalette = palette;
-								 _paletteChosen = true;
+								 _selection = ShotThemeSelection{
+									 .palette = palette.save(),
+									 .embedded = type,
+									 .color = LuxuryFeatures::MessageShot::getSelectedColorFromDefault(),
+									 .name = name,
+								 };
+								 setApplyEnabled(true);
 							 },
 							 lifetime());
 
-	addButton(tr::luxury_MessageShotThemeApply(),
-			  [=]
-			  {
-				  if (_paletteChosen) {
-					  _palettes.fire(std::move(_selectedPalette));
-				  }
-				  closeBox();
-			  });
+	_applyButton = addButton(tr::luxury_MessageShotThemeApply(), [=] {
+		if (!_selection) {
+			return;
+		}
+		_themes.fire_copy(*_selection);
+		closeBox();
+	});
+	setApplyEnabled(_selection.has_value());
+	boxClosing() | rpl::on_next([=] {
+		++_selectionGeneration;
+		_selectionLifetime.destroy();
+	}, lifetime());
 
 	setDimensionsToContent(st::boxWidth, container);
 }

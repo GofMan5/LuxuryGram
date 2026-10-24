@@ -28,6 +28,7 @@ public:
 	[[nodiscard]] bool countKnown(PeerId peerId) const;
 	[[nodiscard]] int count(PeerId peerId) const;
 	[[nodiscard]] bool fullyLoaded(PeerId peerId) const;
+	[[nodiscard]] bool loadFailed(PeerId peerId) const;
 	[[nodiscard]] const std::vector<not_null<HistoryItem*>> &list(
 		PeerId peerId) const;
 	void loadMore(PeerId peerId);
@@ -55,6 +56,7 @@ private:
 		mtpRequestId requestId = 0;
 		int total = -1;
 		bool loaded = false;
+		bool loadFailed = false;
 		bool reloading = false;
 	};
 

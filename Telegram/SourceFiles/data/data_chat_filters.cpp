@@ -723,6 +723,9 @@ void ChatFilters::remove(FilterId id) {
 }
 
 void ChatFilters::moveAllToFront() {
+	if (LuxurySettings::getInstance().hideAllChatsFolder()) {
+		return;
+	}
 	const auto i = ranges::find(_list, FilterId(), &ChatFilter::id);
 	if (!_list.empty() && i == begin(_list)) {
 		return;

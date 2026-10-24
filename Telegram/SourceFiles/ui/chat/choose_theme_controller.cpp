@@ -271,6 +271,7 @@ void ChooseThemeController::init(rpl::producer<QSize> outer) {
 	const auto close = Ui::CreateChild<Ui::IconButton>(
 		_wrap.get(),
 		st::boxTitleClose);
+	close->setAccessibleName(tr::lng_close(tr::now));
 	close->setClickedCallback([=] { this->close(); });
 	rpl::combine(
 		_wrap->widthValue(),

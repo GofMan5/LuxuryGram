@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/tabs/info_profile_tabs_strip.h"
 
+#include "base/weak_qptr.h"
 #include "ui/effects/animation_value.h"
 #include "ui/effects/animation_value_f.h"
 #include "ui/effects/ripple_animation.h"
@@ -17,7 +18,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat_helpers.h"
 #include "styles/style_info.h"
 
+#include <crl/crl_on_main.h>
+
 #include <QApplication>
+#include <QKeyEvent>
 
 namespace Info::Profile {
 namespace {
@@ -80,7 +84,11 @@ void TabsStrip::setTabs(std::vector<StripTab> tabs) {
 	const auto activeId = (_active >= 0 && _active < int(_buttons.size()))
 		? _buttons[_active].tab.id
 		: QString();
+	const auto focusedIdentity = accessibilityChildIdentity(_focused);
+	const auto weak = base::make_weak(this);
 	setSelected(-1);
+	_pressed = -1;
+	_pressx = _dragx = 0;
 	const auto pillHeight = _st.height
 		- _st.margin.top()
 		- _st.margin.bottom();
@@ -91,8 +99,18 @@ void TabsStrip::setTabs(std::vector<StripTab> tabs) {
 	auto x = 0;
 	for (auto &tab : tabs) {
 		Assert(!tab.id.isEmpty());
+		Assert(ranges::find(buttons, tab.id, [](const Button &button) {
+			return button.tab.id;
+		}) == end(buttons));
 
+		const auto previous = ranges::find(
+			_buttons,
+			tab.id,
+			[](const Button &button) { return button.tab.id; });
 		auto button = Button();
+		button.identity = (previous != end(_buttons))
+			? previous->identity
+			: ++_identityCounter;
 		button.text.setMarkedText(
 			_st.style,
 			tab.text,
@@ -110,6 +128,14 @@ void TabsStrip::setTabs(std::vector<StripTab> tabs) {
 		x += width;
 	}
 	_buttons = std::move(buttons);
+	_focused = accessibilityChildIndexByIdentity(focusedIdentity);
+	if (_focused < 0 && !_buttons.empty()) {
+		_focused = (_active >= 0) ? _active : 0;
+	}
+	setFocusPolicy(_buttons.empty() ? Qt::NoFocus : Qt::StrongFocus);
+	if (!weak) {
+		return;
+	}
 	_fullWidth = x;
 	_activeAnimation.stop();
 	if (_active >= 0) {
@@ -122,8 +148,25 @@ void TabsStrip::setTabs(std::vector<StripTab> tabs) {
 			+ _fullWidth
 			+ _st.skip
 			+ _st.margin.right()));
+	if (!weak) {
+		return;
+	}
 	resizeToWidth(width());
+	if (!weak) {
+		return;
+	}
+	if (hasFocus() && _focused >= 0) {
+		scrollToTab(_focused);
+	}
 	invalidate();
+	crl::on_main(this, [=] {
+		const auto weak = base::make_weak(this);
+		QAccessibleEvent event(this, QAccessible::ObjectReorder);
+		QAccessible::updateAccessibility(&event);
+		if (weak && hasFocus() && _focused >= 0) {
+			accessibilityChildFocused(_focused);
+		}
+	});
 }
 
 void TabsStrip::setActiveTab(const QString &id) {
@@ -213,6 +256,7 @@ void TabsStrip::setActive(int index) {
 		_activeAnimation.stop();
 		_wasActive = -1;
 		invalidate();
+		notifyActiveChanged(previous);
 		return;
 	}
 	const auto to = highlightRect(index);
@@ -235,6 +279,48 @@ void TabsStrip::setActive(int index) {
 	}
 	scrollToTab(index);
 	invalidate();
+	notifyActiveChanged(previous);
+}
+
+void TabsStrip::notifyActiveChanged(int previous) {
+	const auto previousIdentity = accessibilityChildIdentity(previous);
+	const auto identity = accessibilityChildIdentity(_active);
+	// Owners finish switching the page before accessibility can re-enter them.
+	crl::on_main(this, [=] {
+		const auto weak = base::make_weak(this);
+		const auto previous = accessibilityChildIndexByIdentity(previousIdentity);
+		if (previous >= 0) {
+			accessibilityChildSelectionChanged(previous);
+		}
+		if (weak) {
+			const auto index = accessibilityChildIndexByIdentity(identity);
+			if (index >= 0 && index == _active) {
+				accessibilityChildSelectionChanged(index);
+			}
+		}
+	});
+}
+
+void TabsStrip::setFocused(int index) {
+	if (index < 0 || index >= int(_buttons.size())) {
+		return;
+	}
+	const auto changed = (_focused != index);
+	_focused = index;
+	scrollToTab(index);
+	update();
+	if (changed && hasFocus()) {
+		accessibilityChildFocused(index);
+	}
+}
+
+void TabsStrip::activateTab(int index) {
+	if (!isEnabled() || !isVisible()
+		|| index < 0 || index >= int(_buttons.size())) {
+		return;
+	}
+	const auto id = _buttons[index].tab.id;
+	_activated.fire_copy(id);
 }
 
 void TabsStrip::scrollToTab(int index) {
@@ -274,6 +360,59 @@ int TabsStrip::resizeGetHeight(int newWidth) {
 		_scrollAnimation.stop();
 	}
 	return _buttons.empty() ? 0 : _st.height;
+}
+
+void TabsStrip::keyPressEvent(QKeyEvent *e) {
+	if (!isEnabled() || _buttons.empty()
+		|| (e->modifiers() & (Qt::ControlModifier
+			| Qt::AltModifier
+			| Qt::MetaModifier))) {
+		RpWidget::keyPressEvent(e);
+		return;
+	}
+	const auto current = (_focused >= 0) ? _focused : 0;
+	const auto last = int(_buttons.size()) - 1;
+	auto next = current;
+	switch (e->key()) {
+	case Qt::Key_Left: next = std::max(current - 1, 0); break;
+	case Qt::Key_Right: next = std::min(current + 1, last); break;
+	case Qt::Key_Home: next = 0; break;
+	case Qt::Key_End: next = last; break;
+	case Qt::Key_Return:
+	case Qt::Key_Enter:
+	case Qt::Key_Space:
+		e->accept();
+		if (!e->isAutoRepeat()) {
+			activateTab(current);
+		}
+		return;
+	default:
+		RpWidget::keyPressEvent(e);
+		return;
+	}
+	e->accept();
+	_keyboardFocus = true;
+	setFocused(next);
+}
+
+void TabsStrip::focusInEvent(QFocusEvent *e) {
+	_keyboardFocus = (e->reason() != Qt::MouseFocusReason);
+	const auto tab = (e->reason() == Qt::TabFocusReason)
+		|| (e->reason() == Qt::BacktabFocusReason);
+	if (tab || _focused < 0) {
+		_focused = (_active >= 0) ? _active : (_buttons.empty() ? -1 : 0);
+	}
+	if (_focused >= 0) {
+		scrollToTab(_focused);
+	}
+	RpWidget::focusInEvent(e);
+	update();
+}
+
+void TabsStrip::focusOutEvent(QFocusEvent *e) {
+	_keyboardFocus = false;
+	RpWidget::focusOutEvent(e);
+	update();
 }
 
 bool TabsStrip::eventHook(QEvent *e) {
@@ -393,6 +532,8 @@ void TabsStrip::mousePressEvent(QMouseEvent *e) {
 	if (e->button() != Qt::LeftButton) {
 		return;
 	}
+	_keyboardFocus = false;
+	update();
 	setSelected(indexAt(e->pos()));
 	_pressed = _selected;
 	_pressx = e->pos().x();
@@ -420,7 +561,12 @@ void TabsStrip::mouseReleaseEvent(QMouseEvent *e) {
 		&& pressed >= 0
 		&& _selected == pressed
 		&& pressed < _buttons.size()) {
-		_activated.fire_copy(_buttons[pressed].tab.id);
+		const auto identity = accessibilityChildIdentity(pressed);
+		const auto weak = base::make_weak(this);
+		setFocused(pressed);
+		if (weak) {
+			activateTab(accessibilityChildIndexByIdentity(identity));
+		}
 	}
 }
 
@@ -444,6 +590,14 @@ void TabsStrip::paintEvent(QPaintEvent *e) {
 	clip.addRoundedRect(QRectF(island), radius, radius);
 	p.setClipPath(clip);
 	p.drawImage(island.topLeft(), _content);
+	if (hasFocus() && _keyboardFocus && isEnabled() && _focused >= 0) {
+		const auto outline = highlightRect(_focused).translated(
+			contentOrigin()) - Margins(st::buttonFocusInset);
+		const auto focusRadius = outline.height() / 2.;
+		p.setBrush(Qt::NoBrush);
+		p.setPen(QPen(st::windowFg->c, st::lineWidth));
+		p.drawRoundedRect(outline, focusRadius, focusRadius);
+	}
 	p.setClipping(false);
 
 	PaintIslandOutline(p, QRectF(island), radius, _st.bg);
@@ -528,6 +682,97 @@ void TabsStrip::validateContent(QRect island) {
 		p.setOpacity(std::clamp(opacityLeft, 0., 1.));
 		icon.fadeLeft.fill(p, QRect(0, 0, leftWidth, height), c);
 	}
+}
+
+QAccessible::Role TabsStrip::accessibilityRole() {
+	return QAccessible::PageTabList;
+}
+
+std::optional<Qt::Orientation> TabsStrip::accessibilityOrientation() const {
+	return Qt::Horizontal;
+}
+
+bool TabsStrip::accessibilitySelectionList() const {
+	return true;
+}
+
+int TabsStrip::accessibilityChildCount() const {
+	return int(_buttons.size());
+}
+
+QAccessible::Role TabsStrip::accessibilityChildRole() const {
+	return QAccessible::PageTab;
+}
+
+QString TabsStrip::accessibilityChildName(int index) const {
+	return (index >= 0 && index < int(_buttons.size()))
+		? _buttons[index].tab.text.text
+		: QString();
+}
+
+QAccessible::State TabsStrip::accessibilityChildState(int index) const {
+	auto state = QAccessible::State();
+	if (index < 0 || index >= int(_buttons.size())) {
+		state.invisible = true;
+		return state;
+	}
+	state.disabled = !isEnabled();
+	state.focusable = isEnabled();
+	state.selectable = isEnabled();
+	state.selected = (index == _active);
+	state.focused = hasFocus() && (index == _focused);
+	state.invisible = !isVisible();
+	state.offscreen = accessibilityChildRect(index).isEmpty();
+	return state;
+}
+
+QRect TabsStrip::accessibilityChildRect(int index) const {
+	return (index >= 0 && index < int(_buttons.size()))
+		? _buttons[index].geometry.translated(contentOrigin()).intersected(
+			islandRect())
+		: QRect();
+}
+
+bool TabsStrip::accessibilityChildSupportsActions(int index) const {
+	return accessibilityChildIdentity(index) != 0;
+}
+
+quintptr TabsStrip::accessibilityChildIdentity(int index) const {
+	return (index >= 0 && index < int(_buttons.size()))
+		? _buttons[index].identity
+		: 0;
+}
+
+int TabsStrip::accessibilityChildIndexByIdentity(quintptr identity) const {
+	if (identity) {
+		for (auto i = 0, count = int(_buttons.size()); i != count; ++i) {
+			if (_buttons[i].identity == identity) {
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+void TabsStrip::accessibilityChildSetFocus(quintptr identity) {
+	crl::on_main(this, [=] {
+		const auto index = accessibilityChildIndexByIdentity(identity);
+		if (index < 0 || !isVisible() || !isEnabled()) {
+			return;
+		}
+		const auto weak = base::make_weak(this);
+		_keyboardFocus = true;
+		setFocused(index);
+		if (weak && !hasFocus()) {
+			setFocus(Qt::OtherFocusReason);
+		}
+	});
+}
+
+void TabsStrip::accessibilityChildActivate(quintptr identity) {
+	crl::on_main(this, [=] {
+		activateTab(accessibilityChildIndexByIdentity(identity));
+	});
 }
 
 } // namespace Info::Profile

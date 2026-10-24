@@ -184,6 +184,7 @@ Cover::Cover(
 			const auto callback = [=] {
 				auto id = IDString(_user);
 				TextUtilities::SetClipboardText({ id });
+				_controller->showToast(tr::luxury_IDCopiedToast(tr::now));
 			};
 			request.menu->addAction(
 				tr::luxury_ContextCopyID(tr::now),

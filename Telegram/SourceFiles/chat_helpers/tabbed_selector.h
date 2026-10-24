@@ -115,13 +115,6 @@ enum class TabbedSearchType {
 	Stickers,
 	Greeting,
 };
-[[nodiscard]] std::unique_ptr<Ui::TabbedSearch> MakeSearch(
-	not_null<Ui::RpWidget*> parent,
-	const style::EmojiPan &st,
-	Fn<void(std::vector<QString>&&)> callback,
-	not_null<Main::Session*> session,
-	TabbedSearchType type);
-
 class TabbedSelector : public Ui::RpWidget {
 public:
 	static constexpr auto kPickCustomTimeId = -1;
@@ -205,6 +198,7 @@ public:
 	class InnerFooter;
 
 protected:
+	bool eventHook(QEvent *e) override;
 	void paintEvent(QPaintEvent *e) override;
 	void resizeEvent(QResizeEvent *e) override;
 	void contextMenuEvent(QContextMenuEvent *e) override;
@@ -321,13 +315,18 @@ private:
 	class SlideAnimation;
 	std::unique_ptr<SlideAnimation> _slideAnimation;
 	Ui::Animations::Simple _a_slide;
+	uint64 _slideGeneration = 0;
+	bool _slideFromTabs = false;
 
-	object_ptr<Ui::SettingsSlider> _tabsSlider = { nullptr };
+	class TabsSlider;
+	object_ptr<TabsSlider> _tabsSlider = { nullptr };
 	object_ptr<Ui::PlainShadow> _topShadow;
 	object_ptr<Ui::PlainShadow> _bottomShadow;
 	object_ptr<Ui::ScrollArea> _scroll;
 	object_ptr<Ui::FlatLabel> _restrictedLabel = { nullptr };
 	QString _restrictedLabelKey;
+	PeerData *_restrictedPeer = nullptr;
+	int _restrictedBoostsToLift = 0;
 	std::vector<Tab> _tabs;
 	SelectorTab _currentTabType = SelectorTab::Emoji;
 
@@ -397,6 +396,10 @@ public:
 	void panelHideFinished();
 	virtual void clearSelection() = 0;
 
+	void afterShownWithSearchFocus(bool allow);
+	[[nodiscard]] bool allowSearchAutoFocus() const {
+		return _allowSearchAutoFocus;
+	}
 	virtual void afterShown() {
 	}
 	virtual void beforeHiding() {
@@ -458,8 +461,16 @@ private:
 	rpl::event_stream<> _checkForHide;
 
 	bool _preventHideWithBox = false;
+	bool _allowSearchAutoFocus = true;
 
 };
+
+[[nodiscard]] std::unique_ptr<Ui::TabbedSearch> MakeSearch(
+	not_null<TabbedSelector::Inner*> parent,
+	const style::EmojiPan &st,
+	Fn<void(std::vector<QString>&&)> callback,
+	not_null<Main::Session*> session,
+	TabbedSearchType type);
 
 class TabbedSelector::InnerFooter : public Ui::RpWidget {
 public:

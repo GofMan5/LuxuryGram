@@ -108,6 +108,7 @@ public:
 	void resetValue(const QByteArray &key);
 	void applyValue(const QByteArray &key, const QByteArray &value);
 	void updatePluralRules();
+	void notifyUpdated();
 
 private:
 	void setBaseId(const QString &baseId, const QString &pluralId);

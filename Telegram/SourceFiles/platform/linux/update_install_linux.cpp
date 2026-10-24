@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/update_keys.h"
 #include "core/update_unpack.h"
 #include "core/update_verify.h"
+#include "config.h"
 
 #ifndef TDESKTOP_DISABLE_AUTOUPDATE
 #include "mtproto/dedicated_file_loader.h"
@@ -373,7 +374,12 @@ void ReportProgress(const char *message) {
 	return result;
 }
 
-[[nodiscard]] std::optional<Core::Updates::VerifiedUpdate> VerifyPackage(
+struct VerifiedPackage {
+	quint64 version = 0;
+	QByteArray uncompressed;
+};
+
+[[nodiscard]] std::optional<Core::Updates::VerifiedUpdate> VerifyPackageV2(
 		const QByteArray &bytes,
 		bool beta,
 		QString &error) {
@@ -392,7 +398,7 @@ void ReportProgress(const char *message) {
 		error = u"This platform has no supported update target."_q;
 		return std::nullopt;
 	}
-	return Core::Updates::VerifyUpdate(
+	auto verified = Core::Updates::VerifyUpdate(
 		bytes,
 		Core::BuildUpdateChannel,
 		AppBetaVersion || beta,
@@ -402,6 +408,52 @@ void ReportProgress(const char *message) {
 		root,
 		QDateTime::currentSecsSinceEpoch(),
 		&error);
+	if (verified && Core::BuildIsCanary
+		&& verified->envelope.channel != Core::BuildUpdateChannel) {
+		error = u"Canary update is not from this lane."_q;
+		return std::nullopt;
+	}
+	return verified;
+}
+
+[[nodiscard]] std::optional<VerifiedPackage> VerifyPackage(
+		const QByteArray &bytes,
+		bool beta,
+		QString &error) {
+	if (Core::Updates::IsV2UpdateFile(bytes)) {
+		if (const auto verified = VerifyPackageV2(bytes, beta, error)) {
+			auto uncompressed = Core::Updates::DecompressUpdatePayload(
+				*verified,
+				&error);
+			if (!uncompressed) {
+				return std::nullopt;
+			}
+			return VerifiedPackage{
+				verified->envelope.version,
+				std::move(*uncompressed),
+			};
+		} else if (Core::BuildIsCanary) {
+			return std::nullopt;
+		}
+		// A v1 RSA signature can start with v2 magic. The fallback must
+		// authenticate the same bytes with the pinned Luxury public key.
+	}
+	auto legacy = Core::Updates::VerifyLegacyUpdate(
+		bytes,
+		UpdatesPublicKey,
+		Core::BuildUpdateChannel,
+		&error);
+	if (!legacy) {
+		return std::nullopt;
+	} else if (legacy->version == 0x7FFFFFFF
+		|| qint32(legacy->version) <= LuxuryUpdateVersion) {
+		error = u"Legacy update version is unsupported or not newer."_q;
+		return std::nullopt;
+	}
+	return VerifiedPackage{
+		Core::Updates::MakeUpdateVersion(legacy->version, 0),
+		std::move(legacy->uncompressed),
+	};
 }
 
 PrivateDirectory::~PrivateDirectory() {
@@ -640,7 +692,7 @@ const QString &PrivateDirectory::path() const {
 		}
 		const auto relative = prefix + name;
 		if (prefix.isEmpty()) {
-			const auto reserved = { "Telegram", "Updater", "ready", "tdata" };
+			const auto reserved = { "LuxuryGram", "Updater", "ready", "tdata" };
 			for (const auto word : reserved) {
 				if (AsciiLower(name) == AsciiLower(word) && name != word) {
 					return Fail(error, "A staged name aliases a reserved filename.");
@@ -654,7 +706,7 @@ const QString &PrivateDirectory::path() const {
 		const auto skipped = relative == "ready"
 			|| relative == "tdata"
 			|| relative.startsWith("tdata/");
-		const auto target = (relative == "Telegram") ? executableName : relative;
+		const auto target = (relative == "LuxuryGram") ? executableName : relative;
 		if (!skipped) {
 			const auto key = AsciiLower(target);
 			if (destinations.contains(key)) {
@@ -663,7 +715,7 @@ const QString &PrivateDirectory::path() const {
 			destinations.insert(key);
 		}
 		if (S_ISDIR(info.st_mode)) {
-			if (relative == "Telegram" || relative == "Updater"
+			if (relative == "LuxuryGram" || relative == "Updater"
 				|| relative == "ready") {
 				return Fail(error, "A required staged file is a directory.");
 			}
@@ -683,7 +735,7 @@ const QString &PrivateDirectory::path() const {
 		if (!TrustedFile(info)
 			|| info.st_size < 0
 			|| (mode != 0644 && mode != 0755)
-			|| ((relative == "Telegram" || relative == "Updater")
+			|| ((relative == "LuxuryGram" || relative == "Updater")
 				&& mode != 0755)) {
 			return Fail(error, "A staged file has an unsafe type, owner or mode.");
 		} else if (skipped) {
@@ -992,18 +1044,16 @@ const QString &PrivateDirectory::path() const {
 		return ReportError(error);
 	}
 	ReportProgress("Extracting the authenticated package into private staging.");
-	const auto version = verified->envelope.version;
-	auto uncompressed = Core::Updates::DecompressUpdatePayload(*verified, &error);
-	verified.reset();
-	if (!uncompressed) {
-		return ReportError(error);
-	}
 	const auto temp = staging.path() + u"/tupdates/temp"_q;
-	if (!Core::Updates::ExtractUpdateFiles(*uncompressed, version, temp, &error)
+	if (!Core::Updates::ExtractUpdateFiles(
+			verified->uncompressed,
+			verified->version,
+			temp,
+			&error)
 		|| !WriteReady(temp, error)) {
 		return ReportError(error);
 	}
-	uncompressed.reset();
+	verified.reset();
 	const auto staged = OpenTrustedDirectory(
 		AT_FDCWD,
 		QFile::encodeName(temp),
@@ -1011,11 +1061,11 @@ const QString &PrivateDirectory::path() const {
 	if (!staged) {
 		return ReportError(error);
 	}
-	for (const auto required : { "Telegram", "Updater" }) {
+	for (const auto required : { "LuxuryGram", "Updater" }) {
 		struct stat info = {};
 		if (fstatat(staged.get(), required, &info, AT_SYMLINK_NOFOLLOW)
 			|| !TrustedExecutable(info)) {
-			return ReportError(u"The package requires exact top-level Telegram "
+			return ReportError(u"The package requires exact top-level LuxuryGram "
 				u"and Updater executables."_q);
 		}
 	}

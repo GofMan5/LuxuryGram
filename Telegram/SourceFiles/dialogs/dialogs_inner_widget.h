@@ -561,6 +561,7 @@ private:
 	enum class AccessibilityCohort {
 		Hashtag,
 		Filtered,
+		IdSearch,
 		PeerSearch,
 		Preview,
 		Searched,

@@ -122,6 +122,7 @@ private:
     {
         std::function<void(const Result &)> done;
         std::function<void(const MTP::Error &)> fail;
+        CallbackCancel cancel;
     };
 
     mtpRequestId _nextId = 1;

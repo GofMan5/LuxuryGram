@@ -45,7 +45,10 @@ void AddDeleteOwnMessagesAction(PeerData *peerData,
 								not_null<Window::SessionController*> sessionController,
 								const Window::PeerMenuCallback &addCallback);
 
-void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
+void AddHistoryAction(
+	not_null<Ui::PopupMenu*> menu,
+	not_null<Window::SessionController*> controller,
+	HistoryItem *item);
 
 // Returns true when the entry was added, so a caller that has a fallback text
 // for the same message can tell whether it still needs to offer one.
@@ -56,7 +59,10 @@ bool AddTranslateMessageAction(
 	TextWithEntities text,
 	bool hasCopyRestriction);
 void AddHideMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
-void AddUserMessagesAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
+void AddUserMessagesAction(
+	not_null<Ui::PopupMenu*> menu,
+	not_null<Window::SessionController*> controller,
+	HistoryItem *item);
 void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
 void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, HistoryView::Context context);
 void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);

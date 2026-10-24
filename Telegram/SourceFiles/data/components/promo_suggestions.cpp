@@ -136,12 +136,8 @@ void PromoSuggestions::refreshTopPromotion() {
 			}
 
 			const auto &settings = LuxurySettings::getInstance();
-			if (settings.disableAds()) {
-				setTopPromoted(nullptr, QString(), QString());
-				return;
-			}
-
-			if (const auto peer = data.vpeer()) {
+			const auto peer = data.vpeer();
+			if (!settings.disableAds() && peer) {
 				const auto peerId = peerFromMTP(*peer);
 				const auto history = _session->data().history(peerId);
 				setTopPromoted(

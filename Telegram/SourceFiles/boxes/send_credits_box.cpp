@@ -483,6 +483,7 @@ void SendCreditsBox(
 		const auto close = Ui::CreateChild<Ui::IconButton>(
 			content,
 			st::boxTitleClose);
+		close->setAccessibleName(tr::lng_close(tr::now));
 		close->setClickedCallback([=] { box->closeBox(); });
 		content->widthValue() | rpl::on_next([=](int) {
 			close->moveToRight(0, 0);

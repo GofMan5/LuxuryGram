@@ -112,6 +112,11 @@ enum class Type {
 
 void InitLastPathDefault();
 
+// The remembered folder can be on a network share that went offline, where
+// every file system call blocks for tens of seconds. Checked off the main
+// thread with a short budget; Downloads when it is missing or not answering.
+[[nodiscard]] QString ReachableFolder(const QString &path);
+
 bool GetDefault(
 	QPointer<QWidget> parent,
 	QStringList &files,

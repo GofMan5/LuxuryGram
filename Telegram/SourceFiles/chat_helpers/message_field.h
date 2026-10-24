@@ -222,8 +222,8 @@ enum class FrozenWriteRestrictionType {
 	FreezeInfoStyleOverride st = {});
 std::unique_ptr<Ui::AbstractButton> LuxuryForwardWriteRestriction(
 	not_null<QWidget *> parent,
-	const PeerId &peer,
-	const Main::Session &session);
+	std::shared_ptr<ChatHelpers::Show> show,
+	PeerId peer);
 void SelectTextInFieldWithMargins(
 	not_null<Ui::InputField*> field,
 	const TextSelection &selection);

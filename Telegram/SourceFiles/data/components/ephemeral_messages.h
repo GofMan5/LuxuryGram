@@ -71,12 +71,14 @@ public:
 		MsgId topicRootId = 0,
 		FullReplyTo realReply = {},
 		Data::WebPageDraft webPage = {},
-		bool invertCaption = false);
+		bool invertCaption = false,
+		Fn<void(bool)> done = nullptr);
 	bool sendMedia(
 		not_null<HistoryItem*> item,
 		const MTPInputMedia &media,
 		Data::FileOrigin origin = {},
-		Fn<MTPInputMedia()> rebuildMedia = nullptr);
+		Fn<MTPInputMedia()> rebuildMedia = nullptr,
+		Fn<void(bool)> done = nullptr);
 	[[nodiscard]] bool sendRich(
 		not_null<HistoryItem*> item,
 		const MTPInputRichMessage &richMessage,
@@ -135,7 +137,8 @@ private:
 		Fn<MTPInputMedia()> rebuildMedia = nullptr,
 		bool invertMedia = false,
 		std::optional<MTPInputRichMessage> richMessage = {},
-		Fn<std::optional<MTPInputRichMessage>()> rebuildRich = nullptr);
+		Fn<std::optional<MTPInputRichMessage>()> rebuildRich = nullptr,
+		Fn<void(bool)> done = nullptr);
 	[[nodiscard]] bool replyTargetMissing(
 		const MTPDephemeralMessage &data) const;
 	[[nodiscard]] bool mentionsMe(

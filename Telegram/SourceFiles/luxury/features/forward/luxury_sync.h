@@ -30,8 +30,8 @@ using Cancelled = Fn<bool()>;
 using WeakSession = base::weak_ptr<Main::Session>;
 
 struct UploadedFile {
-	PhotoData *photo = nullptr;
-	DocumentData *document = nullptr;
+	PhotoId photo = 0;
+	DocumentId document = 0;
 };
 
 QString pathForSave(not_null<Main::Session*> session);
@@ -66,14 +66,14 @@ void loadDocumentSync(
 	const QString &path,
 	qint64 expectedSize,
 	const Cancelled &cancelled);
-void loadPhotoSync(
-	not_null<Main::Session*> session,
-	not_null<PhotoData*> photo,
+[[nodiscard]] QString loadPhotoSync(
+	WeakSession session,
+	PhotoId photoId,
 	Data::FileOrigin origin,
 	const Cancelled &cancelled);
 [[nodiscard]] QString loadDocumentSync(
-	not_null<Main::Session*> session,
-	not_null<DocumentData*> document,
+	WeakSession session,
+	DocumentId documentId,
 	Data::FileOrigin origin,
 	const Cancelled &cancelled);
 [[nodiscard]] bool forwardMessagesSync(WeakSession session,
@@ -88,17 +88,20 @@ void loadPhotoSync(
 				   Api::MessageToSend &&message,
 				   const Cancelled &cancelled);
 [[nodiscard]] UploadedFile uploadFileSync(
-	not_null<Main::Session*> session,
-	not_null<PeerData*> peer,
+	WeakSession session,
+	PeerId peerId,
 	const QString &path,
 	SendMediaType type,
 	bool forceFile,
-	const QString &displayName = {});
+	const QString &displayName,
+	const Cancelled &cancelled);
 [[nodiscard]] std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
-	not_null<Main::Session*> session,
-	FullMsgId itemId);
+	WeakSession session,
+	FullMsgId itemId,
+	const Cancelled &cancelled);
 [[nodiscard]] bool sendRichMessageSync(
-	not_null<Main::Session*> session,
+	WeakSession session,
 	const MTPInputRichMessage &richMessage,
-	const Api::SendAction &action);
+	const Api::SendAction &action,
+	const Cancelled &cancelled);
 }

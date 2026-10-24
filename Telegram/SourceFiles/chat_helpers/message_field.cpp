@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/layers/generic_box.h"
 #include "ui/boxes/calendar_box.h"
 #include "ui/boxes/choose_date_time.h"
+#include "ui/boxes/confirm_box.h"
 #include "ui/basic_click_handlers.h"
 #include "ui/rect.h"
 #include "core/shortcuts.h"
@@ -1419,12 +1420,12 @@ std::unique_ptr<Ui::AbstractButton> BoostsToLiftWriteRestriction(
 
 std::unique_ptr<Ui::AbstractButton> LuxuryForwardWriteRestriction(
 	not_null<QWidget *> parent,
-	const PeerId &peer,
-	const Main::Session &session) {
+	std::shared_ptr<ChatHelpers::Show> show,
+	PeerId peer) {
 	using namespace Ui;
 
 	// status and part
-	const auto pair = LuxuryForward::stateName(peer, session);
+	const auto pair = LuxuryForward::stateName(peer, show->session());
 
 	auto result = std::make_unique<FlatButton>(
 		parent,
@@ -1473,8 +1474,16 @@ std::unique_ptr<Ui::AbstractButton> LuxuryForwardWriteRestriction(
 
 	}, title->lifetime());
 
-	raw->setClickedCallback([peer, session = &session] {
-		LuxuryForward::cancelForward(peer, *session);
+	raw->setClickedCallback([=] {
+		show->showBox(Ui::MakeConfirmBox({
+			.text = tr::luxury_LuxuryForwardStopSure(),
+			.confirmed = [=](Fn<void()> close) {
+				LuxuryForward::cancelForward(peer, show->session());
+				close();
+			},
+			.confirmText = tr::lng_selected_upload_stop(),
+			.confirmStyle = &st::attentionBoxButton,
+		}));
 	});
 
 	return result;

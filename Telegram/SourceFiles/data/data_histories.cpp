@@ -181,34 +181,36 @@ void Histories::clearAll() {
 	_map.clear();
 }
 
-void Histories::readInbox(not_null<History*> history) {
+void Histories::readInbox(
+		not_null<History*> history,
+		std::optional<bool> sendReadReceipt) {
 	DEBUG_LOG(("Reading: readInbox called."));
 	if (history->lastServerMessageKnown()) {
 		const auto last = history->lastServerMessage();
 		DEBUG_LOG(("Reading: last known, reading till %1."
 			).arg(last ? last->id.bare : 0));
-		readInboxTill(history, last ? last->id : 0);
+		readInboxTill(history, last ? last->id : 0, false, sendReadReceipt);
 		return;
 	} else if (history->loadedAtBottom()) {
 		if (const auto lastId = history->maxMsgId()) {
 			DEBUG_LOG(("Reading: loaded at bottom, maxMsgId %1."
 				).arg(lastId.bare));
-			readInboxTill(history, lastId);
+			readInboxTill(history, lastId, false, sendReadReceipt);
 			return;
 		} else if (history->loadedAtTop()) {
 			DEBUG_LOG(("Reading: loaded at bottom, loaded at top."));
-			readInboxTill(history, 0);
+			readInboxTill(history, 0, false, sendReadReceipt);
 			return;
 		}
 		DEBUG_LOG(("Reading: loaded at bottom, but requesting entry."));
 	}
 	requestDialogEntry(history, [=] {
-		Expects(history->lastServerMessageKnown());
+		if (!history->lastServerMessageKnown()) return;
 
 		const auto last = history->lastServerMessage();
 		DEBUG_LOG(("Reading: got entry, reading till %1."
 			).arg(last ? last->id.bare : 0));
-		readInboxTill(history, last ? last->id : 0);
+		readInboxTill(history, last ? last->id : 0, false, sendReadReceipt);
 	});
 }
 
@@ -257,7 +259,9 @@ void Histories::readInboxTill(not_null<History*> history, MsgId tillId) {
 void Histories::readInboxTill(
 		not_null<History*> history,
 		MsgId tillId,
-		bool force) {
+		bool force,
+		std::optional<bool> sendReadReceipt) {
+	force = force || (sendReadReceipt.value_or(false) && IsServerMsgId(tillId));
 	Expects(IsServerMsgId(tillId) || (!tillId && !force));
 
 	DEBUG_LOG(("Reading: readInboxTill %1, force %2."
@@ -283,6 +287,18 @@ void Histories::readInboxTill(
 
 	Core::App().notifications().clearIncomingFromHistory(history);
 
+	if (!sendReadReceipt.value_or(LuxurySettings::ghost(&session()).sendReadMessages())) {
+		for (const auto item : history->clientSideMessages()) readClientSideMessage(item);
+		history->setUnreadMark(false);
+		const auto stillUnread = history->countStillUnreadLocal(tillId);
+		history->setInboxReadTill(tillId);
+		if (stillUnread) {
+			history->setUnreadCount(*stillUnread);
+		}
+		history->updateChatListEntry();
+		return;
+	}
+
 	const auto needsRequest = history->readInboxTillNeedsRequest(tillId);
 	if (!needsRequest && !force) {
 		DEBUG_LOG(("Reading: readInboxTill finish 1."));
@@ -301,10 +317,14 @@ void Histories::readInboxTill(
 			).arg(maybeState->sentReadTill.bare
 			).arg(Logs::b(force)));
 		if (force) {
-			sendPendingReadInbox(history);
+			if (sendReadReceipt.value_or(false)) {
+				maybeState->explicitReadTill = std::max(maybeState->explicitReadTill, tillId);
+			}
+			maybeState->willReadWhen = 0;
+			sendReadRequests();
 		}
 		return;
-	} else if (!needsRequest
+	} else if (!needsRequest && !force
 		&& (!maybeState || !maybeState->willReadTill)) {
 		return;
 	}
@@ -320,6 +340,9 @@ void Histories::readInboxTill(
 	}
 	auto &state = maybeState ? *maybeState : _states[history];
 	state.willReadTill = tillId;
+	if (sendReadReceipt.value_or(false)) {
+		state.explicitReadTill = std::max(state.explicitReadTill, tillId);
+	}
 	if (force || !stillUnread || !*stillUnread) {
 		DEBUG_LOG(("Reading: will read till %1 with still unread %2"
 			).arg(tillId.bare
@@ -699,11 +722,6 @@ void Histories::sendReadRequests() {
 
 	// LuxuryGram sendReadMessages
 	const auto &ghost = LuxurySettings::ghost(&_owner->session());
-	if (!ghost.sendReadMessages()) {
-		DEBUG_LOG(("[LuxuryGram] Don't read messages"));
-		_states.clear();
-		return;
-	}
 
 	if (_states.empty()) {
 		return;
@@ -711,6 +729,13 @@ void Histories::sendReadRequests() {
 	const auto now = crl::now();
 	auto next = std::optional<crl::time>();
 	for (auto &[history, state] : _states) {
+		if (!ghost.sendReadMessages()) {
+			state.willReadTill = base::take(state.explicitReadTill);
+			state.willReadWhen = 0;
+		} else if (state.explicitReadTill) {
+			state.willReadTill = std::max(state.willReadTill, state.explicitReadTill);
+			state.willReadWhen = 0;
+		}
 		if (!state.willReadTill) {
 			DEBUG_LOG(("Reading: skipping zero till."));
 			continue;
@@ -734,6 +759,7 @@ void Histories::sendReadRequest(not_null<History*> history, State &state) {
 	Expects(state.willReadTill > state.sentReadTill);
 
 	const auto tillId = state.sentReadTill = base::take(state.willReadTill);
+	state.explicitReadTill = 0;
 	state.willReadWhen = 0;
 	state.sentReadDone = false;
 	DEBUG_LOG(("Reading: sending request now with till %1."

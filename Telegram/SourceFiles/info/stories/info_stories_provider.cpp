@@ -36,10 +36,7 @@ constexpr auto kPreloadedScreensCountFull
 	= kPreloadedScreensCount + 1 + kPreloadedScreensCount;
 
 [[nodiscard]] int MinStoryHeight(int width) {
-	auto itemsLeft = st::infoMediaSkip;
-	auto itemsInRow = (width - itemsLeft)
-		/ (st::infoMediaMinGridSize + st::infoMediaSkip);
-	return (st::infoMediaMinGridSize + st::infoMediaSkip) / itemsInRow;
+	return MinItemHeight(Type::PhotoVideo, width);
 }
 
 } // namespace

@@ -150,10 +150,9 @@ void ShowFiltersListMenu(
 		parent,
 		st::popupMenuWithIcons);
 
-	const auto reorderAll = session->user()->isPremium();
-	const auto maxLimit = (reorderAll ? 1 : 0)
+	const auto hasAll = ranges::contains(list, FilterId(), &Data::ChatFilter::id);
+	const auto premiumFrom = (hasAll ? 1 : 0)
 		+ Data::PremiumLimits(session).dialogFiltersCurrent();
-	const auto premiumFrom = (reorderAll ? 0 : 1) + maxLimit;
 
 	for (auto i = 0; i < list.size(); ++i) {
 		const auto title = list[i].title();
@@ -276,7 +275,7 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 			const auto filters = &session->data().chatsFilters();
 			const auto &list = filters->list();
 			if (!session->user()->isPremium()) {
-				if (list[0].id() != FilterId()) {
+				if (!list.empty() && list[0].id() != FilterId()) {
 					filters->moveAllToFront();
 				}
 			}
@@ -422,9 +421,9 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 		slider->fitWidthToSections();
 		{
 			const auto reorderAll = session->user()->isPremium();
-			const auto maxLimit = (reorderAll ? 1 : 0)
+			const auto hasAll = ranges::contains(list, FilterId(), &Data::ChatFilter::id);
+			const auto premiumFrom = (hasAll ? 1 : 0)
 				+ Data::PremiumLimits(session).dialogFiltersCurrent();
-			const auto premiumFrom = (reorderAll ? 0 : 1) + maxLimit;
 			slider->setLockedFrom((premiumFrom >= list.size())
 				? 0
 				: premiumFrom);
@@ -434,12 +433,12 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 			if (state->reorder) {
 				state->reorder->cancel();
 				state->reorder->clearPinnedIntervals();
-				if (!reorderAll) {
+				if (!reorderAll && hasAll) {
 					state->reorder->addPinnedInterval(0, 1);
 				}
 				state->reorder->addPinnedInterval(
 					premiumFrom,
-					std::max(1, int(list.size()) - maxLimit));
+					std::max(1, int(list.size()) - premiumFrom));
 			}
 		}
 		if (trackActiveFilterAndUnreadAndReorder) {

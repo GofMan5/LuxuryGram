@@ -1226,7 +1226,9 @@ void WebViewInstance::requestButton() {
 				: Flag(0))
 			| (action.replyTo ? Flag::f_reply_to : Flag(0))
 			| (action.options.sendAs ? Flag::f_send_as : Flag(0))
-			| (action.options.silent ? Flag::f_silent : Flag(0))),
+			| (ShouldSendSilent(action.history->peer, action.options)
+				? Flag::f_silent
+				: Flag(0))),
 		action.history->peer->input(),
 		_bot->inputUser(),
 		MTP_bytes(_button.url),
@@ -1346,7 +1348,7 @@ void WebViewInstance::requestChatJoin() {
 		MTP_flags(Flag::f_theme_params),
 		MTP_long(join.queryId),
 		MTP_dataJSON(MTP_bytes(botThemeParams().json)),
-		MTP_string("tdesktop")
+		MTP_string(WebviewPlatform())
 	)).done([=](const MTPWebViewResult &result) {
 		_requestId = 0;
 		show({
@@ -1558,7 +1560,9 @@ void WebViewInstance::started(uint64 queryId) {
 			MTP_flags(Flag(0)
 				| (action.replyTo ? Flag::f_reply_to : Flag(0))
 				| (action.options.sendAs ? Flag::f_send_as : Flag(0))
-				| (action.options.silent ? Flag::f_silent : Flag(0))),
+				| (ShouldSendSilent(action.history->peer, action.options)
+					? Flag::f_silent
+					: Flag(0))),
 			action.history->peer->input(),
 			_bot->inputUser(),
 			MTP_long(queryId),

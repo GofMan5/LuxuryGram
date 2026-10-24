@@ -29,6 +29,23 @@ public:
 	void setChecked(bool value, bool animated);
 	[[nodiscard]] bool checked() const;
 
+	QAccessible::Role accessibilityRole() override {
+		return QAccessible::CheckBox;
+	}
+	Ui::AccessibilityState accessibilityState() const override {
+		return {
+			.checkable = true,
+			.checked = _checked,
+			.pressed = isDown(),
+		};
+	}
+	void accessibilityDoAction(const QString &name) override {
+		AbstractButton::accessibilityDoAction(
+			(name == QAccessibleActionInterface::toggleAction())
+				? QAccessibleActionInterface::pressAction()
+				: name);
+	}
+
 protected:
 	void paintEvent(QPaintEvent *e) override;
 
@@ -67,6 +84,7 @@ ChartLinesFilterWidget::FlatCheckbox::FlatCheckbox(
 		+ st::statisticsChartFlatCheckboxCheckWidth * 3
 		- st::statisticsChartFlatCheckboxShrinkkWidth;
 	resize(_naturalWidth, h);
+	setAccessibleName(text);
 }
 
 void ChartLinesFilterWidget::FlatCheckbox::setOuterWidth(int outerWidth) {
@@ -90,6 +108,8 @@ void ChartLinesFilterWidget::FlatCheckbox::setChecked(
 		const auto to = value ? 1. : 0.;
 		_animation.start([=] { update(); }, from, to, st::shakeDuration);
 	}
+	update();
+	accessibilityStateChanged({ .checked = true });
 }
 
 bool ChartLinesFilterWidget::FlatCheckbox::checked() const {
@@ -154,6 +174,7 @@ void ChartLinesFilterWidget::FlatCheckbox::paintEvent(QPaintEvent *e) {
 		.elisionLines = constrained ? 1 : 0,
 	};
 	_text.draw(p, textContext);
+	paintKeyboardFocus(p, r, r.height() / 2, st::windowFg->c);
 
 	if (progress > kCheckPartProgress) {
 		auto hq = PainterHighQualityEnabler(p);
@@ -230,8 +251,11 @@ void ChartLinesFilterWidget::fillButtons(
 					return;
 				}
 			}
+			const auto weak = base::make_weak(this);
 			raw->setChecked(checked, true);
-			_buttonEnabledChanges.fire({ .id = id, .enabled = checked });
+			if (weak) {
+				_buttonEnabledChanges.fire({ .id = id, .enabled = checked });
+			}
 		});
 
 		_buttons.push_back(std::move(button));

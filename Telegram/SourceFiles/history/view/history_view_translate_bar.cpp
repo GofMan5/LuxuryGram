@@ -317,6 +317,7 @@ void TranslateBar::setup(not_null<History*> history) {
 	const auto settings = Ui::CreateChild<Ui::IconButton>(
 		button,
 		st::historyTranslateSettings);
+	settings->setAccessibleName(tr::lng_translate_settings(tr::now));
 	settings->setClickedCallback([=] { showMenu(createMenu(settings)); });
 
 	const auto updateLabelGeometry = [=] {

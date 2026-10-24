@@ -205,6 +205,15 @@ void PhotoData::cancel() {
 	}
 }
 
+Fn<void()> PhotoData::cancelLoadCallback(PhotoSize size) const {
+	const auto &loader = _images[validSizeIndex(size)].loader;
+	if (!loader) return {};
+	const auto weak = base::make_weak(loader.get());
+	return [weak] {
+		if (weak) weak->cancel();
+	};
+}
+
 void PhotoData::clearLocalCache() {
 	auto keys = base::flat_set<Storage::Cache::Key>();
 	for (auto &file : _images) {

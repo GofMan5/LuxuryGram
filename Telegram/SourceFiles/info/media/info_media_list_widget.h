@@ -130,6 +130,26 @@ public:
 	[[nodiscard]] bool canZoomIn() const;
 	[[nodiscard]] bool canZoomOut() const;
 
+	// Accessibility.
+	QAccessible::Role accessibilityRole() override {
+		return QAccessible::Role::List;
+	}
+	Qt::FocusPolicy accessibilityFocusPolicy() override {
+		return Qt::TabFocus;
+	}
+	Ui::AccessibilityState accessibilityState() const override;
+	int accessibilityChildCount() const override;
+	QString accessibilityChildName(int index) const override;
+	QAccessible::State accessibilityChildState(int index) const override;
+	QAccessible::Role accessibilityChildRole() const override;
+	QAccessible::Role accessibilityChildRoleAt(int index) const override;
+	QRect accessibilityChildRect(int index) const override;
+	bool accessibilityChildSupportsActions(int index) const override;
+	quintptr accessibilityChildIdentity(int index) const override;
+	int accessibilityChildIndexByIdentity(quintptr identity) const override;
+	void accessibilityChildSetFocus(quintptr identity) override;
+	void accessibilityChildActivate(quintptr identity) override;
+
 	// Overview::Layout::Delegate
 	void registerHeavyItem(not_null<const BaseLayout*> item) override;
 	void unregisterHeavyItem(not_null<const BaseLayout*> item) override;
@@ -214,6 +234,8 @@ private:
 
 	bool eventHook(QEvent *e) override;
 	void paintEvent(QPaintEvent *e) override;
+	void focusInEvent(QFocusEvent *e) override;
+	void keyPressEvent(QKeyEvent *e) override;
 	void mouseMoveEvent(QMouseEvent *e) override;
 	void mousePressEvent(QMouseEvent *e) override;
 	void mouseReleaseEvent(QMouseEvent *e) override;
@@ -258,6 +280,7 @@ private:
 	void markStoryMsgsSelected();
 	void trackSession(not_null<Main::Session*> session);
 
+	void accessibilitySelectionChanged();
 	[[nodiscard]] SelectedItems collectSelectedItems() const;
 	[[nodiscard]] MessageIdsList collectSelectedIds() const;
 	[[nodiscard]] MessageIdsList collectSelectedIds(
@@ -368,6 +391,14 @@ private:
 
 	void setupStoriesTrackIds();
 
+	[[nodiscard]] std::vector<not_null<BaseLayout*>> accessibilityItems() const;
+	[[nodiscard]] BaseLayout *accessibilityLayoutAt(int index) const;
+	[[nodiscard]] HistoryItem *accessibilityItemAt(int index) const;
+	[[nodiscard]] int accessibilityIndexOfItem(
+		const HistoryItem *item) const;
+	[[nodiscard]] bool accessibilityItemCanActivate(int index) const;
+	void accessibilityFocusItem(int index, bool announce);
+
 	void startReorder(const QPoint &globalPos);
 	void updateReorder(const QPoint &globalPos);
 	void finishReorder();
@@ -421,6 +452,14 @@ private:
 	uint16 _mouseTextSymbol = 0;
 	bool _pressWasInactive = false;
 	SelectedMap _selected;
+	int _accessibilityFocusedIndex = -1;
+	HistoryItem *_accessibilityFocusedItem = nullptr;
+	mutable base::flat_map<
+		not_null<const HistoryItem*>,
+		quintptr> _accessibilityIdentities;
+	mutable quintptr _accessibilityIdentityCounter = 0;
+	base::flat_set<quintptr> _accessibilitySelectedIdentities;
+	bool _accessibilitySelectionUpdateScheduled = false;
 	SelectedMap _dragSelected;
 	rpl::event_stream<SelectedItems> _selectedListStream;
 	style::cursor _cursor = style::cur_default;

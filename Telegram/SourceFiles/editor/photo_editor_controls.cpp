@@ -24,6 +24,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_editor.h"
 #include "styles/style_media_player.h" // mediaPlayerMenuCheck
 
+#include <crl/crl_on_main.h>
+
 #include <QRegion>
 #include <QtGui/QGuiApplication>
 
@@ -38,7 +40,7 @@ namespace {
 			| Qt::MetaModifier);
 }
 
-class CheckAction final : public Ui::Menu::ItemBase {
+class CheckAction final : public Ui::Menu::Action {
 public:
 	CheckAction(
 		not_null<Ui::Menu::Menu*> parent,
@@ -48,8 +50,9 @@ public:
 
 	void setChecked(bool checked);
 
-	not_null<QAction*> action() const override;
-	bool isEnabled() const override;
+	Ui::AccessibilityState accessibilityState() const override;
+	QStringList accessibilityActionNames() override;
+	void accessibilityDoAction(const QString &name) override;
 
 private:
 	int contentHeight() const override;
@@ -58,7 +61,6 @@ private:
 	const style::Menu &_st;
 	Ui::CheckView _check;
 	const base::unique_qptr<Ui::FlatLabel> _text;
-	const not_null<QAction*> _dummyAction;
 
 };
 
@@ -67,15 +69,19 @@ CheckAction::CheckAction(
 	const style::Menu &st,
 	const QString &text,
 	bool checked)
-: ItemBase(parent, st)
+: Ui::Menu::Action(
+	parent,
+	st,
+	new QAction(text, parent.get()),
+	nullptr,
+	nullptr)
 , _st(st)
 , _check(st::photoEditorMenuCheck, checked, [=] { update(); })
 , _text(base::make_unique_q<Ui::FlatLabel>(
 	this,
 	rpl::single(text),
-	st::photoEditorMenuCheckLabel))
-, _dummyAction(Ui::CreateChild<QAction>(parent.get())) {
-	ItemBase::enableMouseSelecting();
+	st::photoEditorMenuCheckLabel)) {
+	setAcceptBoth(false);
 	setPreventClose(true);
 	_text->setAttribute(Qt::WA_TransparentForMouseEvents);
 	setMinWidth(_st.widthMin);
@@ -88,15 +94,31 @@ CheckAction::CheckAction(
 }
 
 void CheckAction::setChecked(bool checked) {
+	if (_check.checked() == checked) {
+		return;
+	}
 	_check.setChecked(checked, anim::type::normal);
+	crl::on_main(this, [=] {
+		accessibilityStateChanged({ .checked = true });
+	});
 }
 
-not_null<QAction*> CheckAction::action() const {
-	return _dummyAction;
+Ui::AccessibilityState CheckAction::accessibilityState() const {
+	auto result = Ui::Menu::Action::accessibilityState();
+	result.checkable = true;
+	result.checked = _check.checked();
+	return result;
 }
 
-bool CheckAction::isEnabled() const {
-	return true;
+QStringList CheckAction::accessibilityActionNames() {
+	return { QAccessibleActionInterface::toggleAction() };
+}
+
+void CheckAction::accessibilityDoAction(const QString &name) {
+	Ui::Menu::Action::accessibilityDoAction(
+		(name == QAccessibleActionInterface::toggleAction())
+			? QAccessibleActionInterface::pressAction()
+			: name);
 }
 
 int CheckAction::contentHeight() const {
@@ -228,6 +250,10 @@ public:
 
 	void setChecked(bool checked);
 
+	Ui::AccessibilityState accessibilityState() const override;
+	QStringList accessibilityActionNames() override;
+	void accessibilityDoAction(const QString &name) override;
+
 private:
 	void paintEvent(QPaintEvent *e) override;
 
@@ -260,6 +286,27 @@ void RoundCheckAction::setChecked(bool checked) {
 		checked ? 1. : 0.,
 		st::photoEditorMenuRoundCheck.duration,
 		anim::linear);
+	crl::on_main(this, [=] {
+		accessibilityStateChanged({ .checked = true });
+	});
+}
+
+Ui::AccessibilityState RoundCheckAction::accessibilityState() const {
+	auto result = Ui::Menu::Action::accessibilityState();
+	result.checkable = true;
+	result.checked = _checked;
+	return result;
+}
+
+QStringList RoundCheckAction::accessibilityActionNames() {
+	return { QAccessibleActionInterface::toggleAction() };
+}
+
+void RoundCheckAction::accessibilityDoAction(const QString &name) {
+	Ui::Menu::Action::accessibilityDoAction(
+		(name == QAccessibleActionInterface::toggleAction())
+			? QAccessibleActionInterface::pressAction()
+			: name);
 }
 
 void RoundCheckAction::paintEvent(QPaintEvent *e) {
@@ -988,11 +1035,11 @@ void PhotoEditorControls::showShapesMenu() {
 	const auto filledRaw = filled.get();
 	filled->setActionTriggered([=] {
 		_shapesFilled = !_shapesFilled;
-		_shapesFillChanges.fire_copy(_shapesFilled);
 		filledRaw->setChecked(_shapesFilled);
 		for (const auto entry : *entries) {
 			entry->setFilled(_shapesFilled);
 		}
+		_shapesFillChanges.fire_copy(_shapesFilled);
 	});
 	filled->setPreventClose(true);
 	menu->addAction(std::move(filled));

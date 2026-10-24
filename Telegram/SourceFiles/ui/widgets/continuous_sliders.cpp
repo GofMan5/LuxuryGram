@@ -28,8 +28,15 @@ ContinuousSlider::ContinuousSlider(QWidget *parent) : RpWidget(parent) {
 void ContinuousSlider::setDisabled(bool disabled) {
 	if (_disabled != disabled) {
 		_disabled = disabled;
+		if (_disabled) {
+			_mouseDown = false;
+			if (_byWheelFinished) {
+				_byWheelFinished->cancel();
+			}
+		}
 		setCursor(_disabled ? style::cur_default : style::cur_pointer);
 		update();
+		setEnabled(!disabled);
 	}
 }
 
@@ -37,7 +44,7 @@ void ContinuousSlider::setMoveByWheel(bool move) {
 	if (move != moveByWheel()) {
 		if (move) {
 			_byWheelFinished = std::make_unique<base::Timer>([=] {
-				if (_changeFinishedCallback) {
+				if (!_disabled && isEnabled() && _changeFinishedCallback) {
 					_changeFinishedCallback(getCurrentValue());
 				}
 			});
@@ -76,7 +83,7 @@ void ContinuousSlider::setFadeOpacity(float64 opacity) {
 }
 
 void ContinuousSlider::mouseMoveEvent(QMouseEvent *e) {
-	if (_mouseDown) {
+	if (!_disabled && isEnabled() && _mouseDown) {
 		updateDownValueFromPos(e->pos());
 	}
 }
@@ -91,6 +98,10 @@ float64 ContinuousSlider::computeValue(const QPoint &pos) const {
 }
 
 void ContinuousSlider::mousePressEvent(QMouseEvent *e) {
+	if (_disabled || !isEnabled()) {
+		e->ignore();
+		return;
+	}
 	_mouseDown = true;
 	_downValue = computeValue(e->pos());
 	update();
@@ -100,13 +111,13 @@ void ContinuousSlider::mousePressEvent(QMouseEvent *e) {
 }
 
 void ContinuousSlider::mouseReleaseEvent(QMouseEvent *e) {
-	if (_mouseDown) {
+	if (!_disabled && isEnabled() && _mouseDown) {
 		_mouseDown = false;
 		const auto weak = base::make_weak(this);
 		if (_changeFinishedCallback) {
 			_changeFinishedCallback(_downValue);
 		}
-		if (!weak) {
+		if (!weak || _disabled || !isEnabled()) {
 			return;
 		}
 		_value = _downValue;
@@ -115,7 +126,7 @@ void ContinuousSlider::mouseReleaseEvent(QMouseEvent *e) {
 }
 
 void ContinuousSlider::wheelEvent(QWheelEvent *e) {
-	if (_mouseDown || !moveByWheel()) {
+	if (_disabled || !isEnabled() || _mouseDown || !moveByWheel()) {
 		return;
 	}
 	constexpr auto step = static_cast<int>(QWheelEvent::DefaultDeltasPerStep);
@@ -134,13 +145,17 @@ void ContinuousSlider::wheelEvent(QWheelEvent *e) {
 	if (_changeProgressCallback) {
 		_changeProgressCallback(finalValue);
 	}
-	if (!weak) {
+	if (!weak || _disabled || !isEnabled() || !_byWheelFinished) {
 		return;
 	}
 	_byWheelFinished->callOnce(kByWheelFinishedTimeout);
 }
 
 void ContinuousSlider::keyPressEvent(QKeyEvent *e) {
+	if (_disabled || !isEnabled()) {
+		e->ignore();
+		return;
+	}
 	const auto changeBy = [&](float64 step) {
 		Expects(step != 0.);
 
@@ -184,7 +199,7 @@ void ContinuousSlider::keyPressEvent(QKeyEvent *e) {
 	if (_changeProgressCallback) {
 		_changeProgressCallback(_value);
 	}
-	if (weak && _changeFinishedCallback) {
+	if (weak && !_disabled && isEnabled() && _changeFinishedCallback) {
 		_changeFinishedCallback(_value);
 	}
 	if (!weak) {
@@ -194,6 +209,9 @@ void ContinuousSlider::keyPressEvent(QKeyEvent *e) {
 }
 
 void ContinuousSlider::updateDownValueFromPos(const QPoint &pos) {
+	if (_disabled || !isEnabled()) {
+		return;
+	}
 	_downValue = computeValue(pos);
 	update();
 	if (_changeProgressCallback) {

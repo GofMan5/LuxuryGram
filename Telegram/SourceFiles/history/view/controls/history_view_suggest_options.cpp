@@ -767,6 +767,7 @@ void ChooseSuggestPriceBox(
 		const auto close = Ui::CreateChild<Ui::IconButton>(
 			container,
 			st::boxTitleClose);
+		close->setAccessibleName(tr::lng_close(tr::now));
 		close->setClickedCallback([=] { box->closeBox(); });
 		container->widthValue() | rpl::on_next([=](int) {
 			close->moveToRight(0, 0);

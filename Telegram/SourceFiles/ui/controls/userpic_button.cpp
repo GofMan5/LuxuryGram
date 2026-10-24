@@ -724,6 +724,8 @@ void UserpicButton::paintEvent(QPaintEvent *e) {
 				: 0.,
 		});
 	}
+	p.setClipping(false);
+	paintKeyboardFocus(p);
 }
 
 void UserpicButton::paintUserpicFrame(Painter &p, QPoint photoPosition) {

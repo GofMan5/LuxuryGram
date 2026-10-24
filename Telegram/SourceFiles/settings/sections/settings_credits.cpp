@@ -762,6 +762,7 @@ base::weak_qptr<Ui::RpWidget> Credits::createPinnedToTop(
 				content,
 				(isLayer ? st::infoTopBarBack : st::infoLayerTopBarBack)),
 			st::infoTopBarScale);
+		_back->entity()->setAccessibleName(tr::lng_go_back(tr::now));
 		_back->setDuration(0);
 		_back->toggleOn(isLayer
 			? _backToggles.value() | rpl::type_erased
@@ -783,6 +784,7 @@ base::weak_qptr<Ui::RpWidget> Credits::createPinnedToTop(
 			_close = base::make_unique_q<Ui::IconButton>(
 				content,
 				st::infoTopBarClose);
+			_close->setAccessibleName(tr::lng_close(tr::now));
 			_close->addClickHandler([=] {
 				controller()->parentController()->hideLayer();
 				controller()->parentController()->hideSpecialLayer();

@@ -66,6 +66,49 @@ const auto regDateBotUsername = QString("ayugrambot");
 const auto kZalgoPattern = QStringLiteral(
 	"\\p{Mn}{3,}|[\\x{202A}-\\x{202E}\\x{2066}-\\x{2069}\\x{200E}\\x{200F}\\x{061C}]");
 
+// Myanmar, Tibetan, Hebrew and Indic letters carry up to four or five marks
+// of their own script. Zalgo piles up the generic combining marks, repeats
+// one mark, or stacks more than any script does.
+constexpr auto kMaxScriptMarks = 5;
+constexpr auto kMaxGenericMarks = 2;
+
+[[nodiscard]] bool IsGenericCombiningMark(uint code) {
+	return (code >= 0x0300 && code <= 0x036F)
+		|| (code >= 0x1AB0 && code <= 0x1AFF)
+		|| (code >= 0x1DC0 && code <= 0x1DFF)
+		|| (code >= 0x20D0 && code <= 0x20FF)
+		|| (code >= 0xFE20 && code <= 0xFE2F);
+}
+
+[[nodiscard]] bool IsZalgo(QStringView match) {
+	const auto codes = match.toUcs4();
+	if (codes.size() > kMaxScriptMarks) {
+		return true;
+	}
+	auto generic = 0;
+	auto previous = uint();
+	for (const auto code : codes) {
+		if ((QChar::category(code) != QChar::Mark_NonSpacing)
+			|| (code == previous)
+			|| (IsGenericCombiningMark(code)
+				&& ++generic > kMaxGenericMarks)) {
+			return true;
+		}
+		previous = code;
+	}
+	return false;
+}
+
+}
+
+Main::Session *getSessionByUniqueId(uint64 sessionId) {
+	for (const auto &[index, account] : Core::App().domain().accounts()) {
+		if (const auto session = account->maybeSession();
+			session && session->uniqueId() == sessionId) {
+			return session;
+		}
+	}
+	return nullptr;
 }
 
 Main::Session *getSession(ID userId) {
@@ -119,14 +162,14 @@ bool isMessageHidden(const not_null<HistoryItem*> item) {
 	return FiltersController::filtered(item);
 }
 
-void MarkAsReadChatList(not_null<Dialogs::MainList*> list) {
+void MarkAsReadChatList(not_null<Dialogs::MainList*> list, bool sendReadReceipt) {
 	auto mark = std::vector<not_null<History*>>();
 	for (const auto &row : list->indexed()->all()) {
 		if (const auto history = row->history()) {
 			mark.push_back(history);
 		}
 	}
-	ranges::for_each(mark, MarkAsReadThread);
+	for (const auto history : mark) MarkAsReadThread(history, sendReadReceipt);
 }
 
 void readMentions(base::weak_ptr<Data::Thread> weakThread) {
@@ -183,10 +226,10 @@ void readReactions(base::weak_ptr<Data::Thread> weakThread) {
 	}).send();
 }
 
-void MarkAsReadThread(not_null<Data::Thread*> thread) {
+void MarkAsReadThread(not_null<Data::Thread*> thread, bool sendReadReceipt) {
 	const auto readHistoryNative = [&](const not_null<History*> history)
 	{
-		history->owner().histories().readInbox(history);
+		history->owner().histories().readInbox(history, sendReadReceipt);
 	};
 	const auto sendReadMentions = [=](
 		const not_null<Data::Thread*> threadInner)
@@ -201,13 +244,13 @@ void MarkAsReadThread(not_null<Data::Thread*> thread) {
 
 	if (thread->chatListBadgesState().unread) {
 		if (const auto forum = thread->asForum()) {
-			forum->enumerateTopics([](
+			forum->enumerateTopics([sendReadReceipt](
 				not_null<Data::ForumTopic*> topic)
 				{
-					MarkAsReadThread(topic);
+					MarkAsReadThread(topic, sendReadReceipt);
 				});
 		} else if (const auto topic = thread->asTopic()) {
-			topic->readTillEnd();
+			topic->readTillEnd(sendReadReceipt);
 		} else if (const auto history = thread->asHistory()) {
 			readHistoryNative(history);
 			if (const auto migrated = history->migrateSibling()) {
@@ -216,45 +259,50 @@ void MarkAsReadThread(not_null<Data::Thread*> thread) {
 		}
 	}
 
+	const auto history = thread->owningHistory();
+	const auto rootId = thread->asTopic() ? thread->asTopic()->rootId() : MsgId();
 	if (thread->unreadMentions().has()) {
-		sendReadMentions(thread);
+		if (sendReadReceipt) sendReadMentions(thread);
+		else history->clearUnreadMentionsFor(rootId);
 	}
 
 	if (thread->unreadReactions().has()) {
-		sendReadReactions(thread);
+		if (sendReadReceipt) sendReadReactions(thread);
+		else history->clearUnreadReactionsFor(rootId, thread->asSublist());
 	}
 
-	LuxuryWorker::markAsOnline(&thread->session());
+	if (sendReadReceipt) LuxuryWorker::markAsOnline(&thread->session());
 }
 
 void readHistory(not_null<HistoryItem*> message) {
 	const auto history = message->history();
 	const auto tillId = message->id;
 
-	history->session().data().histories()
-		.sendRequest(history,
-					 Data::Histories::RequestType::ReadInbox,
-					 [=](Fn<void()> finish)
-					 {
-						 if (const auto channel = history->peer->asChannel()) {
-							 return history->session().api().request(MTPchannels_ReadHistory(
-								 channel->inputChannel(),
-								 MTP_int(tillId)
-							 )).done([=] { LuxuryWorker::markAsOnline(&history->session()); }).send();
-						 }
-
-						 return history->session().api().request(MTPmessages_ReadHistory(
-							 history->peer->input(),
-							 MTP_int(tillId)
-						 )).done([=](const MTPmessages_AffectedMessages &result)
-						 {
-							 history->session().api().applyAffectedMessages(history->peer, result);
-							 LuxuryWorker::markAsOnline(&history->session());
-						 }).fail([=]
-						 {
-							 LOG(("LuxuryGram: messages.readHistory failed for peer %1").arg(history->peer->id.value));
-						 }).send();
-					 });
+	history->session().data().histories().sendRequest(
+		history,
+		Data::Histories::RequestType::ReadInbox,
+		[=](Fn<void()> finish) {
+			const auto finished = [=] {
+				LuxuryWorker::markAsOnline(&history->session());
+				finish();
+			};
+			if (const auto channel = history->peer->asChannel()) {
+				return history->session().api().request(MTPchannels_ReadHistory(
+					channel->inputChannel(),
+					MTP_int(tillId)
+				)).done(finished).fail(finished).send();
+			}
+			return history->session().api().request(MTPmessages_ReadHistory(
+				history->peer->input(),
+				MTP_int(tillId)
+			)).done([=](const MTPmessages_AffectedMessages &result) {
+				history->session().api().applyAffectedMessages(history->peer, result);
+				finished();
+			}).fail([=] {
+				LOG(("LuxuryGram: messages.readHistory failed for peer %1").arg(history->peer->id.value));
+				finished();
+			}).send();
+		});
 
 	if (history->unreadMentions().has()) {
 		readMentions(history->asThread());
@@ -280,10 +328,10 @@ QString getDCName(int dc) {
 	{
 		switch (dc) {
 			case 1:
-			case 3: return u"Miami FL, USA"_q;
+			case 3: return tr::luxury_DCLocationMiami(tr::now);
 			case 2:
-			case 4: return u"Amsterdam, NL"_q;
-			case 5: return u"Singapore, SG"_q;
+			case 4: return tr::luxury_DCLocationAmsterdam(tr::now);
+			case 5: return tr::luxury_DCLocationSingapore(tr::now);
 			default: return QString();
 		}
 	};
@@ -308,21 +356,24 @@ QString getLocalizedAt() {
 	return val;
 }
 
-QString formatDateTime(const QDateTime &date) {
-	const auto locale = QLocale::system();
-	const auto datePart = locale.toString(date.date(), QLocale::ShortFormat);
-	const auto timePart = locale.toString(date, "HH:mm:ss");
+namespace {
 
-	return datePart + getLocalizedAt() + timePart;
+// Called for every message on layout, and the format only depends on the
+// system locale, which does not change while we are running. Building a
+// QLocale and asking it for the format each time was pure overhead.
+const QLocale &systemLocale() {
+	static const auto locale = QLocale();
+	return locale;
 }
 
-QString formatMessageTime(const QTime &time) {
-	// Called for every message on layout, and the format only depends on the
-	// system locale, which does not change while we are running. Building a
-	// QLocale and asking it for the format each time was pure overhead.
-	static const auto locale = QLocale();
-	static const auto shortFormat = locale.timeFormat(QLocale::ShortFormat);
-	static const auto secondsFormat = [] {
+const QString &shortTimeFormat() {
+	static const auto result = systemLocale().timeFormat(QLocale::ShortFormat);
+	return result;
+}
+
+const QString &secondsTimeFormat() {
+	static const auto result = [] {
+		const auto &shortFormat = shortTimeFormat();
 		// Insert the seconds right after the minutes, reusing the separator the
 		// locale already picked, so "h:mm AP" and "H.mm" both stay themselves.
 		const auto minutes = shortFormat.indexOf(u"mm"_q);
@@ -335,15 +386,32 @@ QString formatMessageTime(const QTime &time) {
 		return result.insert(minutes + 2, u"%1ss"_q.arg(
 			shortFormat.at(minutes - 1)));
 	}();
-
-	return locale.toString(
-		time,
-		LuxurySettings::getInstance().showMessageSeconds()
-			? secondsFormat
-			: shortFormat);
+	return result;
 }
 
-int getMediaSizeBytes(not_null<HistoryItem*> message) {
+} // namespace
+
+QString formatTimeWithSeconds(const QTime &time) {
+	return systemLocale().toString(time, secondsTimeFormat());
+}
+
+QString formatDateTime(const QDateTime &date) {
+	const auto datePart = systemLocale().toString(
+		date.date(),
+		QLocale::ShortFormat);
+
+	return datePart + getLocalizedAt() + formatTimeWithSeconds(date.time());
+}
+
+QString formatMessageTime(const QTime &time) {
+	return systemLocale().toString(
+		time,
+		LuxurySettings::getInstance().showMessageSeconds()
+			? secondsTimeFormat()
+			: shortTimeFormat());
+}
+
+int64 getMediaSizeBytes(not_null<HistoryItem*> message) {
 	if (!message->media()) {
 		return -1;
 	}
@@ -767,10 +835,11 @@ static bool prependPseudoReplyImpl(
 		return false;
 	}
 	const auto shortify = [&](const QString &text, int maxLength) {
-		if (text.isEmpty() || text.length() < maxLength) {
+		if (text.length() <= maxLength) {
 			return text;
 		}
-		return text.left(maxLength - 1) + QChar(8230); // …
+		return text.left(safeCutPosition(text, maxLength - 1))
+			+ QChar(8230); // …
 	};
 	const auto shiftEntities = [&](QVector<TextWithTags::Tag> &tags, int offset) {
 		if (tags.isEmpty() || !offset) {
@@ -961,18 +1030,22 @@ not_null<Main::Session*> currentSession() {
 	return &Core::App().domain().active().session();
 }
 
-template<typename T>
-PeerData *getPeerFromDialogId(T id) {
+PeerData *getPeerFromDialogId(ID dialogId) {
+	const auto bare = getBareDialogId(dialogId);
+	if (!bare) {
+		return nullptr;
+	}
 	for (const auto &[index, account] : Core::App().domain().accounts()) {
 		if (const auto session = account->maybeSession()) {
-			PeerData *from = session->data().userLoaded(id);
-			if (!from) {
-				from = session->data().channelLoaded(id);
+			const auto &data = session->data();
+			PeerData *from = nullptr;
+			if (dialogId > 0) {
+				from = data.userLoaded(UserId(bare));
+			} else if (const auto channel = data.channelLoaded(ChannelId(bare))) {
+				from = channel;
+			} else {
+				from = data.chatLoaded(ChatId(bare));
 			}
-			if (!from) {
-				from = session->data().chatLoaded(id);
-			}
-
 			if (from) {
 				return from;
 			}
@@ -982,12 +1055,15 @@ PeerData *getPeerFromDialogId(T id) {
 	return nullptr;
 }
 
-PeerData *getPeerFromDialogId(ID id) {
-	return getPeerFromDialogId<ID>(id);
-}
-
-PeerData *getPeerFromDialogId(unsigned long long id) {
-	return getPeerFromDialogId<unsigned long long>(id);
+// A lone surrogate is sent by toUtf8() as '?' and drawn as a box, so a cut
+// never splits an emoji or any other pair.
+int safeCutPosition(const QString &text, int position) {
+	return (position > 0
+		&& position < text.size()
+		&& text[position - 1].isHighSurrogate()
+		&& text[position].isLowSurrogate())
+		? (position - 1)
+		: position;
 }
 
 QString filterZalgo(const QString &text) {
@@ -1030,6 +1106,9 @@ QString filterZalgo(const QString &text) {
 	auto lastEnd = 0;
 	while (it.hasNext()) {
 		const auto match = it.next();
+		if (!IsZalgo(match.capturedView())) {
+			continue;
+		}
 		output.append(text.mid(lastEnd, match.capturedStart() - lastEnd));
 		output.append(QString(match.capturedLength(), QChar(0x2060)));
 		lastEnd = match.capturedEnd();
@@ -1323,10 +1402,39 @@ void applyGhostScheduling(
 		Api::SendOptions &options,
 		int delaySeconds) {
 	const auto &ghost = LuxurySettings::ghost(session);
-	if (ghost.isUseScheduledMessages() && !options.scheduled) {
+	// Quick replies and welcome messages are stored, not sent: a schedule
+	// date would file them as scheduled messages of the chat instead.
+	// Self-destructing media cannot be scheduled.
+	if (ghost.isUseScheduledMessages()
+		&& !options.scheduled
+		&& !options.shortcutId
+		&& !options.welcomeTemplate
+		&& !options.ttlSeconds) {
 		const auto delay = Core::App().settings().proxy().isEnabled()
 			? (delaySeconds * 6 + 4) / 5 //ceil(delaySeconds * 1.2)
 			: delaySeconds;
 		options.scheduled = base::unixtime::now() + delay;
 	}
+}
+
+rpl::producer<> PhotoLoadUpdates(
+		not_null<Main::Session*> session,
+		not_null<PhotoData*> photo) {
+	return rpl::merge(
+		session->downloaderTaskFinished(),
+		session->data().photoLoadProgress(
+		) | rpl::filter([=](not_null<PhotoData*> updated) {
+			return (updated == photo);
+		}) | rpl::to_empty);
+}
+
+rpl::producer<> DocumentLoadUpdates(
+		not_null<Main::Session*> session,
+		not_null<DocumentData*> document) {
+	return rpl::merge(
+		session->downloaderTaskFinished(),
+		session->data().documentLoadProgress(
+		) | rpl::filter([=](not_null<DocumentData*> updated) {
+			return (updated == document);
+		}) | rpl::to_empty);
 }

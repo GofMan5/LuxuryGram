@@ -262,6 +262,7 @@ void CollectibleInfoBox(
 	const auto close = Ui::CreateChild<Ui::IconButton>(
 		buttonsParent,
 		st::boxTitleClose);
+	close->setAccessibleName(tr::lng_close(tr::now));
 	close->setClickedCallback([=] {
 		box->closeBox();
 	});

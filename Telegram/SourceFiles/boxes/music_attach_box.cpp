@@ -1393,8 +1393,9 @@ void ApplySendOptions(
 	if (options.starsApproved != empty.starsApproved) {
 		base.starsApproved = options.starsApproved;
 	}
-	if (options.silent != empty.silent) {
+	if (options.silent != empty.silent || options.ignoreGhostSilent) {
 		base.silent = options.silent;
+		base.ignoreGhostSilent = options.ignoreGhostSilent;
 	}
 	if (options.handleSupportSwitch != empty.handleSupportSwitch) {
 		base.handleSupportSwitch = options.handleSupportSwitch;

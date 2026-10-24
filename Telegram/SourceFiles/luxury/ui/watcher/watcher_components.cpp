@@ -6,6 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/watcher/watcher_components.h"
 
+#include "crl/crl_on_main.h"
 #include "ui/widgets/buttons.h"
 #include "ui/painter.h"
 #include "ui/qt_object_factory.h"
@@ -71,11 +72,10 @@ ChoiceButton::ChoiceButton(QWidget *parent, QString text)
 void ChoiceButton::setSelected(bool selected) {
 	if (_selected != selected) {
 		_selected = selected;
-		accessibilityStateChanged({
-			.checked = _selected,
-			.selected = _selected,
-		});
 		update();
+		crl::on_main(this, [=] {
+			accessibilityStateChanged({ .checked = true, .selected = true });
+		});
 	}
 }
 
@@ -85,7 +85,7 @@ void ChoiceButton::paintEvent(QPaintEvent *e) {
 	p.setPen(Qt::NoPen);
 	p.setBrush(_selected
 		? WithAlpha(AccentColor(), 0.10)
-		: (isOver() && isEnabled())
+		: (isOver() && !isDisabled())
 		? st::windowBgOver->c
 		: QColor(Qt::transparent));
 	const auto inset = st::lineWidth / 2.;
@@ -99,7 +99,7 @@ void ChoiceButton::paintEvent(QPaintEvent *e) {
 		p.drawRoundedRect(plate, st::luxuryWatcherDetailRadius,
 			st::luxuryWatcherDetailRadius);
 	}
-	const auto disabled = !isEnabled();
+	const auto disabled = isDisabled();
 	const auto &font = st::luxuryWatcherChipFont;
 	p.setFont(font);
 	p.setPen(_selected

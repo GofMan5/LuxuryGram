@@ -61,7 +61,7 @@ public:
 	void requestUnreadCount();
 
 	void readTill(not_null<HistoryItem*> item);
-	void readTill(MsgId tillId);
+	void readTill(MsgId tillId, std::optional<bool> sendReadReceipt = std::nullopt);
 
 	[[nodiscard]] bool canDeleteMyTopic() const;
 
@@ -102,7 +102,10 @@ private:
 
 	void changeUnreadCountByPost(MsgId id, int delta);
 	void setUnreadCount(std::optional<int> count);
-	void readTill(MsgId tillId, HistoryItem *tillIdItem);
+	void readTill(
+		MsgId tillId,
+		HistoryItem *tillIdItem,
+		std::optional<bool> sendReadReceipt = std::nullopt);
 	void checkReadTillEnd();
 	void sendReadTillRequest();
 	void reloadUnreadCountIfNeeded();
@@ -129,6 +132,8 @@ private:
 
 	base::Timer _readRequestTimer;
 	mtpRequestId _readRequestId = 0;
+	MsgId _readRequestTill = 0;
+	MsgId _explicitReadRequestTill = 0;
 
 	mtpRequestId _reloadUnreadCountRequestId = 0;
 

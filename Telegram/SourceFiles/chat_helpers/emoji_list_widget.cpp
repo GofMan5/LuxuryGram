@@ -619,6 +619,12 @@ EmojiListWidget::EmojiListWidget(
 		resizeToWidth(width());
 	}, lifetime());
 
+	LuxurySettings::getInstance().showOnlyAddedEmojisAndStickersChanges(
+	) | rpl::on_next([=] {
+		refreshCustom();
+		resizeToWidth(width());
+	}, lifetime());
+
 	rpl::single(
 		rpl::empty
 	) | rpl::then(

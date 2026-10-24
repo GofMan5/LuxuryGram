@@ -420,6 +420,8 @@ bool Get(
 	if (realLastPath.isEmpty() || realLastPath.endsWith(qstr("/tdummy"))) {
 		realLastPath = QStandardPaths::writableLocation(
 			QStandardPaths::DownloadLocation);
+	} else {
+		realLastPath = ::FileDialog::internal::ReachableFolder(realLastPath);
 	}
 	dialog.setDirectory(realLastPath);
 

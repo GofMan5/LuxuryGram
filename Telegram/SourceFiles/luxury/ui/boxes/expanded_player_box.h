@@ -28,8 +28,8 @@ struct TrackState;
 } // namespace Media
 
 namespace Ui {
-class FilledSlider;
 class FlatLabel;
+class MediaSlider;
 class RoundButton;
 template <typename Widget>
 class SlideWrap;
@@ -74,7 +74,7 @@ private:
 	CoverWidget *_cover = nullptr;
 	Ui::FlatLabel *_titleLabel = nullptr;
 	Ui::SlideWrap<Ui::FlatLabel> *_performerWrap = nullptr;
-	Ui::FilledSlider *_playbackSlider = nullptr;
+	Ui::MediaSlider *_playbackSlider = nullptr;
 	TimeWidget *_timeRow = nullptr;
 	ControlsWidget *_controls = nullptr;
 	QPointer<Ui::RoundButton> _saveCoverButton = nullptr;

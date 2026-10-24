@@ -226,6 +226,7 @@ void Polls::create(
 		Fn<void()> done,
 		Fn<void(bool fileReferenceExpired)> fail) {
 	StripUnsendableReply(_session, action.replyTo);
+	applyGhostScheduling(_session, action.options);
 	_session->api().sendAction(action);
 
 	const auto history = action.history;

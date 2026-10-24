@@ -31,6 +31,7 @@ struct LastseenStatus {
     int till = 0;
     bool local = false;
     bool isOnline(int now) const { return till > now; }
+    int onlineTill() const { return till; }
 };
 }
 Data::LastseenStatus LastseenFromMTP(MTPUserStatus status, Data::LastseenStatus previous) {
@@ -117,7 +118,24 @@ int main() {
     excluded.service = true;
     excluded.updateServerLastseen({ mtpc_userStatusOnline, 150 });
     assert(recorded.size() == 7);
-    std::cout << "Production server presence: PASS (live transition, elapsed expiry, inference isolation, hidden/stale statuses, gates, exclusions)\n";
+    UserData stale;
+    base::unixtime::clock = 200;
+    stale.updateServerLastseen({ mtpc_userStatusOnline, 250 });
+    const auto afterStart = recorded.size();
+    base::unixtime::clock = 210;
+    stale.updateServerLastseen({ mtpc_userStatusOffline, 190 });
+    assert(recorded.size() == afterStart && !stale.trackedOnlineStart());
+    for (const auto invalid : { 0, 230 }) {
+        stale.updateServerLastseen({ mtpc_userStatusOnline, 250 });
+        const auto beforeInvalid = recorded.size();
+        stale.updateServerLastseen({ mtpc_userStatusOffline, invalid });
+        assert(recorded.size() == beforeInvalid && !stale.trackedOnlineStart());
+    }
+    stale.updateServerLastseen({ mtpc_userStatusOnline, 250 });
+    base::unixtime::clock = 190; // A real backward clock correction is not stale data.
+    stale.updateServerLastseen({ mtpc_userStatusOffline, 185 });
+    assert(!recorded.back().online && recorded.back().at == 185);
+    std::cout << "Production server presence: PASS (live transition, elapsed expiry, inference isolation, hidden/stale statuses, gates, exclusions, stale/invalid offline, clock correction)\n";
 }
 '''
 with tempfile.TemporaryDirectory(prefix='luxury-presence-recording-') as tmp:
@@ -125,7 +143,7 @@ with tempfile.TemporaryDirectory(prefix='luxury-presence-recording-') as tmp:
     exe = Path(tmp) / 'recording.exe'
     cpp.write_text(harness, encoding='utf-8')
     subprocess.run([
-        'g++', '-std=c++20', '-Wall', '-Wextra', '-Werror',
+        'g++', '-std=c++20', '-O0', '-g', '-D_DEBUG', '-Wall', '-Wextra', '-Werror',
         '-I', str(root / 'Telegram/SourceFiles'), str(cpp), '-o', str(exe),
     ], check=True)
     subprocess.run([str(exe)], check=True)

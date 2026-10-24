@@ -1055,6 +1055,7 @@ std::unique_ptr<Ui::Premium::TopBarAbstract> Widget::setupTop() {
 					? st::infoLayerTopBar.back
 					: st::infoTopBar.back)),
 			st::infoTopBarScale);
+		_back->entity()->setAccessibleName(tr::lng_go_back(tr::now));
 		_back->setDuration(0);
 		_back->toggleOn(isLayer
 			? _backEnabled.value() | rpl::type_erased
@@ -1078,6 +1079,7 @@ std::unique_ptr<Ui::Premium::TopBarAbstract> Widget::setupTop() {
 			_close = base::make_unique_q<Ui::IconButton>(
 				raw,
 				st::infoTopBarClose);
+			_close->setAccessibleName(tr::lng_close(tr::now));
 			_close->addClickHandler([=] {
 				controller->parentController()->hideLayer();
 				controller->parentController()->hideSpecialLayer();

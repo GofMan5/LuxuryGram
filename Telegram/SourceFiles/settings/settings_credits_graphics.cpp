@@ -2417,6 +2417,7 @@ void GenericCreditsEntryBody(
 		const auto close = Ui::CreateChild<Ui::IconButton>(
 			content,
 			st::boxTitleClose);
+		close->setAccessibleName(tr::lng_close(tr::now));
 		close->setClickedCallback([=] { box->closeBox(); });
 		content->widthValue() | rpl::on_next([=](int) {
 			close->moveToRight(0, 0);
@@ -3738,6 +3739,7 @@ void AddUniqueCloseMoreButton(
 	const auto close = Ui::CreateChild<Ui::IconButton>(
 		box,
 		st::uniqueCloseButton);
+	close->setAccessibleName(tr::lng_close(tr::now));
 	const auto menu = fillMenu
 		? Ui::CreateChild<Ui::IconButton>(box, st::uniqueMenuButton)
 		: nullptr;
@@ -3747,10 +3749,12 @@ void AddUniqueCloseMoreButton(
 	close->show();
 	close->raise();
 	if (menu) {
+		menu->setAccessibleName(tr::lng_credits_more_options(tr::now));
 		menu->show();
 		menu->raise();
 	}
 	if (craft) {
+		craft->setAccessibleName(tr::lng_gift_craft_menu_button(tr::now));
 		craft->show();
 		craft->raise();
 	}

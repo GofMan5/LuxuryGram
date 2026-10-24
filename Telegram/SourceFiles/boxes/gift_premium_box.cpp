@@ -918,6 +918,7 @@ void GiftCodeBox(
 	const auto close = Ui::CreateChild<Ui::IconButton>(
 		box.get(),
 		st::boxTitleClose);
+	close->setAccessibleName(tr::lng_close(tr::now));
 	close->setClickedCallback([=] {
 		box->closeBox();
 	});
@@ -1048,6 +1049,7 @@ void GiftCodePendingBox(
 	const auto close = Ui::CreateChild<Ui::IconButton>(
 		box.get(),
 		st::boxTitleClose);
+	close->setAccessibleName(tr::lng_close(tr::now));
 	const auto closeCallback = [=] { box->closeBox(); };
 	close->setClickedCallback(closeCallback);
 	box->widthValue(

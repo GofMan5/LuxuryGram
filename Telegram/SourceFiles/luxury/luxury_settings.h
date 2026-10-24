@@ -11,9 +11,11 @@
 // actually build or parse a json value.
 #include "luxury/libs/json_fwd.hpp"
 #include "luxury/luxury_ui_settings.h"
+#include "base/weak_ptr.h"
 #include "rpl/lifetime.h"
 #include "rpl/producer.h"
 #include "rpl/variable.h"
+#include <array>
 #include <map>
 #include <unordered_set>
 
@@ -55,7 +57,7 @@ enum class SendWithoutSoundOption {
 // The json mappings for the enums above live in luxury_settings.cpp, next to
 // the only code that serializes them.
 
-class GhostModeAccountSettings {
+class GhostModeAccountSettings : public base::has_weak_ptr {
 public:
 	GhostModeAccountSettings();
 
@@ -88,6 +90,7 @@ public:
 	void setSendWithoutSound(SendWithoutSoundOption val);
 	void setSuggestGhostModeBeforeViewingStory(bool val);
 	void setGhostModeEnabled(bool val);
+	[[nodiscard]] const std::array<uint64, 5> &privacyRevisions() const { return _privacyRevisions; }
 
 	void setSendReadMessagesLocked(bool val);
 	void setSendReadStoriesLocked(bool val);
@@ -113,6 +116,7 @@ public:
 	[[nodiscard]] rpl::producer<SendWithoutSoundOption> sendWithoutSoundChanges() const { return _sendWithoutSound.changes(); }
 	[[nodiscard]] rpl::producer<bool> suggestGhostModeBeforeViewingStoryValue() const { return _suggestGhostModeBeforeViewingStory.value(); }
 	[[nodiscard]] rpl::producer<bool> suggestGhostModeBeforeViewingStoryChanges() const { return _suggestGhostModeBeforeViewingStory.changes(); }
+	// Lock changes also notify when the aggregate value stays the same.
 	[[nodiscard]] rpl::producer<bool> ghostModeActiveValue() const { return _ghostModeActive.value(); }
 	[[nodiscard]] rpl::producer<bool> ghostModeActiveChanges() const { return _ghostModeActive.changes(); }
 
@@ -133,6 +137,8 @@ public:
 private:
 	friend class LuxurySettings;
 
+	bool _startupGhostApplied = false;
+	std::array<uint64, 5> _privacyRevisions = {};
 	rpl::variable<bool> _sendReadMessages = true;
 	rpl::variable<bool> _sendReadStories = true;
 	rpl::variable<bool> _sendOnlinePackets = true;
@@ -240,6 +246,8 @@ public:
 
 	[[nodiscard]] static GhostModeAccountSettings &ghost(not_null<Main::Session*> session);
 	[[nodiscard]] static GhostModeAccountSettings &ghost(uint64 userId);
+	[[nodiscard]] static GhostModeAccountSettings &ghostProfile(uint64 profileId);
+	static void applyStartupGhost(GhostModeAccountSettings &profile);
 	[[nodiscard]] static GhostModeAccountSettings &ghost();
 
 	[[nodiscard]] bool useGlobalGhostMode() const { return _useGlobalGhostMode.current(); }

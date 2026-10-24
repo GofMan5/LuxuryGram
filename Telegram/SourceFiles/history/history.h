@@ -37,6 +37,7 @@ struct SponsoredFrom;
 class SponsoredMessages;
 class HistoryMessages;
 class SavedMessages;
+struct MessagesSlice;
 } // namespace Data
 
 namespace Dialogs {
@@ -213,6 +214,11 @@ public:
 	[[nodiscard]] auto clientSideMessages()
 		-> const base::flat_set<not_null<HistoryItem*>> &;
 	[[nodiscard]] HistoryItem *latestSendingMessage() const;
+
+	void registerDeletedMessage(not_null<HistoryItem*> item);
+	void insertDeletedMessages(
+		Data::MessagesSlice &slice,
+		Fn<bool(not_null<HistoryItem*>)> belongs) const;
 
 	[[nodiscard]] bool readInboxTillNeedsRequest(MsgId tillId);
 	void applyInboxReadUpdate(
@@ -692,6 +698,7 @@ private:
 	std::optional<HistoryItem*> _lastMessage;
 	std::optional<HistoryItem*> _lastServerMessage;
 	base::flat_set<not_null<HistoryItem*>> _clientSideMessages;
+	base::flat_set<not_null<HistoryItem*>> _deletedMessages;
 	std::unordered_set<std::unique_ptr<HistoryItem>> _items;
 
 	std::unique_ptr<Data::HistoryMessages> _messages;

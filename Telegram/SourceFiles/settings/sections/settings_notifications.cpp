@@ -47,6 +47,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/notifications_manager.h"
+#include "window/notifications_manager_default.h"
 #include "window/section_widget.h"
 #include "window/themes/window_theme.h"
 #include "window/window_session_controller.h"
@@ -337,7 +338,11 @@ NotificationsCount::NotificationsCount(
 	_sampleOpacities.resize(kMaxNotificationsCount);
 
 	prepareNotificationSampleSmall();
-	prepareNotificationSampleLarge();
+	_notificationSampleLarge = prepareNotificationSampleLarge(
+		st::notifyWidth);
+	_notificationSampleLargeTopCenter = prepareNotificationSampleLarge(
+		Window::Notifications::Default::NotificationWidth(
+			ScreenCorner::TopCenter));
 }
 
 void NotificationsCount::paintEvent(QPaintEvent *e) {
@@ -487,8 +492,8 @@ void NotificationsCount::prepareNotificationSampleUserpic() {
 	}
 }
 
-void NotificationsCount::prepareNotificationSampleLarge() {
-	int w = st::notifyWidth, h = st::notifyMinHeight;
+QPixmap NotificationsCount::prepareNotificationSampleLarge(int w) {
+	const auto h = st::notifyMinHeight;
 	auto sampleImage = QImage(
 		w * style::DevicePixelRatio(),
 		h * style::DevicePixelRatio(),
@@ -523,7 +528,7 @@ void NotificationsCount::prepareNotificationSampleLarge() {
 		st::notifyClose.icon.paint(p, w - st::notifyClosePos.x() - st::notifyClose.width + st::notifyClose.iconPosition.x(), st::notifyClosePos.y() + st::notifyClose.iconPosition.y(), w);
 	}
 
-	_notificationSampleLarge = Ui::PixmapFromImage(std::move(sampleImage));
+	return Ui::PixmapFromImage(std::move(sampleImage));
 }
 
 void NotificationsCount::removeSample(SampleWidget *widget) {
@@ -600,12 +605,19 @@ void NotificationsCount::setOverCorner(ScreenCorner corner) {
 		auto sampleLeft = (isLeft == rtl()) ? (r.x() + r.width() - st::notifyWidth - st::notifyDeltaX) : (r.x() + st::notifyDeltaX);
 		auto sampleTop = isTop ? (r.y() + st::notifyDeltaY) : (r.y() + r.height() - st::notifyDeltaY - st::notifyMinHeight);
 
-		if (Core::Settings::IsTopCenterCorner(_overCorner)) {
-			sampleLeft = (r.x() + r.width() / 2 - st::notifyWidth / 2);
+		const auto topCenter = Core::Settings::IsTopCenterCorner(_overCorner);
+		const auto &sample = topCenter
+			? _notificationSampleLargeTopCenter
+			: _notificationSampleLarge;
+		if (topCenter) {
+			sampleLeft = r.x()
+				+ r.width() / 2
+				- Window::Notifications::Default::NotificationWidth(
+					_overCorner) / 2;
 		}
 
 		for (int i = samplesLeave; i != samplesNeeded; ++i) {
-			auto widget = std::make_unique<SampleWidget>(this, _notificationSampleLarge);
+			auto widget = std::make_unique<SampleWidget>(this, sample);
 			widget->move(sampleLeft, sampleTop + (isTop ? 1 : -1) * i * (st::notifyMinHeight + st::notifyDeltaY));
 			widget->showFast();
 			samples.push_back(widget.release());

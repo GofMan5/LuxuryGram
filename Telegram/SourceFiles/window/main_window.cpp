@@ -144,11 +144,13 @@ const char kOptionNewWindowsSizeAsFirst[] = "new-windows-size-as-first";
 const char kOptionDisableTouchbar[] = "touchbar-disabled";
 
 QImage Logo() {
-	return LuxuryAssets::currentAppLogo();
+	auto result = LuxuryAssets::currentAppLogo();
+	result.setDevicePixelRatio(1.);
+	return result;
 }
 
 QImage LogoNoMargin() {
-	return LuxuryAssets::currentAppLogo();
+	return Logo();
 }
 
 const QImage &LogoTelegramDefault() {

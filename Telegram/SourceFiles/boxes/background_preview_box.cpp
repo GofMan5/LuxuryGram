@@ -503,6 +503,9 @@ void BackgroundPreviewBox::rebuildButtons(bool dark) {
 	auto toggle = object_ptr<Ui::IconButton>(this, equals
 		? (dark ? st::backgroundSwitchToLight : st::backgroundSwitchToDark)
 		: dark ? _dark->toggle : _light->toggle);
+	toggle->setAccessibleName(dark
+		? tr::luxury_BackgroundPreviewLight(tr::now)
+		: tr::luxury_BackgroundPreviewDark(tr::now));
 	toggle->setClickedCallback([=] {
 		_boxDarkMode = !_boxDarkMode.current();
 	});

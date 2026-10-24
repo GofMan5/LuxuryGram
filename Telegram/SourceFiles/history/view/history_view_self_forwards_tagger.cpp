@@ -369,6 +369,7 @@ not_null<Ui::AbstractButton*> SelfForwardsTagger::createRightButton(
 	const auto button = Ui::CreateChild<Ui::IconButton>(
 		widget.get(),
 		st::joinChatAddToFilterToastButton);
+	button->setAccessibleName(tr::lng_filters_menu_add(tr::now));
 	widget->sizeValue() | rpl::on_next([=](const QSize &size) {
 		button->moveToRight(
 			st::lineWidth * 4,

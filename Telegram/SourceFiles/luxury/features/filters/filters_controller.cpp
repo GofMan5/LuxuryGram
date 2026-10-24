@@ -63,7 +63,8 @@ bool filterBlocked(const not_null<HistoryItem*> item) {
 std::optional<bool> isFiltered(
 		const QString &str,
 		long long dialogId,
-		const std::shared_ptr<const FiltersCacheController::Cache> &cache) {
+		const std::shared_ptr<const FiltersCacheController::Cache> &cache,
+		bool sharedEnabled) {
 	if (str.isEmpty()) {
 		return std::nullopt;
 	}
@@ -120,7 +121,7 @@ std::optional<bool> isFiltered(
 	}
 
 	const auto exclusions = cache->exclusionsByDialogId.find(dialogId);
-	if (!cache->sharedPatterns.empty()) {
+	if (sharedEnabled && !cache->sharedPatterns.empty()) {
 		for (const auto &pattern : cache->sharedPatterns) {
 			if (timer.hasExpired(kRegexEvaluationBudgetMs)) {
 				break;
@@ -134,11 +135,6 @@ std::optional<bool> isFiltered(
 		}
 	}
 	return false;
-}
-
-bool isEnabled(not_null<PeerData*> peer) {
-	const auto &settings = LuxurySettings::getInstance();
-	return settings.filtersEnabled() && (settings.filtersEnabledInChats() || peer->isBroadcast());
 }
 
 bool isBlocked(const not_null<HistoryItem*> item) {
@@ -213,8 +209,6 @@ bool filtered(const not_null<HistoryItem*> item) {
 		return true;
 	}
 
-	if (!isEnabled(item->history()->peer)) return false;
-
 	const auto cached = FiltersCacheController::isFiltered(item);
 	if (cached) {
 		return *cached;
@@ -224,7 +218,8 @@ bool filtered(const not_null<HistoryItem*> item) {
 	const auto res = isFiltered(
 		FilterUtils::extractAllText(item, group),
 		getDialogIdFromPeer(item->history()->peer),
-		cache);
+		cache,
+		settings.filtersEnabledInChats() || item->history()->peer->isBroadcast());
 
 	// sometimes item has empty text.
 	// so we cache result only if

@@ -117,7 +117,8 @@ void Changelogs::addLocalLogs() {
 			lt_changes,
 			tr::lng_new_version_minor(tr::now),
 			lt_link,
-			Core::App().changelogLink());
+			Core::App().changelogLink()
+		).replace("Telegram", "LuxuryGram");
 		addLocalLog(text.trimmed());
 	}
 }

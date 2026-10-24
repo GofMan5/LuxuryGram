@@ -150,9 +150,12 @@ public:
 		return _controls.joinToWrite && _controls.joinToWrite->toggled();
 	}
 	[[nodiscard]] bool requestToJoin() const {
-		return _controls.requestToJoin
-			&& (_isGroup || getPrivacy() != Privacy::HasUsername)
-			&& _controls.requestToJoin->toggled();
+		if (!_controls.requestToJoin) {
+			return false;
+		} else if (!requestsSectionShown(getPrivacy())) {
+			return _originalRequestToJoin;
+		}
+		return _controls.requestToJoin->toggled();
 	}
 
 	[[nodiscard]] rpl::producer<int> scrollToRequests() const {

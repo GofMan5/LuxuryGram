@@ -10,6 +10,7 @@
 #include "mainwindow.h"
 #include "luxury/ui/settings/settings_main.h"
 #include "luxury/utils/telegram_helpers.h"
+#include "base/flat_set.h"
 #include "base/qthelp_url.h"
 #include "boxes/abstract_box.h"
 #include "core/application.h"
@@ -55,7 +56,7 @@ bool ResolveUser(
 			}
 
 			Core::App().hideMediaView();
-			Ui::show(Ui::MakeInformBox(tr::luxury_UserNotFoundMessage()));
+			controller->show(Ui::MakeInformBox(tr::luxury_UserNotFoundMessage()));
 		}
 	);
 
@@ -76,11 +77,6 @@ bool ResolveChat(
 	if (!chatId) {
 		return false;
 	}
-	const auto peer = controller->session().data().peerLoaded(static_cast<PeerId>(chatId));
-	if (peer != nullptr) {
-		controller->showPeerHistory(peer);
-		return true;
-	}
 
 	searchChatById(
 		chatId,
@@ -93,7 +89,7 @@ bool ResolveChat(
 			}
 
 			Core::App().hideMediaView();
-			Ui::show(Ui::MakeInformBox(tr::luxury_UserNotFoundMessage()));
+			controller->show(Ui::MakeInformBox(tr::luxury_ChatNotFoundMessage()));
 		}
 	);
 
@@ -211,6 +207,43 @@ bool TryHandleSpotify(const QString &url) {
 	}
 
 	return false;
+}
+
+bool IsWebUrl(const QUrl &url) {
+	const auto scheme = url.scheme();
+	return !scheme.compare(u"http"_q, Qt::CaseInsensitive)
+		|| !scheme.compare(u"https"_q, Qt::CaseInsensitive);
+}
+
+bool IsUnsafeExternalUrl(const QString &url) {
+	static const auto kBlocked = base::flat_set<QString>{
+		u"file"_q,
+		u"smb"_q,
+		u"nfs"_q,
+		u"afp"_q,
+		u"cifs"_q,
+		u"dav"_q,
+		u"davs"_q,
+		u"webdav"_q,
+		u"search"_q,
+		u"search-ms"_q,
+		u"shell"_q,
+		u"javascript"_q,
+		u"vbscript"_q,
+		u"jar"_q,
+		u"jnlp"_q,
+		u"jnlps"_q,
+		u"mk"_q,
+		u"its"_q,
+		u"mhtml"_q,
+		u"hcp"_q,
+		u"res"_q,
+	};
+	// A one-letter scheme is a drive letter: C:\x opens a local file.
+	const auto scheme = QUrl(url).scheme().toLower();
+	return (scheme.size() == 1)
+		|| kBlocked.contains(scheme)
+		|| scheme.startsWith(u"ms-"_q);
 }
 
 }

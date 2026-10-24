@@ -643,6 +643,11 @@ FullMsgId EphemeralMessages::realReplyId(
 bool EphemeralMessages::trySend(const Api::MessageToSend &message) {
 	const auto history = message.action.history;
 	const auto peer = history->peer;
+	const auto dropped = [&] {
+		if (const auto finished = message.action.options.localSendFinished) {
+			(*finished)(FullMsgId(), false);
+		}
+	};
 	if (!SupportsEphemeral(peer)) {
 		return false;
 	} else if (message.action.options.scheduled
@@ -654,6 +659,7 @@ bool EphemeralMessages::trySend(const Api::MessageToSend &message) {
 		if (wouldSend(message) || (replyTo && replyTo->isEphemeral())) {
 			LOG(("API Error: "
 				"Dropping a scheduled ephemeral message send."));
+			dropped();
 			return true;
 		}
 		return false;
@@ -666,28 +672,35 @@ bool EphemeralMessages::trySend(const Api::MessageToSend &message) {
 	if (text.text.isEmpty()) {
 		return false;
 	}
+	const auto sendTracked = [&](not_null<UserData*> bot, int32 replyId, MsgId topicRootId, FullReplyTo realReply) {
+		auto done = Fn<void(bool)>();
+		const auto &options = message.action.options;
+		if (options.localIdAllocated) {
+			const auto id = FullMsgId(peer->id, _session->data().nextLocalMessageId());
+			if (!(*options.localIdAllocated)(id)) return;
+			if (const auto finished = options.localSendFinished) {
+				done = [=](bool success) { (*finished)(id, success); };
+			}
+		}
+		send(history, bot, std::move(text), replyId, topicRootId, realReply,
+			message.webPage, options.invertCaption, std::move(done));
+	};
 	auto realReply = FullReplyTo();
 	if (const auto replyToId = realReplyId(message)) {
 		const auto replyTo = _session->data().message(replyToId);
 		if (replyTo && replyTo->isEphemeral()) {
 			if (replyTo->out()) {
+				dropped();
 				return true;
 			}
 			const auto entry = findByItem(replyTo);
 			const auto bot = entry ? botForSending(*entry) : nullptr;
 			if (!bot) {
 				reportDroppedReply();
+				dropped();
 				return true;
 			}
-			send(
-				history,
-				bot,
-				std::move(text),
-				entry->ephemeralId,
-				MsgId(),
-				FullReplyTo(),
-				message.webPage,
-				message.action.options.invertCaption);
+			sendTracked(bot, entry->ephemeralId, MsgId(), FullReplyTo());
 			return true;
 		}
 		realReply = message.action.replyTo;
@@ -696,15 +709,7 @@ bool EphemeralMessages::trySend(const Api::MessageToSend &message) {
 	if (!bot) {
 		return false;
 	}
-	send(
-		history,
-		bot,
-		std::move(text),
-		0,
-		message.action.replyTo.topicRootId,
-		realReply,
-		message.webPage,
-		message.action.options.invertCaption);
+	sendTracked(bot, 0, message.action.replyTo.topicRootId, realReply);
 	return true;
 }
 
@@ -758,7 +763,8 @@ void EphemeralMessages::send(
 		MsgId topicRootId,
 		FullReplyTo realReply,
 		Data::WebPageDraft webPage,
-		bool invertCaption) {
+		bool invertCaption,
+		Fn<void(bool)> done) {
 	const auto exactWebPage = !webPage.url.isEmpty() && !webPage.removed;
 	const auto manualWebPage = exactWebPage && webPage.manual;
 	const auto invertMedia = (exactWebPage && webPage.invert)
@@ -777,14 +783,18 @@ void EphemeralMessages::send(
 		FullMsgId(),
 		Data::FileOrigin(),
 		nullptr,
-		invertMedia);
+		invertMedia,
+		{},
+		nullptr,
+		std::move(done));
 }
 
 bool EphemeralMessages::sendMedia(
 		not_null<HistoryItem*> item,
 		const MTPInputMedia &media,
 		Data::FileOrigin origin,
-		Fn<MTPInputMedia()> rebuildMedia) {
+		Fn<MTPInputMedia()> rebuildMedia,
+		Fn<void(bool)> done) {
 	const auto history = item->history();
 	const auto replyTo = item->replyTo();
 	const auto target = _session->data().message(replyTo.messageId);
@@ -810,7 +820,7 @@ bool EphemeralMessages::sendMedia(
 				item->fullId(),
 				origin,
 				rebuildMedia,
-				item->invertMedia());
+				item->invertMedia(), {}, nullptr, done);
 			return true;
 		}
 		return false;
@@ -831,12 +841,13 @@ bool EphemeralMessages::sendMedia(
 				item->fullId(),
 				origin,
 				rebuildMedia,
-				item->invertMedia());
+				item->invertMedia(), {}, nullptr, done);
 			return true;
 		}
 		reportDroppedReply();
 	}
 	_session->data().destroyMessageWithCacheCleanup(item);
+	if (done) done(false);
 	return true;
 }
 
@@ -981,7 +992,8 @@ void EphemeralMessages::request(
 		Fn<MTPInputMedia()> rebuildMedia,
 		bool invertMedia,
 		std::optional<MTPInputRichMessage> richMessage,
-		Fn<std::optional<MTPInputRichMessage>()> rebuildRich) {
+		Fn<std::optional<MTPInputRichMessage>()> rebuildRich,
+		Fn<void(bool)> done) {
 	const auto session = _session;
 	const auto destroyLocal = [=] {
 		if (destroyOnResult) {
@@ -1044,6 +1056,7 @@ void EphemeralMessages::request(
 					session->data().destroyMessageWithCacheCleanup(local);
 				}
 			}
+			if (done) done(true);
 		}).fail([=](const MTP::Error &error) {
 			const auto type = error.type();
 			const auto refreshable = !attempt
@@ -1061,12 +1074,14 @@ void EphemeralMessages::request(
 							LOG(("API Error: "
 								"send ephemeral message - %1").arg(type));
 							destroyLocal();
+							if (done) done(false);
 						}
 					});
 				return;
 			}
 			LOG(("API Error: send ephemeral message - %1").arg(type));
 			destroyLocal();
+			if (done) done(false);
 		}).send();
 	};
 	send(send, media, richMessage.value_or(MTPInputRichMessage()), 0);

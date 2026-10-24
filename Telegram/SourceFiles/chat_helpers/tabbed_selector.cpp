@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "chat_helpers/emoji_list_widget.h"
 #include "chat_helpers/stickers_list_widget.h"
 #include "chat_helpers/gifs_list_widget.h"
+#include "base/weak_qptr.h"
 #include "menu/menu_send.h"
 #include "ui/controls/swipe_handler.h"
 #include "ui/controls/tabbed_search.h"
@@ -40,8 +41,376 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mainwindow.h"
 #include "apiwrap.h"
 #include "styles/style_chat_helpers.h"
+#include "styles/style_basic.h"
+
+#include <crl/crl_on_main.h>
+#include <QApplication>
+#include <QKeyEvent>
 
 namespace ChatHelpers {
+
+class TabbedSelector::TabsSlider final : public Ui::SettingsSlider {
+public:
+	TabsSlider(TabbedSelector *parent, const style::SettingsSlider &st);
+	void setTabs(
+		const std::vector<SelectorTab> &types,
+		const std::vector<QString> &labels);
+	void notifySelectionChanged(int previous);
+
+	QAccessible::Role accessibilityRole() override;
+	Qt::FocusPolicy accessibilityFocusPolicy() override;
+	std::optional<Qt::Orientation> accessibilityOrientation() const override;
+	bool accessibilitySelectionList() const override;
+	int accessibilityChildCount() const override;
+	QAccessible::Role accessibilityChildRole() const override;
+	QString accessibilityChildName(int index) const override;
+	QAccessible::State accessibilityChildState(int index) const override;
+	QRect accessibilityChildRect(int index) const override;
+	bool accessibilityChildSupportsActions(int index) const override;
+	quintptr accessibilityChildIdentity(int index) const override;
+	int accessibilityChildIndexByIdentity(quintptr identity) const override;
+	void accessibilityChildSetFocus(quintptr identity) override;
+	void accessibilityChildActivate(quintptr identity) override;
+
+protected:
+	void keyPressEvent(QKeyEvent *e) override;
+	void keyReleaseEvent(QKeyEvent *e) override;
+	void mouseReleaseEvent(QMouseEvent *e) override;
+	void focusInEvent(QFocusEvent *e) override;
+	void focusOutEvent(QFocusEvent *e) override;
+	void paintEvent(QPaintEvent *e) override;
+
+private:
+	int committedIndex() const;
+	void setFocused(int index);
+	bool focusTab(quintptr identity);
+	void activate(int index);
+
+	const not_null<TabbedSelector*> _owner;
+	std::vector<SelectorTab> _types;
+	std::vector<QString> _labels;
+	std::vector<quintptr> _identities;
+	quintptr _identityCounter = 0;
+	int _focused = -1;
+	bool _keyboardFocus = false;
+
+};
+
+TabbedSelector::TabsSlider::TabsSlider(
+		TabbedSelector *parent,
+		const style::SettingsSlider &st)
+: SettingsSlider(parent, st)
+, _owner(parent) {
+	setFocusPolicy(Qt::TabFocus);
+}
+
+void TabbedSelector::TabsSlider::setTabs(
+		const std::vector<SelectorTab> &types,
+		const std::vector<QString> &labels) {
+	Expects(types.size() == labels.size());
+	const auto focused = accessibilityChildIdentity(_focused);
+	auto identities = std::vector<quintptr>();
+	identities.reserve(types.size());
+	for (const auto type : types) {
+		const auto i = ranges::find(_types, type);
+		const auto identity = (i != end(_types))
+			? _identities[i - begin(_types)]
+			: ++_identityCounter;
+		Assert(identity != 0);
+		identities.push_back(identity);
+	}
+	_types = types;
+	_labels = labels;
+	_identities = std::move(identities);
+	_focused = accessibilityChildIndexByIdentity(focused);
+	if (_focused < 0 && !_types.empty()) {
+		_focused = std::max(committedIndex(), 0);
+	}
+	const auto weak = base::make_weak(this);
+	setSections(labels);
+	if (!weak) {
+		return;
+	}
+	setFocusPolicy(_types.empty() ? Qt::NoFocus : Qt::TabFocus);
+	if (!weak) {
+		return;
+	}
+	crl::on_main(this, [=] {
+		const auto weak = base::make_weak(this);
+		QAccessibleEvent event(this, QAccessible::ObjectReorder);
+		QAccessible::updateAccessibility(&event);
+		if (weak && hasFocus() && _focused >= 0) {
+			accessibilityChildFocused(_focused);
+		}
+	});
+}
+
+int TabbedSelector::TabsSlider::committedIndex() const {
+	const auto i = ranges::find(_types, _owner->_currentTabType);
+	return (i != end(_types)) ? int(i - begin(_types)) : -1;
+}
+
+void TabbedSelector::TabsSlider::notifySelectionChanged(int previous) {
+	const auto was = accessibilityChildIdentity(previous);
+	const auto now = accessibilityChildIdentity(committedIndex());
+	crl::on_main(this, [=] {
+		const auto weak = base::make_weak(this);
+		const auto previous = accessibilityChildIndexByIdentity(was);
+		if (previous >= 0) {
+			accessibilityChildSelectionChanged(previous);
+		}
+		if (weak) {
+			const auto index = accessibilityChildIndexByIdentity(now);
+			if (index >= 0 && index == committedIndex()) {
+				accessibilityChildSelectionChanged(index);
+			}
+		}
+	});
+}
+
+void TabbedSelector::TabsSlider::setFocused(int index) {
+	if (index < 0 || index >= int(_types.size())) {
+		return;
+	}
+	const auto changed = (_focused != index);
+	_focused = index;
+	update();
+	if (changed && hasFocus()) {
+		accessibilityChildFocused(index);
+	}
+}
+
+bool TabbedSelector::TabsSlider::focusTab(quintptr identity) {
+	const auto index = accessibilityChildIndexByIdentity(identity);
+	if (index < 0 || !isEnabled() || !isVisible()) {
+		return false;
+	}
+	const auto focus = QPointer<QWidget>(QApplication::focusWidget());
+	const auto generation = _owner->_slideGeneration;
+	const auto weak = base::make_weak(this);
+	_keyboardFocus = true;
+	setFocused(index);
+	if (!weak
+		|| _owner->_slideGeneration != generation
+		|| QApplication::focusWidget() != focus.data()
+		|| accessibilityChildIdentity(_focused) != identity
+		|| !isVisible()
+		|| !isEnabled()) {
+		return false;
+	}
+	if (!hasFocus()) {
+		setFocus(Qt::OtherFocusReason);
+	}
+	return weak
+		&& _owner->_slideGeneration == generation
+		&& hasFocus()
+		&& isVisible()
+		&& isEnabled()
+		&& accessibilityChildIdentity(_focused) == identity;
+}
+
+void TabbedSelector::TabsSlider::activate(int index) {
+	const auto identity = accessibilityChildIdentity(index);
+	if (focusTab(identity)) {
+		setActiveSection(accessibilityChildIndexByIdentity(identity));
+	}
+}
+
+void TabbedSelector::TabsSlider::keyPressEvent(QKeyEvent *e) {
+	if (!isEnabled() || !isVisible() || _types.empty()
+		|| (e->modifiers() & (Qt::ControlModifier
+			| Qt::AltModifier
+			| Qt::MetaModifier))) {
+		SettingsSlider::keyPressEvent(e);
+		return;
+	}
+	const auto current = (_focused >= 0) ? _focused : 0;
+	const auto last = int(_types.size()) - 1;
+	auto next = current;
+	switch (e->key()) {
+	case Qt::Key_Left:
+		next = std::clamp(current + (style::RightToLeft() ? 1 : -1), 0, last);
+		break;
+	case Qt::Key_Right:
+		next = std::clamp(current + (style::RightToLeft() ? -1 : 1), 0, last);
+		break;
+	case Qt::Key_Home: next = 0; break;
+	case Qt::Key_End: next = last; break;
+	case Qt::Key_Enter:
+	case Qt::Key_Return:
+	case Qt::Key_Space:
+		e->accept();
+		if (!e->isAutoRepeat()) {
+			activate(current);
+		}
+		return;
+	default:
+		SettingsSlider::keyPressEvent(e);
+		return;
+	}
+	e->accept();
+	_keyboardFocus = true;
+	setFocused(next);
+}
+
+void TabbedSelector::TabsSlider::keyReleaseEvent(QKeyEvent *e) {
+	if (isEnabled() && isVisible() && !_types.empty()
+		&& !(e->modifiers() & (Qt::ControlModifier
+			| Qt::AltModifier
+			| Qt::MetaModifier))
+		&& (e->key() == Qt::Key_Enter
+			|| e->key() == Qt::Key_Return
+			|| e->key() == Qt::Key_Space)) {
+		e->accept();
+	} else {
+		SettingsSlider::keyReleaseEvent(e);
+	}
+}
+
+void TabbedSelector::TabsSlider::mouseReleaseEvent(QMouseEvent *e) {
+	_keyboardFocus = false;
+	const auto weak = base::make_weak(this);
+	SettingsSlider::mouseReleaseEvent(e);
+	if (weak) {
+		_keyboardFocus = false;
+		setFocused(activeSection());
+	}
+}
+
+void TabbedSelector::TabsSlider::focusInEvent(QFocusEvent *e) {
+	_keyboardFocus = (e->reason() != Qt::MouseFocusReason);
+	if (_focused < 0
+		|| e->reason() == Qt::TabFocusReason
+		|| e->reason() == Qt::BacktabFocusReason) {
+		_focused = _types.empty() ? -1 : std::max(committedIndex(), 0);
+	}
+	const auto weak = base::make_weak(this);
+	SettingsSlider::focusInEvent(e);
+	if (weak) {
+		update();
+	}
+}
+
+void TabbedSelector::TabsSlider::focusOutEvent(QFocusEvent *e) {
+	_keyboardFocus = false;
+	const auto weak = base::make_weak(this);
+	SettingsSlider::focusOutEvent(e);
+	if (weak) {
+		update();
+	}
+}
+
+void TabbedSelector::TabsSlider::paintEvent(QPaintEvent *e) {
+	SettingsSlider::paintEvent(e);
+	if (!hasFocus() || !_keyboardFocus || !isEnabled() || _focused < 0) {
+		return;
+	}
+	auto p = QPainter(this);
+	p.setPen(QPen(st::windowFg->c, st::lineWidth));
+	p.setBrush(Qt::NoBrush);
+	p.drawRect(accessibilityChildRect(_focused).marginsRemoved(QMargins(
+		st::buttonFocusInset,
+		st::buttonFocusInset,
+		st::buttonFocusInset,
+		st::buttonFocusInset)));
+}
+
+QAccessible::Role TabbedSelector::TabsSlider::accessibilityRole() {
+	return QAccessible::PageTabList;
+}
+
+Qt::FocusPolicy TabbedSelector::TabsSlider::accessibilityFocusPolicy() {
+	return Qt::NoFocus;
+}
+
+std::optional<Qt::Orientation> TabbedSelector::TabsSlider::accessibilityOrientation() const {
+	return Qt::Horizontal;
+}
+
+bool TabbedSelector::TabsSlider::accessibilitySelectionList() const {
+	return true;
+}
+
+int TabbedSelector::TabsSlider::accessibilityChildCount() const {
+	return int(_types.size());
+}
+
+QAccessible::Role TabbedSelector::TabsSlider::accessibilityChildRole() const {
+	return QAccessible::PageTab;
+}
+
+QString TabbedSelector::TabsSlider::accessibilityChildName(int index) const {
+	return (index >= 0 && index < int(_labels.size()))
+		? _labels[index]
+		: QString();
+}
+
+QAccessible::State TabbedSelector::TabsSlider::accessibilityChildState(int index) const {
+	auto state = QAccessible::State();
+	if (index < 0 || index >= int(_types.size())) {
+		state.invisible = true;
+		return state;
+	}
+	state.disabled = !isEnabled();
+	state.focusable = isEnabled();
+	state.selectable = isEnabled();
+	state.selected = (index == committedIndex());
+	state.focused = hasFocus() && (index == _focused);
+	state.invisible = !isVisible();
+	state.offscreen = accessibilityChildRect(index).isEmpty();
+	return state;
+}
+
+QRect TabbedSelector::TabsSlider::accessibilityChildRect(int index) const {
+	auto result = QRect();
+	auto i = 0;
+	enumerateSections([&](const Section &section) {
+		if (i++ == index) {
+			result = myrtlrect(QRect(section.left, 0, section.width, height()));
+			return false;
+		}
+		return true;
+	});
+	return result.intersected(rect());
+}
+
+bool TabbedSelector::TabsSlider::accessibilityChildSupportsActions(int index) const {
+	return accessibilityChildIdentity(index) != 0;
+}
+
+quintptr TabbedSelector::TabsSlider::accessibilityChildIdentity(int index) const {
+	return (index >= 0 && index < int(_identities.size()))
+		? _identities[index]
+		: 0;
+}
+
+int TabbedSelector::TabsSlider::accessibilityChildIndexByIdentity(quintptr identity) const {
+	if (identity) {
+		const auto i = ranges::find(_identities, identity);
+		if (i != end(_identities)) {
+			return int(i - begin(_identities));
+		}
+	}
+	return -1;
+}
+
+void TabbedSelector::TabsSlider::accessibilityChildSetFocus(quintptr identity) {
+	const auto generation = _owner->_slideGeneration;
+	crl::on_main(this, [=] {
+		if (_owner->_slideGeneration == generation) {
+			focusTab(identity);
+		}
+	});
+}
+
+void TabbedSelector::TabsSlider::accessibilityChildActivate(quintptr identity) {
+	const auto generation = _owner->_slideGeneration;
+	crl::on_main(this, [=] {
+		if (_owner->_slideGeneration == generation) {
+			activate(accessibilityChildIndexByIdentity(identity));
+		}
+	});
+}
 
 class TabbedSelector::SlideAnimation : public Ui::RoundShadowAnimation {
 public:
@@ -320,7 +689,7 @@ void TabbedSelector::Tab::saveScrollTop() {
 }
 
 std::unique_ptr<Ui::TabbedSearch> MakeSearch(
-		not_null<Ui::RpWidget*> parent,
+		not_null<TabbedSelector::Inner*> parent,
 		const style::EmojiPan &st,
 		Fn<void(std::vector<QString>&&)> callback,
 		not_null<Main::Session*> session,
@@ -340,7 +709,10 @@ std::unique_ptr<Ui::TabbedSearch> MakeSearch(
 			: owner->emojiStatuses().emojiGroupsValue()),
 		.customEmojiFactory = owner->customEmojiManager().factory(
 			Data::CustomEmojiManager::SizeTag::SetIcon,
-			Ui::SearchWithGroups::IconSizeOverride())
+			Ui::SearchWithGroups::IconSizeOverride()),
+		.allowAutoFocus = [weak = base::make_weak(parent)] {
+			return weak && weak->allowSearchAutoFocus();
+		},
 	});
 
 	result->queryValue(
@@ -588,14 +960,16 @@ void TabbedSelector::reinstallSwipe(not_null<Inner*> widget) {
 		const auto activeSection = _tabsSlider->activeSection();
 		const auto isToLeft = data.direction == Qt::RightToLeft;
 		if ((isToLeft && activeSection > 0)
-			|| (!isToLeft && activeSection < _tabs.size() - 1)) {
+			|| (!isToLeft && activeSection < _tabsSlider->sectionsCount() - 1)) {
 			return Ui::Controls::DefaultSwipeBackHandlerFinishData([=] {
 				if (_tabsSlider
 					&& _tabsSlider->activeSection() == activeSection) {
 					_swipeBackData = {};
-					_tabsSlider->setActiveSection(isToLeft
-						? activeSection - 1
-						: activeSection + 1);
+					const auto next = activeSection + (isToLeft ? -1 : 1);
+					if (next < 0 || next >= _tabsSlider->sectionsCount()) {
+						return;
+					}
+					_tabsSlider->setActiveSection(next);
 				}
 			});
 		}
@@ -674,7 +1048,9 @@ TabbedSelector::Tab TabbedSelector::createTab(SelectorTab type, int index) {
 				.mode = (_mode == Mode::ChatIntro
 					? StickersMode::ChatIntro
 					: StickersMode::Full),
-				.requireConfirmation = _mode != Mode::MediaEditor,
+				// A pick only sends in the full panel: elsewhere it adds a sticker
+				// to a set or sets the chat intro, and must not ask about sending.
+				.requireConfirmation = (_mode == Mode::Full),
 				.paused = paused,
 				.st = &_st,
 				.features = _features,
@@ -685,6 +1061,7 @@ TabbedSelector::Tab TabbedSelector::createTab(SelectorTab type, int index) {
 			using Descriptor = GifsListDescriptor;
 			return object_ptr<GifsListWidget>(this, Descriptor{
 				.show = _show,
+				.requireConfirmation = (_mode == Mode::Full),
 				.paused = paused,
 				.st = &_st,
 			});
@@ -875,6 +1252,14 @@ void TabbedSelector::updateRestrictedLabelGeometry() {
 		(height() / 3 - _restrictedLabel->height() / 2));
 }
 
+bool TabbedSelector::eventHook(QEvent *e) {
+	if (e->type() == QEvent::Hide || e->type() == QEvent::ParentChange) {
+		++_slideGeneration;
+		_slideFromTabs = false;
+	}
+	return RpWidget::eventHook(e);
+}
+
 void TabbedSelector::paintEvent(QPaintEvent *e) {
 	auto p = QPainter(this);
 
@@ -883,9 +1268,19 @@ void TabbedSelector::paintEvent(QPaintEvent *e) {
 		paintSlideFrame(p);
 		if (!_a_slide.animating()) {
 			_slideAnimation.reset();
+			const auto generation = _slideGeneration;
 			InvokeQueued(this, [=] {
-				if (!_slideAnimation) {
-					afterShown();
+				if (_slideGeneration != generation
+					|| _slideAnimation
+					|| !isVisible()) {
+					return;
+				}
+				const auto weak = base::make_weak(this);
+				afterShown();
+				if (weak
+					&& _slideGeneration == generation
+					&& !_slideAnimation
+					&& isVisible()) {
 					_slideFinished.fire({});
 				}
 			});
@@ -1070,6 +1465,8 @@ QRect TabbedSelector::floatPlayerAvailableRect() const {
 }
 
 void TabbedSelector::hideFinished() {
+	++_slideGeneration;
+	_slideFromTabs = false;
 	for (auto &tab : _tabs) {
 		tab.widget()->panelHideFinished();
 	}
@@ -1078,6 +1475,8 @@ void TabbedSelector::hideFinished() {
 }
 
 void TabbedSelector::showStarted() {
+	++_slideGeneration;
+	_slideFromTabs = false;
 	if (hasStickersTab()) {
 		session().api().updateStickers();
 	}
@@ -1098,10 +1497,20 @@ void TabbedSelector::showStarted() {
 }
 
 void TabbedSelector::beforeHiding() {
+	++_slideGeneration;
+	_slideFromTabs = false;
+	const auto weak = base::make_weak(this);
+	const auto generation = _slideGeneration;
 	if (!_scroll->isHidden()) {
 		currentTab()->widget()->beforeHiding();
-		if (_beforeHidingCallback) {
-			_beforeHidingCallback(_currentTabType);
+		if (!weak || _slideGeneration != generation) {
+			return;
+		}
+	}
+	if (_beforeHidingCallback) {
+		_beforeHidingCallback(_currentTabType);
+		if (!weak || _slideGeneration != generation) {
+			return;
 		}
 	}
 	if (Ui::InFocusChain(this)) {
@@ -1111,9 +1520,14 @@ void TabbedSelector::beforeHiding() {
 
 void TabbedSelector::afterShown() {
 	if (!_a_slide.animating()) {
+		const auto generation = _slideGeneration;
+		const auto weak = base::make_weak(this);
 		showAll();
-		currentTab()->widget()->afterShown();
-		if (_afterShownCallback) {
+		if (!weak || _slideGeneration != generation) {
+			return;
+		}
+		currentTab()->widget()->afterShownWithSearchFocus(!_slideFromTabs);
+		if (weak && _slideGeneration == generation && _afterShownCallback) {
 			_afterShownCallback(_currentTabType);
 		}
 	}
@@ -1174,11 +1588,16 @@ void TabbedSelector::checkRestrictedPeer() {
 					ChatRestriction::SendOther)
 				: Data::SendError())
 			: Data::SendError();
-		const auto changed = (_restrictedLabelKey != error.text);
+		const auto changed = (_restrictedLabelKey != error.text)
+			|| (_restrictedPeer != _currentPeer)
+			|| (_restrictedBoostsToLift != error.boostsToLift)
+			|| (bool(_restrictedLabel) != bool(error));
 		if (!changed) {
 			return;
 		}
 		_restrictedLabelKey = error.text;
+		_restrictedPeer = _currentPeer;
+		_restrictedBoostsToLift = error.boostsToLift;
 		if (error) {
 			const auto show = _show;
 			const auto peer = _currentPeer;
@@ -1204,6 +1623,8 @@ void TabbedSelector::checkRestrictedPeer() {
 		}
 	} else {
 		_restrictedLabelKey = QString();
+		_restrictedPeer = nullptr;
+		_restrictedBoostsToLift = 0;
 	}
 	if (_restrictedLabel) {
 		_restrictedLabel.destroy();
@@ -1289,15 +1710,18 @@ void TabbedSelector::fillTabsSliderSections() {
 		return;
 	}
 
-	const auto sections = ranges::views::all(
+	const auto types = ranges::views::all(
 		_tabs
 	) | ranges::views::filter([&](const Tab &tab) {
 		return (tab.type() == SelectorTab::Masks)
 			? !masks()->mySetsEmpty()
 			: true;
-	}) | ranges::views::transform([&](const Tab &tab) {
+	}) | ranges::views::transform(&Tab::type) | ranges::to_vector;
+	const auto sections = ranges::views::all(
+		types
+	) | ranges::views::transform([&](SelectorTab type) {
 		return [&] {
-			switch (tab.type()) {
+			switch (type) {
 			case SelectorTab::Emoji:
 				return tr::lng_switch_emoji;
 			case SelectorTab::Stickers:
@@ -1310,7 +1734,7 @@ void TabbedSelector::fillTabsSliderSections() {
 			Unexpected("SelectorTab value in fillTabsSliderSections.");
 		}()(tr::now);
 	}) | ranges::to_vector;
-	_tabsSlider->setSections(sections);
+	_tabsSlider->setTabs(types, sections);
 }
 
 bool TabbedSelector::hasSectionIcons() const {
@@ -1328,13 +1752,45 @@ void TabbedSelector::switchTab() {
 		return;
 	}
 
+	const auto weak = base::make_weak(this);
+	const auto generation = _slideGeneration + 1;
+	const auto fromTabs = _tabsSlider->hasFocus();
+	const auto parked = QPointer<QWidget>(window());
+	auto restoreTabs = fromTabs;
+	auto parking = true;
+	const auto focusConnection = fromTabs
+		? QObject::connect(qApp, &QApplication::focusChanged, this,
+			[&](QWidget *from, QWidget *to) {
+				if (!parking || from != _tabsSlider.data() || to != parked.data()) {
+					restoreTabs = false;
+				}
+			})
+		: QMetaObject::Connection();
+	const auto disconnect = gsl::finally([&] {
+		QObject::disconnect(focusConnection);
+	});
+	if (fromTabs) {
+		parked->setFocus();
+		parking = false;
+		if (!weak || _slideGeneration + 1 != generation) {
+			return;
+		}
+	}
+
 	const auto wasSectionIcons = hasSectionIcons() && !_dropDown;
 	const auto wasIndex = indexByType(_currentTabType);
 	currentTab()->saveScrollTop();
 
 	beforeHiding();
+	if (!weak || _slideGeneration != generation) {
+		return;
+	}
+	_slideFromTabs = fromTabs;
 
 	auto wasCache = grabForAnimation();
+	if (!weak || _slideGeneration != generation) {
+		return;
+	}
 
 	auto widget = _scroll->takeWidget<Inner>();
 	widget->setParent(this);
@@ -1345,6 +1801,7 @@ void TabbedSelector::switchTab() {
 	currentTab()->returnWidget(std::move(widget));
 
 	_currentTabType = newTabType;
+	_tabsSlider->notifySelectionChanged(wasIndex);
 	_restrictedLabel.destroy();
 	checkRestrictedPeer();
 
@@ -1353,6 +1810,9 @@ void TabbedSelector::switchTab() {
 	setWidgetToScrollArea();
 
 	auto nowCache = grabForAnimation();
+	if (!weak || _slideGeneration != generation) {
+		return;
+	}
 
 	auto direction = (wasIndex > indexByType(_currentTabType))
 		? SlideAnimation::Direction::LeftToRight
@@ -1378,8 +1838,22 @@ void TabbedSelector::switchTab() {
 	_slideAnimation->start();
 
 	hideForSliding();
+	if (!weak || _slideGeneration != generation) {
+		return;
+	}
 
 	getTab(wasIndex)->widget()->hideFinished();
+	if (!weak || _slideGeneration != generation) {
+		return;
+	}
+	QObject::disconnect(focusConnection);
+	if (restoreTabs && parked && QApplication::focusWidget() == parked
+		&& _tabsSlider->isVisible() && _tabsSlider->isEnabled()) {
+		_tabsSlider->setFocus(Qt::OtherFocusReason);
+		if (!weak || _slideGeneration != generation) {
+			return;
+		}
+	}
 
 	_a_slide.start(
 		[=] { update(); },
@@ -1628,6 +2102,16 @@ int TabbedSelector::Inner::minimalHeight() const {
 
 int TabbedSelector::Inner::defaultMinimalHeight() const {
 	return st::emojiPanMaxHeight - _st.footer;
+}
+
+void TabbedSelector::Inner::afterShownWithSearchFocus(bool allow) {
+	const auto weak = base::make_weak(this);
+	const auto previous = _allowSearchAutoFocus;
+	_allowSearchAutoFocus = previous && allow;
+	afterShown();
+	if (weak) {
+		_allowSearchAutoFocus = previous;
+	}
 }
 
 void TabbedSelector::Inner::hideFinished() {

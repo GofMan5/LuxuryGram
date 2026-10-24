@@ -1254,6 +1254,11 @@ void FileLoadTask::finish() {
 	if (!session) {
 		return;
 	}
+	const auto failed = [=] {
+		if (const auto finished = _to.options.localSendFinished) {
+			(*finished)(FullMsgId(), false);
+		}
+	};
 	const auto premium = session->user()->isPremium();
 	if (!_result || !_result->filesize || _result->filesize < 0) {
 		Ui::show(
@@ -1261,12 +1266,14 @@ void FileLoadTask::finish() {
 				? tr::lng_folder_archive_failed(tr::now)
 				: tr::lng_send_image_empty(tr::now, lt_name, _filepath)),
 			Ui::LayerOption::KeepOther);
+		failed();
 		removeFromAlbum();
 	} else if (_result->filesize > kFileSizePremiumLimit
 		|| (_result->filesize > kFileSizeLimit && !premium)) {
 		Ui::show(
 			Box(FileSizeLimitBox, session, _result->filesize, nullptr),
 			Ui::LayerOption::KeepOther);
+		failed();
 		removeFromAlbum();
 	} else if (_album && _album->preparedMusicBatching()) {
 		const auto it = ranges::find(_album->items, id(), &SendingAlbum::Item::taskId);

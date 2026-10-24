@@ -291,8 +291,10 @@ void recordTransition(not_null<UserData*> user, bool online, int at) {
 	const auto userId = DatabaseUserId(peer->session());
 	const auto dialogId = getDialogIdFromPeer(peer);
 	const auto peerId = static_cast<ID>(peer->id.value);
-	if (!online) {
-		const auto key = std::make_pair(userId, dialogId);
+	const auto key = std::make_pair(userId, dialogId);
+	if (online) {
+		LastOffline.erase(key);
+	} else {
 		if (!LastOffline.contains(key)
 			&& LastOffline.size() >= kMaxLastOfflineEntries) {
 			LastOffline.erase(LastOffline.begin());

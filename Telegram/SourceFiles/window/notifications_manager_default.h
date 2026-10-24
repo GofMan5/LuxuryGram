@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #pragma once
 
 #include "window/notifications_manager.h"
+#include "core/core_settings.h"
 #include "ui/effects/animations.h"
 #include "ui/text/text.h"
 #include "ui/rp_widget.h"
@@ -35,6 +36,8 @@ class HideAllButton;
 
 class Manager;
 std::unique_ptr<Manager> Create(System *system);
+
+[[nodiscard]] int NotificationWidth(Core::Settings::ScreenCorner corner);
 
 class Manager final : public Notifications::Manager {
 public:

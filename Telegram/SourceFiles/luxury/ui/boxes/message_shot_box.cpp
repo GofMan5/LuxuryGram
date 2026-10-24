@@ -18,6 +18,7 @@
 #include "history/history_item_components.h"
 #include "luxury/ui/boxes/theme_selector_box.h"
 #include "luxury/ui/components/image_view.h"
+#include "luxury/ui/utils/box_buttons.h"
 #include "luxury/luxury_settings.h"
 #include "main/main_session.h"
 #include "settings/settings_common.h"
@@ -46,6 +47,14 @@ MessageShotBox::MessageShotBox(
 
 void MessageShotBox::prepare() {
 	setupContent();
+}
+
+void MessageShotBox::setExportButtonsEnabled(bool enabled) {
+	for (const auto &button : { _saveButton, _copyButton }) {
+		if (button) {
+			Luxury::Ui::SetBoxButtonEnabled(button.data(), enabled);
+		}
+	}
 }
 
 void MessageShotBox::setupContent() {
@@ -212,12 +221,18 @@ void MessageShotBox::setupContent() {
 	const auto updatePreview = [=]
 	{
 		const auto currentGeneration = ++(*generation);
+		_exportImage = QImage();
+		setExportButtonsEnabled(false);
 		LuxuryFeatures::MessageShot::Make(this, _config, [=](const QImage &image, bool final)
 		{
 			if (!weak || currentGeneration != *generation) {
 				return;
 			}
 
+			if (final) {
+				_exportImage = image;
+				setExportButtonsEnabled(!image.isNull());
+			}
 			if (final || imageView->getImage().isNull()) {
 				imageView->setImage(image);
 			}
@@ -244,7 +259,8 @@ void MessageShotBox::setupContent() {
 					? std::make_shared<Ui::ChatStyle>(_selectedPalette.get())
 					: fallbackStyle;
 				updatePreview();
-			});
+			},
+			_savedThemeLifetime);
 	}
 
 	auto selectedTheme =
@@ -262,35 +278,30 @@ void MessageShotBox::setupContent() {
 			LuxuryFeatures::MessageShot::setChoosingTheme(true);
 
 			auto box = Box<ThemeSelectorBox>(_config.controller);
-			box->paletteSelected() | rpl::on_next(
-				[=](const style::palette &palette) mutable
+			box->themeSelected() | rpl::on_next(
+				[=](const ShotThemeSelection &selection) mutable
 				{
+					_savedThemeLifetime.destroy();
 					_selectedPalette->reset();
-					_selectedPalette->load(palette.save());
+					_selectedPalette->load(selection.palette);
 
 					_config.st = std::make_shared<Ui::ChatStyle>(_selectedPalette.get());
 
 					auto &shot = LuxurySettings::getInstance().messageShotSettings();
-					const auto embedded = LuxuryFeatures::MessageShot::getSelectedFromDefault();
-					const auto cloud = LuxuryFeatures::MessageShot::getSelectedFromCustom();
+					const auto embedded = selection.embedded;
+					const auto &cloud = selection.cloud;
 					if (cloud.has_value()) {
 						const auto accountId = _config.controller->session().uniqueId();
 						shot.setCloudTheme(accountId, cloud->id, cloud->accessHash, cloud->documentId, cloud->title);
 					} else if (embedded != Window::Theme::EmbeddedType(-1)) {
-						const auto color = LuxuryFeatures::MessageShot::getSelectedColorFromDefault();
+						const auto &color = selection.color;
 						shot.setEmbeddedTheme(static_cast<int>(embedded), color ? color->rgb() : 0);
 					} else {
 						shot.clearTheme();
 					}
 
+					selectedTheme->force_assign(selection.name);
 					updatePreview();
-				},
-				content->lifetime());
-
-			box->themeNameChanged() | rpl::on_next(
-				[=](const QString &name)
-				{
-					selectedTheme->force_assign(name);
 				},
 				content->lifetime());
 
@@ -301,7 +312,7 @@ void MessageShotBox::setupContent() {
 				},
 				content->lifetime());
 
-			Ui::show(std::move(box), Ui::LayerOption::KeepOther);
+			_config.controller->show(std::move(box));
 		});
 	AddButtonWithIcon(
 		content,
@@ -423,10 +434,10 @@ void MessageShotBox::setupContent() {
 
 	AddSkip(content);
 
-	addButton(tr::luxury_MessageShotSave(),
+	_saveButton = addButton(tr::luxury_MessageShotSave(),
 			  [=]
 			  {
-				  const auto image = imageView->getImage();
+				  const auto image = _exportImage;
 				  if (image.isNull()) {
 					  // Nothing was rendered -- the size guard rejected it, or every
 					  // message is gone. Keep the box and the user's selection.
@@ -452,29 +463,34 @@ void MessageShotBox::setupContent() {
 							  ? result
 							  : (result + u".png"_q);
 						  _tookShot = true;
+						  const auto controller = _config.controller;
 						  closeBox();
 						  // A shot can encode to tens of megabytes, so it does not
 						  // belong on the main thread.
 						  crl::async([=] {
 							  if (!image.save(path)) {
-								  crl::on_main([] {
-									  Ui::Toast::Show(
+								  crl::on_main(controller, [=] {
+									  controller->showToast(
 										  tr::luxury_MessageShotSaveFailed(tr::now));
 								  });
 							  }
 						  });
 					  }));
 			  });
-	addButton(tr::luxury_MessageShotCopy(),
+	_copyButton = addButton(tr::luxury_MessageShotCopy(),
 			  [=]
 			  {
-				  const auto image = imageView->getImage();
+				  const auto image = _exportImage;
 				  if (image.isNull()) {
 					  // Do not wipe the clipboard with nothing.
 					  showToast(tr::luxury_MessageShotEmpty(tr::now));
 					  return;
 				  }
 				  QGuiApplication::clipboard()->setImage(image);
+				  // The box closes at once, so the toast goes to the window: without
+				  // it nothing tells a copy from a click that did nothing.
+				  _config.controller->showToast(
+					  tr::luxury_MessageShotCopied(tr::now));
 
 				  _tookShot = true;
 				  closeBox();
@@ -488,6 +504,7 @@ void MessageShotBox::setupContent() {
 	boxClosing() | rpl::on_next(
 		[=]
 		{
+			_savedThemeLifetime.destroy();
 			LuxuryFeatures::MessageShot::resetCustomSelected();
 			LuxuryFeatures::MessageShot::resetDefaultSelected();
 		},

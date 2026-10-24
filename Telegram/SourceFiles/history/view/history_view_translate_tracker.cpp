@@ -24,6 +24,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "spellcheck/platform/platform_language.h"
 #include "ui/toast/toast.h"
+#include "window/window_session_controller.h"
+#include "styles/style_widgets.h"
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
@@ -40,15 +42,29 @@ constexpr auto kMaxCheckInBunch = 100;
 constexpr auto kRequestLengthLimit = 24 * 1024;
 constexpr auto kRequestCountLimit = 20;
 constexpr auto kTranslateFailSnippetLength = 64;
+constexpr auto kTranslateFailToastDuration = 4 * crl::time(1000);
 
 // First line of a message that did not translate, for the batch-failure
 // toast: names which message failed when the provider drops the whole batch.
-QString TranslateFailSnippet(const QString &text) {
-	auto flat = text;
+QString TranslateFailSnippet(const TextWithEntities &original) {
+	auto flat = original.text;
+	for (const auto &entity : original.entities) {
+		if (entity.type() == EntityType::Spoiler) {
+			flat.replace(
+				entity.offset(),
+				entity.length(),
+				QString(entity.length(), QChar(0x259A)));
+		}
+	}
 	flat.replace(u'\n', u' ');
-	return (flat.size() > kTranslateFailSnippetLength)
-		? flat.left(kTranslateFailSnippetLength) + u"…"_q
-		: flat;
+	if (flat.size() <= kTranslateFailSnippetLength) {
+		return flat;
+	}
+	auto cut = kTranslateFailSnippetLength;
+	if (flat.at(cut - 1).isHighSurrogate()) {
+		--cut;
+	}
+	return flat.left(cut) + u"…"_q;
 }
 
 } // namespace
@@ -174,8 +190,8 @@ void TranslateTracker::switchTranslation(
 	if (item->translationShowRequiresRequest(id)) {
 		_itemsToRequest.emplace(item->fullId(), ItemToRequest{
 			.length = int(item->originalText().text.size()),
-			.rich = (_provider->supportsMessageId()
-				&& (item->richPage() != nullptr)),
+			.rich = Ui::SupportsRichMessageTranslation(_provider.get())
+				&& (item->richPage() != nullptr),
 		});
 	}
 }
@@ -392,7 +408,7 @@ void TranslateTracker::requestSome() {
 				} else {
 					if (outcome->failedSnippet.isEmpty()) {
 						outcome->failedSnippet = TranslateFailSnippet(
-							item->originalText().text);
+							item->originalText());
 					}
 					++outcome->failed;
 				}
@@ -404,18 +420,27 @@ void TranslateTracker::requestSome() {
 			}
 			_requestInProcess = false;
 			_requested.clear();
-			if (outcome->failed > 0 && !outcome->failedSnippet.isEmpty()) {
+			const auto peer = _history->peer;
+			const auto window = (outcome->failed > 0
+				&& !outcome->failedSnippet.isEmpty())
+				? peer->session().tryResolveWindow(peer)
+				: nullptr;
+			if (window) {
 				const auto text = tr::luxury_TranslateBatchFailed(
 					tr::now,
 					lt_text,
 					outcome->failedSnippet);
-				Ui::Toast::Show(outcome->succeeded > 0
-					? text + u" · "_q
-						+ tr::luxury_TranslateBatchOthersDone(
-							tr::now,
-							lt_count,
-							outcome->succeeded)
-					: text);
+				window->showToast(Ui::Toast::Config{
+					.text = { outcome->succeeded > 0
+						? text + u" · "_q
+							+ tr::luxury_TranslateBatchOthersDone(
+								tr::now,
+								lt_count,
+								outcome->succeeded)
+						: text },
+					.st = &st::defaultToast,
+					.duration = kTranslateFailToastDuration,
+				});
 			}
 			requestSome();
 		});

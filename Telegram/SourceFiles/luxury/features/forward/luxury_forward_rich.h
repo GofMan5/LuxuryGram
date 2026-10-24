@@ -13,7 +13,7 @@
 namespace LuxuryForward {
 
 bool forwardRichMessage(
-	not_null<Main::Session*> session,
+	base::weak_ptr<Main::Session> session,
 	FullMsgId itemId,
 	const Api::SendAction &action,
 	Fn<bool()> cancelled = nullptr);

@@ -60,6 +60,7 @@
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
+#include "window/window_controller.h"
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
 
@@ -200,15 +201,12 @@ void DeleteMyMessagesAfterConfirm(
 			// ErrorWaitSeconds() replaces two startsWith() prefix tests that also
 			// matched FLOOD_WAIT with a non-numeric tail and retried it after one
 			// second, forever. No count, no retry: it drops to the stop below.
-			if (const auto seconds = Api::ErrorWaitSeconds(type)) {
-				// Said out loud, because the deletion is about to sit still for
-				// as long as the server asks and there is nothing else on screen
-				// to explain the pause.
+			if (Api::ErrorWaitSeconds(type)) {
+				// The request is parked by MTProto and a retry here only
+				// reopens the flood window, producing another toast and
+				// another request forever. Stop this batch; the user can
+				// retry the action deliberately later.
 				state->say(Api::ErrorText(type));
-				const auto delay = crl::time(std::max(seconds, 1) * 1000);
-				base::call_delayed(delay, [state, ids, nextFrom, hasMore] {
-					state->removeBatch(ids, nextFrom, hasMore);
-				});
 				return;
 			}
 			if (type == u"MESSAGE_DELETE_FORBIDDEN"_q
@@ -438,12 +436,10 @@ void AddLuxuryGramActions(PeerData *peerData,
 					tr::luxury_ViewDeletedMenuText(tr::now),
 					[=]
 					{
-						if (const auto window = sessionController->session().tryResolveWindow()) {
-							window->showSection(std::make_shared<MessageHistory::SectionMemento>(
-								peerData,
-								MsgId(),
-								topicId));
-						}
+						sessionController->showSection(std::make_shared<MessageHistory::SectionMemento>(
+							peerData,
+							MsgId(),
+							topicId));
 					},
 					&st::menuIconArchive);
 				if (showFilters || filteredToggleShown.value_or(false)) addAction({ .isSeparator = true });
@@ -483,7 +479,8 @@ void AddLuxuryGramActions(PeerData *peerData,
 							box->addButton(tr::luxury_ClearOnlineHistoryMenuText(), [=] {
 								if (alsoFiles && alsoFiles->checked()) {
 									LuxuryFeatures::Watch::clearKeptMediaForDialog(
-										getDialogIdFromPeer(peerData));
+										peerData->session().uniqueId(),
+										ID(peerData->id.value));
 								}
 								LuxuryOnline::clearHistory(peerData);
 								box->closeBox();
@@ -724,7 +721,10 @@ void AddDeleteOwnMessagesAction(PeerData *peerData,
 		&st::menuIconTTL);
 }
 
-void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
+void AddHistoryAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<Window::SessionController*> controller,
+		HistoryItem *item) {
 	const auto &settings = LuxurySettings::getInstance();
 	if (!needToShowItem(settings.showEditsHistoryInContextMenu())) {
 		return;
@@ -750,27 +750,21 @@ void AddHistoryAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 	// The action runs after the menu closed, so the item may already be gone
 	// by then: deleted from the other side, or dropped when the history was
 	// unloaded. Re-resolve it instead of holding the pointer.
-	const auto weak = base::make_weak(&item->history()->session());
 	const auto itemId = item->fullId();
 	menu->addAction(
 		tr::luxury_EditsHistoryMenuText(tr::now),
-		[=]
+		crl::guard(controller, [=]
 		{
-			const auto session = weak.get();
-			const auto item = session
-				? session->data().message(itemId)
-				: nullptr;
+			const auto item = controller->session().data().message(itemId);
 			if (!item) {
 				return;
 			}
-			if (const auto window = session->tryResolveWindow()) {
-				window->showSection(
-					std::make_shared<MessageHistory::SectionMemento>(
-						item->history()->peer,
-						item->id,
-						0));
-			}
-		},
+			controller->showSection(
+				std::make_shared<MessageHistory::SectionMemento>(
+					item->history()->peer,
+					item->id,
+					0));
+		}),
 		&st::luxuryEditsHistoryIcon);
 }
 
@@ -849,7 +843,10 @@ void AddHideMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 		&st::menuIconClear);
 }
 
-void AddUserMessagesAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
+void AddUserMessagesAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<Window::SessionController*> controller,
+		HistoryItem *item) {
 	const auto &settings = LuxurySettings::getInstance();
 	if (!needToShowItem(settings.showUserMessagesInContextMenu())) {
 		return;
@@ -864,7 +861,7 @@ void AddUserMessagesAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 		const auto itemId = item->fullId();
 		menu->addAction(
 			tr::luxury_UserMessagesMenuText(tr::now),
-			[=]
+			crl::guard(controller, [=]
 			{
 				// The message can be deleted while the menu is open, and its
 				// sender is what we search by.
@@ -872,16 +869,14 @@ void AddUserMessagesAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 				if (!current) {
 					return;
 				}
-				if (const auto controller = history->session().tryResolveWindow()) {
-					const auto peer = history->peer;
-					const auto key = (peer && !peer->isUser())
-										 ? current->topic()
-											   ? Dialogs::Key{current->topic()}
-											   : Dialogs::Key{history}
-										 : Dialogs::Key{history};
-					controller->searchInChat(key, current->from());
-				}
-			},
+				const auto peer = history->peer;
+				const auto key = (peer && !peer->isUser())
+									 ? current->topic()
+										   ? Dialogs::Key{current->topic()}
+										   : Dialogs::Key{history}
+									 : Dialogs::Key{history};
+				controller->searchInChat(key, current->from());
+			}),
 			&st::menuIconTTL);
 	}
 }
@@ -930,8 +925,8 @@ void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 			: QDateTime();
 
 	const auto
-		messageViews = item->hasViews() && item->viewsCount() > 0 ? QString::number(item->viewsCount()) : QString();
-	const auto messageForwards = views && views->forwardsCount > 0 ? QString::number(views->forwardsCount) : QString();
+		messageViews = item->hasViews() && item->viewsCount() > 0 ? Lang::FormatCountDecimal(item->viewsCount()) : QString();
+	const auto messageForwards = views && views->forwardsCount > 0 ? Lang::FormatCountDecimal(views->forwardsCount) : QString();
 
 	const auto mediaSize = media ? getMediaSize(item) : QString();
 	const auto mediaMime = media ? getMediaMime(item) : QString();
@@ -1026,19 +1021,21 @@ void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 				}
 
 				if (!mediaMime.isEmpty()) {
-					const auto mime = Core::MimeTypeForName(mediaMime);
+					const auto mime = Core::MimeTypeForName(mediaMime).name();
 
 					menu2->addAction(Ui::ContextActionWithSubText(
 						menu2->menu(),
 						st::menuIconShowAll,
 						tr::luxury_MessageDetailsMimeTypePC(tr::now),
-						mime.name()
+						mime.isEmpty() ? mediaMime : mime
 					));
 				}
 
 				if (!mediaName.isEmpty()) {
 					const auto shortified = mediaName.length() > kMaxMediaNameLength
-						? "…" + mediaName.right(kMaxMediaNameLength)
+						? "…" + mediaName.mid(safeCutPosition(
+							mediaName,
+							mediaName.length() - kMaxMediaNameLength))
 						: mediaName;
 
 					menu2->addAction(Ui::ContextActionWithSubText(
@@ -1049,6 +1046,9 @@ void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 						[=]
 						{
 							QGuiApplication::clipboard()->setText(mediaName);
+							if (const auto window = Core::App().activeWindow()) {
+								window->showToast(tr::lng_text_copied(tr::now));
+							}
 						}
 					));
 				}
@@ -1162,9 +1162,10 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 			if (useNoQuote) {
 				if (currentItem->richPage() && session->premium()) {
 					if (preserveReply) {
+						const auto weakSession = base::make_weak(session);
 						crl::async([=]
 						{
-							LuxuryForward::forwardRichMessage(session, itemId, action);
+							LuxuryForward::forwardRichMessage(weakSession, itemId, action);
 						});
 					} else {
 						const auto forwardDraft = Data::ForwardDraft{
@@ -1187,14 +1188,14 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 								currentItem->originalText().entities),
 						};
 					}
-					if (media) {
+					if (!media || media->webpage()) {
+						session->api().sendMessage(std::move(message));
+					} else {
 						if (const auto photo = media->photo()) {
 							Api::SendExistingPhoto(std::move(message), photo);
 						} else if (const auto document = media->document()) {
 							Api::SendExistingDocument(std::move(message), document);
 						}
-					} else {
-						session->api().sendMessage(std::move(message));
 					}
 				}
 			} else {

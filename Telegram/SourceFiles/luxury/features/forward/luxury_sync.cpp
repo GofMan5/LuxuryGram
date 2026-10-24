@@ -12,6 +12,7 @@
 #include "luxury/utils/telegram_helpers.h"
 #include "base/base_file_utilities.h"
 #include "base/flat_map.h"
+#include "base/flat_set.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "core/file_utilities.h"
@@ -28,6 +29,7 @@
 #include "iv/iv_rich_page.h"
 #include "main/main_session.h"
 #include "storage/file_download_mtproto.h"
+#include "storage/file_upload.h"
 #include "storage/localimageloader.h"
 
 #include <QFile>
@@ -35,7 +37,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <mutex>
 #include <utility>
 
 namespace LuxurySync {
@@ -61,6 +62,22 @@ bool WaitUntil(
 	return false;
 }
 
+std::shared_ptr<rpl::lifetime> WatchSessionDataClear(
+		WeakSession session,
+		const std::shared_ptr<std::atomic_bool> &active) {
+	const auto lifetime = std::make_shared<rpl::lifetime>();
+	crl::on_main_sync([&] {
+		if (const auto strong = session.get()) {
+			strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+				active->store(false);
+			}, *lifetime);
+		} else {
+			active->store(false);
+		}
+	});
+	return lifetime;
+}
+
 template <typename Callback>
 bool SendAndWait(
 		WeakSession session,
@@ -69,58 +86,82 @@ bool SendAndWait(
 		const Cancelled &cancelled,
 		Callback &&callback) {
 	Expects(count > 0);
+	const auto active = std::make_shared<std::atomic_bool>(true);
 	const auto stopped = [=] {
-		return !session.get() || (cancelled && cancelled());
+		return !active->load() || !session.get() || (cancelled && cancelled());
 	};
-	if (stopped()) {
-		return false;
-	}
-
-	auto latch = std::make_shared<TimedCountDownLatch>(count);
-	auto lifetime = std::make_shared<rpl::lifetime>();
-	auto started = std::make_shared<std::atomic_bool>(false);
-
-	crl::on_main(session, [
-		session,
-		action,
-		count,
-		latch,
-		lifetime,
-		started,
-		stopped,
-		callback = std::forward<Callback>(callback)
-	]() mutable {
+	if (stopped()) return false;
+	struct State {
+		base::flat_set<FullMsgId> pending;
+		base::flat_set<FullMsgId> owned;
+		int allocated = 0;
+		bool dispatching = true;
+		bool started = false;
+		bool failed = false;
+	};
+	const auto state = std::make_shared<State>();
+	const auto latch = std::make_shared<TimedCountDownLatch>(1);
+	const auto lifetime = std::make_shared<rpl::lifetime>();
+	crl::on_main(session, [=, callback = std::forward<Callback>(callback)]() mutable {
 		if (stopped()) {
+			latch->countDown();
 			return;
 		}
 		const auto strong = session.get();
-		if (!strong) {
-			return;
-		}
-		const auto peerId = action.history->peer->id;
-		strong->data().itemIdChanged(
-		) | rpl::filter([peerId](const Data::Session::IdChange &update) {
-			return peerId == update.newId.peer;
-		}) | rpl::take(count) | rpl::on_next([latch] {
-			latch->countDown();
-		}, *lifetime);
-		started->store(true);
-		if (!callback(strong)) {
-			started->store(false);
-			for (auto i = 0; i != count; ++i) {
+		const auto check = [=] {
+			if (!state->dispatching
+				&& state->allocated >= count
+				&& state->pending.empty()) {
 				latch->countDown();
 			}
+		};
+		const auto allocated = std::make_shared<Fn<bool(FullMsgId)>>([=](FullMsgId id) {
+			if (stopped()) return false;
+			if (state->owned.emplace(id).second) {
+				state->pending.emplace(id);
+				++state->allocated;
+			}
+			return true;
+		});
+		strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+			state->failed = true;
+			active->store(false);
+			lifetime->destroy();
+			latch->countDown();
+		}, *lifetime);
+		strong->data().itemIdChanged() | rpl::on_next([=](const Data::Session::IdChange &update) {
+			if (state->pending.remove(FullMsgId(update.newId.peer, update.oldId))) check();
+		}, *lifetime);
+		const auto finished = std::make_shared<Fn<void(FullMsgId, bool)>>([=](FullMsgId id, bool success) {
+			if (stopped()) return;
+			if (!success && (!id || state->pending.contains(id))) {
+				state->failed = true;
+				active->store(false);
+				latch->countDown();
+			} else if (state->pending.remove(id)) {
+				check();
+			}
+		});
+		strong->uploader().photoFailed() | rpl::on_next([=](FullMsgId id) { (*finished)(id, false); }, *lifetime);
+		strong->uploader().documentFailed() | rpl::on_next([=](FullMsgId id) { (*finished)(id, false); }, *lifetime);
+		state->started = callback(strong, allocated, finished);
+		state->dispatching = false;
+		if (state->started) {
+			check();
+		} else {
+			latch->countDown();
 		}
 	});
-
-	const auto completed = WaitUntil(
-		latch,
-		std::chrono::minutes(5),
-		stopped);
-	crl::on_main([lifetime = std::move(lifetime)] {
+	const auto completed = WaitUntil(latch, std::chrono::minutes(5), stopped);
+	active->store(false);
+	auto result = false;
+	crl::on_main_sync([&] {
 		lifetime->destroy();
+		result = completed && session.get() && !(cancelled && cancelled())
+			&& state->started && !state->failed
+			&& state->allocated >= count && state->pending.empty();
 	});
-	return completed && started->load();
+	return result;
 }
 
 QString ForwardPhotoName(not_null<PhotoData*> photo) {
@@ -129,118 +170,6 @@ QString ForwardPhotoName(not_null<PhotoData*> photo) {
 }
 
 constexpr auto kDocumentDownloadTimeout = std::chrono::minutes(15);
-constexpr auto kDownloadWaitStep = std::chrono::milliseconds(100);
-
-enum class DownloadWaitResult {
-	Completed,
-	Cancelled,
-	TimedOut,
-};
-
-struct ActiveDocumentDownload {
-	QString path;
-	QString readyPath;
-	TimedCountDownLatch done{ 1 };
-	rpl::lifetime lifetime;
-	int consumers = 1;
-	bool allowSizeFallback = false;
-};
-
-struct DocumentDownloadRegistration {
-	std::shared_ptr<ActiveDocumentDownload> state;
-	bool owner = false;
-};
-
-using ActiveDocumentDownloads = base::flat_map<
-	DocumentData*,
-	std::shared_ptr<ActiveDocumentDownload>>;
-
-[[nodiscard]] std::mutex &DocumentDownloadsMutex() {
-	static auto result = std::mutex();
-	return result;
-}
-
-[[nodiscard]] ActiveDocumentDownloads &DocumentDownloads() {
-	static auto result = ActiveDocumentDownloads();
-	return result;
-}
-
-[[nodiscard]] DocumentDownloadRegistration RegisterDocumentDownload(
-		not_null<DocumentData*> document) {
-	const auto lock = std::lock_guard(DocumentDownloadsMutex());
-	auto &active = DocumentDownloads();
-	const auto i = active.find(document);
-	if (i != active.end()) {
-		++i->second->consumers;
-		return { i->second, false };
-	}
-	auto state = std::make_shared<ActiveDocumentDownload>();
-	active.emplace(document, state);
-	return { std::move(state), true };
-}
-
-void FinishDocumentDownload(
-		DocumentData *document,
-		const std::shared_ptr<ActiveDocumentDownload> &state) {
-	{
-		const auto lock = std::lock_guard(DocumentDownloadsMutex());
-		auto &active = DocumentDownloads();
-		const auto i = active.find(document);
-		if (i != active.end() && i->second == state) {
-			active.erase(i);
-		}
-	}
-	state->done.countDown();
-}
-
-void ReleaseDocumentDownloadConsumer(
-		DocumentData *document,
-		const std::shared_ptr<ActiveDocumentDownload> &state) {
-	auto released = false;
-	{
-		const auto lock = std::lock_guard(DocumentDownloadsMutex());
-		Expects(state->consumers > 0);
-		--state->consumers;
-		if (state->consumers == 0) {
-			auto &active = DocumentDownloads();
-			const auto i = active.find(document);
-			if (i != active.end() && i->second == state) {
-				active.erase(i);
-				released = true;
-			}
-		}
-	}
-	if (released) {
-		state->done.countDown();
-	}
-}
-
-[[nodiscard]] DownloadWaitResult WaitForDownload(
-		TimedCountDownLatch &done,
-		std::chrono::milliseconds timeout,
-		const Fn<bool()> &cancelled) {
-	const auto deadline = std::chrono::steady_clock::now() + timeout;
-	while (true) {
-		if (done.await(std::chrono::milliseconds(0))) {
-			return DownloadWaitResult::Completed;
-		}
-		if (cancelled && cancelled()) {
-			return DownloadWaitResult::Cancelled;
-		}
-		const auto remaining = std::chrono::duration_cast<
-			std::chrono::milliseconds>(
-			deadline - std::chrono::steady_clock::now());
-		if (remaining <= std::chrono::milliseconds(0)) {
-			return DownloadWaitResult::TimedOut;
-		}
-		if (done.await(std::min(
-				remaining,
-				kDownloadWaitStep))) {
-			return DownloadWaitResult::Completed;
-		}
-	}
-}
-
 [[nodiscard]] bool SameFilePath(const QString &left, const QString &right) {
 	const auto leftInfo = QFileInfo(left);
 	const auto rightInfo = QFileInfo(right);
@@ -265,14 +194,6 @@ void ReleaseDocumentDownloadConsumer(
 		&& info.size() == expectedSize;
 }
 
-[[nodiscard]] QString LoadedDocumentPath(not_null<DocumentData*> document) {
-	auto result = QString();
-	crl::on_main_sync([&] {
-		result = document->filepath(true);
-	});
-	return result;
-}
-
 [[nodiscard]] bool DocumentReady(
 		not_null<DocumentData*> document,
 		const QString &path) {
@@ -281,30 +202,6 @@ void ReleaseDocumentDownloadConsumer(
 		&& !loaded.isEmpty()
 		&& SameFilePath(path, loaded)
 		&& FileHasExactSize(path, document->size);
-}
-
-void CompleteDocumentDownload(
-		not_null<DocumentData*> document,
-		const std::shared_ptr<ActiveDocumentDownload> &state) {
-	if (document->loading()) {
-		return;
-	}
-	const auto released = state->done.await(std::chrono::milliseconds(0));
-	const auto ready = state->allowSizeFallback
-		? FileHasExactSize(state->path, document->size)
-		: (document->status != FileDownloadFailed
-			&& !document->cancelled()
-			&& DocumentReady(document, state->path));
-	if (!ready) {
-		QFile::remove(state->path);
-		state->path.clear();
-	} else if (!released) {
-		state->readyPath = state->path;
-	}
-	state->lifetime.destroy();
-	if (!released) {
-		FinishDocumentDownload(document, state);
-	}
 }
 
 [[nodiscard]] QString GeneratedDocumentName(
@@ -496,8 +393,9 @@ void loadDocumentSync(
 	}
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 	auto lifetime = std::make_shared<rpl::lifetime>();
+	const auto active = std::make_shared<std::atomic_bool>(true);
 	const auto stopped = [=] {
-		return !session.get() || (cancelled && cancelled());
+		return !active->load() || !session.get() || (cancelled && cancelled());
 	};
 	crl::on_main(session, [=] {
 		if (stopped()) {
@@ -505,6 +403,11 @@ void loadDocumentSync(
 			return;
 		}
 		const auto strong = session.get();
+		strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+			active->store(false);
+			lifetime->destroy();
+			latch->countDown();
+		}, *lifetime);
 		const auto item = strong ? strong->data().message(itemId) : nullptr;
 		const auto media = item ? item->media() : nullptr;
 		const auto document = media ? media->document() : nullptr;
@@ -516,7 +419,7 @@ void loadDocumentSync(
 		document->save(Data::FileOriginMessage(itemId), path);
 
 		rpl::single() | rpl::then(
-			strong->downloaderTaskFinished()
+			DocumentLoadUpdates(strong, document)
 		) | rpl::filter([=] {
 			// The stat is the only way to know the file is fully written, but it
 			// must not run on every downloader tick in the app: while this one is
@@ -533,115 +436,60 @@ void loadDocumentSync(
 		LOG(("forward document download timed out"));
 	}
 
-	crl::on_main([lifetime = std::move(lifetime)] {
-		lifetime->destroy();
-	});
+	active->store(false);
+	crl::on_main_sync([&] { lifetime->destroy(); });
 }
 
 QString loadDocumentSync(
-		not_null<Main::Session*> session,
-		not_null<DocumentData*> data,
+		WeakSession session,
+		DocumentId documentId,
 		Data::FileOrigin origin,
 		const Cancelled &cancelled) {
-	if (cancelled && cancelled()) {
-		return {};
-	}
-	const auto expectedSize = data->size;
-	const auto registration = RegisterDocumentDownload(data);
-	const auto releaseConsumer = gsl::finally([&] {
-		ReleaseDocumentDownloadConsumer(data, registration.state);
-	});
-	if (!registration.owner) {
-		const auto waitResult = WaitForDownload(
-			registration.state->done,
-			kDocumentDownloadTimeout,
-			cancelled);
-		if (waitResult != DownloadWaitResult::Completed) {
-			if (waitResult != DownloadWaitResult::Cancelled) {
-				LOG(("forward document download timed out"));
-			}
-			return {};
-		}
-		const auto path = registration.state->readyPath;
-		return FileHasExactSize(path, expectedSize) ? path : QString();
-	}
-	auto registrationActive = true;
-	auto reserved = false;
-	const auto cleanup = gsl::finally([&] {
-		if (!registrationActive) {
+	const auto active = std::make_shared<std::atomic_bool>(true);
+	const auto stopped = [=] {
+		return !active->load() || !session.get() || (cancelled && cancelled());
+	};
+	if (stopped()) return {};
+	struct State { QString path; int64 expected = 0; };
+	const auto state = std::make_shared<State>();
+	auto latch = std::make_shared<TimedCountDownLatch>(1);
+	auto lifetime = std::make_shared<rpl::lifetime>();
+	crl::on_main(session, [=] {
+		if (stopped()) {
+			latch->countDown();
 			return;
 		}
-		if (reserved) {
-			QFile::remove(registration.state->path);
+		const auto strong = session.get();
+		strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+			active->store(false);
+			lifetime->destroy();
+			latch->countDown();
+		}, *lifetime);
+		const auto document = strong->data().document(documentId);
+		state->expected = document->size;
+		state->path = document->filepath(true);
+		if (FileHasExactSize(state->path, state->expected)) { latch->countDown(); return; }
+		if (document->loading()) {
+			state->path = document->loadingFilePath();
+		} else {
+			state->path = NextDocumentPath(strong, document);
+			if (!state->path.isEmpty() && QDir().mkpath(QFileInfo(state->path).absolutePath())) {
+				document->save(origin, state->path);
+			} else { state->path.clear(); }
 		}
-		registration.state->path.clear();
-		FinishDocumentDownload(data, registration.state);
+		if (state->path.isEmpty()) { latch->countDown(); return; }
+		rpl::single() | rpl::then(DocumentLoadUpdates(strong, document))
+		| rpl::filter([=] { return !document->loading(); })
+		| rpl::take(1) | rpl::on_next([=] {
+			if (document->status == FileDownloadFailed || !DocumentReady(document, state->path)) state->path.clear();
+			latch->countDown();
+		}, *lifetime);
 	});
-	auto path = LoadedDocumentPath(data);
-	if (FileHasExactSize(path, expectedSize)) {
-		registration.state->path = path;
-		registration.state->readyPath = path;
-		registrationActive = false;
-		FinishDocumentDownload(data, registration.state);
-		return path;
-	}
-	while (true) {
-		path = NextDocumentPath(session, data);
-		if (path.isEmpty()) {
-			LOG(("failed to pick document path for forward"));
-			return {};
-		}
-		if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
-			LOG(("failed to create document directory for forward"));
-			return {};
-		}
-		auto reservation = QFile(path);
-		if (reservation.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
-			reservation.close();
-			reserved = true;
-			break;
-		}
-		if (!QFile::exists(path)) {
-			LOG(("failed to reserve document file for forward"));
-			return {};
-		}
-	}
-	registration.state->path = path;
-	if (cancelled && cancelled()) {
-		return {};
-	}
-
-	const auto state = registration.state;
-	const auto documentId = data->id;
-	crl::on_main_sync([=] {
-		data->save(origin, path);
-		state->allowSizeFallback = !data->loading();
-		if (!data->loading()) {
-			CompleteDocumentDownload(data, state);
-			return;
-		}
-
-		session->data().documentLoadProgress(
-		) | rpl::filter([=](not_null<DocumentData*> changed) {
-			return changed->id == documentId
-				&& !changed->loading();
-		}) | rpl::on_next([=](not_null<DocumentData*> changed) {
-			CompleteDocumentDownload(changed, state);
-		}, state->lifetime);
-	});
-	registrationActive = false;
-	const auto waitResult = WaitForDownload(
-		registration.state->done,
-		kDocumentDownloadTimeout,
-		cancelled);
-	if (waitResult != DownloadWaitResult::Completed) {
-		if (waitResult != DownloadWaitResult::Cancelled) {
-			LOG(("forward document download timed out"));
-		}
-		return {};
-	}
-	path = registration.state->readyPath;
-	return FileHasExactSize(path, expectedSize) ? path : QString();
+	const auto finished = WaitUntil(latch, kDocumentDownloadTimeout, stopped);
+	const auto successful = finished && !stopped();
+	active->store(false);
+	crl::on_main_sync([&] { lifetime->destroy(); });
+	return successful && FileHasExactSize(state->path, state->expected) ? state->path : QString();
 }
 
 bool forwardMessagesSync(WeakSession session,
@@ -649,14 +497,21 @@ bool forwardMessagesSync(WeakSession session,
 						 const ApiWrap::SendAction &action,
 						 Data::ForwardOptions options,
 						 const Cancelled &cancelled) {
+	const auto dataActive = std::make_shared<std::atomic_bool>(true);
+	const auto sessionLifetime = WatchSessionDataClear(session, dataActive);
+	const auto cleanup = gsl::finally([&] {
+		crl::on_main_sync([&] { sessionLifetime->destroy(); });
+	});
+	const auto active = std::make_shared<std::atomic_bool>(true);
 	const auto stopped = [=] {
-		return !session.get() || (cancelled && cancelled());
+		return !active->load() || !dataActive->load() || !session.get() || (cancelled && cancelled());
 	};
 	if (stopped()) {
 		return false;
 	}
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 	auto started = std::make_shared<std::atomic_bool>(false);
+	const auto failed = std::make_shared<std::atomic_bool>(false);
 
 	crl::on_main(session, [=] {
 		if (stopped()) {
@@ -680,9 +535,17 @@ bool forwardMessagesSync(WeakSession session,
 			return;
 		}
 		started->store(true);
+		auto trackedAction = action;
+		trackedAction.options.localSendFinished = std::make_shared<Fn<void(FullMsgId, bool)>>([=](FullMsgId, bool success) {
+			if (!success) {
+				failed->store(true);
+				active->store(false);
+				latch->countDown();
+			}
+		});
 		strong->api().forwardMessages(
 			Data::ResolvedForwardDraft(items, options),
-			action,
+			trackedAction,
 			[latch] { latch->countDown(); });
 	});
 
@@ -690,7 +553,9 @@ bool forwardMessagesSync(WeakSession session,
 	if (!completed && !stopped()) {
 		LOG(("forward send timed out"));
 	}
-	return completed && started->load();
+	const auto successful = completed && started->load() && !failed->load() && !stopped();
+	active->store(false);
+	return successful;
 }
 
 void loadPhotoSync(
@@ -708,8 +573,9 @@ void loadPhotoSync(
 
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 	auto lifetime = std::make_shared<rpl::lifetime>();
+	const auto active = std::make_shared<std::atomic_bool>(true);
 	const auto stopped = [=] {
-		return !session.get() || (cancelled && cancelled());
+		return !active->load() || !session.get() || (cancelled && cancelled());
 	};
 	crl::on_main(session, [=] {
 		if (stopped()) {
@@ -717,6 +583,11 @@ void loadPhotoSync(
 			return;
 		}
 		const auto strong = session.get();
+		strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+			active->store(false);
+			lifetime->destroy();
+			latch->countDown();
+		}, *lifetime);
 		const auto item = strong ? strong->data().message(itemId) : nullptr;
 		const auto media = item ? item->media() : nullptr;
 		const auto photo = media ? media->photo() : nullptr;
@@ -726,13 +597,14 @@ void loadPhotoSync(
 			latch->countDown();
 			return;
 		}
+		photo->clearFailed(Data::PhotoSize::Large);
 		view->wanted(Data::PhotoSize::Large, itemId);
 		rpl::single() | rpl::then(
-			strong->downloaderTaskFinished()
-		) | rpl::filter([view] {
-			return view->loaded();
+			PhotoLoadUpdates(strong, photo)
+		) | rpl::filter([=] {
+			return view->loaded() || photo->failed(Data::PhotoSize::Large);
 		}) | rpl::take(1) | rpl::on_next([=] {
-			if (!view->saveToFile(path)) {
+			if (!stopped() && !view->saveToFile(path)) {
 				LOG(("failed to save photo for forward to %1").arg(path));
 			}
 			latch->countDown();
@@ -741,63 +613,54 @@ void loadPhotoSync(
 	if (!WaitUntil(latch, std::chrono::minutes(5), stopped)) {
 		LOG(("forward photo download timed out"));
 	}
-	crl::on_main([lifetime = std::move(lifetime)] {
-		lifetime->destroy();
-	});
+	active->store(false);
+	crl::on_main_sync([&] { lifetime->destroy(); });
 }
 
-void loadPhotoSync(
-		not_null<Main::Session*> session,
-		not_null<PhotoData*> photo,
+QString loadPhotoSync(
+		WeakSession session,
+		PhotoId photoId,
 		Data::FileOrigin origin,
 		const Cancelled &cancelled) {
-	const auto path = pathForSave(session);
-	if (path.isEmpty() || !QDir().mkpath(path)) {
-		LOG(("failed to prepare photo path for forward"));
-		return;
-	}
-
+	const auto active = std::make_shared<std::atomic_bool>(true);
+	const auto stopped = [=] {
+		return !active->load() || !session.get() || (cancelled && cancelled());
+	};
+	if (stopped()) return {};
+	auto path = std::make_shared<QString>();
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 	auto lifetime = std::make_shared<rpl::lifetime>();
-
 	crl::on_main(session, [=] {
+		if (stopped()) {
+			latch->countDown();
+			return;
+		}
+		const auto strong = session.get();
+		strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+			active->store(false);
+			lifetime->destroy();
+			latch->countDown();
+		}, *lifetime);
+		const auto photo = strong->data().photo(photoId);
+		const auto target = filePath(strong, photo);
+		if (target.isEmpty() || !QDir().mkpath(QFileInfo(target).absolutePath())) { latch->countDown(); return; }
 		const auto view = photo->createMediaView();
-		if (!view) {
-			latch->countDown();
-			return;
-		}
+		photo->clearFailed(Data::PhotoSize::Large);
 		view->wanted(Data::PhotoSize::Large, origin);
-
-		const auto saveToFiles = [=] {
-			const auto target = filePath(session, photo);
-			if (!view->saveToFile(target)) {
-				LOG(("failed to save photo for forward to %1").arg(target));
-			}
-		};
-
-		if (view->loaded()) {
-			saveToFiles();
-			latch->countDown();
-			return;
-		}
-
-		rpl::single()
-		| rpl::then(session->downloaderTaskFinished())
-		| rpl::filter([view] { return view->loaded(); })
-		| rpl::take(1)
-		| rpl::on_next([=] {
-			saveToFiles();
+		rpl::single() | rpl::then(PhotoLoadUpdates(strong, photo))
+		| rpl::filter([=] {
+			return view->loaded() || photo->failed(Data::PhotoSize::Large);
+		})
+		| rpl::take(1) | rpl::on_next([=] {
+			if (!stopped() && view->saveToFile(target)) *path = target;
 			latch->countDown();
 		}, *lifetime);
 	});
-
-	if (!WaitUntil(latch, std::chrono::minutes(5), cancelled)) {
-		LOG(("forward photo download timed out"));
-	}
-
-	crl::on_main([lifetime = std::move(lifetime)] {
-		lifetime->destroy();
-	});
+	const auto finished = WaitUntil(latch, std::chrono::minutes(5), stopped);
+	const auto successful = finished && !stopped();
+	active->store(false);
+	crl::on_main_sync([&] { lifetime->destroy(); });
+	return successful ? *path : QString();
 }
 
 bool sendMessageSync(
@@ -807,11 +670,16 @@ bool sendMessageSync(
 	const auto action = message.action;
 	return SendAndWait(session, action, 1, cancelled, [
 		message = std::move(message)
-	](not_null<Main::Session*> strong) mutable {
+	](
+		not_null<Main::Session*> strong,
+		const std::shared_ptr<Fn<bool(FullMsgId)>> &allocated,
+		const std::shared_ptr<Fn<void(FullMsgId, bool)>> &finished) mutable {
 		// we cannot send events to objects
 		// owned by a different thread
 		// because sendMessage updates UI too
 
+		message.action.options.localIdAllocated = allocated;
+		message.action.options.localSendFinished = finished;
 		strong->api().sendMessage(std::move(message));
 		return true;
 	});
@@ -833,16 +701,22 @@ bool sendDocumentSync(WeakSession session,
 		action,
 		lst = std::move(group.list),
 		caption = std::move(caption)
-	](not_null<Main::Session*> strong) mutable {
+	](
+		not_null<Main::Session*> strong,
+		const std::shared_ptr<Fn<bool(FullMsgId)>> &allocated,
+		const std::shared_ptr<Fn<void(FullMsgId, bool)>> &finished) mutable {
 		auto size = lst.files.size();
 		if (!lst.files.empty()) {
 			lst.files.front().caption = std::move(caption);
 		}
+		auto trackedAction = action;
+		trackedAction.options.localIdAllocated = allocated;
+		trackedAction.options.localSendFinished = finished;
 		strong->api().sendFiles(
 			std::move(lst),
 			type,
 			size > 1 ? groupId : nullptr,
-			action);
+			trackedAction);
 		return true;
 	});
 }
@@ -855,13 +729,18 @@ bool sendStickerSync(WeakSession session,
 	return SendAndWait(session, action, 1, cancelled, [
 		itemId,
 		message = std::move(message)
-	](not_null<Main::Session*> strong) mutable {
+	](
+		not_null<Main::Session*> strong,
+		const std::shared_ptr<Fn<bool(FullMsgId)>> &allocated,
+		const std::shared_ptr<Fn<void(FullMsgId, bool)>> &finished) mutable {
 		const auto item = strong->data().message(itemId);
 		const auto media = item ? item->media() : nullptr;
 		const auto document = media ? media->document() : nullptr;
 		if (!document) {
 			return false;
 		}
+		message.action.options.localIdAllocated = allocated;
+		message.action.options.localSendFinished = finished;
 		Api::SendExistingDocument(std::move(message), document, std::nullopt);
 		return true;
 	});
@@ -881,10 +760,16 @@ bool sendVoiceSync(WeakSession session,
 		video,
 		action,
 		message = std::move(message)
-	](not_null<Main::Session*> strong) {
+	](
+		not_null<Main::Session*> strong,
+		const std::shared_ptr<Fn<bool(FullMsgId)>> &allocated,
+		const std::shared_ptr<Fn<void(FullMsgId, bool)>> &finished) {
+		auto options = action.options;
+		options.localIdAllocated = allocated;
+		options.localSendFinished = finished;
 		const auto to = FileLoadTo(
 			action.history->peer->id,
-			action.options,
+			options,
 			action.replyTo,
 			action.replaceMediaOf);
 		strong->api().fileLoader()->addTask(std::make_unique<FileLoadTask>(FileLoadTask::VoiceArgs{
@@ -901,111 +786,157 @@ bool sendVoiceSync(WeakSession session,
 }
 
 UploadedFile uploadFileSync(
-		not_null<Main::Session*> session,
-		not_null<PeerData*> peer,
+		WeakSession session,
+		PeerId peerId,
 		const QString &path,
 		SendMediaType type,
 		bool forceFile,
-		const QString &displayName) {
-	if (path.isEmpty() || !QFile::exists(path)) {
-		return {};
-	}
-
-	auto task = FileLoadTask(FileLoadTask::Args{
-		.session = session,
-		.filepath = path,
-		.type = type,
-		.to = FileLoadTo(peer->id, Api::SendOptions(), FullReplyTo(), MsgId()),
-		.forceFile = forceFile,
-		.sendLargePhotos = (type == SendMediaType::Photo),
-		.displayName = displayName,
+		const QString &displayName,
+		const Cancelled &cancelled) {
+	const auto dataActive = std::make_shared<std::atomic_bool>(true);
+	const auto sessionLifetime = WatchSessionDataClear(session, dataActive);
+	const auto sessionCleanup = gsl::finally([&] {
+		crl::on_main_sync([&] { sessionLifetime->destroy(); });
 	});
-	task.process({ .generateGoodThumbnail = false });
-
-	const auto prepared = task.peekResult();
-	if (!prepared) {
-		return {};
-	}
-
+	const auto active = std::make_shared<std::atomic_bool>(true);
+	const auto stopped = [=] {
+		return !active->load() || !dataActive->load() || !session.get() || (cancelled && cancelled());
+	};
+	if (stopped() || path.isEmpty() || !QFile::exists(path)) return {};
+	std::unique_ptr<FileLoadTask> task;
+	crl::on_main_sync([&] {
+		if (stopped()) return;
+		const auto strong = session.get();
+		task = std::make_unique<FileLoadTask>(FileLoadTask::Args{
+			.session = strong,
+			.filepath = path,
+			.type = type,
+			.to = FileLoadTo(peerId, Api::SendOptions(), FullReplyTo(), MsgId()),
+			.forceFile = forceFile,
+			.sendLargePhotos = (type == SendMediaType::Photo),
+			.displayName = displayName,
+		});
+	});
+	if (!task || stopped()) return {};
+	task->process({ .generateGoodThumbnail = false });
+	const auto prepared = task->peekResult();
+	if (!prepared || stopped()) return {};
 	const auto info = std::make_shared<std::optional<Api::RemoteFileInfo>>();
-	auto uploadLatch = std::make_shared<TimedCountDownLatch>(1);
+	const auto uploadId = std::make_shared<FullMsgId>();
+	auto latch = std::make_shared<TimedCountDownLatch>(1);
 	auto lifetime = std::make_shared<rpl::lifetime>();
-
 	crl::on_main(session, [=] {
-		const auto uploadId = FullMsgId(
-			peer->id,
-			session->data().nextLocalMessageId());
+		if (stopped()) {
+			latch->countDown();
+			return;
+		}
+		const auto strong = session.get();
+		*uploadId = FullMsgId(peerId, strong->data().nextLocalMessageId());
 		const auto ready = [=](const Storage::UploadedMedia &data) {
-			if (data.fullId != uploadId) {
-				return;
+			if (!stopped() && data.fullId == *uploadId) {
+				*info = data.info;
+				latch->countDown();
 			}
-			*info = data.info;
-			uploadLatch->countDown();
 		};
 		const auto failed = [=](const FullMsgId &id) {
-			if (id == uploadId) {
-				uploadLatch->countDown();
-			}
+			if (id == *uploadId) latch->countDown();
 		};
-
-		session->uploader().photoReady() | rpl::on_next(ready, *lifetime);
-		session->uploader().documentReady() | rpl::on_next(ready, *lifetime);
-		session->uploader().photoFailed() | rpl::on_next(failed, *lifetime);
-		session->uploader().documentFailed() | rpl::on_next(failed, *lifetime);
-
-		session->uploader().upload(uploadId, prepared);
+		strong->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+			lifetime->destroy();
+			latch->countDown();
+		}, *lifetime);
+		strong->uploader().photoReady() | rpl::on_next(ready, *lifetime);
+		strong->uploader().documentReady() | rpl::on_next(ready, *lifetime);
+		strong->uploader().photoFailed() | rpl::on_next(failed, *lifetime);
+		strong->uploader().documentFailed() | rpl::on_next(failed, *lifetime);
+		strong->uploader().upload(*uploadId, prepared);
 	});
-
-	const auto uploadFinished = uploadLatch->await(std::chrono::minutes(30));
-	crl::on_main([lifetime = std::move(lifetime)] {
+	const auto uploaded = WaitUntil(latch, std::chrono::minutes(30), stopped);
+	auto uploadInfo = std::optional<Api::RemoteFileInfo>();
+	active->store(false);
+	crl::on_main_sync([&] {
 		lifetime->destroy();
+		if (const auto strong = session.get()) {
+			if (!uploaded && *uploadId) strong->uploader().cancel(*uploadId);
+			if (uploaded) uploadInfo = *info;
+		}
 	});
-
-	if (!uploadFinished || !info->has_value()) {
-		return {};
-	}
-
-	const auto result = std::make_shared<UploadedFile>();
+	if (!uploadInfo || !dataActive->load() || !session.get() || (cancelled && cancelled())) return {};
+	const auto mediaActive = std::make_shared<std::atomic_bool>(true);
+	const auto mediaStopped = [=] {
+		return !mediaActive->load() || !dataActive->load() || !session.get() || (cancelled && cancelled());
+	};
+	auto result = std::make_shared<UploadedFile>();
+	auto request = std::make_shared<mtpRequestId>(0);
 	auto mediaLatch = std::make_shared<TimedCountDownLatch>(1);
-
 	crl::on_main(session, [=] {
-		session->api().request(MTPmessages_UploadMedia(
-			MTP_flags(0),
-			MTPstring(),
-			peer->input(),
-			UploadedInputMedia(prepared, **info)
+		if (mediaStopped()) {
+			mediaLatch->countDown();
+			return;
+		}
+		const auto strong = session.get();
+		const auto peer = strong->data().peer(peerId);
+		*request = strong->api().request(MTPmessages_UploadMedia(
+			MTP_flags(0), MTPstring(), peer->input(),
+			UploadedInputMedia(prepared, *uploadInfo)
 		)).done([=](const MTPMessageMedia &media) {
+			if (mediaStopped()) {
+				mediaLatch->countDown();
+				return;
+			}
+			const auto owner = session.get();
 			media.match([&](const MTPDmessageMediaPhoto &data) {
 				const auto photo = data.vphoto();
-				if (photo && photo->type() == mtpc_photo) {
-					result->photo = session->data().processPhoto(*photo);
-				}
+				if (photo && photo->type() == mtpc_photo) result->photo = owner->data().processPhoto(*photo)->id;
 			}, [&](const MTPDmessageMediaDocument &data) {
 				const auto document = data.vdocument();
-				if (document && document->type() == mtpc_document) {
-					result->document = session->data().processDocument(*document);
-				}
+				if (document && document->type() == mtpc_document) result->document = owner->data().processDocument(*document)->id;
 			}, [](const auto &) {});
+			*request = 0;
 			mediaLatch->countDown();
 		}).fail([=](const MTP::Error &) {
+			*request = 0;
 			mediaLatch->countDown();
 		}).send();
 	});
-
-	const auto mediaFinished = mediaLatch->await(std::chrono::minutes(5));
-
-	return mediaFinished ? *result : UploadedFile();
+	const auto finished = WaitUntil(mediaLatch, std::chrono::minutes(5), mediaStopped);
+	mediaActive->store(false);
+	auto snapshot = UploadedFile();
+	crl::on_main_sync([&] {
+		if (const auto strong = session.get()) {
+			if (*request) strong->api().request(*request).cancel();
+			if (finished && dataActive->load() && !(cancelled && cancelled())) snapshot = *result;
+		}
+	});
+	return snapshot;
 }
 
 std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
-		not_null<Main::Session*> session,
-		FullMsgId itemId) {
+		WeakSession session,
+		FullMsgId itemId,
+		const Cancelled &cancelled) {
+	const auto dataActive = std::make_shared<std::atomic_bool>(true);
+	const auto sessionLifetime = WatchSessionDataClear(session, dataActive);
+	const auto sessionCleanup = gsl::finally([&] {
+		crl::on_main_sync([&] { sessionLifetime->destroy(); });
+	});
+	const auto active = std::make_shared<std::atomic_bool>(true);
+	const auto stopped = [=] {
+		return !active->load() || !dataActive->load() || !session.get() || (cancelled && cancelled());
+	};
+	if (stopped()) return nullptr;
+	const auto request = std::make_shared<mtpRequestId>(0);
 	const auto resolved = std::make_shared<
 		std::shared_ptr<const Iv::RichPage>>();
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 
 	crl::on_main(session, [=] {
-		const auto item = session->data().message(itemId);
+		if (stopped()) {
+			latch->countDown();
+			return;
+		}
+		const auto strong = session.get();
+		const auto item = strong->data().message(itemId);
 		if (!item) {
 			latch->countDown();
 			return;
@@ -1029,14 +960,20 @@ std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
 
 		const auto peer = item->history()->peer;
 
-		session->api().request(MTPmessages_GetRichMessage(
+		*request = strong->api().request(MTPmessages_GetRichMessage(
 			peer->input(),
 			MTP_int(itemId.msg)
 		)).done([=](const MTPmessages_Messages &result) {
+			if (stopped()) {
+				latch->countDown();
+				return;
+			}
+			const auto owner = session.get();
+			*request = 0;
 			auto full = std::shared_ptr<const Iv::RichPage>();
 			const auto process = [&](const auto &data) {
-				session->data().processUsers(data.vusers());
-				session->data().processChats(data.vchats());
+				owner->data().processUsers(data.vusers());
+				owner->data().processChats(data.vchats());
 				peer->processTopics(data.vtopics());
 				for (const auto &message : data.vmessages().v) {
 					if (message.type() != mtpc_message) {
@@ -1047,7 +984,7 @@ std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
 						continue;
 					}
 					if (const auto richMessage = fields.vrich_message()) {
-						full = Iv::ParseRichPage(session, *richMessage);
+						full = Iv::ParseRichPage(owner, *richMessage);
 					}
 					break;
 				}
@@ -1062,85 +999,134 @@ std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
 				process(data);
 			});
 			if (full) {
-				if (const auto current = session->data().message(itemId)) {
+				if (const auto current = owner->data().message(itemId)) {
 					current->setFullRichPage(full);
 				}
 				*resolved = full;
 			}
 			latch->countDown();
 		}).fail([=](const MTP::Error &) {
+			*request = 0;
 			latch->countDown();
 		}).send();
 	});
 
-	const auto finished = latch->await(std::chrono::minutes(1));
-
-	return finished ? *resolved : nullptr;
+	const auto finished = WaitUntil(latch, std::chrono::minutes(1), stopped);
+	active->store(false);
+	auto snapshot = std::shared_ptr<const Iv::RichPage>();
+	crl::on_main_sync([&] {
+		if (const auto strong = session.get()) {
+			if (*request) strong->api().request(*request).cancel();
+			if (finished && dataActive->load() && !(cancelled && cancelled())) snapshot = *resolved;
+		}
+	});
+	return snapshot;
 }
 
 bool sendRichMessageSync(
-		not_null<Main::Session*> session,
+		WeakSession session,
 		const MTPInputRichMessage &richMessage,
-		const Api::SendAction &action) {
+		const Api::SendAction &action,
+		const Cancelled &cancelled) {
+	const auto dataActive = std::make_shared<std::atomic_bool>(true);
+	const auto sessionLifetime = WatchSessionDataClear(session, dataActive);
+	const auto sessionCleanup = gsl::finally([&] {
+		crl::on_main_sync([&] { sessionLifetime->destroy(); });
+	});
+	const auto active = std::make_shared<std::atomic_bool>(true);
+	const auto stopped = [=] {
+		return !active->load() || !dataActive->load() || !session.get() || (cancelled && cancelled());
+	};
+	if (stopped()) return false;
+	const auto request = std::make_shared<mtpRequestId>(0);
 	const auto sent = std::make_shared<bool>(false);
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 
 	crl::on_main(session, [=] {
-		const auto peer = action.history->peer;
+		if (stopped()) {
+			latch->countDown();
+			return;
+		}
+		const auto strong = session.get();
+		// The same as a text message of this forward gets from sendMessage():
+		// no effect or suggestion of its own, a reply that the server still
+		// knows, ghost mode's schedule date and the price of a paid chat.
+		auto sending = action;
+		sending.options.suggest = {};
+		sending.options.effectId = 0;
+		StripUnsendableReply(strong, sending.replyTo);
+		applyGhostScheduling(strong, sending.options);
+		const auto peer = sending.history->peer;
+		const auto starsPaid = std::min(
+			peer->starsPerMessageChecked(),
+			sending.options.starsApproved);
 
 		using Flag = MTPmessages_SendMessage::Flag;
 		auto sendFlags = MTPmessages_SendMessage::Flags(0)
 			| Flag::f_rich_message;
-		if (action.replyTo) {
+		if (sending.replyTo) {
 			sendFlags |= Flag::f_reply_to;
 		}
-		if (ShouldSendSilent(peer, action.options)) {
+		if (ShouldSendSilent(peer, sending.options)) {
 			sendFlags |= Flag::f_silent;
 		}
-		if (action.options.scheduled) {
+		if (sending.options.scheduled) {
 			sendFlags |= Flag::f_schedule_date;
-			if (action.options.scheduleRepeatPeriod) {
+			if (sending.options.scheduleRepeatPeriod) {
 				sendFlags |= Flag::f_schedule_repeat_period;
 			}
 		}
-		if (action.options.sendAs) {
+		if (sending.options.sendAs) {
 			sendFlags |= Flag::f_send_as;
 		}
-		if (action.options.effectId) {
-			sendFlags |= Flag::f_effect;
+		if (starsPaid) {
+			sendFlags |= Flag::f_allow_paid_stars;
 		}
 
-		session->api().request(MTPmessages_SendMessage(
+		*request = strong->api().request(MTPmessages_SendMessage(
 			MTP_flags(sendFlags),
 			peer->input(),
-			action.mtpReplyTo(),
+			sending.mtpReplyTo(),
 			MTP_string(QString()),
 			MTP_long(base::RandomValue<uint64>()),
 			MTPReplyMarkup(),
 			MTPVector<MTPMessageEntity>(),
-			MTP_int(action.options.scheduled),
-			MTP_int(action.options.scheduleRepeatPeriod),
-			(action.options.sendAs
-				? action.options.sendAs->input()
+			MTP_int(sending.options.scheduled),
+			MTP_int(sending.options.scheduleRepeatPeriod),
+			(sending.options.sendAs
+				? sending.options.sendAs->input()
 				: MTP_inputPeerEmpty()),
 			MTPInputQuickReplyShortcut(),
-			MTP_long(action.options.effectId),
-			MTP_long(0),
-			Api::SuggestToMTP(action.options.suggest),
+			MTP_long(0), // effect
+			MTP_long(starsPaid),
+			Api::SuggestToMTP(sending.options.suggest),
 			richMessage
 		)).done([=](const MTPUpdates &result) {
-			session->api().applyUpdates(result);
+			*request = 0;
+			if (stopped()) {
+				latch->countDown();
+				return;
+			}
+			session.get()->api().applyUpdates(result);
 			*sent = true;
 			latch->countDown();
 		}).fail([=](const MTP::Error &error) {
+			*request = 0;
 			LOG(("LuxuryForward: rich message send failed: %1").arg(error.type()));
 			latch->countDown();
 		}).send();
 	});
 
-	const auto finished = latch->await(std::chrono::minutes(2));
-
-	return finished && *sent;
+	const auto finished = WaitUntil(latch, std::chrono::minutes(2), stopped);
+	active->store(false);
+	auto snapshot = false;
+	crl::on_main_sync([&] {
+		if (const auto strong = session.get()) {
+			if (*request) strong->api().request(*request).cancel();
+			if (finished && dataActive->load() && !(cancelled && cancelled())) snapshot = *sent;
+		}
+	});
+	return snapshot;
 }
 
 } // namespace LuxurySync

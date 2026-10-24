@@ -117,6 +117,7 @@ void SubsectionTabs::setupHorizontal(
 		widget,
 		st::chatTabsToggle);
 	toggle->show();
+	toggle->setAccessibleName(tr::lng_edit_topics_layout(tr::now));
 	toggle->setIconOverride(
 		bottom ? &st::chatTabsToggleIconBottom : &st::chatTabsToggleIconTop,
 		(bottom
@@ -208,6 +209,7 @@ void SubsectionTabs::setupVertical(not_null<QWidget*> parent) {
 		_vertical,
 		st::chatTabsToggle);
 	toggle->show();
+	toggle->setAccessibleName(tr::lng_edit_topics_layout(tr::now));
 	toggle->setIconOverride(
 		&st::chatTabsToggleIconLeft,
 		&st::chatTabsToggleIconLeftOver);

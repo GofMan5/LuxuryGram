@@ -362,60 +362,59 @@ int64 MusicProvider::scrollTopStatePosition(not_null<HistoryItem*> item) {
 HistoryItem *MusicProvider::scrollTopStateItem(ListScrollTopState state) {
 	if (state.item && _slice.indexOf(state.item)) {
 		return state.item;
-	//} else if (const auto id = _slice.nearest(state.position)) {
-	//	const auto full = FullMsgId(_peer->id, StoryIdToMsgId(*id));
-	//	if (const auto item = _controller->session().data().message(full)) {
-	//		return item;
-	//	}
 	}
 
-	auto nearestId = (HistoryItem*)nullptr; //AssertIsDebug();
-	//for (auto i = 0; i != _slice.size(); ++i) {
-	//	if (!nearestId
-	//		|| std::abs(*nearestId - state.position)
-	//			> std::abs(_slice[i] - state.position)) {
-	//		nearestId = _slice[i];
-	//	}
-	//}
-	if (nearestId) {
-		const auto full = nearestId->fullId();
-		if (const auto item = _controller->session().data().message(full)) {
-			return item;
+	auto nearest = (HistoryItem*)nullptr;
+	auto distance = uint64(0);
+	for (auto i = 0; i != _slice.size(); ++i) {
+		const auto item = _slice[i].get();
+		const auto position = item->id.bare;
+		const auto delta = (position > state.position)
+			? uint64(position) - uint64(state.position)
+			: uint64(state.position) - uint64(position);
+		if (!nearest || delta < distance) {
+			nearest = item;
+			distance = delta;
 		}
 	}
-
-	return state.item;
+	return nearest;
 }
 
 void MusicProvider::saveState(
 		not_null<Media::Memento*> memento,
 		ListScrollTopState scrollState) {
-	if (_aroundId != nullptr && scrollState.item) {
-		//AssertIsDebug();
-		//memento->setAroundId({ _peer->id, StoryIdToMsgId(_aroundId) });
-		//memento->setIdsLimit(_idsLimit);
-		//memento->setScrollTopItem(scrollState.item->globalId());
-		//memento->setScrollTopItemPosition(scrollState.position);
-		//memento->setScrollTopShift(scrollState.shift);
+	if (scrollState.item && isMyItem(scrollState.item)) {
+		memento->setAroundId(scrollState.item->fullId());
+		memento->setIdsLimit(_idsLimit);
+		memento->setScrollTopItem(scrollState.item->globalId());
+		memento->setScrollTopItemPosition(scrollState.position);
+		memento->setScrollTopShift(scrollState.shift);
 	}
 }
 
 void MusicProvider::restoreState(
 		not_null<Media::Memento*> memento,
 		Fn<void(ListScrollTopState)> restoreScrollState) {
-	if (const auto limit = memento->idsLimit()) {
-		const auto wasAroundId = memento->aroundId();
-		if (wasAroundId.peer == _peer->id) {
-			_idsLimit = limit;
-			//AssertIsDebug();
-			//_aroundId = StoryIdFromMsgId(wasAroundId.msg);
-			restoreScrollState({
-				.position = memento->scrollTopItemPosition(),
-				.item = MessageByGlobalId(memento->scrollTopItem()),
-				.shift = memento->scrollTopShift(),
-			});
-			refreshViewer();
-		}
+	const auto limit = memento->idsLimit();
+	const auto wasAroundId = memento->aroundId();
+	if (limit <= 0 || wasAroundId.peer != _peer->id) {
+		return;
+	}
+	const auto scrollItem = MessageByGlobalId(memento->scrollTopItem());
+	const auto item = (scrollItem && isMyItem(scrollItem))
+		? scrollItem
+		: nullptr;
+	const auto around = _controller->session().data().message(wasAroundId);
+	_aroundId = (around && isMyItem(around)) ? around : item;
+	_idsLimit = limit;
+	const auto weak = base::make_weak(this);
+	restoreScrollState({
+		.position = memento->scrollTopItemPosition(),
+		.item = item,
+		.shift = memento->scrollTopShift(),
+	});
+	if (weak) {
+		refreshViewer();
 	}
 }
 

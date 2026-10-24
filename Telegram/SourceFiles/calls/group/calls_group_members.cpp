@@ -998,7 +998,7 @@ void Members::Controller::prepareRows(not_null<Data::GroupCall*> real) {
 			foundMe = true;
 		}
 		if (const auto found = real->participantByPeer(participantPeer)) {
-			updateRowInSoundingMap(row, false, 0, 0, found);
+			updateRow(row, std::nullopt, found);
 			++i;
 		} else if (me) {
 			++i;
@@ -1609,7 +1609,7 @@ void Members::Controller::addMuteActionsToContextMenu(
 			otherParticipantStateValue,
 			_call->rtmp() ? _call->rtmpVolume() : row->volume(),
 			Group::kMaxVolume,
-			muted,
+			muted || mutedByMe,
 			st::groupCallMenuVolumePadding);
 		volumeItem->setCanMute(!isMe(participantPeer)
 			&& !(participantIsCallAdmin && _call->canManage()));

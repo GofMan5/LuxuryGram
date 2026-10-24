@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "data/data_forum.h"
 #include "data/data_forum_topic.h"
+#include "luxury/features/filters/filters_controller.h"
 
 namespace Data {
 namespace {
@@ -48,6 +49,10 @@ void Groups::registerMessage(not_null<HistoryItem*> item) {
 	const auto i = _groups.emplace(item->groupId(), Group()).first;
 	auto &items = i->second.items;
 	if (items.size() < kMaxItemsInGroup) {
+		FiltersController::invalidate(item);
+		if (!items.empty()) {
+			FiltersController::invalidate(items.front());
+		}
 		items.insert(findPositionForItem(items, item), item);
 		if (items.size() > 1) {
 			refreshViews(items);
@@ -63,6 +68,10 @@ void Groups::unregisterMessage(not_null<const HistoryItem*> item) {
 	const auto i = _groups.find(groupId);
 	if (i != end(_groups)) {
 		auto &items = i->second.items;
+		if (!ranges::contains(items, item)) {
+			return;
+		}
+		FiltersController::invalidate(items.front());
 		const auto removed = ranges::remove(items, item);
 		const auto last = end(items);
 		if (removed != last) {
@@ -152,6 +161,7 @@ void Groups::refreshViews(const HistoryItemsList &items) {
 	if (items.empty()) {
 		return;
 	}
+	FiltersController::invalidate(items.front());
 	for (const auto &item : items) {
 		_data->requestItemViewRefresh(item);
 		item->invalidateChatListEntry();

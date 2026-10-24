@@ -27,6 +27,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item_helpers.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "luxury/features/filters/filters_controller.h"
 #include "ui/text/format_values.h"
 
 namespace Dialogs {
@@ -51,12 +52,17 @@ namespace {
 	return QString();
 }
 
+[[nodiscard]] bool AccessibleMessage(not_null<const HistoryItem*> item) {
+	return !item->isService()
+		&& !FiltersController::filtered(const_cast<HistoryItem*>(item.get()));
+}
+
 [[nodiscard]] QStringList MessageTailParts(
 		not_null<const HistoryItem*> item,
 		not_null<History*> history,
 		not_null<PeerData*> peer) {
 	QStringList parts;
-	if (item->isService()) {
+	if (!AccessibleMessage(item)) {
 		return parts;
 	}
 	const auto dateTime = ItemDateTime(item);
@@ -417,7 +423,7 @@ QString SubItemValue(
 	}
 	case SubItem::Sender: {
 		const auto chatItem = history->chatListMessage();
-		if (!chatItem || chatItem->isService() || chatItem->out()) {
+		if (!chatItem || !AccessibleMessage(chatItem) || chatItem->out()) {
 			return {};
 		}
 		if (peer->isChat() || peer->isMegagroup()) {
@@ -429,7 +435,7 @@ QString SubItemValue(
 	}
 	case SubItem::Message: {
 		const auto chatItem = history->chatListMessage();
-		if (!chatItem || chatItem->isService()) {
+		if (!chatItem || !AccessibleMessage(chatItem)) {
 			return {};
 		}
 		auto messageText = chatItem->notificationText().text;
@@ -445,7 +451,7 @@ QString SubItemValue(
 	}
 	case SubItem::Delivery: {
 		const auto chatItem = history->chatListMessage();
-		if (!chatItem || chatItem->isService()) {
+		if (!chatItem || !AccessibleMessage(chatItem)) {
 			return {};
 		}
 		if (chatItem->out()) {
@@ -463,7 +469,7 @@ QString SubItemValue(
 	}
 	case SubItem::Reactions: {
 		const auto chatItem = history->chatListMessage();
-		if (!chatItem || chatItem->isService()) {
+		if (!chatItem || !AccessibleMessage(chatItem)) {
 			return {};
 		}
 		const auto &reactions = chatItem->reactions();
@@ -489,7 +495,7 @@ QString SubItemValue(
 	}
 	case SubItem::Time: {
 		const auto chatItem = history->chatListMessage();
-		if (!chatItem || chatItem->isService()) {
+		if (!chatItem || !AccessibleMessage(chatItem)) {
 			return {};
 		}
 		const auto dateTime = ItemDateTime(chatItem);
@@ -549,7 +555,7 @@ QString SubItemValue(
 		return {};
 	case SubItem::Forward: {
 		const auto chatItem = history->chatListMessage();
-		if (!chatItem || chatItem->isService()) {
+		if (!chatItem || !AccessibleMessage(chatItem)) {
 			return {};
 		}
 		if (chatItem->Get<HistoryMessageForwarded>()) {

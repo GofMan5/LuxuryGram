@@ -529,6 +529,7 @@ settingsSearchResultNoIcon: SettingsButton(settingsSearchResult) {
 	padding: margins(22px, 4px, 22px, 4px);
 }
 settingsSearchResultDetails: FlatLabel(settingsNotificationTypeDetails) {
+	maxHeight: 20px;
 }
 settingsSearchNoResults: FlatLabel(defaultFlatLabel) {
 	textFg: windowSubTextFg;
@@ -739,8 +740,8 @@ detailedSettingsButtonStyle: DetailedSettingsButtonStyle {
 	button: SettingsButton(settingsButtonNoIconLocked) {
 		style: defaultTextStyle;
 		textBg: transparent;
-		textBgOver: transparent;
-		padding: margins(68px, 8px, 22px, 8px);
+		textBgOver: windowBgOver;
+		padding: margins(60px, 10px, 22px, 8px);
 		iconLeft: 17px;
 	}
 	description: FlatLabel(defaultFlatLabel) {
@@ -749,8 +750,8 @@ detailedSettingsButtonStyle: DetailedSettingsButtonStyle {
 	iconRadius: 10px;
 	iconPadding: 6px;
 	iconForegroundPadding: 3px;
-	descriptionTopSkip: 0px;
-	descriptionBottomSkip: 8px;
+	descriptionTopSkip: 4px;
+	descriptionBottomSkip: 10px;
 	descriptionRightSkip: 4px;
 }
 

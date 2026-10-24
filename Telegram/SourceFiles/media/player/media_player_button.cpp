@@ -259,8 +259,16 @@ void PlayButton::paintEvent(QPaintEvent *e) {
 	auto p = QPainter(this);
 
 	paintRipple(p, _st.rippleAreaPosition);
+	p.save();
 	p.translate(_st.iconPosition);
 	_layout.paint(p, _st.color);
+	p.restore();
+	paintKeyboardFocus(
+		p,
+		QRect(
+			_st.rippleAreaPosition,
+			QSize(_st.rippleAreaSize, _st.rippleAreaSize)),
+		_st.rippleAreaSize / 2);
 }
 
 QPoint PlayButton::prepareRippleStartPosition() const {
@@ -339,6 +347,10 @@ void SpeedButton::paintEvent(QPaintEvent *e) {
 		QPoint(_st.padding.left(), _st.padding.top()),
 		_isDefault ? nullptr : &_st.rippleActiveColor->c);
 	_layout.paint(p, isOver(), !_isDefault);
+	paintKeyboardFocus(
+		p,
+		rect().marginsRemoved(_st.padding),
+		_st.rippleRadius);
 }
 
 QPoint SpeedButton::prepareRippleStartPosition() const {

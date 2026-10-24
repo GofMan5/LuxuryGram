@@ -305,6 +305,7 @@ public:
 	[[nodiscard]] std::shared_ptr<GroupCall> sharedConferenceCallFind(
 		const MTPUpdates &response);
 
+	void resetTrackedPresence();
 	void watchForOffline(not_null<UserData*> user, TimeId now = 0);
 	void maybeStopWatchForOffline(not_null<UserData*> user);
 

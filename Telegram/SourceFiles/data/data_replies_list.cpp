@@ -297,6 +297,10 @@ rpl::producer<std::optional<int>> RepliesList::unreadCountValue() const {
 }
 
 void RepliesList::injectRootMessageAndReverse(not_null<Viewer*> viewer) {
+	_history->insertDeletedMessages(viewer->slice, [&](
+			not_null<HistoryItem*> item) {
+		return (item->id != _rootId) && item->inThread(_rootId);
+	});
 	injectRootMessage(viewer);
 	ranges::reverse(viewer->slice.ids);
 }
@@ -963,16 +967,17 @@ void RepliesList::requestUnreadCount() {
 }
 
 void RepliesList::readTill(not_null<HistoryItem*> item) {
-	readTill(item->id, item);
+	readTill(item->id, item.get());
 }
 
-void RepliesList::readTill(MsgId tillId) {
-	readTill(tillId, _history->owner().message(_history->peer->id, tillId));
+void RepliesList::readTill(MsgId tillId, std::optional<bool> sendReadReceipt) {
+	readTill(tillId, _history->owner().message(_history->peer->id, tillId), sendReadReceipt);
 }
 
 void RepliesList::readTill(
 		MsgId tillId,
-		HistoryItem *tillIdItem) {
+		HistoryItem *tillIdItem,
+		std::optional<bool> sendReadReceipt) {
 	if (!IsServerMsgId(tillId)) {
 		return;
 	}
@@ -983,7 +988,9 @@ void RepliesList::readTill(
 	}
 	const auto unreadCount = computeUnreadCountLocally(now);
 	const auto fast = (tillIdItem && tillIdItem->out()) || !unreadCount.has_value();
-	if (was < now || (fast && now == was)) {
+	const auto send = sendReadReceipt.value_or(
+		LuxurySettings::ghost(&_history->session()).sendReadMessages());
+	if (was < now || (fast && now == was) || sendReadReceipt.value_or(false)) {
 		setInboxReadTill(now, unreadCount);
 		const auto rootFullId = FullMsgId(_history->peer->id, _rootId);
 		if (const auto root = _history->owner().message(rootFullId)) {
@@ -991,10 +998,15 @@ void RepliesList::readTill(
 				post->setCommentsInboxReadTill(now);
 			}
 		}
-		if (!_readRequestTimer.isActive()) {
-			_readRequestTimer.callOnce(fast ? 0 : kReadRequestTimeout);
-		} else if (fast && _readRequestTimer.remainingTime() > 0) {
-			_readRequestTimer.callOnce(0);
+		if (send) {
+			auto &target = sendReadReceipt.value_or(false)
+				? _explicitReadRequestTill : _readRequestTill;
+			target = std::max(target, now);
+			if (!_readRequestTimer.isActive()) {
+				_readRequestTimer.callOnce(fast ? 0 : kReadRequestTimeout);
+			} else if (fast && _readRequestTimer.remainingTime() > 0) {
+				_readRequestTimer.callOnce(0);
+			}
 		}
 	}
 	if (const auto topic = _history->peer->forumTopicFor(_rootId)) {
@@ -1010,14 +1022,18 @@ void RepliesList::sendReadTillRequest() {
 	api->request(base::take(_readRequestId)).cancel();
 
 	const auto &ghost = LuxurySettings::ghost(&_history->session());
-	if (!ghost.sendReadMessages()) {
+	const auto automaticTill = base::take(_readRequestTill);
+	const auto explicitTill = base::take(_explicitReadRequestTill);
+	const auto tillId = ghost.sendReadMessages()
+		? std::max(automaticTill, explicitTill) : explicitTill;
+	if (!tillId) {
 		return;
 	}
 
 	_readRequestId = api->request(MTPmessages_ReadDiscussion(
 		_history->peer->input(),
 		MTP_int(_rootId),
-		MTP_int(computeInboxReadTillFull())
+		MTP_int(tillId)
 	)).done(crl::guard(this, [=] {
 		_readRequestId = 0;
 		reloadUnreadCountIfNeeded();
@@ -1027,11 +1043,8 @@ void RepliesList::sendReadTillRequest() {
 void RepliesList::reloadUnreadCountIfNeeded() {
 	if (unreadCountKnown()) {
 		return;
-	} else if (inboxReadTillId() < computeInboxReadTillFull()) {
-		_readRequestTimer.callOnce(0);
-	} else {
-		requestUnreadCount();
 	}
+	requestUnreadCount();
 }
 
 bool RepliesList::canDeleteMyTopic() const {

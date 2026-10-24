@@ -306,6 +306,7 @@ void ForwardState::setSkippedMessages(int skipped) {
 void ForwardState::advanceChunk() {
 	const auto lock = std::lock_guard(_mutex);
 	++_data.currentChunk;
+	_data.skippedMessages = 0;
 }
 
 void ForwardState::updateBottomBar(
@@ -597,13 +598,8 @@ bool ForwardItems(
 				job.peerId,
 				ForwardState::State::Downloading);
 
-			const auto strong = job.session.get();
-			if (!strong) {
-				LOG(("failed to forward items: session destroyed"));
-				return false;
-			}
 			const auto richSent = forwardRichMessage(
-				strong,
+				job.session,
 				item.id,
 				job.action,
 				cancelled);
@@ -628,7 +624,6 @@ bool ForwardItems(
 
 		auto message = Api::MessageToSend(job.action);
 		message.action.options.invertCaption = item.invertCaption;
-		message.action.options.scheduled = 0;
 		message.action.options.suggest = {};
 		message.action.options.effectId = 0;
 		message.action.replaceMediaOf = 0;
@@ -793,12 +788,18 @@ void intelligentForward(
 		std::move(successCallback));
 	auto state = std::make_shared<ForwardState>(int(chunks.size()));
 	SetForwardState(job.peerId, job.sessionKey, state);
+	const auto lifetime = std::make_shared<rpl::lifetime>();
+	session->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+		state->requestStop();
+	}, *lifetime);
 	crl::async([
 		job = std::move(job),
 		chunks = std::move(chunks),
-		state
+		state,
+		lifetime
 	]() mutable {
 		RunIntelligentForward(job, chunks, state);
+		crl::on_main_sync([&] { lifetime->destroy(); });
 	});
 }
 
@@ -819,12 +820,18 @@ void forwardMessages(
 	auto items = SnapshotItems(session, draft.items);
 	auto state = std::make_shared<ForwardState>(1);
 	SetForwardState(job.peerId, job.sessionKey, state);
+	const auto lifetime = std::make_shared<rpl::lifetime>();
+	session->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+		state->requestStop();
+	}, *lifetime);
 	crl::async([
 		job = std::move(job),
 		items = std::move(items),
-		state
+		state,
+		lifetime
 	]() mutable {
 		RunForward(job, items, state);
+		crl::on_main_sync([&] { lifetime->destroy(); });
 	});
 }
 

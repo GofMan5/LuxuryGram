@@ -11,6 +11,11 @@ namespace CrashReports {
 
 QString PlatformString();
 
+// LuxuryGram runs no crash collector, so reports stay on the user's disk and
+// the dialog only offers viewing and saving them. Point this at a collector to
+// enable sending again.
+inline constexpr auto kReportEndpoint = "";
+
 #ifndef TDESKTOP_DISABLE_CRASH_REPORTS
 
 struct dump {

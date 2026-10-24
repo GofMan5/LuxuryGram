@@ -52,6 +52,7 @@ private:
 	int count_ = 0;
 };
 
+Main::Session *getSessionByUniqueId(uint64 sessionId);
 Main::Session *getSession(ID userId);
 void dispatchToMainThread(const std::function<void()> &callback, int delay = 0);
 ID getDialogIdFromPeer(not_null<PeerData*> peer);
@@ -61,12 +62,13 @@ ID getBareID(not_null<PeerData*> peer);
 
 bool isMessageHidden(not_null<HistoryItem*> item);
 
-void MarkAsReadChatList(not_null<Dialogs::MainList*> list);
-void MarkAsReadThread(not_null<Data::Thread*> thread);
+void MarkAsReadChatList(not_null<Dialogs::MainList*> list, bool sendReadReceipt);
+void MarkAsReadThread(not_null<Data::Thread*> thread, bool sendReadReceipt);
 
 void markReadAfterAction(not_null<History*> history);
 void readHistory(not_null<HistoryItem*> message);
 
+QString formatTimeWithSeconds(const QTime &time);
 QString formatDateTime(const QDateTime &date);
 QString formatMessageTime(const QTime &time);
 
@@ -102,10 +104,11 @@ void applyLocalPremiumEmoji(TextWithEntities &text);
 
 not_null<Main::Session *> currentSession();
 
-PeerData* getPeerFromDialogId(ID id);
-PeerData* getPeerFromDialogId(unsigned long long id);
+PeerData* getPeerFromDialogId(ID dialogId);
 
 QString filterZalgo(const QString &text);
+
+int safeCutPosition(const QString &text, int position);
 
 bool prependPseudoReply(Api::MessageToSend &message);
 bool prependPseudoReply(
@@ -122,3 +125,12 @@ void applyGhostScheduling(
 	not_null<Main::Session*> session,
 	Api::SendOptions &options,
 	int delaySeconds = 12);
+
+// A failed download finishes no downloader task: only the load progress
+// of its own file reports it.
+[[nodiscard]] rpl::producer<> PhotoLoadUpdates(
+	not_null<Main::Session*> session,
+	not_null<PhotoData*> photo);
+[[nodiscard]] rpl::producer<> DocumentLoadUpdates(
+	not_null<Main::Session*> session,
+	not_null<DocumentData*> document);

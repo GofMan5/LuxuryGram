@@ -1627,6 +1627,7 @@ base::weak_qptr<Ui::RpWidget> Premium::createPinnedToTop(
 						? st::settingsPremiumLayerTopBarBack
 						: st::settingsPremiumTopBarBack)),
 			st::infoTopBarScale);
+		_back->entity()->setAccessibleName(tr::lng_go_back(tr::now));
 		_back->setDuration(0);
 		_back->toggleOn(isLayer
 			? _backToggles.value() | rpl::type_erased
@@ -1650,6 +1651,7 @@ base::weak_qptr<Ui::RpWidget> Premium::createPinnedToTop(
 				isEmojiStatus
 					? st::infoTopBarClose
 					: st::settingsPremiumTopBarClose);
+			_close->setAccessibleName(tr::lng_close(tr::now));
 			_close->addClickHandler([=] {
 				controller()->parentController()->hideLayer();
 				controller()->parentController()->hideSpecialLayer();

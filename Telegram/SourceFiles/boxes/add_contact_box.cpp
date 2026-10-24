@@ -406,9 +406,11 @@ void AddContactBox::resizeEvent(QResizeEvent *e) {
 }
 
 void AddContactBox::submit() {
-	if (_first->hasFocus()) {
-		_last->setFocus();
-	} else if (_last->hasFocus()) {
+	const auto &firstRow = _invertOrder ? _last : _first;
+	const auto &secondRow = _invertOrder ? _first : _last;
+	if (firstRow->hasFocus()) {
+		secondRow->setFocus();
+	} else if (secondRow->hasFocus()) {
 		if (_phone->isEnabled()) {
 			_phone->setFocus();
 		} else {
@@ -507,7 +509,7 @@ void AddContactBox::retry() {
 	_last->setText(QString());
 	_phone->clearText();
 	_phone->setDisabled(false);
-	_first->setFocus();
+	(_invertOrder ? _last : _first)->setFocus();
 	update();
 }
 

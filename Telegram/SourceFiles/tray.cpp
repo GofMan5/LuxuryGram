@@ -14,6 +14,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "platform/platform_notifications_manager.h"
 #include "platform/platform_specific.h"
 #include "lang/lang_keys.h"
+#include "main/main_domain.h"
+#include "main/main_session.h"
 
 #include <QtWidgets/QApplication>
 
@@ -62,6 +64,13 @@ void Tray::create() {
 	}, _tray.lifetime());
 
 	Core::App().passcodeLockChanges(
+	) | rpl::on_next([=] {
+		rebuildMenu();
+	}, _tray.lifetime());
+
+	rpl::merge(
+		LuxurySettings::getInstance().showGhostToggleInTrayChanges(),
+		LuxurySettings::getInstance().showStreamerToggleInTrayChanges()
 	) | rpl::on_next([=] {
 		rebuildMenu();
 	}, _tray.lifetime());
@@ -117,11 +126,13 @@ void Tray::rebuildMenu() {
 	const auto &settings = LuxurySettings::getInstance();
 
 	if (settings.showGhostToggleInTray()) {
-		auto ghostActiveChanges = LuxurySettings::getInstance().useGlobalGhostModeValue()
-			| rpl::map([](bool) {
-				return LuxurySettings::ghost().ghostModeActiveValue();
-			})
-			| rpl::flatten_latest();
+		auto ghostActiveChanges = rpl::combine(
+			Core::App().domain().activeSessionValue(),
+			LuxurySettings::getInstance().useGlobalGhostModeValue(),
+			_textUpdates.events_starting_with({})
+		) | rpl::map([](Main::Session*, bool, auto) {
+			return LuxurySettings::ghost().ghostModeActiveValue();
+		}) | rpl::flatten_latest();
 
 		auto turnGhostModeText = rpl::combine(
 			_textUpdates.events_starting_with({}),

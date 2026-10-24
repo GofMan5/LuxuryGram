@@ -373,6 +373,7 @@ TopBar::TopBar(
 , _window(window)
 , _history(history)
 , _searchTimer([=] { requestSearch(); }) {
+	_cancel->setAccessibleName(tr::lng_sr_cancel_search(tr::now));
 	if (from) {
 		setFrom(from);
 	}
@@ -707,6 +708,11 @@ BottomBar::BottomBar(not_null<Ui::RpWidget*> parent, bool fastShowChooseFrom)
 
 	_counter->setAttribute(Qt::WA_TransparentForMouseEvents);
 	_chooseFromUser->setVisible(fastShowChooseFrom);
+	_previous->setAccessibleName(tr::luxury_SearchPreviousResult(tr::now));
+	_next->setAccessibleName(tr::luxury_SearchNextResult(tr::now));
+	_jumpToDate->setAccessibleName(tr::lng_calendar(tr::now));
+	_chooseFromUser->setAccessibleName(tr::lng_search_messages_from(tr::now));
+	_showList->setAccessibleName(tr::luxury_SearchResultsList(tr::now));
 
 	parent->geometryValue(
 	) | rpl::on_next([=](const QRect &r) {

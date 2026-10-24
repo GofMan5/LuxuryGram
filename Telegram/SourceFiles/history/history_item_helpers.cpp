@@ -631,11 +631,9 @@ QString NewMessagePostAuthor(const Api::SendAction &action) {
 bool ShouldSendSilent(
 		not_null<PeerData*> peer,
 		const Api::SendOptions &options) {
-	// Ghost mode's "send without sound by default" only ever adds silence. It used
-	// to return !options.silent, which made picking "Send without sound" from the
-	// menu play a sound -- there is no menu entry to ask for one back.
 	return options.silent
-		|| LuxurySettings::ghost(&peer->session()).shouldSendWithoutSound()
+		|| (!options.ignoreGhostSilent
+			&& LuxurySettings::ghost(&peer->session()).shouldSendWithoutSound())
 		|| (peer->isBroadcast()
 			&& peer->owner().notifySettings().silentPosts(peer))
 		|| (peer->session().supportMode()

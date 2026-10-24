@@ -113,6 +113,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/luxury_infra.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/features/streamer_mode/streamer_mode.h"
+#include "luxury/ui/startup_splash.h"
 
 
 namespace Core {
@@ -350,6 +351,15 @@ void Application::run() {
 
 	LuxuryInfra::init();
 	style::StartManager(cScale());
+
+	auto splash = LuxuryStartup::ShowSplash();
+	const auto stage = [&](tr::phrase<> text, float64 progress) {
+		if (splash) {
+			splash->setStage(text(tr::now), progress);
+		}
+	};
+	stage(tr::luxury_StartupInterface, 0.2);
+
 	Ui::Accessible::Init();
 	Ui::InitTextOptions();
 	Ui::StartCachedCorners();
@@ -388,6 +398,7 @@ void Application::run() {
 		QString::fromLatin1(QT_VERSION_STR)));
 
 	DEBUG_LOG(("Application Info: starting app..."));
+	stage(tr::luxury_StartupWindow, 0.45);
 
 	// Create mime database, so it won't be slow later.
 	QMimeDatabase().mimeTypeForName(u"text/plain"_q);
@@ -444,16 +455,19 @@ void Application::run() {
 	}, _lifetime);
 
 	DEBUG_LOG(("Application Info: window created..."));
+	stage(tr::luxury_StartupAccounts, 0.65);
 
 	startDomain();
 	startTray();
 
+	stage(tr::luxury_StartupShowing, 0.85);
 	_lastActivePrimaryWindow->firstShow();
 
 	startMediaView();
 
 	DEBUG_LOG(("Application Info: showing."));
 	_lastActivePrimaryWindow->finishFirstShow();
+	splash = nullptr;
 
 	if (!_lastActivePrimaryWindow->locked() && cStartToSettings()) {
 		_lastActivePrimaryWindow->showSettings();
@@ -1091,6 +1105,11 @@ void Application::checkLocalTime() {
 		base::Timer::Adjust();
 		base::ConcurrentTimerEnvironment::Adjust();
 		base::unixtime::http_invalidate();
+		for (const auto &[index, account] : _domain->accounts()) {
+			if (const auto session = account->maybeSession()) {
+				session->data().resetTrackedPresence();
+			}
+		}
 	}
 	if (const auto session = maybePrimarySession()) {
 		session->updates().checkLastUpdate(adjusted);

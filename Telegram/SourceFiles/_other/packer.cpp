@@ -57,6 +57,10 @@ w/CVnbwQOw0g5GBwwFV3r0uTTvy44xx8XXxk+Qknu4eBCsmrAFNnAgMBAAE=\n\
 extern const char *PrivateKey;
 extern const char *PrivateBetaKey;
 #include "packer_private.h" // RSA PRIVATE KEYS for update signing
+#else // PACKER_DISABLE_PRIVATE
+const char *PrivateKey = "";
+const char *PrivateBetaKey = "";
+#define PACKER_V2_ONLY
 #endif // PACKER_DISABLE_PRIVATE
 
 QString countAlphaVersionSignature(quint64 version);
@@ -649,6 +653,13 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+#ifdef PACKER_V2_ONLY
+	if (AlphaVersion || BetaChannel || OnlyAlphaKey
+		|| (!V2Channel && V2UnsignedFile.isEmpty())) {
+		cout << "This nonsecret Packer only supports v2 update packaging.\n";
+		return -1;
+	}
+#endif // PACKER_V2_ONLY
 	if (OnlyAlphaKey) {
 		return writeAlphaKey();
 	}

@@ -78,16 +78,10 @@ TabbedPanel::TabbedPanel(
 	_selector->setParent(this);
 	_selector->setRoundRadius(st::emojiPanRadius);
 	_selector->setAfterShownCallback([=](SelectorTab tab) {
-		if (_regularWindow) {
-			_regularWindow->enableGifPauseReason(_selector->level());
-		}
-		_pauseAnimations.fire(true);
+		setAnimationsPaused(true);
 	});
 	_selector->setBeforeHidingCallback([=](SelectorTab tab) {
-		if (_regularWindow) {
-			_regularWindow->disableGifPauseReason(_selector->level());
-		}
-		_pauseAnimations.fire(false);
+		setAnimationsPaused(false);
 	});
 	_selector->showRequests(
 	) | rpl::on_next([=] {
@@ -457,7 +451,23 @@ void TabbedPanel::toggleAnimated() {
 	}
 }
 
+void TabbedPanel::setAnimationsPaused(bool paused) {
+	if (_animationsPaused == paused) {
+		return;
+	}
+	_animationsPaused = paused;
+	if (_regularWindow) {
+		if (paused) {
+			_regularWindow->enableGifPauseReason(_selector->level());
+		} else {
+			_regularWindow->disableGifPauseReason(_selector->level());
+		}
+	}
+	_pauseAnimations.fire_copy(paused);
+}
+
 void TabbedPanel::hideFinished() {
+	setAnimationsPaused(false);
 	hide();
 	_a_show.stop();
 	_showAnimation.reset();
@@ -530,6 +540,7 @@ bool TabbedPanel::overlaps(const QRect &globalRect) const {
 }
 
 TabbedPanel::~TabbedPanel() {
+	setAnimationsPaused(false);
 	hideFast();
 	if (!_ownedSelector && _regularWindow) {
 		_regularWindow->takeTabbedSelectorOwnershipFrom(this);

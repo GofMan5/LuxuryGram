@@ -52,7 +52,7 @@ assert 'Ui::ScrollArea' not in box
 assert 'box->setPinnedToTopContent(' in box and 'object_ptr<WatcherHeader>(box)' in box
 assert 'object_ptr<WatcherBody>(box, peer)' in box
 assert box.count('box->scrollToY(0);') == 2
-assert 'if (weak && !over)' in button
+assert 'if (weak && !over && !isDisabled())' in button
 
 # Same-second watch records must stay in newest-insertion order.
 query = database.split('std::vector<WatchEvent> getWatchEvents(', 1)[1].split('\nvoid ', 1)[0]
@@ -91,7 +91,12 @@ assert 'user->trackedOnlineStart() == session.start' in box
 assert 'session.startId == _events.front().fakeId' in box
 assert 'user->serverLastseen().isOnline' in box
 assert '_expandedEvents.contains(key)' in box
-assert 'QApplication::mouseButtons()' in box and 'body->isAncestorOf(QApplication::focusWidget())' in box
+# A focused row no longer freezes refresh forever: changed rows defer only
+# while pressed, and clock ticks flush that rebuild after release.
+assert 'QApplication::mouseButtons()' in box
+assert 'const auto defer = changed && QApplication::mouseButtons();' in box
+assert 'if (_rebuildPending && !QApplication::mouseButtons())' in box
+assert 'state->clockTimer.callEach(1000)' in box
 assert 'state->refreshTimer.callEach(kRefreshInterval)' in box
 assert 'base::make_unique_q<Ui::Menu::Toggle>' in box
 assert 'setter(!getter())' in box
@@ -99,7 +104,7 @@ assert 'itemPadding: margins(17px, 9px, 60px, 8px);' in style
 assert 'itemToggleShift: 43px;' in style
 assert 'body->rebuilds(' in box and 'box->scrollToY(state->scrollTop)' in box
 assert 'luxury/features/watch/presence_history.h' in (root / 'Telegram/CMakeLists.txt').read_text('utf-8')
-assert 'const auto exact = online || status.type() == mtpc_userStatusOffline' in server
+assert 'const auto exact = online || exactOffline;' in server
 assert 'enabled && exact' in server  # Approximate/hidden presence opens a gap, not an invented logout.
 assert 'if (watcherAvailable)' in menu and 'trackOnlineHistory = settings.trackOnlineHistory()' not in menu
 assert updates.count('LuxuryOnline::noteProfileChange(') == 2
@@ -107,4 +112,27 @@ with sqlite3.connect(':memory:') as db:
     db.execute('CREATE TABLE OnlineEvent(fakeId INTEGER PRIMARY KEY, at INTEGER, online INTEGER)')
     db.executemany('INSERT INTO OnlineEvent VALUES (?, ?, ?)', [(1, 10, 1), (2, 10, 0), (3, 9, 1)])
     assert db.execute('SELECT fakeId FROM OnlineEvent ORDER BY fakeId DESC').fetchall() == [(3,), (2,), (1,)]
-print('Watcher source contracts: PASS (layout, recording paths, privacy gates, async reads, live state, localization, SQL order)')
+assert 'if (user->updateServerLastseen(data.vstatus()))' in (root / 'Telegram/SourceFiles/apiwrap.cpp').read_text('utf-8')
+assert 'for (const auto &[index, account] : _domain->accounts())' in (root / 'Telegram/SourceFiles/core/application.cpp').read_text('utf-8')
+assert 'session->updates().checkLastUpdate(adjusted);' in (root / 'Telegram/SourceFiles/core/application.cpp').read_text('utf-8')
+assert 'void Session::resetTrackedPresence()' in session
+assert 'session().data().resetTrackedPresence();' in updates
+assert 'session->data().resetTrackedPresence();' in (root / 'Telegram/SourceFiles/main/main_account.cpp').read_text('utf-8')
+assert 'uint64 _rebuildGeneration = 0;' in box
+assert 'const auto generation = _rebuildGeneration;' in box
+assert 'generation != _rebuildGeneration' in box
+assert 'const auto weak = base::make_weak(this);' in box
+assert 'if (!weak) {' in box
+card = box.split('void SessionCard::setActive(',1)[1].split('void SessionCard::tick()',1)[0]
+assert card.index('setToolTip(') < card.index('updateAccessibleName()')
+tick = box.split('void SessionCard::tick()',1)[1].split('void SessionCard::computeLayout',1)[0]
+assert tick.index('computeLayout(width())') < tick.index('updateAccessibleName()')
+assert 'crl::on_main(this' in (root / 'Telegram/SourceFiles/luxury/ui/watcher/watcher_components.cpp').read_text('utf-8')
+titles = box.split('void WatcherBody::rebuild()', 1)[1].split('_eventEmpty->show();', 1)[0]
+assert titles.index('const auto counted = !_loading || !sessionList.empty();') < titles.index('_sessionsTitle->setText(counted') \
+    < titles.index('QString::number(_sessions.size()))\n\t\t\t: tr::luxury_OnlineHistorySessions(tr::now));'.replace('\n', '\r\n' if '\r\n' in box else '\n')), \
+    'a loading Sessions title must not claim zero'
+events_title = titles.split('auto title = tr::luxury_OnlineHistoryEvents(tr::now);', 1)[1]
+assert events_title.index('if (!_loading || !eventList.empty()) {') < events_title.index('QString::number(eventList.size())'), \
+    'a loading Events title must not claim zero'
+print('Watcher source contracts: PASS (layout, recording paths, privacy gates, async reads, live state, localization, SQL order, contacts callback, connection/sleep boundaries, reactive refresh, rebuild generations, callback guards)')

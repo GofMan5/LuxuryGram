@@ -137,6 +137,10 @@ set(luxurygram_files
         luxury/ui/toasts.h
         luxury/ui/luxury_userpic.cpp
         luxury/ui/luxury_userpic.h
+        luxury/ui/startup_splash.cpp
+        luxury/ui/startup_splash.h
+        luxury/ui/utils/box_buttons.cpp
+        luxury/ui/utils/box_buttons.h
         luxury/ui/utils/luxury_profile_values.cpp
         luxury/ui/utils/luxury_profile_values.h
         luxury/ui/utils/color_cut_quantizer.cpp

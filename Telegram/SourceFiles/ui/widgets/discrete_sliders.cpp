@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "ui/widgets/discrete_sliders.h"
 
+#include "base/weak_qptr.h"
 #include "ui/effects/ripple_animation.h"
 #include "styles/style_widgets.h"
 
@@ -21,9 +22,12 @@ DiscreteSlider::DiscreteSlider(QWidget *parent, bool snapToLabel)
 DiscreteSlider::~DiscreteSlider() = default;
 
 void DiscreteSlider::setActiveSection(int index) {
+	const auto weak = base::make_weak(this);
 	_activeIndex = index;
 	activateCallback();
-	setSelectedSection(index);
+	if (weak && _activeIndex == index) {
+		setSelectedSection(index);
+	}
 }
 
 void DiscreteSlider::activateCallback() {
@@ -44,8 +48,11 @@ void DiscreteSlider::timerEvent(QTimerEvent *e) {
 }
 
 void DiscreteSlider::setActiveSectionFast(int index) {
+	const auto weak = base::make_weak(this);
 	setActiveSection(index);
-	finishAnimating();
+	if (weak && _activeIndex == index) {
+		finishAnimating();
+	}
 }
 
 void DiscreteSlider::finishAnimating() {

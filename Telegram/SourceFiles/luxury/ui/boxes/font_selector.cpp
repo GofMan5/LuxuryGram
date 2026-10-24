@@ -847,40 +847,22 @@ LuxuryUi::FontSelectorBox::FontSelectorBox(QWidget *, Window::SessionController 
 }
 
 void LuxuryUi::FontSelectorBox::prepare() {
-	addButton(tr::lng_box_ok(),
-			  [=]
-			  {
-				  _hook(_selectedFont);
-
-				  _controller->show(Ui::MakeConfirmBox({
-					  .text = tr::lng_settings_need_restart(),
-					  .confirmed = []
-					  {
-						  Core::Restart();
-					  },
-					  .confirmText = tr::lng_settings_restart_now(),
-					  .cancelText = tr::lng_settings_restart_later(),
-				  }));
-				  closeBox();
-			  });
-
-	addLeftButton(tr::luxury_BoxActionReset(),
-				  [=]
-				  {
-					  _hook(qs(""));
-
-					  _controller->show(Ui::MakeConfirmBox({
-						  .text = tr::lng_settings_need_restart(),
-						  .confirmed = []
-						  {
-							  Core::Restart();
-						  },
-						  .confirmText = tr::lng_settings_restart_now(),
-						  .cancelText = tr::lng_settings_restart_later(),
-					  }));
-
-					  closeBox();
-				  });
+	// The font in use only changes on restart, so offer one only when the
+	// saved choice now differs from it: OK on the current font is a no-op.
+	const auto apply = [=](const QString &font) {
+		_hook(font);
+		if (font != LuxuryUiSettings::getMonoFont()) {
+			_controller->show(Ui::MakeConfirmBox({
+				.text = tr::lng_settings_need_restart(),
+				.confirmed = [] { Core::Restart(); },
+				.confirmText = tr::lng_settings_restart_now(),
+				.cancelText = tr::lng_settings_restart_later(),
+			}));
+		}
+		closeBox();
+	};
+	addButton(tr::lng_box_ok(), [=] { apply(_selectedFont); });
+	addLeftButton(tr::luxury_BoxActionReset(), [=] { apply(QString()); });
 
 	setTitle(tr::luxury_CustomizeFontTitle());
 

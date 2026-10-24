@@ -51,6 +51,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_document.h"
 #include "data/data_histories.h"
 #include "data/data_history_messages.h"
+#include "data/data_messages.h"
 #include "api/api_text_entities.h"
 #include "api/api_updates.h"
 #include "data/data_poll.h"
@@ -239,6 +240,7 @@ void History::itemRemoved(not_null<HistoryItem*> item) {
 	}
 	checkChatListMessageRemoved(item);
 	itemVanished(item);
+	_deletedMessages.remove(item);
 	if (IsClientMsgId(item->id)) {
 		unregisterClientSideMessage(item);
 	}
@@ -1757,6 +1759,30 @@ HistoryItem *History::latestSendingMessage() const {
 		return std::pair(item->date(), item->id.bare);
 	});
 	return (i == sending.end()) ? nullptr : i->get();
+}
+
+void History::registerDeletedMessage(not_null<HistoryItem*> item) {
+	Expects(item->isRegular());
+
+	_deletedMessages.emplace(item);
+}
+
+void History::insertDeletedMessages(
+		Data::MessagesSlice &slice,
+		Fn<bool(not_null<HistoryItem*>)> belongs) const {
+	for (const auto &item : _deletedMessages) {
+		if (!belongs(item)) {
+			continue;
+		}
+		const auto id = item->fullId();
+		const auto i = ranges::lower_bound(slice.ids, id, std::greater<>());
+		if ((i != end(slice.ids) && *i == id)
+			|| (i == begin(slice.ids) && slice.skippedAfter != 0)
+			|| (i == end(slice.ids) && slice.skippedBefore != 0)) {
+			continue;
+		}
+		slice.ids.insert(i, id);
+	}
 }
 
 HistoryBlock *History::prepareBlockForAddingItem() {

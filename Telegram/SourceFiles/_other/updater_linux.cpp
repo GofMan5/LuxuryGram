@@ -292,7 +292,9 @@ bool update() {
 						writeLog("Error: bad update, has Updater! '%s' equal '%s'", tofname.c_str(), updaterName.c_str());
 						delFolder();
 						return false;
-					} else if (equal(tofname, exePath + "Telegram") && exeName != "Telegram") {
+					} else if ((equal(tofname, exePath + "LuxuryGram")
+						|| (!writeprotected && equal(tofname, exePath + "Telegram")))
+						&& tofname != exePath + exeName) {
 						string fullBinaryPath = exePath + exeName;
 						writeLog("Target binary found: '%s', changing to '%s'", tofname.c_str(), fullBinaryPath.c_str());
 						tofname = fullBinaryPath;

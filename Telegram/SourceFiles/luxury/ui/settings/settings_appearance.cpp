@@ -177,6 +177,17 @@ void BuildAvatarCorners(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		},
 	});
 
+	luxury.addSettingToggle({
+		.id = u"luxury/singleCornerRadius"_q,
+		.title = tr::luxury_SingleCornerRadius(),
+		.getter = &LuxurySettings::singleCornerRadius,
+		.setter = &LuxurySettings::setSingleCornerRadius,
+	});
+
+	builder.addSkip();
+	builder.addDividerText(tr::luxury_SingleCornerRadiusDescription());
+	builder.addSkip();
+
 	builder.addSubsectionTitle({
 		.id = u"luxury/menuRadius"_q,
 		.title = tr::luxury_MenuRadius(),
@@ -218,16 +229,7 @@ void BuildAvatarCorners(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		},
 	});
 
-	luxury.addSettingToggle({
-		.id = u"luxury/singleCornerRadius"_q,
-		.title = tr::luxury_SingleCornerRadius(),
-		.getter = &LuxurySettings::singleCornerRadius,
-		.setter = &LuxurySettings::setSingleCornerRadius,
-	});
-
-	builder.addSkip();
-	builder.addDividerText(tr::luxury_SingleCornerRadiusDescription());
-	builder.addSkip();
+	luxury.addSectionDivider();
 }
 
 void BuildAppearance(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
@@ -272,6 +274,7 @@ void BuildAppearance(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.title = tr::luxury_DisableCustomBackgrounds(),
 		.getter = &LuxurySettings::disableCustomBackgrounds,
 		.setter = &LuxurySettings::setDisableCustomBackgrounds,
+		.keywords = { u"background"_q, u"custom"_q },
 	});
 	luxury.addSettingToggle({
 		.id = u"luxury/hidePremiumStatuses"_q,
@@ -285,10 +288,10 @@ void BuildAppearance(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.id = u"luxury/monoFont"_q,
 		.title = tr::luxury_MonospaceFont(),
 		.st = &st::settingsButtonNoIcon,
-		.label = rpl::single(
-			settings->monoFont().isEmpty()
-				? tr::luxury_FontDefault(tr::now)
-				: settings->monoFont()),
+		.label = settings->monoFontValue(
+		) | rpl::map([](const QString &font) {
+			return font.isEmpty() ? tr::luxury_FontDefault(tr::now) : font;
+		}),
 		.onClick = [=] {
 			LuxuryUi::FontSelectorBox::Show(
 				controller,

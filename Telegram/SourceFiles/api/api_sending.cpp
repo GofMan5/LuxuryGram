@@ -95,6 +95,7 @@ void SendSimpleMedia(SendAction action, MTPInputMedia inputMedia) {
 	// After the ephemeral branch above, which needs the reply intact to recognise
 	// an ephemeral bot: a target the server cannot resolve fails the whole send.
 	StripUnsendableReply(session, action.replyTo);
+	applyGhostScheduling(session, action.options);
 
 	if (action.replyTo.messageId
 		&& !IsServerMsgId(action.replyTo.messageId.msg)
@@ -227,6 +228,8 @@ void SendExistingMedia(
 		localMessageId
 			? (*localMessageId)
 			: session->data().nextLocalMessageId());
+	if (message.action.options.localIdAllocated
+		&& !(*message.action.options.localIdAllocated)(newId)) return;
 	const auto randomId = welcomeTemplate
 		? uint64(0)
 		: base::RandomValue<uint64>();
@@ -332,12 +335,19 @@ void SendExistingMedia(
 			item,
 			inputMedia(),
 			origin,
-			inputMedia)) {
+			inputMedia,
+			action.options.localSendFinished
+				? Fn<void(bool)>([=](bool success) {
+					(*action.options.localSendFinished)(newId, success);
+				})
+				: Fn<void(bool)>())) {
 		api->finishForwarding(action);
 		return;
 	}
 
 	const auto performRequest = [=](const auto &repeatRequest) -> void {
+		if (action.options.localIdAllocated
+			&& !(*action.options.localIdAllocated)(newId)) return;
 		auto &histories = history->owner().histories();
 		const auto session = &history->session();
 		const auto usedFileReference = media->fileReference();
@@ -366,13 +376,21 @@ void SendExistingMedia(
 			if (error.code() == 400
 				&& error.type().startsWith(u"FILE_REFERENCE_"_q)) {
 				api->refreshFileReference(origin, [=](const auto &result) {
+					if (action.options.localIdAllocated
+						&& !(*action.options.localIdAllocated)(newId)) return;
 					if (media->fileReference() != usedFileReference) {
 						repeatRequest(repeatRequest);
 					} else {
+						if (action.options.localSendFinished) {
+							(*action.options.localSendFinished)(newId, false);
+						}
 						api->sendMessageFail(error, peer, randomId, newId);
 					}
 				});
 			} else {
+				if (action.options.localSendFinished) {
+					(*action.options.localSendFinished)(newId, false);
+				}
 				api->sendMessageFail(error, peer, randomId, newId);
 			}
 		});
@@ -489,6 +507,8 @@ void SendMusicSelectionBatch(
 		const auto newId = FullMsgId(
 			peer->id,
 			session->data().nextLocalMessageId());
+		if (action.options.localIdAllocated
+			&& !(*action.options.localIdAllocated)(newId)) return;
 		const auto randomId = base::RandomValue<uint64>();
 		const auto messageStarsPaid = std::min(
 			peer->starsPerMessageChecked(),
@@ -517,12 +537,13 @@ void SendMusicSelectionBatch(
 			.localItem = localItem,
 			.localId = newId,
 			.randomId = randomId,
-			.caption = std::move(itemCaption),
+			.caption = reverseLocalPremiumEmoji(itemCaption, history),
 		});
 	}
 
 	const auto failRequest = [=](const MTP::Error &error) {
 		for (const auto &item : requests) {
+			if (action.options.localSendFinished) (*action.options.localSendFinished)(item.localId, false);
 			api->sendMessageFail(error, peer, item.randomId, item.localId);
 		}
 		if (done) {
@@ -776,13 +797,28 @@ void SendMusicSelection(
 		return;
 	}
 
+	// The same preparation every other media send gets: a reply to a deleted
+	// message becomes a quote, and ghost mode sends it as scheduled.
+	const auto session = &message.action.history->session();
+	if (prependPseudoReply(message)) {
+		message.action.replyTo.messageId = FullMsgId(
+			message.action.replyTo.messageId.peer,
+			message.action.replyTo.topicRootId);
+	}
+	if (!session->ephemeralMessages().wouldSendMedia(
+			message.action.history->peer,
+			message.action.replyTo,
+			message.textWithTags.text)) {
+		applyGhostScheduling(session, message.action.options);
+	}
+
 	auto caption = TextWithEntities{
 		std::move(message.textWithTags.text),
 		TextUtilities::ConvertTextTagsToEntities(message.textWithTags.tags)
 	};
 	TextUtilities::Trim(caption);
 
-	const auto api = &message.action.history->session().api();
+	const auto api = &session->api();
 
 	message.action.clearDraft = false;
 	message.action.generateLocal = true;
@@ -879,6 +915,10 @@ bool SendDice(MessageToSend &message) {
 	const auto session = &history->session();
 	const auto api = &session->api();
 
+	if (message.action.options.stakeSeedHash.isEmpty()
+		&& !session->ephemeralMessages().wouldSend(message)) {
+		applyGhostScheduling(session, message.action.options);
+	}
 	message.textWithTags = TextWithTags();
 	message.action.clearDraft = false;
 	message.action.generateLocal = true;
@@ -889,6 +929,8 @@ bool SendDice(MessageToSend &message) {
 	const auto newId = FullMsgId(
 		peer->id,
 		session->data().nextLocalMessageId());
+	if (action.options.localIdAllocated
+		&& !(*action.options.localIdAllocated)(newId)) return true;
 	const auto randomId = base::RandomValue<uint64>();
 
 	auto &histories = history->owner().histories();
@@ -992,6 +1034,7 @@ bool SendDice(MessageToSend &message) {
 			SuggestToMTP(action.options.suggest)
 		), [=](const MTPUpdates &result, const MTP::Response &response) {
 	}, [=](const MTP::Error &error, const MTP::Response &response) {
+		if (action.options.localSendFinished) (*action.options.localSendFinished)(newId, false);
 		api->sendMessageFail(error, peer, randomId, newId);
 	});
 	api->finishForwarding(action);
@@ -1343,7 +1386,10 @@ void AddConfirmedLocalPlaceholder(const ConfirmedLocalFile &local) {
 			peer->starsPerMessageChecked(),
 			remainingStarsApproved);
 		remainingStarsApproved -= starsPaid;
-		locals.push_back(PrepareConfirmedLocalFile(session, file, starsPaid));
+		auto local = PrepareConfirmedLocalFile(session, file, starsPaid);
+		if (file->to.options.localIdAllocated
+			&& !(*file->to.options.localIdAllocated)(local.newId)) return true;
+		locals.push_back(std::move(local));
 	}
 
 	auto notifyHistory = false;
@@ -1396,6 +1442,8 @@ void SendConfirmedFile(
 		std::min(
 			history->peer->starsPerMessageChecked(),
 			file->to.options.starsApproved));
+	if (file->to.options.localIdAllocated
+		&& !(*file->to.options.localIdAllocated)(local.newId)) return;
 	session->uploader().upload(local.newId, file);
 	session->api().sendAction(local.action);
 	AddConfirmedLocalPlaceholder(local);

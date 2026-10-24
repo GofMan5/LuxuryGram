@@ -55,7 +55,7 @@ ID PerDialogFiltersListRow::dialogId() const {
 }
 
 QString PerDialogFiltersListRow::generateName() {
-	if (const auto from = getPeerFromDialogId(peerId.value & PeerId::kChatTypeMask)) {
+	if (const auto from = getPeerFromDialogId(_dialogId)) {
 		this->setPeer(from);
 		return PeerListRow::generateName();
 	}
@@ -66,7 +66,7 @@ QString PerDialogFiltersListRow::generateName() {
 }
 
 PaintRoundImageCallback PerDialogFiltersListRow::generatePaintUserpicCallback(bool forceRound) {
-	if (const auto from = getPeerFromDialogId(peerId.value & PeerId::kChatTypeMask)) {
+	if (const auto from = getPeerFromDialogId(_dialogId)) {
 		this->setPeer(from);
 		return PeerListRow::generatePaintUserpicCallback(forceRound);
 	}

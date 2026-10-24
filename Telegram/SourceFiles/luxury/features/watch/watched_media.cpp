@@ -17,6 +17,7 @@
 #include "data/data_media_types.h"
 #include "data/data_photo.h"
 #include "data/data_photo_media.h"
+#include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "lang_auto.h"
@@ -27,8 +28,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QUuid>
 
 #include <atomic>
+#include <map>
+#include <mutex>
 #include <utility>
 
 namespace LuxuryFeatures::Watch {
@@ -83,8 +87,42 @@ constexpr auto kKeepRetryDelay = crl::time(30 * 1000);
 // as a single toast when it closes.
 constexpr auto kGiveUpToastDelay = crl::time(60 * 1000);
 
+struct MediaScope {
+	uint64 sessionId = 0;
+	ID dialogId = 0;
+	QString nonce = QUuid::createUuid().toString(QUuid::WithoutBraces);
+	std::atomic<bool> active = true;
+	std::atomic<bool> photoWritesAllowed = true;
+};
+
+std::map<std::pair<uint64, ID>, std::shared_ptr<MediaScope>> Scopes;
+std::mutex MediaFilesMutex;
+base::flat_set<QString> ClearingPaths;
+
+[[nodiscard]] std::shared_ptr<MediaScope> ScopeForItem(
+		not_null<HistoryItem*> item) {
+	const auto key = std::pair(
+		item->history()->session().uniqueId(),
+		ID(item->history()->peer->id.value));
+	auto &scope = Scopes[key];
+	if (!scope) {
+		scope = std::make_shared<MediaScope>();
+		scope->sessionId = key.first;
+		scope->dialogId = key.second;
+	}
+	return scope;
+}
+
+struct AwaitingDocument {
+	uint64 sessionId = 0;
+	uint64 documentId = 0;
+	QString path;
+	std::shared_ptr<MediaScope> scope;
+};
+
 struct AwaitingPhoto {
 	QString path;
+	std::shared_ptr<MediaScope> scope;
 	std::shared_ptr<Data::PhotoMedia> media;
 	// Which session's data the media belongs to. Kept as an id rather than a
 	// pointer because the point of it is to be readable after that session is
@@ -92,20 +130,26 @@ struct AwaitingPhoto {
 	// already freed it by then.
 	uint64 sessionId = 0;
 	crl::time deadline = 0;
+	Fn<void()> cancelLoad;
 };
 
 // A file whose message was deleted while a loader we started was still writing
-// it. No session id: the file and its name are all the move needs, and it must
-// outlive the account being logged out.
+// it. Its scope survives logout, but an explicit clear invalidates it.
 struct PendingKeep {
 	QString name;
+	std::shared_ptr<MediaScope> scope;
 	crl::time deadline = 0;
 };
 
+std::vector<AwaitingDocument> AwaitingDocuments;
 std::vector<AwaitingPhoto> AwaitingPhotos;
 std::vector<PendingKeep> PendingKeeps;
+std::map<QString, std::shared_ptr<MediaScope>> PhotoWrites;
+
+void FlushPendingKeeps();
 // One retry timer at a time: anything pushed while it is armed rides on it.
 bool PendingKeepsRetrying = false;
+uint64 RetryGeneration = 0;
 // Give-ups counted while a toast window is open; the delayed toast swaps
 // the count back to zero when it fires.
 int GivenUpKeeps = 0;
@@ -113,7 +157,6 @@ crl::time GivenUpKeepsWindow = 0;
 base::flat_set<uint64> SubscribedSessions;
 int FetchesSincePrune = 0;
 std::atomic<bool> Pruning = false;
-std::atomic<bool> ClearingAllKept = false;
 std::atomic<bool> ReportedOverBudget = false;
 
 [[nodiscard]] QString PendingDir() {
@@ -132,7 +175,8 @@ std::atomic<bool> ReportedOverBudget = false;
 		|| fileName.contains('/')
 		|| fileName.contains('\\')
 		|| fileName.contains(':')
-		|| fileName.startsWith('.')) {
+		|| fileName.startsWith('.')
+		|| ClearingPaths.contains(KeptDir() + fileName)) {
 		return QString();
 	}
 	return KeptDir() + fileName;
@@ -153,6 +197,7 @@ std::atomic<bool> ReportedOverBudget = false;
 }
 
 [[nodiscard]] QString FileName(
+		const std::shared_ptr<MediaScope> &scope,
 		ID dialogId,
 		MsgId messageId,
 		uint64 mediaId,
@@ -160,30 +205,40 @@ std::atomic<bool> ReportedOverBudget = false;
 	// dialogId is negative for chats and channels, which is fine in a name: it is
 	// the same key the deleted-message rows use, and that is what makes a kept
 	// file findable from either side.
-	return u"%1_%2_%3.%4"_q
+	const auto prefix = u"v2_%1_%2_%3_%4_"_q
+		.arg(scope->sessionId)
 		.arg(dialogId)
 		.arg(messageId.bare)
-		.arg(mediaId)
-		.arg(suffix);
+		.arg(mediaId);
+	for (const auto &directory : { KeptDir(), PendingDir() }) {
+		for (const auto &name : QDir(directory).entryList(
+				{ prefix + '*' }, QDir::Files)) {
+			if (!ClearingPaths.contains(directory + name)) {
+				return name;
+			}
+		}
+	}
+	return prefix + scope->nonce + '.' + suffix;
 }
 
-// Both the fetch and the keep derive the name from the item, so neither has to
-// remember anything between them: the folder is the index. Nothing to migrate,
-// nothing to get out of sync with the disk.
+// The folder remains the durable index. v2 names include the account and a
+// clear generation; ambiguous legacy names are preserved but never auto-adopted.
 [[nodiscard]] QString NameForItem(not_null<HistoryItem*> item) {
 	const auto media = item->media();
 	if (!media) {
 		return QString();
 	}
-	const auto dialogId = getDialogIdFromPeer(item->history()->peer);
+	const auto scope = ScopeForItem(item);
+	const auto dialogId = scope->dialogId;
 	if (const auto document = media->document()) {
 		return FileName(
+			scope,
 			dialogId,
 			item->id,
 			document->id,
 			SafeSuffix(document->filename(), u"bin"_q));
 	} else if (const auto photo = media->photo()) {
-		return FileName(dialogId, item->id, photo->id, u"jpg"_q);
+		return FileName(scope, dialogId, item->id, photo->id, u"jpg"_q);
 	}
 	return QString();
 }
@@ -199,6 +254,7 @@ void PruneOldFiles() {
 		}
 		// Oldest first: QDir::Time sorts newest first and Reversed flips it.
 		const auto files = QDir(pending).entryInfoList(
+			{ u"v2_*"_q },
 			QDir::Files,
 			QDir::Time | QDir::Reversed);
 		auto total = keptSize;
@@ -239,7 +295,16 @@ void PruneOldFiles() {
 // runs inside a downloader tick with up to kMaxAwaitingPhotos of them queued.
 void SavePhotoAsync(
 		const std::shared_ptr<Data::PhotoMedia> &media,
-		const QString &path) {
+		const QString &path,
+		const std::shared_ptr<MediaScope> &scope) {
+	if (PhotoWrites.contains(path)) return;
+	const auto finished = [path, scope] {
+		crl::on_main([path, scope] {
+			const auto i = PhotoWrites.find(path);
+			if (i != PhotoWrites.end() && i->second == scope) PhotoWrites.erase(i);
+			FlushPendingKeeps();
+		});
+	};
 	constexpr auto large = Data::PhotoSize::Large;
 	// Writes the video content of a live photo and the large image otherwise --
 	// exactly the pair wanted() asked for.
@@ -248,7 +313,11 @@ void SavePhotoAsync(
 		bytes = media->imageBytes(large);
 	}
 	if (!bytes.isEmpty()) {
-		crl::async([path, bytes = std::move(bytes)] {
+		PhotoWrites.emplace(path, scope);
+		crl::async([path, scope, finished, bytes = std::move(bytes)] {
+			const auto notify = gsl::finally(finished);
+			const auto lock = std::lock_guard(MediaFilesMutex);
+			if (!scope->active || !scope->photoWritesAllowed) return;
 			auto f = QFile(path);
 			if (!f.open(QIODevice::WriteOnly)
 				|| f.write(bytes) != bytes.size()) {
@@ -264,11 +333,37 @@ void SavePhotoAsync(
 		DEBUG_LOG(("Luxury Watch: nothing to write for %1").arg(path));
 		return;
 	}
-	crl::async([path, image = std::move(image)] {
+	PhotoWrites.emplace(path, scope);
+	crl::async([path, scope, finished, image = std::move(image)] {
+		const auto notify = gsl::finally(finished);
+		const auto lock = std::lock_guard(MediaFilesMutex);
+		if (!scope->active || !scope->photoWritesAllowed) return;
 		if (!image.save(path, "JPG")) {
 			DEBUG_LOG(("Luxury Watch: could not write %1").arg(path));
 		}
 	});
+}
+
+void CancelUnusedPhotoLoads(const std::vector<AwaitingPhoto> &photos) {
+	base::flat_set<const Data::PhotoMedia*> canceled;
+	for (const auto &entry : photos) {
+		if (!entry.cancelLoad || !getSessionByUniqueId(entry.sessionId)) continue;
+		auto sharedWithWatch = false;
+		for (auto &remaining : AwaitingPhotos) {
+			if (remaining.media == entry.media) {
+				if (!remaining.cancelLoad) remaining.cancelLoad = entry.cancelLoad;
+				sharedWithWatch = true;
+			}
+		}
+		const auto heldByWatch = std::count_if(photos.begin(), photos.end(), [&](const auto &other) {
+			return other.media == entry.media;
+		});
+		// A later user/media-view owner may have joined the same loader.
+		if (!sharedWithWatch && entry.media.use_count() == heldByWatch
+			&& canceled.emplace(entry.media.get()).second) {
+			entry.cancelLoad();
+		}
+	}
 }
 
 void FlushAwaitingPhotos() {
@@ -277,13 +372,18 @@ void FlushAwaitingPhotos() {
 	// this and invalidate a live iterator.
 	const auto now = crl::now();
 	auto kept = std::vector<AwaitingPhoto>();
+	auto expired = std::vector<AwaitingPhoto>();
 	auto pending = base::take(AwaitingPhotos);
 	kept.reserve(pending.size());
 	for (auto &entry : pending) {
-		if (entry.media->loaded()) {
-			SavePhotoAsync(entry.media, entry.path);
+		if (!entry.scope->active) {
+			continue;
+		} else if (entry.media->loaded()) {
+			SavePhotoAsync(entry.media, entry.path, entry.scope);
 		} else if (now < entry.deadline) {
 			kept.push_back(std::move(entry));
+		} else {
+			expired.push_back(std::move(entry));
 		}
 	}
 	// Anything queued while the writes were being started stays queued.
@@ -291,6 +391,7 @@ void FlushAwaitingPhotos() {
 		AwaitingPhotos.end(),
 		std::make_move_iterator(kept.begin()),
 		std::make_move_iterator(kept.end()));
+	CancelUnusedPhotoLoads(expired);
 }
 
 void DropAwaitingPhotos(uint64 sessionId) {
@@ -311,14 +412,26 @@ void DropAwaitingPhotos(uint64 sessionId) {
 	return QFile::rename(PendingDir() + name, KeptDir() + name);
 }
 
-void FlushPendingKeeps();
+[[nodiscard]] bool MediaWritePending(const QString &path) {
+	return PhotoWrites.contains(path)
+		|| ranges::any_of(AwaitingPhotos, [&](const auto &photo) {
+			return photo.scope->active && photo.path == path;
+		})
+		|| ranges::any_of(AwaitingDocuments, [&](const auto &document) {
+			const auto session = getSessionByUniqueId(document.sessionId);
+			return session && document.scope->active && document.path == path
+				&& session->data().document(document.documentId)->loadingFilePath() == path;
+		});
+}
 
 void RetryPendingKeepsLater() {
 	if (PendingKeepsRetrying || PendingKeeps.empty()) {
 		return;
 	}
 	PendingKeepsRetrying = true;
-	base::call_delayed(kKeepRetryDelay, [] {
+	const auto generation = RetryGeneration;
+	base::call_delayed(kKeepRetryDelay, [generation] {
+		if (generation != RetryGeneration) return;
 		PendingKeepsRetrying = false;
 		FlushPendingKeeps();
 	});
@@ -340,12 +453,16 @@ void FlushPendingKeeps() {
 	auto pending = base::take(PendingKeeps);
 	retry.reserve(pending.size());
 	for (auto &entry : pending) {
-		if (QFile::exists(KeptDir() + entry.name)) {
+		const auto path = PendingDir() + entry.name;
+		const auto writing = MediaWritePending(path);
+		if (!entry.scope->active) {
 			continue;
-		} else if (!QFile::exists(PendingDir() + entry.name)) {
+		} else if (QFile::exists(KeptDir() + entry.name)) {
+			continue;
+		} else if (!writing && !QFile::exists(path)) {
 			// Pruned, or the loader was cancelled and removed it. Nothing left.
 			continue;
-		} else if (MoveToKept(entry.name)) {
+		} else if (!writing && MoveToKept(entry.name)) {
 			continue;
 		} else if (now < entry.deadline) {
 			// The loader still holds the file open. PruneOldFiles() leaves files
@@ -377,6 +494,11 @@ void SubscribeToDownloads(not_null<Main::Session*> session) {
 	}
 	session->downloaderTaskFinished(
 	) | rpl::on_next([] {
+		std::erase_if(AwaitingDocuments, [](const AwaitingDocument &entry) {
+			const auto owner = getSessionByUniqueId(entry.sessionId);
+			return !owner || !entry.scope->active
+				|| owner->data().document(entry.documentId)->loadingFilePath() != entry.path;
+		});
 		FlushAwaitingPhotos();
 		FlushPendingKeeps();
 	}, session->lifetime());
@@ -388,9 +510,19 @@ void SubscribeToDownloads(not_null<Main::Session*> session) {
 	// by the time this fires, so their PhotoData is freed, and saveToFile() would
 	// read it -- a photo that outlived its account is one nothing may ask about
 	// again. Destroying the media itself is safe: ~PhotoMedia touches nothing.
+	session->data().sessionDataAboutToBeCleared() | rpl::on_next([id] {
+		DropAwaitingPhotos(id);
+		std::erase_if(AwaitingDocuments, [id](const AwaitingDocument &entry) {
+			return entry.sessionId == id;
+		});
+		std::erase_if(Scopes, [id](const auto &entry) {
+			if (entry.first.first != id) return false;
+			entry.second->photoWritesAllowed = false;
+			return true;
+		});
+	}, session->lifetime());
 	session->lifetime().add([id] {
 		SubscribedSessions.remove(id);
-		DropAwaitingPhotos(id);
 	});
 }
 
@@ -409,6 +541,11 @@ void processNewMessage(not_null<HistoryItem*> item) {
 	if (!media) {
 		return;
 	}
+	std::erase_if(AwaitingDocuments, [](const AwaitingDocument &entry) {
+		const auto session = getSessionByUniqueId(entry.sessionId);
+		return !session || !entry.scope->active
+			|| session->data().document(entry.documentId)->loadingFilePath() != entry.path;
+	});
 	const auto name = NameForItem(item);
 	if (name.isEmpty()) {
 		return;
@@ -435,6 +572,8 @@ void processNewMessage(not_null<HistoryItem*> item) {
 			DEBUG_LOG(("Luxury Watch: %1 is %2 bytes, over the file limit."
 				).arg(name).arg(document->size));
 			return;
+		} else if (AwaitingDocuments.size() >= kMaxPendingKeeps) {
+			return;
 		} else if (document->loading()) {
 			// Something already asked for this one. save() below would try to
 			// point that loader at our path, fail, and cancel it.
@@ -451,25 +590,38 @@ void processNewMessage(not_null<HistoryItem*> item) {
 		// It also makes our path the document's known location, so a prune can
 		// leave tdesktop pointing at a file that is gone -- which it handles by
 		// downloading again, the same as any file the user moved.
-		document->save(origin, path, LoadFromCloudOrLocal, true);
-		// A delete that lands before this finishes cannot move the file, so the
-		// move waits for a completion on this signal. Idempotent per session.
 		SubscribeToDownloads(&history->session());
+		AwaitingDocuments.push_back({
+			history->session().uniqueId(),
+			document->id,
+			path,
+			ScopeForItem(item),
+		});
+		document->save(origin, path, LoadFromCloudOrLocal, true);
+		std::erase_if(AwaitingDocuments, [&](const AwaitingDocument &entry) {
+			return entry.sessionId == history->session().uniqueId()
+				&& entry.documentId == document->id
+				&& document->loadingFilePath() != entry.path;
+		});
+
 	} else if (const auto photo = media->photo()) {
-		if (AwaitingPhotos.size() >= kMaxAwaitingPhotos) {
+		if (AwaitingPhotos.size() + PhotoWrites.size() >= kMaxAwaitingPhotos) {
 			return;
 		} else if (!QDir().mkpath(PendingDir())) {
 			LOG(("Luxury Watch: could not create %1").arg(PendingDir()));
 			return;
 		}
 		auto view = photo->createMediaView();
+		const auto ownsLoad = !photo->loading() && !view->loaded();
 		view->wanted(Data::PhotoSize::Large, origin);
 		const auto session = &history->session();
 		AwaitingPhotos.push_back({
 			path,
+			ScopeForItem(item),
 			std::move(view),
 			session->uniqueId(),
 			crl::now() + kPhotoWaitTimeout,
+			ownsLoad ? photo->cancelLoadCallback(Data::PhotoSize::Large) : Fn<void()>(),
 		});
 		SubscribeToDownloads(session);
 	} else {
@@ -491,12 +643,9 @@ QString keepMediaForDeleted(not_null<HistoryItem*> item) {
 	} else if (QFile::exists(KeptDir() + name)) {
 		// Deleted twice, or kept by an earlier run. Either way it is already safe.
 		return name;
-	} else if (!QFile::exists(PendingDir() + name)) {
-		return QString();
 	}
-	const auto media = item->media();
-	const auto document = media ? media->document() : nullptr;
-	if (document && document->loading()) {
+	const auto path = PendingDir() + name;
+	if (MediaWritePending(path)) {
 		// The loader still owns the file. Renaming it now fails outright on
 		// Windows, and on Linux moves the inode out from under the loader, which
 		// then reports a location that no longer holds what it says. Wait for a
@@ -504,23 +653,27 @@ QString keepMediaForDeleted(not_null<HistoryItem*> item) {
 		// deleted seconds after it arrived, so it must not be dropped.
 		if (PendingKeeps.size() < kMaxPendingKeeps
 			&& !ranges::contains(PendingKeeps, name, &PendingKeep::name)) {
-			PendingKeeps.push_back({ name, crl::now() + kKeepWaitTimeout });
+			PendingKeeps.push_back({ name, ScopeForItem(item), crl::now() + kKeepWaitTimeout });
 			RetryPendingKeepsLater();
 		}
 		return QString();
 	}
-	return MoveToKept(name) ? name : QString();
+	return QFile::exists(path) && MoveToKept(name) ? name : QString();
 }
 
-QString keptFileForMessage(ID dialogId, MsgId messageId) {
-	// The media id is the one part of the name the viewer cannot know, so the
-	// first two thirds are matched and the rest globbed. No ambiguity from the
-	// trailing separator: "5_45_*" cannot match "5_456_7.jpg".
-	const auto prefix = u"%1_%2_"_q.arg(dialogId).arg(messageId.bare);
+QString keptFileForMessage(uint64 sessionId, ID dialogId, MsgId messageId) {
+	// Match the account and original message, not the viewer's synthetic id.
+	// The trailing separator prevents 45 from matching message 456.
+	const auto prefix = u"v2_%1_%2_%3_"_q.arg(sessionId).arg(dialogId).arg(messageId.bare);
 	const auto names = QDir(KeptDir()).entryList(
 		{ prefix + '*' },
 		QDir::Files);
-	return names.isEmpty() ? QString() : keptFilePath(names.front());
+	for (const auto &name : names) {
+		if (const auto path = keptFilePath(name); !path.isEmpty()) {
+			return path;
+		}
+	}
+	return QString();
 }
 
 bool ownsFetchedPath(const QString &path) {
@@ -530,33 +683,96 @@ bool ownsFetchedPath(const QString &path) {
 	return path.startsWith(PendingDir());
 }
 
-void clearKeptMedia() {
-	// Guards the all-files walk only: per-dialog clears touch disjoint name
-	// ranges, so they can overlap this walk or each other without harm.
-	if (ClearingAllKept.exchange(true)) {
-		return;
-	}
-	crl::async([kept = KeptDir()] {
-		for (const auto &entry : QDir(kept).entryInfoList(QDir::Files)) {
-			QFile::remove(entry.absoluteFilePath());
+namespace {
+
+void ClearMedia(std::optional<std::pair<uint64, ID>> selected) {
+	const auto matches = [&](const auto &scope) {
+		return !selected || *selected == std::pair(scope->sessionId, scope->dialogId);
+	};
+	{
+		// A photo write that already started completes before the snapshot below;
+		// queued writes observe the inactive scope and cannot recreate its file.
+		const auto lock = std::lock_guard(MediaFilesMutex);
+		std::erase_if(Scopes, [&](const auto &entry) {
+			if (!matches(entry.second)) return false;
+			entry.second->active = false;
+			return true;
+		});
+		std::erase_if(PhotoWrites, [&](const auto &entry) {
+			if (!matches(entry.second)) return false;
+			entry.second->active = false;
+			return true;
+		});
+		for (auto &entry : PendingKeeps) {
+			if (matches(entry.scope)) entry.scope->active = false;
 		}
-		// The budget warning is armed again, so a new run over it is said.
-		ReportedOverBudget = false;
-		ClearingAllKept = false;
+		for (auto &entry : AwaitingPhotos) {
+			if (matches(entry.scope)) entry.scope->active = false;
+		}
+		for (auto &entry : AwaitingDocuments) {
+			if (matches(entry.scope)) entry.scope->active = false;
+		}
+	}
+	std::erase_if(PendingKeeps, [&](const auto &entry) { return matches(entry.scope); });
+	auto photos = base::take(AwaitingPhotos);
+	std::erase_if(photos, [&](auto &entry) {
+		if (matches(entry.scope)) return false;
+		AwaitingPhotos.push_back(std::move(entry));
+		return true;
+	});
+	const auto documents = base::take(AwaitingDocuments);
+	for (const auto &entry : documents) {
+		if (!matches(entry.scope)) AwaitingDocuments.push_back(entry);
+	}
+	++RetryGeneration;
+	PendingKeepsRetrying = false;
+	RetryPendingKeepsLater();
+
+	const auto prefix = selected
+		? u"v2_%1_%2_"_q.arg(selected->first).arg(selected->second)
+		: u"v2_"_q;
+	auto paths = QStringList();
+	for (const auto &directory : { PendingDir(), KeptDir() }) {
+		for (const auto &entry : QDir(directory).entryInfoList(
+				{ prefix + '*' }, QDir::Files)) {
+			const auto path = entry.absoluteFilePath();
+			if (ClearingPaths.emplace(path).second) paths.push_back(path);
+		}
+	}
+	// cancel() synchronously notifies the downloader. All old queues and scopes
+	// have been detached first, so that notification may safely start new work.
+	for (const auto &entry : documents) {
+		if (!matches(entry.scope)) continue;
+		if (const auto session = getSessionByUniqueId(entry.sessionId)) {
+			const auto document = session->data().document(entry.documentId);
+			if (document->loadingFilePath() == entry.path) document->cancel();
+		}
+	}
+	CancelUnusedPhotoLoads(photos);
+	crl::async([paths = std::move(paths)] {
+		{
+			const auto lock = std::lock_guard(MediaFilesMutex);
+			for (const auto &path : paths) {
+				if (QFile::exists(path) && !QFile::remove(path)) {
+					LOG(("Luxury Watch: could not clear %1").arg(path));
+				}
+			}
+		}
+		crl::on_main([paths] {
+			for (const auto &path : paths) ClearingPaths.remove(path);
+			ReportedOverBudget = false;
+		});
 	});
 }
 
-void clearKeptMediaForDialog(ID dialogId) {
-	// The same anchored prefix keptFileForMessage() matches with: "5_*"
-	// cannot hit "56_7.jpg", so only this dialog's files go.
-	const auto prefix = u"%1_"_q.arg(dialogId);
-	crl::async([kept = KeptDir(), prefix] {
-		for (const auto &entry : QDir(kept).entryInfoList(
-				{ prefix + '*' },
-				QDir::Files)) {
-			QFile::remove(entry.absoluteFilePath());
-		}
-	});
+} // namespace
+
+void clearKeptMedia() {
+	ClearMedia(std::nullopt);
+}
+
+void clearKeptMediaForDialog(uint64 sessionId, ID dialogId) {
+	ClearMedia(std::pair(sessionId, dialogId));
 }
 
 } // namespace LuxuryFeatures::Watch

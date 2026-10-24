@@ -48,6 +48,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+#include "luxury/luxury_url_handlers.h"
 #include <ada.h>
 
 namespace {
@@ -455,8 +456,13 @@ void HiddenUrlClickHandler::Open(QString url, QVariant context) {
 			|| (confirmAfterIvFallback && !canTryIv)
 			|| (HiddenUrlRequiresConfirmation(parsedUrl)
 				&& !skipConfirmation);
-		if (!LuxurySettings::getInstance().disableOpenLinkWarning()
-			&& requiresConfirmation) {
+		// LuxuryGram: the switch is about web pages. A hidden file:, smb: or
+		// search-ms: target hands the link to a local handler, so it keeps the
+		// box that shows where the link really goes.
+		const auto skipWarning
+			= LuxurySettings::getInstance().disableOpenLinkWarning()
+			&& LuxuryUrlHandlers::IsWebUrl(parsedUrl);
+		if (!skipWarning && requiresConfirmation) {
 			if (!my.show) {
 				Core::App().hideMediaView();
 			}

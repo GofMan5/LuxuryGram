@@ -58,8 +58,7 @@ namespace Default {
 namespace {
 
 [[nodiscard]] int notifyWidth() {
-	const auto corner = Core::App().settings().notificationsCorner();
-	return Core::Settings::IsTopCenterCorner(corner) ? st::notifyWidth * 1.5 : st::notifyWidth;
+	return NotificationWidth(Core::App().settings().notificationsCorner());
 }
 
 [[nodiscard]] QPoint notificationStartPosition() {
@@ -85,6 +84,10 @@ internal::Widget::Direction notificationShiftDirection() {
 }
 
 } // namespace
+
+int NotificationWidth(Core::Settings::ScreenCorner corner) {
+	return Core::Settings::IsTopCenterCorner(corner) ? st::notifyWidth * 1.5 : st::notifyWidth;
+}
 
 std::unique_ptr<Manager> Create(System *system) {
 	return std::make_unique<Manager>(system);

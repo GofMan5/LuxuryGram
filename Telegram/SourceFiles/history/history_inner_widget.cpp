@@ -3131,9 +3131,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				&st::menuIconStats);
 		}
 
-		LuxuryUi::AddHistoryAction(_menu, item);
+		LuxuryUi::AddHistoryAction(_menu, controller, item);
 		LuxuryUi::AddHideMessageAction(_menu, item);
-		LuxuryUi::AddUserMessagesAction(_menu, item);
+		LuxuryUi::AddUserMessagesAction(_menu, controller, item);
 		LuxuryUi::AddRepeatMessageAction(_menu, item, HistoryView::Context::History);
 		LuxuryUi::AddMessageDetailsAction(_menu, item);
 	};

@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_unread_things.h"
+#include "luxury/luxury_settings.h"
 #include "main/main_session.h"
 #include "window/notifications_manager.h"
 
@@ -287,6 +288,13 @@ void SavedSublist::readTillEnd() {
 }
 
 bool SavedSublist::buildFromData(not_null<Viewer*> viewer) {
+	const auto insertDeleted = [&] {
+		const auto sublistPeerId = sublistPeer()->id;
+		owningHistory()->insertDeletedMessages(viewer->slice, [&](
+				not_null<HistoryItem*> item) {
+			return (item->sublistPeerId() == sublistPeerId);
+		});
+	};
 	if (_list.empty() && _skippedBefore == 0 && _skippedAfter == 0) {
 		viewer->slice.ids.clear();
 		viewer->slice.nearestToAround = FullMsgId();
@@ -294,6 +302,7 @@ bool SavedSublist::buildFromData(not_null<Viewer*> viewer) {
 			= viewer->slice.skippedBefore
 			= viewer->slice.skippedAfter
 			= 0;
+		insertDeleted();
 		ranges::reverse(viewer->slice.ids);
 		return true;
 	}
@@ -343,6 +352,7 @@ bool SavedSublist::buildFromData(not_null<Viewer*> viewer) {
 			slice->ids.empty() ? 0 : slice->ids.back().msg));
 	slice->fullCount = _fullCount.current();
 
+	insertDeleted();
 	ranges::reverse(viewer->slice.ids);
 
 	if (_skippedBefore != 0 && useBefore < viewer->limitBefore + 1) {
@@ -707,6 +717,9 @@ void SavedSublist::sendReadTillRequest() {
 	const auto api = &_parent->session().api();
 	api->request(base::take(_readRequestId)).cancel();
 
+	if (!LuxurySettings::ghost(&_parent->session()).sendReadMessages()) {
+		return;
+	}
 	_sentReadTill = computeInboxReadTillFull();
 	_readRequestId = api->request(MTPmessages_ReadSavedHistory(
 		parentChat->input(),

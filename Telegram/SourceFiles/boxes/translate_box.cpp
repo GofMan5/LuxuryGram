@@ -434,7 +434,8 @@ void TranslateBoxTo(
 		rpl::variable<LanguageId> to;
 	};
 	const auto state = box->lifetime().make_state<State>(&peer->session());
-	if (IsServerMsgId(msgId) && state->provider->supportsMessageId()) {
+	if (IsServerMsgId(msgId)
+		&& SupportsRichMessageTranslation(state->provider.get())) {
 		if (const auto item = peer->owner().message(peer->id, msgId)) {
 			if (const auto page = item->richPage()) {
 				if (TranslateRichBox(

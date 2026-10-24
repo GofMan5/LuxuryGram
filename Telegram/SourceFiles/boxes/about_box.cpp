@@ -49,7 +49,9 @@ rpl::producer<TextWithEntities> Text() {
 }
 
 void AddUpdateRow(not_null<Ui::GenericBox*> box) {
-	if (Core::UpdaterDisabled()) {
+	// With automatic updates off the updater ignores start(), so a check button
+	// here would do nothing; settings hide theirs in that state too.
+	if (Core::UpdaterDisabled() || !cAutoUpdate()) {
 		return;
 	}
 	const auto layout = box->verticalLayout();
@@ -63,7 +65,7 @@ void AddUpdateRow(not_null<Ui::GenericBox*> box) {
 	) | rpl::map([] {
 		return (Core::UpdateChecker().state()
 				== Core::UpdateChecker::State::Ready)
-			? tr::lng_update_telegram(tr::now)
+			? tr::luxury_UpdateLuxuryGram(tr::now)
 			: tr::lng_settings_check_now(tr::now);
 	});
 

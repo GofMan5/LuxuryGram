@@ -312,6 +312,7 @@ Widget::Widget(
 , _folderIcon(descriptor.folderIcon)
 , _horizontalFilters(descriptor.horizontalFilters) {
 	setMinimumHeight(st::boxTitleHeight);
+	_close->setAccessibleName(tr::lng_close(tr::now));
 	refreshTitleText();
 	setTitlePosition(st::boxTitlePosition.x(), st::boxTitlePosition.y());
 
