@@ -167,9 +167,46 @@ def check(root=None, read=source):
     assert 'elementGramReadLine' in pure
     for header in ('luxury/ui/message_history/history_inner.h',
                    'history/admin_log/history_admin_log_inner.h',
-                   'history/view/history_view_list_widget.h'):
+                   'history/view/history_view_list_widget.h',
+                   'history/history_inner_widget.cpp'):
         text = read(SRC + header)
-        assert not [name for name in pure if name + '(' not in text], header
+        missing = [name for name in pure if not re.search(
+            r'\b' + name + r'\([^;{]*\)\s*(?:const\s*)?override\b', text)]
+        assert not missing, (header, missing)
+    # One GetKeyIndex over 11.6k generated keys hit MSVC ARM64 C1053
+    # "function too large". The generator splits it into parts of a
+    # descending key range, each ending in "return kKeysCount;", and
+    # dispatches by each part's smallest key, the last part unconditionally.
+    generator = read('Telegram/codegen/codegen/lang/generator.cpp')
+    split = generator[generator.index('constexpr auto kKeysPerPart'):generator.index('header_->popNamespace().newline();', generator.index('constexpr auto kKeysPerPart'))]
+    per_part = int(re.search(r'constexpr auto kKeysPerPart = (\d+);', split).group(1))
+    assert 'auto parts = std::vector<std::set<QString, std::greater<>>>();' in split
+    assert 'for (const auto &key : keysSet) {' in split
+    assert 'parts.back().size() == kKeysPerPart' in split
+    assert 'writeSetSearch(parts[i], computeKey, "kKeysCount");' in split
+    smallest = re.search(r'if \(key >= QLatin1String\(\\"" << \*parts\[i\]\.(r?begin)\(\) << "\\"\)\) \{', split)
+    assert smallest and smallest.group(1) == 'rbegin', 'descending part: rbegin is its smallest key'
+    assert 'if (i + 1 == partsCount) {\n\t\t\tsource_->stream() << "\\treturn GetKeyIndexPart" << i << "(key);\\n";' \
+        in split.replace('\r\n', '\n')
+    # Brace matching cannot read writeSetSearch: its string literals open
+    # switches. Each part ends in the search's own final return.
+    search = generator[generator.index('void Generator::writeSetSearch('):generator.index('QString Generator::getFullKey(')]
+    assert search.replace('\r\n', '\n').rstrip().endswith('return " << invalidResult << ";\\n";\n}')
+    # Simulate on the keys the generator emits: each plural expands to six.
+    plurals = ('zero', 'one', 'two', 'few', 'many', 'other')
+    keys = set()
+    for key in re.findall(r'^"([^"]+)"\s*=', read('Telegram/Resources/langs/lang.strings'), re.M):
+        keys.update(key.split('#')[0] + '#' + p for p in plurals) if '#' in key else keys.add(key)
+    # QString orders by UTF-16 units, QLatin1String by bytes: equal on ASCII,
+    # which ValidateKey enforces.
+    keys = sorted(keys, reverse=True)
+    assert len(keys) > 2 * per_part
+    parts = [keys[i:i + per_part] for i in range(0, len(keys), per_part)]
+    assert per_part <= 2000, 'MSVC ARM64 failed on 11.6k keys and passed on 8.7k in one function'
+    for part, chunk in enumerate(parts):
+        for key in chunk:
+            routed = next((i for i, p in enumerate(parts[:-1]) if key >= p[-1]), len(parts) - 1)
+            assert routed == part, (key, routed, part)
     print('Optimisation audit contracts PASS')
 
 
