@@ -69,49 +69,6 @@ not_null<Button*> AddChooseButtonWithIconAndRightTextInner(not_null<Ui::Vertical
 											  Settings::IconDescriptor &&descriptor,
 											  const Fn<void(int)> &setter);
 
-void AddChooseButtonWithIconAndRightText(not_null<Ui::VerticalLayout*> container,
-										 not_null<Window::SessionController*> controller,
-										 int initialState,
-										 std::vector<QString> options,
-										 rpl::producer<QString> text,
-										 rpl::producer<QString> boxTitle,
-										 const style::icon &icon,
-										 const Fn<void(int)> &setter);
-
-void AddChooseButtonWithIconAndRightText(not_null<Ui::VerticalLayout*> container,
-										 not_null<Window::SessionController*> controller,
-										 int initialState,
-										 std::vector<QString> options,
-										 rpl::producer<QString> text,
-										 rpl::producer<QString> boxTitle,
-										 const Fn<void(int)> &setter);
-
-not_null<Button*> AddToggle(
-	not_null<Ui::VerticalLayout*> container,
-	rpl::producer<QString> text,
-	Fn<bool()> getter,
-	Fn<void(bool)> setter);
-
-not_null<Button*> AddToggle(
-	not_null<Ui::VerticalLayout*> container,
-	rpl::producer<QString> text,
-	Fn<bool()> getter,
-	Fn<void(bool)> setter,
-	const style::icon &icon);
-
 void AddSectionDivider(not_null<Ui::VerticalLayout*> container);
-
-not_null<Button*> AddSettingToggle(
-	not_null<Ui::VerticalLayout*> container,
-	rpl::producer<QString> text,
-	BoolGetter getter,
-	BoolSetter setter);
-
-not_null<Button*> AddSettingToggle(
-	not_null<Ui::VerticalLayout*> container,
-	rpl::producer<QString> text,
-	BoolGetter getter,
-	BoolSetter setter,
-	const style::icon &icon);
 
 } // namespace Settings

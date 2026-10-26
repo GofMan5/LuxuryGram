@@ -25,6 +25,9 @@ assert source.count('if (current())') == 2
 assert source.index('++_requestGeneration;') < source.index('reply->abort();', source.index('void LuxuryLanguage::clearReply()'))
 assert 'const auto baseId = _languageBaseId;' in source and 'const auto langPackBaseId = _languageBaseId;' in source
 assert 'const auto requestedId = (needFallback || finalLangPackId.isEmpty())' in source
+# The pack request follows the app-wide proxy (Sandbox::refreshGlobalProxy),
+# including the system proxy; a per-manager override bypassed it.
+assert 'setProxy(' not in source
 assert '!doc.isObject()' in source and '!json.value(brokenKey).isString()' in source
 apply = source[source.index('void LuxuryLanguage::applyLanguageJson('):]
 assert apply.count('language.notifyUpdated();') == 1

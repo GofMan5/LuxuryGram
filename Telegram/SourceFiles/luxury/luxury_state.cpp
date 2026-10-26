@@ -91,6 +91,9 @@ void hide(not_null<HistoryItem*> item) {
 }
 
 bool isHidden(not_null<HistoryItem*> item) {
+	if (hiddenMessages.empty()) {
+		return false;
+	}
 	const auto session = hiddenMessages.find(
 		item->history()->session().uniqueId());
 	if (session == end(hiddenMessages)) {

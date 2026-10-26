@@ -64,7 +64,6 @@ void loadDocumentSync(
 	WeakSession session,
 	FullMsgId itemId,
 	const QString &path,
-	qint64 expectedSize,
 	const Cancelled &cancelled);
 [[nodiscard]] QString loadPhotoSync(
 	WeakSession session,

@@ -2026,7 +2026,10 @@ void InnerWidget::paintPeerSearchResult(
 	p.setFont(st::dialogsTextFont);
 	QString username = peer->username();
 	if (username.isEmpty()) {
-		const auto idText = QString("ID: ") + QString::number(abs(getDialogIdFromPeer(peer)));
+		const auto idText = tr::luxury_IdValue(
+			tr::now,
+			lt_id,
+			QString::number(abs(getDialogIdFromPeer(peer))));
 		p.setPen(context.active ? st::dialogsTextFgActive : st::dialogsTextFgService);
 		p.drawText(tr.left(), tr.top() + st::dialogsTextFont->ascent, st::dialogsTextFont->elided(idText, tr.width()));
 	} else if (!context.active && username.startsWith(_peerSearchQuery, Qt::CaseInsensitive)) {

@@ -184,15 +184,8 @@ void PerDialogFiltersListController::rowClicked(not_null<PeerListRow*> peer) {
 	if (peer->id() == kLoadingRowId) {
 		return;
 	}
-	ID did;
-	if (const auto row = dynamic_cast<PerDialogFiltersListRow*>(peer.get())) {
-		did = row->dialogId();
-	} else if (peer->special()) {
-		const auto pred = static_cast<long long>(peer->id() & PeerId::kChatTypeMask);
-		did = countsByDialogIds.contains(pred) ? pred : -pred;
-	} else {
-		did = getDialogIdFromPeer(peer->peer());
-	}
+	// Besides the loading row above, only PerDialogFiltersListRow is added.
+	const auto did = static_cast<PerDialogFiltersListRow*>(peer.get())->dialogId();
 	if (_mode == Mode::ShadowBan) {
 		// Every row's only action is lifting that chat's ban, so activation
 		// performs it directly. The old one-item popup was anchored at the

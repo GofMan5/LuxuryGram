@@ -150,7 +150,7 @@ void AboutBox(not_null<Ui::GenericBox*> box, Window::SessionController*) {
 
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 	box->addLeftButton(
-		rpl::single(QString("GitHub Releases")),
+		tr::luxury_GitHubReleases(),
 		[box]
 		{
 			box->closeBox();

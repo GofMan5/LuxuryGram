@@ -29,6 +29,9 @@ botWebViewPanelWidthIncreased: 512px;
 
 stickerRoundingSize: 5px;
 
+// Upstream waits a second before every hover tooltip.
+luxuryTooltipDelay: 350;
+
 messageShotPadding: 4px;
 
 topBarAdmins: IconButton {

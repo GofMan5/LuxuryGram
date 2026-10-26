@@ -26,15 +26,6 @@ QString randomDesktopUserAgent();
 
 QString parseJsonPath(const QByteArray &body, const QString &jsonPath, bool *ok);
 
-struct PassedData
-{
-	MTPflags<MTPmessages_translateText::Flags> flags;
-	MTPInputPeer peer;
-	MTPVector<MTPint> idList;
-	MTPVector<MTPTextWithEntities> text;
-	MTPstring toLang;
-};
-
 struct ParsedData
 {
 	std::vector<TextWithEntities> texts;
@@ -44,7 +35,6 @@ struct ParsedData
 
 struct StartTranslationArgs
 {
-	PassedData requestData;
 	ParsedData parsedData;
 
 	CallbackSuccess onSuccess;

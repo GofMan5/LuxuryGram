@@ -9,10 +9,8 @@
 #include "luxury/utils/windows_utils.h"
 
 #include "base/debug_log.h"
-#include "base/platform/win/base_windows_winrt.h"
 #include "platform/win/windows_app_user_model_id.h"
 
-#include <propvarutil.h>
 #include <ShlObj_core.h>
 
 // An icon the user gave the shortcut in Explorer stays: only no icon, the
@@ -136,7 +134,7 @@ bool processNewPinned(const QString &iconPath) {
 
 	WIN32_FIND_DATA findData;
 	HANDLE findHandle = FindFirstFileEx(
-		(native + L"*").c_str(),
+		(native + L"*.lnk").c_str(),
 		FindExInfoStandard,
 		&findData,
 		FindExSearchNameMatch,
@@ -154,38 +152,7 @@ bool processNewPinned(const QString &iconPath) {
 		if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
 			continue;
 		}
-
-		const auto attributes = GetFileAttributes(fname.c_str());
-		if (attributes == INVALID_FILE_ATTRIBUTES) {
-			continue;
-		}
-
-		auto shellLink = base::WinRT::TryCreateInstance<IShellLink>(
-			CLSID_ShellLink);
-		if (!shellLink) {
-			continue;
-		}
-
-		auto persistFile = shellLink.try_as<IPersistFile>();
-		if (!persistFile) {
-			continue;
-		}
-
-		auto hr = persistFile->Load(fname.c_str(), STGM_READWRITE);
-		if (!SUCCEEDED(hr)) continue;
-
-		WCHAR dst[MAX_PATH] = {0};
-		hr = shellLink->GetPath(dst, MAX_PATH, nullptr, 0);
-		if (!SUCCEEDED(hr)) continue;
-
-		if (Platform::AppUserModelId::GetUniqueFileId(dst) == srcid) {
-			auto propertyStore = shellLink.try_as<IPropertyStore>();
-			if (!propertyStore) {
-				continue;
-			}
-
-			changed |= processIcon(filePath, iconPath);
-		}
+		changed |= processIcon(filePath, iconPath);
 	} while (FindNextFile(findHandle, &findData));
 
 	const auto errorCode = GetLastError();

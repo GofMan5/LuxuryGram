@@ -17,9 +17,14 @@ void SetWindowCaptureExcluded(
 		not_null<QWidget*> widget,
 		bool excluded) {
 	const auto handle = reinterpret_cast<HWND>(widget->winId());
-	SetWindowDisplayAffinity(
+	const auto applied = SetWindowDisplayAffinity(
 		handle,
 		excluded ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+	if (!applied && excluded) {
+		// Windows 10 before 2004 has no EXCLUDEFROMCAPTURE: the window then
+		// shows black in captures instead of leaking its content.
+		SetWindowDisplayAffinity(handle, WDA_MONITOR);
+	}
 }
 
 } // namespace LuxuryFeatures::StreamerMode::Platform

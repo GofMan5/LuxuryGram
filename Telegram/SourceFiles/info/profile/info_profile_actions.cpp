@@ -2011,7 +2011,7 @@ Section DetailsFiller::makeInfo() {
 
 		if (_topic) {
 			auto idDrawableText = IDValue(
-				_peer->forumTopicFor(topicRootId)->topicRootId()
+				topicRootId
 			) | rpl::map([](TextWithEntities &&text)
 			{
 				return Ui::Text::Code(text.text);
@@ -2022,9 +2022,9 @@ Section DetailsFiller::makeInfo() {
 				tr::luxury_ContextCopyID(tr::now)
 			);
 
-			idInfo.text->setClickHandlerFilter([=, peer = _peer](auto &&...)
+			idInfo.text->setClickHandlerFilter([=](auto &&...)
 			{
-				const auto idText = IDString(peer->forumTopicFor(topicRootId)->topicRootId());
+				const auto idText = IDString(topicRootId);
 				if (!idText.isEmpty()) {
 					QGuiApplication::clipboard()->setText(idText);
 					controller->showToast(tr::luxury_IDCopiedToast(tr::now));

@@ -142,26 +142,9 @@ void dropResults() {
 }
 
 std::shared_ptr<const Cache> snapshot() {
-	{
-		std::lock_guard lock(cacheMutex);
-		if (cache) {
-			return cache;
-		}
-	}
-
-	std::lock_guard rebuildLock(rebuildMutex);
-	{
-		std::lock_guard lock(cacheMutex);
-		if (cache) {
-			return cache;
-		}
-	}
-
-	auto next = buildCache();
+	// Null until the startup warm-up has run. Building it here instead put the
+	// first painted message behind DatabaseMutex for a whole migration.
 	std::lock_guard lock(cacheMutex);
-	if (!cache) {
-		cache = std::move(next);
-	}
 	return cache;
 }
 
@@ -257,6 +240,8 @@ void putFiltered(
 	}
 }
 
+namespace {
+
 void invalidateSingle(not_null<HistoryItem*> item) {
 	const auto sessionIt = filteredMessages.find(
 		item->history()->session().uniqueId());
@@ -284,6 +269,8 @@ void invalidateSingle(not_null<HistoryItem*> item) {
 		}
 	}
 }
+
+} // namespace
 
 void invalidate(not_null<HistoryItem*> item) {
 	std::lock_guard lock(filteredMessagesMutex);

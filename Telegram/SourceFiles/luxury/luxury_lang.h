@@ -9,7 +9,6 @@
 #include "rpl/lifetime.h"
 
 #include <QtNetwork/QNetworkReply>
-#include <QtXml/QDomDocument>
 
 class LuxuryLanguage : public QObject
 {

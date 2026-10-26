@@ -78,8 +78,7 @@ bool tryApplyCloudThemePalette(
 
 SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 		const MessageShotSettings &shot,
-		std::shared_ptr<style::palette> palette,
-		Fn<void(bool applied)> onApplied) {
+		std::shared_ptr<style::palette> palette) {
 	if (shot.embeddedThemeType() == -1) {
 		return SavedThemeApplyResult::Failed;
 	}
@@ -104,9 +103,6 @@ SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 		if (accent) {
 			setDefaultSelectedColor(*accent);
 		}
-		if (onApplied) {
-			onApplied(true);
-		}
 		return SavedThemeApplyResult::AppliedSync;
 	}
 
@@ -122,9 +118,6 @@ SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 		palette->load(instance.palette.save());
 		setDefaultSelected(type);
 		setDefaultSelectedColor(color);
-		if (onApplied) {
-			onApplied(true);
-		}
 		return SavedThemeApplyResult::AppliedSync;
 	}
 
@@ -140,9 +133,6 @@ SavedThemeApplyResult tryApplyEmbeddedThemePalette(
 	palette->reset();
 	palette->load(preview->instance.palette.save());
 	setDefaultSelected(type);
-	if (onApplied) {
-		onApplied(true);
-	}
 	return SavedThemeApplyResult::AppliedSync;
 }
 
@@ -203,9 +193,10 @@ void applyCloudThemeAsync(
 		return;
 	}
 
-	session->downloaderTaskFinished(
-	) | rpl::filter([=] {
-		return documentView->loaded();
+	// A failed or cancelled download stops loading without ever loading:
+	// apply() then finds no bytes and reports false instead of waiting forever.
+	DocumentLoadUpdates(session, document) | rpl::filter([=] {
+		return documentView->loaded() || !document->loading();
 	}) | rpl::take(1) | rpl::on_next([=] {
 		apply();
 	}, lifetime);
@@ -331,12 +322,11 @@ void setPersistedPalette(std::shared_ptr<style::palette> palette) {
 }
 
 SavedThemeApplyResult applySavedThemePalette(
-		std::shared_ptr<style::palette> palette,
-		Fn<void(bool applied)> onApplied) {
+		std::shared_ptr<style::palette> palette) {
 	const auto &shot = LuxurySettings::getInstance().messageShotSettings();
 
 	if (shot.embeddedThemeType() != -1) {
-		return tryApplyEmbeddedThemePalette(shot, std::move(palette), std::move(onApplied));
+		return tryApplyEmbeddedThemePalette(shot, std::move(palette));
 	}
 
 	if (shot.cloudThemeId() == 0) {
@@ -350,9 +340,6 @@ SavedThemeApplyResult applySavedThemePalette(
 
 	if (const auto fromList = findCloudThemeById(session, shot.cloudThemeId())) {
 		if (tryApplyCloudThemePalette(session, *fromList, palette)) {
-			if (onApplied) {
-				onApplied(true);
-			}
 			return SavedThemeApplyResult::AppliedSync;
 		}
 	}
@@ -363,9 +350,6 @@ SavedThemeApplyResult applySavedThemePalette(
 	saved.documentId = shot.cloudThemeDocumentId();
 	saved.title = shot.cloudThemeTitle();
 	if (tryApplyCloudThemePalette(session, saved, palette)) {
-		if (onApplied) {
-			onApplied(true);
-		}
 		return SavedThemeApplyResult::AppliedSync;
 	}
 

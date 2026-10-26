@@ -99,7 +99,7 @@ bool DarkTasbarValueValid/* = false*/;
 	const auto ym = image.height() / 16.;
 	p.setBrush(color);
 	p.setPen(Qt::NoPen);
-	p.drawEllipse(QRectF( // cx=3.9, cy=12.7, r=2.2
+	p.drawEllipse(QRectF( // cx=3.9, cy=11.7, r=2.2
 		1.7 * xm,
 		9.5 * ym,
 		4.4 * xm,

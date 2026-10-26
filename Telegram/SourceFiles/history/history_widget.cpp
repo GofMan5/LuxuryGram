@@ -267,13 +267,6 @@ const auto kPsaAboutPrefix = "cloud_lng_about_psa_";
 	return QString();
 }
 
-#define SWITCH_BUTTON(button, show_v) \
-	if (show_v) { \
-		(button)->show(); \
-	} else { \
-		(button)->hide(); \
-	}
-
 } // namespace
 
 HistoryWidget::HistoryWidget(
@@ -803,18 +796,28 @@ HistoryWidget::HistoryWidget(
 		item->mainView()->itemDataChanged();
 	}, lifetime());
 
+	// Loading the block list fires IsBlocked once per peer, and every refresh
+	// rebuilds every view of the open chat: only blocked-hiding cares about it,
+	// and a burst is folded into one pass.
+	const auto filtersRefreshQueued = lifetime().make_state<bool>(false);
 	rpl::merge(
 		session().changes().peerUpdates(
 			Data::PeerUpdate::Flag::IsBlocked
-		) | rpl::to_empty,
+		) | rpl::filter([] {
+			const auto &settings = LuxurySettings::getInstance();
+			return settings.filtersEnabled() && settings.hideFromBlocked();
+		}) | rpl::to_empty,
 		FiltersCacheController::updates()
-	) | rpl::on_next(
+	) | rpl::filter([=] {
+		return !std::exchange(*filtersRefreshQueued, true);
+	}) | rpl::on_next(
 		[=]
 		{
 			crl::on_main(
 				this,
 				[=]
 				{
+					*filtersRefreshQueued = false;
 					if (_history) {
 						_history->forceFullResize();
 						if (_migrated) {
@@ -4389,13 +4392,13 @@ void HistoryWidget::updateControlsVisibility() {
 			_botCommandStart->hide();
 		} else if (_kbReplyTo) {
 			_kbScroll->hide();
-			SWITCH_BUTTON(_tabbedSelectorToggle, settings.showEmojiButtonInMessageField());
+			_tabbedSelectorToggle->setVisible(settings.showEmojiButtonInMessageField());
 			_botKeyboardHide->hide();
 			_botKeyboardShow->hide();
 			_botCommandStart->hide();
 		} else {
 			_kbScroll->hide();
-			SWITCH_BUTTON(_tabbedSelectorToggle, settings.showEmojiButtonInMessageField());
+			_tabbedSelectorToggle->setVisible(settings.showEmojiButtonInMessageField());
 			_botKeyboardHide->hide();
 			if (_keyboard->hasMarkup()) {
 				_botKeyboardShow->show();
@@ -4409,7 +4412,7 @@ void HistoryWidget::updateControlsVisibility() {
 			_replaceMedia->show();
 			_attachToggle->hide();
 		} else {
-			SWITCH_BUTTON(_attachToggle, settings.showAttachButtonInMessageField());
+			_attachToggle->setVisible(settings.showAttachButtonInMessageField());
 		}
 		if (_botMenu.button) {
 			_botMenu.button->show();
@@ -4803,9 +4806,12 @@ void HistoryWidget::messagesReceived(
 		not_null<PeerData*> peer,
 		const MTPmessages_Messages &messages,
 		int requestId) {
-	// Expects(_history != nullptr);
+	// A reply can land after the chat was closed; upstream's Expects crashed
+	// here when using `saveDeletedMessages`.
 	if (!_history || !_peer) {
-		return; // LuxuryGram: fix crash when using `saveDeletedMessages`
+		LOG(("History: messages for %1 arrived with no chat open, dropped."
+			).arg(peer->id.value));
+		return;
 	}
 
 	const auto toMigrated = (peer == _peer->migrateFrom());
@@ -7226,7 +7232,7 @@ void HistoryWidget::toggleKeyboard(bool manual) {
 		_botKeyboardHide->hide();
 		_botKeyboardShow->hide();
 		if (fieldEnabled) {
-			SWITCH_BUTTON(_botCommandStart, settings.showCommandsButtonInMessageField());
+			_botCommandStart->setVisible(settings.showCommandsButtonInMessageField());
 		}
 		_kbScroll->hide();
 		_kbShown = false;
@@ -7277,7 +7283,7 @@ void HistoryWidget::toggleKeyboard(bool manual) {
 	updateSendAsFileVisibility();
 	updateExpandButtonVisibility();
 	updateFieldPlaceholder();
-	SWITCH_BUTTON(_tabbedSelectorToggle, _botKeyboardHide->isHidden()
+	_tabbedSelectorToggle->setVisible(_botKeyboardHide->isHidden()
 		&& canWriteMessage()
 		&& !_showAnimation && settings.showEmojiButtonInMessageField());
 	updateField();
@@ -7711,7 +7717,12 @@ void HistoryWidget::updateFieldSize() {
 			: 0)
 		- st::historySendRight
 		- _send->width()
-		- (settings.showEmojiButtonInMessageField() ? _tabbedSelectorToggle->width() : 0);
+		// The slot stays while the keyboard-hide button sits in it, exactly as
+		// moveFieldControls() lays it out; otherwise the field runs under it.
+		- ((settings.showEmojiButtonInMessageField()
+			|| !_botKeyboardHide->isHidden())
+			? _tabbedSelectorToggle->width()
+			: 0);
 	if (_botMenu.button) {
 		fieldWidth -= st::historyBotMenuSkip + _botMenu.button->width();
 	}
@@ -8039,7 +8050,9 @@ bool HistoryWidget::confirmSendingFiles(
 		_peer,
 		Api::SendType::Normal,
 		sendMenuDetails(),
-		[=](const TextWithTags &text) { _field->setTextWithTags(text); });
+		crl::guard(this, [=](const TextWithTags &text) {
+			_field->setTextWithTags(text);
+		}));
 	box->setReplyTo(replyTo());
 	_field->setTextWithTags({});
 	box->setConfirmedCallback(crl::guard(this, [=](
@@ -9017,7 +9030,7 @@ void HistoryWidget::updateBotKeyboard(History *h, bool force) {
 					showKeyboardHideButton();
 				} else {
 					_kbScroll->hide();
-					SWITCH_BUTTON(_tabbedSelectorToggle, settings.showEmojiButtonInMessageField());
+					_tabbedSelectorToggle->setVisible(settings.showEmojiButtonInMessageField());
 					_botKeyboardHide->hide();
 				}
 				_botKeyboardShow->hide();
@@ -9041,7 +9054,7 @@ void HistoryWidget::updateBotKeyboard(History *h, bool force) {
 		} else {
 			if (!_showAnimation) {
 				_kbScroll->hide();
-				SWITCH_BUTTON(_tabbedSelectorToggle, settings.showEmojiButtonInMessageField());
+				_tabbedSelectorToggle->setVisible(settings.showEmojiButtonInMessageField());
 				_botKeyboardHide->hide();
 				_botKeyboardShow->show();
 				_botCommandStart->hide();
@@ -9060,7 +9073,7 @@ void HistoryWidget::updateBotKeyboard(History *h, bool force) {
 	} else {
 		if (!_scroll->isHidden()) {
 			_kbScroll->hide();
-			SWITCH_BUTTON(_tabbedSelectorToggle, settings.showEmojiButtonInMessageField());
+			_tabbedSelectorToggle->setVisible(settings.showEmojiButtonInMessageField());
 			_botKeyboardHide->hide();
 			_botKeyboardShow->hide();
 			_botCommandStart->setVisible(!_editMsgId && settings.showCommandsButtonInMessageField());

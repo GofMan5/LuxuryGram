@@ -136,6 +136,12 @@ void ThemeSelectorBox::setupContent() {
 			_selectionLifetime.destroy();
 			_selection.reset();
 			setApplyEnabled(false);
+			if (!theme.documentId) {
+				// Emoji themes have no file: document(0) would be an empty
+				// DocumentData whose download never finishes.
+				showToast(tr::luxury_MessageShotThemePreviewFailed(tr::now));
+				return;
+			}
 			const auto document = _controller->session().data().document(theme.documentId);
 			const auto documentView = document->createMediaView();
 

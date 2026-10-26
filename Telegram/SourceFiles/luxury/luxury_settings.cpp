@@ -27,6 +27,7 @@
 #include "platform/platform_translate_provider.h"
 #include "rpl/combine.h"
 #include "window/window_controller.h"
+#include "window/themes/window_themes_embedded.h"
 
 #include <QApplication>
 #include <QFile>
@@ -525,8 +526,7 @@ void from_json(const nlohmann::json &j, MessageShotSettings &s) {
 }
 
 LuxurySettings::LuxurySettings()
-: _appIcon(LuxuryAssets::DEFAULT_ICON)
-, _editedMark(Core::IsAppLaunched() ? tr::lng_edited(tr::now) : QString("edited")) {
+: _appIcon(LuxuryAssets::DEFAULT_ICON) {
 }
 
 LuxurySettings &LuxurySettings::getInstance() {
@@ -837,7 +837,7 @@ void LuxurySettings::validate() {
 	}
 
 	validateRange(_messageBubbleRadius, 0, 16, defaults._messageBubbleRadius);
-	validateRange(_wideMultiplier, 0.5, 4.0, defaults._wideMultiplier);
+	validateRange(_wideMultiplier, 1.0, 4.0, defaults._wideMultiplier);
 	validateRange(_avatarCorners, 0, LuxuryUiSettings::kMaxAvatarCorners, defaults._avatarCorners);
 	validateRange(
 		_menuRadius,
@@ -850,7 +850,8 @@ void LuxurySettings::validate() {
 	validateText(_messageShotSettings._cloudThemeTitle, kMaxThemeTitleLength);
 
 	const auto embeddedType = _messageShotSettings._embeddedThemeType.current();
-	auto embeddedTypeValid = (embeddedType == -1) || (embeddedType >= 0 && embeddedType <= 3); // from Window::Theme::EmbeddedType::DayBlue to Window::Theme::EmbeddedType::NightGreen
+	const auto embeddedTypeValid = (embeddedType >= -1)
+		&& (embeddedType <= int(Window::Theme::EmbeddedType::NightGreen));
 	if (!embeddedTypeValid) {
 		_messageShotSettings._embeddedThemeType = defaults._messageShotSettings._embeddedThemeType.current();
 		_messageShotSettings._embeddedThemeAccentColor = defaults._messageShotSettings._embeddedThemeAccentColor.current();
@@ -981,9 +982,7 @@ void LuxurySettings::setMessageBubbleRadius(int val) {
 void LuxurySettings::setWideMultiplier(double val) {
 	if (_wideMultiplier.current() == val) return;
 	_wideMultiplier = val;
-	// doesn't work because it should be set before style::StartManager()
-	// LuxuryUiSettings::setWideMultiplier(val);
-	// repaintApp();
+	// Styles read it once before style::StartManager(): applies after restart.
 	save();
 }
 
@@ -1093,8 +1092,25 @@ void LuxurySettings::setDeletedMark(const QString &val) {
 	save();
 }
 
+QString LuxurySettings::editedMark() const {
+	const auto &mark = _editedMark.current();
+	return mark.isEmpty() ? tr::lng_edited(tr::now) : mark;
+}
+
+rpl::producer<QString> LuxurySettings::editedMarkValue() const {
+	return rpl::combine(
+		_editedMark.value(),
+		tr::lng_edited()
+	) | rpl::map([](const QString &mark, const QString &language) {
+		return mark.isEmpty() ? language : mark;
+	});
+}
+
 void LuxurySettings::setEditedMark(const QString &val) {
-	const auto validated = val.left(safeCutPosition(val, kMaxMarkLength));
+	auto validated = val.left(safeCutPosition(val, kMaxMarkLength));
+	if (validated == tr::lng_edited(tr::now)) {
+		validated = QString(); // The language's own word: keep following it.
+	}
 	if (_editedMark.current() == validated) return;
 	_editedMark = validated;
 	save();
@@ -1525,7 +1541,7 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"hideFastShare", s._hideFastShare.current()},
 		{"replaceBottomInfoWithIcons", s._replaceBottomInfoWithIcons.current()},
 		{"deletedMark", s._deletedMark.current()},
-		{"editedMark", s._editedMark.current()},
+		{"customEditedMark", s._editedMark.current()},
 		{"unlimitedRecentStickers", s._unlimitedRecentStickers.current()},
 		{"unlimitedFavedStickers", s._unlimitedFavedStickers.current()},
 		{"showReactionsPanelInContextMenu", s._showReactionsPanelInContextMenu.current()},
@@ -1612,7 +1628,9 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 				auto account = std::make_unique<GhostModeAccountSettings>();
 				value.get_to(*account);
 				s._ghostAccounts[id] = std::move(account);
-			} catch (...) {
+			} catch (const std::exception &ex) {
+				LOG(("LuxuryGramSettings: dropping ghost account %1: %2"
+					).arg(id).arg(ex.what()));
 			}
 		}
 	}
@@ -1635,10 +1653,7 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 			if (!value.is_number_integer()) {
 				continue;
 			}
-			try {
-				s._shadowBanIds.insert(value.get<int64>());
-			} catch (...) {
-			}
+			s._shadowBanIds.insert(value.get<int64>());
 		}
 	}
 	s._watchedDialogs.clear();
@@ -1651,10 +1666,7 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 			if (!value.is_number_integer()) {
 				continue;
 			}
-			try {
-				s._watchedDialogs.insert(value.get<int64>());
-			} catch (...) {
-			}
+			s._watchedDialogs.insert(value.get<int64>());
 		}
 	}
 	s._filtersEnabled = j.value("filtersEnabled", defaults._filtersEnabled.current());
@@ -1687,7 +1699,18 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	s._hideFastShare = j.value("hideFastShare", defaults._hideFastShare.current());
 	s._replaceBottomInfoWithIcons = j.value("replaceBottomInfoWithIcons", defaults._replaceBottomInfoWithIcons.current());
 	s._deletedMark = j.value("deletedMark", defaults._deletedMark.current());
-	s._editedMark = j.value("editedMark", defaults._editedMark.current());
+	s._editedMark = j.value("customEditedMark", defaults._editedMark.current());
+	// Earlier builds saved the default mark as the English word itself under
+	// "editedMark", which then stayed English in every interface language.
+	const auto legacyEditedMark = j.find("editedMark");
+	if (!j.contains("customEditedMark")
+		&& legacyEditedMark != j.end()
+		&& legacyEditedMark->is_string()) {
+		const auto mark = legacyEditedMark->get<QString>();
+		if (mark != Lang::GetOriginalValue(tr::lng_edited.base)) {
+			s._editedMark = mark;
+		}
+	}
 	s._unlimitedRecentStickers = j.value("unlimitedRecentStickers", defaults._unlimitedRecentStickers.current());
 	s._unlimitedFavedStickers = j.value("unlimitedFavedStickers", defaults._unlimitedFavedStickers.current());
 	s._showReactionsPanelInContextMenu = j.value("showReactionsPanelInContextMenu", defaults._showReactionsPanelInContextMenu.current());
@@ -1974,6 +1997,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_DCLocationAmsterdam", "Амстердам, Нидерланды" },
 	{ "luxury_DCLocationSingapore", "Сингапур" },
 	{ "luxury_UnknownPeer", "Неизвестно (ID: {id})" },
+	{ "luxury_IdValue", "ID: {id}" },
 	{ "luxury_UnknownSection", "Неизвестный раздел." },
 	{ "luxury_UseScheduledMessages", "Откладывать сообщения" },
 	{ "luxury_UseScheduledMessagesDescription", "Автоматически откладывает исходящие примерно на 12 секунд (медиа — дольше). С этой функцией вы не появляетесь в сети. Не используйте на нестабильной сети." },
@@ -1992,12 +2016,12 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_ClearOnlineHistoryMenuText", "Очистить данные наблюдателя" },
 	{ "luxury_ClearOnlineHistoryText", "Очистить все данные наблюдателя для этого чата? Будут удалены история онлайна и события; список сообщений не затрагивается." },
 	{ "luxury_WatcherClearKeptFilesAlso", "Также удалить сохранённые файлы" },
+	{ "luxury_WatcherClearAction", "Очистить" },
 	{ "luxury_OnlineHistoryTitle", "Наблюдатель" },
 	{ "luxury_OnlineHistorySessions", "Сессии" },
 	{ "luxury_OnlineHistoryEvents", "События" },
 	{ "luxury_OnlineHistorySessionsEmpty", "Сессий пока нет." },
 	{ "luxury_OnlineHistoryEventsEmpty", "Пока ничего нет." },
-	{ "luxury_OnlineHistorySince", "с {time}" },
 	{ "luxury_OnlineHistorySortAll", "Все" },
 	{ "luxury_OnlineHistorySortSessions", "Сессии" },
 	{ "luxury_OnlineHistorySortEvents", "События" },

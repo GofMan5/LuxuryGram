@@ -47,8 +47,10 @@ constexpr auto kMessageFlagHasTTL = 0x02000000;
 constexpr auto kMessageFlagInvertMedia = 0x08000000;
 constexpr auto kMessageFlagHasSavedPeer = 0x10000000;
 
+namespace {
+
 template<typename MTPObject>
-std::vector<char> serializeObject(MTPObject object) {
+[[nodiscard]] std::vector<char> serializeObject(MTPObject object) {
 	mtpBuffer buffer;
 	object.write(buffer);
 
@@ -60,7 +62,8 @@ std::vector<char> serializeObject(MTPObject object) {
 }
 
 template<typename MTPObject>
-MTPObject deserializeObject(const std::vector<char> &serialized) {
+[[nodiscard]] MTPObject deserializeObject(
+		const std::vector<char> &serialized) {
 	if (serialized.empty()
 		|| serialized.size() > kMaxSerializedObjectBytes
 		|| (serialized.size() % sizeof(mtpPrime)) != 0) {
@@ -80,6 +83,8 @@ MTPObject deserializeObject(const std::vector<char> &serialized) {
 	}
 	return data;
 }
+
+} // namespace
 
 std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<HistoryItem*> item) {
 	auto textWithEntities = item->originalText();

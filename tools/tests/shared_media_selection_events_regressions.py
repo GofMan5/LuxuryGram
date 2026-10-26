@@ -34,6 +34,7 @@ def check(root):
         'int ListWidget::accessibilityIndexOfItem(',
         'QAccessible::State ListWidget::accessibilityChildState(',
         'quintptr ListWidget::accessibilityChildIdentity(',
+        'quintptr ListWidget::accessibilityIdentityOf(',
         'int ListWidget::accessibilityChildIndexByIdentity(',
     )
     methods = '\n'.join(function(text, s) for s in signatures)
@@ -86,12 +87,13 @@ struct RpWidget {
  void accessibilityChildSelectionChanged(int);
 };
 namespace Platform { constexpr bool IsLinux(){return false;} }
+namespace Ui { bool ScreenReaderModeActive(){return true;} }
 struct Notice { int id=0;bool selected=false; };
 std::vector<Notice> notices;
 std::function<void()> eventHook;
 namespace QAccessible { void updateAccessibility(QAccessibleEvent*e); }
 ''' + function(rp, 'void RpWidget::accessibilityChildStateChanged(') + '\n' + function(rp, 'void RpWidget::accessibilityChildSelectionChanged(') + r'''
-struct BaseLayout { HistoryItem*item=nullptr;HistoryItem*getItem()const{return item;} };
+struct BaseLayout { HistoryItem*item=nullptr;not_null<HistoryItem*>getItem()const{return item;} };
 struct Section { std::vector<not_null<BaseLayout*>> rows;const auto&items()const{return rows;} };
 struct Provider { ListItemSelectionData computeSelectionData(const HistoryItem*,TextSelection s){return ListItemSelectionData(s);} };
 namespace base {
@@ -123,6 +125,7 @@ struct ListWidget:RpWidget {
  BaseLayout*accessibilityLayoutAt(int)const;HistoryItem*accessibilityItemAt(int)const;int accessibilityIndexOfItem(const HistoryItem*)const;
  QAccessible::State accessibilityChildState(int)const override;
  quintptr accessibilityChildIdentity(int)const;int accessibilityChildIndexByIdentity(quintptr)const;
+ quintptr accessibilityIdentityOf(not_null<const HistoryItem*>)const;
  void accessibilitySelectionChanged();
 };
 void QAccessible::updateAccessibility(QAccessibleEvent*e){

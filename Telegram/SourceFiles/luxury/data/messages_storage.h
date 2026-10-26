@@ -19,7 +19,6 @@ namespace LuxuryMessages {
 void addEditedMessage(
 	not_null<HistoryItem*> item,
 	const QString &afterText);
-std::vector<LuxuryMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit);
 std::vector<LuxuryMessageBase> getEditedMessages(
 	ID userId,
 	ID dialogId,
@@ -29,16 +28,16 @@ std::vector<LuxuryMessageBase> getEditedMessages(
 	int totalLimit);
 bool hasRevisions(not_null<HistoryItem*> item);
 std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
-	not_null<PeerData*> peer,
+	ID userId,
+	ID dialogId,
 	int totalLimit);
-std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
+std::vector<LuxuryMessageBase> getDeletedMessagesForDialog(
 	ID userId,
 	ID dialogId,
 	int totalLimit);
 
 void addDeletedMessage(not_null<HistoryItem*> item);
 void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items);
-std::vector<LuxuryMessageBase> getDeletedMessages(not_null<PeerData*> peer, ID topicId, ID minId, ID maxId, int totalLimit, const QString &searchQuery = QString());
 std::vector<LuxuryMessageBase> getDeletedMessages(
 	ID userId,
 	ID dialogId,
@@ -59,7 +58,6 @@ namespace LuxuryOnline {
 void recordTransition(not_null<UserData*> user, bool online, int at);
 [[nodiscard]] bool TrackingAllowed();
 std::optional<int> lastOfflineAt(not_null<UserData*> user);
-std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit);
 void clearHistory(not_null<PeerData*> peer);
 
 // Gifts and profile changes share the watch table and the viewer section.
@@ -88,6 +86,5 @@ void noteReactions(
 	const QString &summary,
 	const QString &context,
 	int at);
-std::vector<WatchEvent> getWatchEvents(not_null<PeerData*> peer, int totalLimit);
 
 }

@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 #include "styles/style_chat.h"
 #include "styles/style_widgets.h"
+#include "styles/style_luxury_styles.h"
 
 namespace {
 
@@ -434,7 +435,7 @@ QString BotKeyboard::tooltipText() const {
 }
 
 void BotKeyboard::updateSelected() {
-	Ui::Tooltip::Show(350, this);
+	Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 
 	if (!_impl) return;
 

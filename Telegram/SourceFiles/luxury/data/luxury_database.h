@@ -54,6 +54,9 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 // Row count behind the watcher's (userId, dialogId, every-topic) read,
 // which is capped; called off the main thread.
 int countDeletedMessages(ID userId, ID dialogId);
+// The watcher's whole-dialog read: newest deletions first (fakeId is the
+// insertion order, so the moment the row was written), every topic.
+std::vector<DeletedMessage> getDeletedMessagesForDialog(ID userId, ID dialogId, int totalLimit);
 void removeDeletedMessage(ID userId, ID dialogId, ID messageId);
 void clearDeletedMessages(ID userId, ID dialogId, ID topicId);
 
@@ -86,8 +89,6 @@ bool addRegexExclusion(const RegexFilterGlobalExclusion &exclusion);
 
 bool updateRegexFilter(const RegexFilter &filter);
 
-bool deleteFilter(const std::vector<char> &id);
-bool deleteExclusionsByFilterId(const std::vector<char> &id);
 bool deleteExclusion(ID dialogId, const std::vector<char> &filterId);
 
 bool deleteAllFilters();
@@ -95,7 +96,5 @@ bool deleteAllExclusions();
 
 bool hasFilters();
 bool hasPerDialogFilters();
-
-[[nodiscard]] bool moveCurrentDatabase();
 
 }

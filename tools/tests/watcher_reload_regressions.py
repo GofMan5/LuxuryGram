@@ -5,7 +5,7 @@ from library_regressions import ROOT, cpp, function, source
 
 
 CASES = ('healthy', 'reload-counts', 'reload-reloads', 'reload-rebuild',
-         'tick-counts', 'tick-reloads', 'tick-rebuild', 'rebuild-cancel', 'tick-reentry')
+         'tick-counts', 'tick-reloads', 'tick-rebuild', 'rebuild-cancel', 'tick-reentry', 'horizon')
 
 
 def check(root, case='healthy'):
@@ -34,8 +34,9 @@ namespace base{struct Weak{std::weak_ptr<bool>p;operator bool()const{auto a=p.lo
 namespace crl{std::vector<Fn<void()>>tasks;template<class F>void on_main(F f){tasks.push_back(f);}void drain(){auto work=std::exchange(tasks,{});for(auto&f:work)f();}}
 struct QApplication{static int pressed;static int mouseButtons(){return pressed;}};int QApplication::pressed=0;
 struct Session{ID uniqueId(){return 1;}};struct Peer{Session s;Session&session(){return s;}};ID getDialogIdFromPeer(Peer*){return 2;}
-namespace LuxuryDatabase{std::vector<Fn<void()>>tasks;std::vector<Record>online,watch;int reads=0;void async(Fn<void()>f){tasks.push_back(f);}void drain(){auto work=std::exchange(tasks,{});for(auto&f:work)f();}auto getOnlineEvents(ID,ID,int){++reads;return online;}auto getWatchEvents(ID,ID,int){return watch;}int countDeletedMessages(ID,ID){return 0;}int countEditedMessagesForDialog(ID,ID){return 0;}}
-namespace LuxuryMessages{std::vector<Record>getDeletedMessages(ID,ID,int,int,int,int){return{};}std::vector<Record>getEditedMessagesForDialog(ID,ID,int){return{};}}
+namespace LuxuryDatabase{std::vector<Fn<void()>>tasks;std::vector<Record>online,watch;int reads=0;void async(Fn<void()>f){tasks.push_back(f);}void drain(){auto work=std::exchange(tasks,{});for(auto&f:work)f();}auto getOnlineEvents(ID,ID,int){++reads;return online;}auto getWatchEvents(ID,ID,int){return watch;}int deletedCount=0,editedCount=0;int countDeletedMessages(ID,ID){return deletedCount;}int countEditedMessagesForDialog(ID,ID){return editedCount;}}
+namespace LuxuryMessages{std::vector<Record>deleted,edits;std::vector<Record>getDeletedMessagesForDialog(ID,ID,int limit){assert(int(deleted.size())<=limit);return deleted;}std::vector<Record>getEditedMessagesForDialog(ID,ID,int limit){assert(int(edits.size())<=limit);return edits;}}
+int MessageTimestamp(const Record&r){return r.at;}
 constexpr int kHistoryReadLimit=200;
 template<class T>struct Stream{Owner*owner;int count=0;Fn<void(T)>callback;void fire(T v){owner->check();++count;if(callback){auto f=callback;f(v);}}void fire_copy(T v){fire(v);}};
 struct SessionCard{Owner*owner;LuxuryFeatures::Watch::OnlineSession value;const auto&session(){return value;}int h=10,ticks=0;Fn<void()>onActive,onTick;int height(){owner->check();return h;}void setActive(bool){owner->check();if(onActive){auto f=onActive;f();}}void tick(){owner->check();++ticks;if(onTick){auto f=onTick;f();}}};
@@ -51,6 +52,10 @@ if(which=="healthy"){
  auto gone=std::make_unique<WatcherBody>();gone->reload();gone.reset();complete();
 }else if(which=="rebuild-cancel"){
  body._rebuildPending=true;body.rebuild();assert(!body._rebuildPending);const auto count=body.rebuildCount;body.tick();assert(body.rebuildCount==count);
+}else if(which=="horizon"){
+ for(int i=0;i<kHistoryReadLimit;++i)LuxuryMessages::deleted.push_back({ID(1000-i),false,1000-i});LuxuryMessages::edits={{3,false,900},{2,false,801},{1,false,500}};LuxuryDatabase::deletedCount=250;LuxuryDatabase::editedCount=3;
+ body.reload();complete();assert(body._deleted.size()==200&&body._edits.size()==2&&body._edits.back().at==801&&body._eventEarlier==51);
+ LuxuryMessages::deleted.resize(5);LuxuryDatabase::deletedCount=5;body.reload();complete();assert(body._deleted.size()==5&&body._edits.size()==3&&body._eventEarlier==0);
 }else if(which=="tick-reentry"){
  SessionCard card{&body};body._sessionCards={&card};card.onActive=[&]{body.rebuild();};body.tick();assert(body.rebuildCount==1&&card.ticks==0);
 }else{
@@ -80,6 +85,7 @@ def cards(root):
 #include <string>
 using QString=std::string;using qint64=long long;QString operator""_q(const char16_t*s,size_t n){QString r;for(size_t i=0;i<n;++i)r+=char(s[i]);return r;}
 namespace base{struct Weak{std::weak_ptr<bool>p;operator bool()const{auto a=p.lock();return a&&*a;}};template<class T>Weak make_weak(T*p){return{p->alive};}namespace unixtime{qint64 clock=130;qint64 now(){return clock;}}}
+namespace anim{bool Disabled(){return false;}}
 namespace Ui{QString FormatDurationText(qint64 s){return std::to_string(s);}}
 namespace tr{constexpr int now=0;QString luxury_OnlineHistoryOpen(int){return "Online";}QString luxury_WatcherEndUnobserved(int){return "Unknown";}}
 struct SessionCard{std::shared_ptr<bool>alive=std::make_shared<bool>(true);bool _active=true;struct{std::optional<int>start=100;}_session;QString _startLabel="Start",_endLabel="End",_startValue="100",_endValue="Online",_durationText;struct{void start(){}void stop(){}}_pulse;int layouts=0,updates=0,resizes=0,names=0;std::function<void()>onName,onTooltip,onResize;void check(){assert(*alive);}int width(){check();return 274;}void computeLayout(int){check();++layouts;}void update(){check();++updates;}void resizeToWidth(int){check();++resizes;if(onResize){auto f=onResize;f();}}void setToolTip(const QString&){check();if(onTooltip){auto f=onTooltip;f();}}void updateAccessibleName(){check();++names;if(onName){auto f=onName;f();}}void invalidate(){*alive=false;}void tick();void setActive(bool);};

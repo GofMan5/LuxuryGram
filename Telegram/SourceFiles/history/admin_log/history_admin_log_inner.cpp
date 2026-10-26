@@ -74,6 +74,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat.h"
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
+#include "styles/style_luxury_styles.h"
 
 #include <QtWidgets/QApplication>
 #include <QtGui/QClipboard>
@@ -2877,7 +2878,7 @@ void InnerWidget::updateSelected() {
 		|| dragState.cursor == CursorState::Date
 		|| dragState.cursor == CursorState::Forwarded
 		|| dragState.cursor == CursorState::LogAdminService) {
-		Ui::Tooltip::Show(350, this);
+		Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 	}
 
 	auto cursor = style::cur_default;

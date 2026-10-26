@@ -222,13 +222,6 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 	};
 
 	const auto args = StartTranslationArgs{
-		.requestData = {
-			.flags = req.flags(),
-			.peer = req.peer(),
-			.idList = req.ids(),
-			.text = req.texts(),
-			.toLang = req.toLang(),
-		},
 		.parsedData = {
 			.texts = uncachedTexts,
 			.fromLang = fromLang,

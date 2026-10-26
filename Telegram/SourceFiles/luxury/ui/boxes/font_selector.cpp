@@ -39,11 +39,15 @@
 #include <QApplication>
 #include <QFontDatabase>
 
+namespace {
+
 struct Font
 {
 	QString FontName;
 	QString id;
 };
+
+} // namespace
 
 namespace LuxuryUi {
 
@@ -80,17 +84,12 @@ private:
 	{
 		Font data;
 		Ui::Text::String title = {st::boxWideWidth / 2};
-		Ui::Text::String description = {st::boxWideWidth / 2};
 		int top = 0;
 		int height = 0;
 		mutable std::unique_ptr<Ui::RippleAnimation> ripple;
-		mutable std::unique_ptr<Ui::RippleAnimation> menuToggleRipple;
-		bool menuToggleForceRippled = false;
 		int titleHeight = 0;
-		int descriptionHeight = 0;
 		QStringList keywords;
 		std::unique_ptr<Ui::RadioView> check;
-		bool removed = false;
 	};
 
 	struct RowSelection
@@ -151,10 +150,6 @@ private:
 	void repaintChecked(not_null<const Row*> row);
 
 	void activateByIndex(int index);
-
-	void setForceRippled(not_null<Row*> row, bool rippled);
-
-	void restore(not_null<Row*> row);
 
 	std::vector<Row> _rows;
 	std::vector<not_null<Row*>> _filtered;
@@ -266,20 +261,16 @@ void Rows::mouseMoveEvent(QMouseEvent *e) {
 		}
 		return -1;
 	}();
-	const auto row = (index >= 0) ? &rowByIndex(index) : nullptr;
 	if (index < 0) {
 		updateSelected({});
-	} else if (!row->removed) {
-		updateSelected(RowSelection{index});
 	} else {
-		updateSelected({});
+		updateSelected(RowSelection{index});
 	}
 }
 
 void Rows::mousePressEvent(QMouseEvent *e) {
 	updatePressed(_selected);
-	if (!v::is_null(_pressed)
-		&& !rowBySelection(_pressed).menuToggleForceRippled) {
+	if (!v::is_null(_pressed)) {
 		addRipple(_pressed, e->pos());
 	}
 }
@@ -327,14 +318,6 @@ void Rows::mouseReleaseEvent(QMouseEvent *e) {
 				 {
 				 });
 	}
-}
-
-void Rows::restore(not_null<Row*> row) {
-	row->removed = false;
-}
-
-void Rows::setForceRippled(not_null<Row*> row, bool rippled) {
-	repaint(*row);
 }
 
 void Rows::activateByIndex(int index) {
@@ -489,10 +472,8 @@ void Rows::updateSelected(Selection selected) {
 
 void Rows::updatePressed(Selection pressed) {
 	if (!v::is_null(_pressed)) {
-		if (!rowBySelection(_pressed).menuToggleForceRippled) {
-			if (const auto ripple = rippleBySelection(_pressed).get()) {
-				ripple->lastStop();
-			}
+		if (const auto ripple = rippleBySelection(_pressed).get()) {
+			ripple->lastStop();
 		}
 	}
 	_pressed = pressed;
@@ -562,11 +543,9 @@ int Rows::resizeGetHeight(int newWidth) {
 		auto &row = rowByIndex(i);
 		row.top = result;
 		row.titleHeight = row.title.countHeight(availableWidth);
-		row.descriptionHeight = row.description.countHeight(availableWidth);
 		row.height = st::passportRowPadding.top()
 			+ row.titleHeight
 			+ st::passportRowSkip
-			+ row.descriptionHeight
 			+ st::passportRowPadding.bottom();
 		result += row.height;
 	}
@@ -605,7 +584,6 @@ void Rows::paintEvent(QPaintEvent *e) {
 		} else if (row.top >= clip.y() + clip.height()) {
 			break;
 		}
-		p.setOpacity(row.removed ? st::stickersRowDisabledOpacity : 1.);
 		p.translate(0, row.top);
 		const auto guard = gsl::finally([&]
 		{
@@ -613,7 +591,7 @@ void Rows::paintEvent(QPaintEvent *e) {
 		});
 
 		const auto selected = (selectedIndex == i);
-		if (selected && !row.removed) {
+		if (selected) {
 			p.fillRect(0, 0, width(), row.height, st::windowBgOver);
 		}
 
@@ -627,15 +605,13 @@ void Rows::paintEvent(QPaintEvent *e) {
 		const auto checkTop = (row.height - st::defaultRadio.diameter) / 2;
 		row.check->paint(p, checkLeft, checkTop, width());
 
-		auto top = st::passportRowPadding.top();
-
 		p.setPen(st::passportRowTitleFg);
-		row.title.drawLeft(p, left, top, availableWidth, width());
-		top += row.titleHeight + st::passportRowSkip;
-
-		p.setPen(selected ? st::windowSubTextFgOver : st::windowSubTextFg);
-		row.description.drawLeft(p, left, top, availableWidth, width());
-		top += row.descriptionHeight + st::passportRowPadding.bottom();
+		row.title.drawLeft(
+			p,
+			left,
+			st::passportRowPadding.top(),
+			availableWidth,
+			width());
 	}
 }
 
@@ -867,7 +843,6 @@ void LuxuryUi::FontSelectorBox::prepare() {
 	setTitle(tr::luxury_CustomizeFontTitle());
 
 	const auto topContainer = Ui::CreateChild<Ui::VerticalLayout>(this);
-	setupTop(topContainer);
 	const auto select = topContainer->add(
 		object_ptr<Ui::MultiSelect>(
 			topContainer,
@@ -935,12 +910,6 @@ void LuxuryUi::FontSelectorBox::prepare() {
 	};
 }
 
-void LuxuryUi::FontSelectorBox::setupTop(not_null<Ui::VerticalLayout*> container) {
-	if (!_controller) {
-		return;
-	}
-}
-
 void LuxuryUi::FontSelectorBox::keyPressEvent(QKeyEvent *e) {
 	const auto key = e->key();
 	if (key == Qt::Key_Escape) {
@@ -973,11 +942,6 @@ void LuxuryUi::FontSelectorBox::setInnerFocus() {
 	_setInnerFocus();
 }
 
-base::binary_guard
-LuxuryUi::FontSelectorBox::Show(Window::SessionController *controller, const Fn<void(QString font)> hook) {
-	auto result = base::binary_guard();
-
+void LuxuryUi::FontSelectorBox::Show(Window::SessionController *controller, const Fn<void(QString font)> hook) {
 	Ui::show(Box<FontSelectorBox>(controller, hook));
-
-	return result;
 }

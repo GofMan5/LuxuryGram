@@ -1024,29 +1024,18 @@ void StickerSetBox::updateButtons() {
 						if (!weak) {
 							return;
 						}
-
-						const auto strong = weak.get();
-						if (!strong) {
-							return;
-						}
-
 						searchUserById(
 							innerId,
 							session,
 							[session, weak, innerId](const QString &username, PeerData *user)
 							{
-								if (!weak) {
+								const auto strong = weak.get();
+								if (!strong) {
 									return;
 								}
-
-								const auto strongInner = weak.get();
-								if (!strongInner) {
-									return;
-								}
-
 								if (!user) {
 									QGuiApplication::clipboard()->setText(QString::number(innerId));
-									strongInner->showToast(tr::luxury_IDCopiedToast(tr::now));
+									strong->showToast(tr::luxury_IDCopiedToast(tr::now));
 									return;
 								}
 

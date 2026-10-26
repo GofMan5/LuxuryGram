@@ -51,16 +51,15 @@ void initDatabase() {
 	// to this same queue, which is FIFO, or takes DatabaseMutex; initialize()
 	// only has to be first in line, not done.
 	//
-	// filtersEnabled() is read here because the settings are written from the
-	// main thread. The warm-up shares the lambda so it cannot be reordered ahead
-	// of the schema it reads: snapshot() would otherwise build the cache on
-	// whichever thread painted first, and the first painter is a message.
-	const auto warmFilters = LuxurySettings::getInstance().filtersEnabled();
-	LuxuryDatabase::async([=] {
+	// The warm-up shares the lambda so it cannot be reordered ahead of the
+	// schema it reads. Until it is done snapshot() is null and nothing is
+	// filtered, so the update re-checks whatever painted in the meantime. It
+	// runs even with filters off: turning them on at runtime only drops
+	// verdicts and expects the patterns to be there.
+	LuxuryDatabase::async([] {
 		LuxuryDatabase::initialize();
-		if (warmFilters) {
-			FiltersCacheController::reloadNow();
-		}
+		FiltersCacheController::reloadNow();
+		crl::on_main([] { FiltersCacheController::fireUpdate(); });
 	});
 	// ponytail: the three synchronous probes and addEditedMessage() still block
 	// on DatabaseMutex if something reaches them while a migration is running --

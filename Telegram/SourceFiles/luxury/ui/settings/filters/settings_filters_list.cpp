@@ -10,7 +10,6 @@
 #include "luxury/luxury_settings.h"
 #include "luxury/data/luxury_database.h"
 #include "luxury/features/filters/filters_cache_controller.h"
-#include "luxury/features/filters/filters_utils.h"
 #include "luxury/ui/settings/settings_luxury_utils.h"
 #include "luxury/ui/settings/filters/edit_filter.h"
 #include "luxury/ui/settings/filters/per_dialog_filter.h"
@@ -138,15 +137,18 @@ void LuxuryFiltersList::addNewFilter(const RegexFilter &filter, bool exclusion) 
 			{
 				const auto id = state->id;
 				LuxuryDatabase::async([=] {
-					// Both, always: dropping the filter but keeping its
-					// exclusions would leave rows pointing at nothing.
-					const auto removed = LuxuryDatabase::deleteFilter(id);
-					const auto cleaned =
-						LuxuryDatabase::deleteExclusionsByFilterId(id);
+					// One transaction drops the filter with its exclusions:
+					// either alone would leave rows pointing at nothing.
+					const auto removed = LuxuryDatabase::applyFilterChanges(
+						{},
+						{ id },
+						{},
+						{},
+						{});
 					// Already off the main thread.
 					FiltersCacheController::reloadNow();
 					crl::on_main([=] {
-						if (!removed || !cleaned) {
+						if (!removed) {
 							Luxury::Ui::ShowDatabaseError(show);
 						}
 						FiltersCacheController::fireUpdate();
@@ -323,7 +325,7 @@ void LuxuryFiltersList::fillLoadedFilters(
 	not_null<Ui::VerticalLayout*> container) {
 	if (!filters.empty()) {
 		AddSkip(container);
-		filtersTitle = AddSubsectionTitle(container, tr::luxury_RegexFiltersHeader());
+		AddSubsectionTitle(container, tr::luxury_RegexFiltersHeader());
 
 		for (const auto &filter : filters) {
 			addNewFilter(filter);
@@ -335,7 +337,7 @@ void LuxuryFiltersList::fillLoadedFilters(
 			AddSectionDivider(container);
 		}
 
-		excludedTitle = AddSubsectionTitle(container, tr::luxury_RegexFiltersExcluded());
+		AddSubsectionTitle(container, tr::luxury_RegexFiltersExcluded());
 
 		for (const auto &exclusion : exclusions) {
 			addNewFilter(exclusion, true);
@@ -365,7 +367,7 @@ void LuxuryFiltersList::initializeShadowBan(not_null<Ui::VerticalLayout*> contai
 	if (LuxurySettings::getInstance().shadowBanIds().size() > 0) {
 		AddSkip(container);
 
-		filtersTitle = AddSubsectionTitle(container, tr::luxury_ShadowBanListHeader());
+		AddSubsectionTitle(container, tr::luxury_ShadowBanListHeader());
 		const auto content = container->add(std::move(list));
 
 		AddSkip(container);

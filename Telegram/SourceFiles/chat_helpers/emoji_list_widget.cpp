@@ -60,6 +60,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 #include "styles/style_chat_helpers.h"
 #include "styles/style_menu_icons.h"
+#include "styles/style_luxury_styles.h"
 
 #include <QtWidgets/QApplication>
 
@@ -4073,7 +4074,7 @@ void EmojiListWidget::setSelected(OverState newSelected) {
 
 	const auto hasSelection = !v::is_null(_selected);
 	if (hasSelection && Core::App().settings().suggestEmoji()) {
-		Ui::Tooltip::Show(350, this);
+		Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 	}
 
 	setCursor(hasSelection ? style::cur_pointer : style::cur_default);

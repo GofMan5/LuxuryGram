@@ -1898,49 +1898,11 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 			&& result.front()->peer()->isSelf()
 			&& history->session().premium();
 
-		if (LuxuryForward::isFullLuxuryForwardNeeded(items.front())
-			|| LuxuryForward::isLuxuryForwardNeeded(items)) {
-			const auto requestsLeft = std::make_shared<int>(int(result.size()));
-			for (const auto &thread : result) {
-				const auto peer = thread->peer();
-				const auto forum = thread->owningHistory()->asForum();
-				const auto needNewTopic = forum
-					&& forum->bot()
-					&& Data::IsBotUserCreatesTopics(peer)
-					&& !thread->asTopic();
-				const auto effectiveThread = [&]() -> not_null<Data::Thread*> {
-					if (needNewTopic) {
-						const auto topic = forum->reserveNewBotTopic();
-						Assert(topic != nullptr);
-						return topic;
-					}
-					return thread;
-				}();
-				if (!comment.text.isEmpty()) {
-					auto message = Api::MessageToSend(
-						Api::SendAction(effectiveThread, options));
-					message.textWithTags = comment;
-					message.action.clearDraft = false;
-					api.sendMessage(std::move(message));
-				}
-				api.forwardMessages(
-					Data::ResolvedForwardDraft(items, forwardOptions),
-					Api::SendAction(effectiveThread, options),
-					[=] {
-						if (!--*requestsLeft && show->valid()) {
-							ShowForwardedMessageToast(
-								show,
-								&history->session(),
-								donePhraseArgs);
-						}
-					});
-			}
-			if (show->valid()) {
-				show->hideLayer();
-			}
-			return;
-		}
-
+		// Luxury forwarding re-sends the content itself, so it skips the
+		// ranged messages.forwardMessages request below.
+		const auto luxury = LuxuryForward::isFullLuxuryForwardNeeded(items.front())
+			|| LuxuryForward::isLuxuryForwardNeeded(items);
+		const auto requestsLeft = std::make_shared<int>(int(result.size()));
 		for (const auto &thread : result) {
 			const auto peer = thread->peer();
 			const auto threadHistory = thread->owningHistory();
@@ -1964,6 +1926,20 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 				message.textWithTags = comment;
 				message.action.clearDraft = false;
 				api.sendMessage(std::move(message));
+			}
+			if (luxury) {
+				api.forwardMessages(
+					Data::ResolvedForwardDraft(items, forwardOptions),
+					Api::SendAction(effectiveThread, options),
+					[=] {
+						if (!--*requestsLeft && show->valid()) {
+							ShowForwardedMessageToast(
+								show,
+								&history->session(),
+								donePhraseArgs);
+						}
+					});
+				continue;
 			}
 
 			const auto topicRootId = effectiveThread->topicRootId();
@@ -2105,6 +2081,12 @@ ShareBox::SubmitCallback ShareBox::DefaultForwardCallback(
 						requestFail(error, requestKey);
 					});
 			}
+		}
+		if (luxury) {
+			if (show->valid()) {
+				show->hideLayer();
+			}
+			return;
 		}
 		if (state->requests.empty()) {
 			if (show->valid()) {

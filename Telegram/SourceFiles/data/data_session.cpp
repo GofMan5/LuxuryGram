@@ -1592,6 +1592,11 @@ std::shared_ptr<GroupCall> Session::sharedConferenceCallFind(
 }
 
 void Session::resetTrackedPresence() {
+	// Nothing tracks with the watcher off: observe() resets on the next
+	// status anyway, so skip walking every loaded peer on each reconnect.
+	if (!LuxuryOnline::TrackingAllowed()) {
+		return;
+	}
 	for (const auto &[id, peer] : _peers) {
 		if (const auto user = peer->asUser()) {
 			user->resetTrackedPresence();
@@ -3205,29 +3210,20 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 	}
 
 	// LuxuryGram saveMessagesHistory
-	const auto &settings = LuxurySettings::getInstance();
-	HistoryMessageEdition edit;
-
-	if (data.type() != mtpc_message) {
-		goto proceed;
-	}
-	edit = HistoryMessageEdition(_session, data.c_message());
-	if (settings.saveMessagesHistory() && !existing->isLocal() && !existing->author()->isSelf() && !edit.isEditHide) {
-		const auto &msg = existing->originalText();
-		const auto unchanged = edit.richPage
-			? (Iv::FlattenRichPageSummary(edit.richPage) == msg)
-			: (edit.textWithEntities == msg);
-		if (unchanged || msg.empty()) {
-			goto proceed;
+	if (data.type() == mtpc_message
+		&& LuxurySettings::getInstance().saveMessagesHistory()
+		&& !existing->isLocal()
+		&& !existing->author()->isSelf()) {
+		const auto edit = HistoryMessageEdition(_session, data.c_message());
+		const auto &before = existing->originalText();
+		const auto after = edit.richPage
+			? Iv::FlattenRichPageSummary(edit.richPage)
+			: edit.textWithEntities;
+		if (!edit.isEditHide && !before.empty() && after != before) {
+			LuxuryMessages::addEditedMessage(existing, after.text);
 		}
-
-		const auto afterText = edit.richPage
-			? Iv::FlattenRichPageSummary(edit.richPage).text
-			: edit.textWithEntities.text;
-		LuxuryMessages::addEditedMessage(existing, afterText);
 	}
 
-proceed:
 	FiltersController::invalidate(existing);
 
 	if (existing->isLocalUpdateMedia() && data.type() == mtpc_message) {

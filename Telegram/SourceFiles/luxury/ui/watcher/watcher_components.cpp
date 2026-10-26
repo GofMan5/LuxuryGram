@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <QtGui/QPolygonF>
 #include <QtGui/QtEvents>
 
@@ -23,7 +24,7 @@
 namespace LuxuryUi {
 namespace {
 
-constexpr auto kPi = 3.14159265358979323846;
+constexpr auto kPi = std::numbers::pi;
 constexpr auto kSpinDuration = crl::time(450);
 
 } // namespace

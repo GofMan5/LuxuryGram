@@ -171,6 +171,12 @@ void ForceDisabled(QAction *action, bool disabled) {
 	}
 }
 
+[[nodiscard]] QString GhostModeText(const GhostModeAccountSettings *ghost) {
+	return (ghost && ghost->isGhostModeActive())
+		? tr::luxury_DisableGhostMode(tr::now)
+		: tr::luxury_EnableGhostMode(tr::now);
+}
+
 Window::Controller *Manager::resolveActiveWindow() const {
 	if (!Core::IsAppLaunched()) {
 		return nullptr;
@@ -252,13 +258,7 @@ void Manager::retranslate() {
 		_ghostModeMenu->setTitle(tr::luxury_CategoryGhostMode(tr::now));
 	}
 	if (_ghostMode) {
-		if (const auto ghost = resolveGhostSettings()) {
-			_ghostMode->setText(ghost->isGhostModeActive()
-				? tr::luxury_DisableGhostMode(tr::now)
-				: tr::luxury_EnableGhostMode(tr::now));
-		} else {
-			_ghostMode->setText(tr::luxury_EnableGhostMode(tr::now));
-		}
+		_ghostMode->setText(GhostModeText(resolveGhostSettings()));
 	}
 	if (_readOnInteract) {
 		_readOnInteract->setText(tr::luxury_MarkReadAfterAction(tr::now));
@@ -397,17 +397,9 @@ void Manager::recomputeState() {
 		action->setChecked(checked);
 		action->blockSignals(wasBlocked);
 	};
-	if (ghost) {
-		_ghostMode->setText(ghost->isGhostModeActive()
-			? tr::luxury_DisableGhostMode(tr::now)
-			: tr::luxury_EnableGhostMode(tr::now));
-		setChecked(_readOnInteract, ghost->markReadAfterAction());
-		setChecked(_scheduleMessages, ghost->useScheduledMessages());
-	} else {
-		_ghostMode->setText(tr::luxury_EnableGhostMode(tr::now));
-		setChecked(_readOnInteract, false);
-		setChecked(_scheduleMessages, false);
-	}
+	_ghostMode->setText(GhostModeText(ghost));
+	setChecked(_readOnInteract, ghost && ghost->markReadAfterAction());
+	setChecked(_scheduleMessages, ghost && ghost->useScheduledMessages());
 }
 
 void Manager::buildAppleMenu(QMenu *main) {

@@ -873,6 +873,16 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 	std::vector<RegexFilterGlobalExclusion> removeExclusions;
 	std::vector<QString> peersToBeResolved;
 
+	// One toast for the whole import: a backup with a hundred bad patterns
+	// used to stack a hundred of them over the window.
+	auto rejected = 0;
+	auto firstRejection = QString();
+	const auto reject = [&](const QString &reason, const QString &text) {
+		if (!rejected++) {
+			firstRejection = reason + u": "_q + TruncatedPattern(text);
+		}
+	};
+
 	if (!filters.isEmpty()) {
 		for (const auto &filterRef : filters) {
 			if (const auto filter = filterRef.toObject(); !filter.isEmpty()) {
@@ -898,18 +908,12 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 					continue;
 				}
 				if (text.size() > FiltersCacheController::kMaxPatternLength) {
-					Ui::Toast::Show(
-						tr::luxury_RegexFiltersPatternTooLong(tr::now)
-						+ u": "_q
-						+ TruncatedPattern(text));
+					reject(tr::luxury_RegexFiltersPatternTooLong(tr::now), text);
 					LOG(("FilterUtils: pattern exceeds length limit, skipped."));
 					continue;
 				}
 				if (!CompilesPattern(text, regex.caseInsensitive)) {
-					Ui::Toast::Show(
-						tr::luxury_RegexFiltersAddError(tr::now)
-						+ u": "_q
-						+ TruncatedPattern(text));
+					reject(tr::luxury_RegexFiltersAddError(tr::now), text);
 					LOG(("FilterUtils: pattern does not compile, skipped."));
 					continue;
 				}
@@ -926,6 +930,11 @@ ApplyChanges FilterUtils::prepareChanges(const QJsonObject &root) {
 				}
 			}
 		}
+	}
+	if (rejected) {
+		Ui::Toast::Show((rejected > 1)
+			? (firstRejection + u" (+%1)"_q.arg(rejected - 1))
+			: firstRejection);
 	}
 
 	if (!exclusions.isEmpty()) {

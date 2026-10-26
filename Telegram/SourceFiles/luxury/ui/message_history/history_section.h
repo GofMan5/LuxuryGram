@@ -8,7 +8,6 @@
 
 #include "base/object_ptr.h"
 #include "luxury/ui/message_history/history_item.h"
-#include "mtproto/sender.h"
 #include "window/section_memento.h"
 #include "window/section_widget.h"
 

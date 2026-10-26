@@ -63,6 +63,11 @@ public:
 	CoverWidget(QWidget *parent, int radius)
 	: RpWidget(parent)
 	, _radius(radius) {
+		style::PaletteChanged(
+		) | rpl::on_next([=] {
+			_placeholder = QImage();
+			update();
+		}, lifetime());
 	}
 
 	void setImage(QImage image) {

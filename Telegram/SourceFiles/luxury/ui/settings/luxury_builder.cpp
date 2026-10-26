@@ -40,10 +40,6 @@ LuxurySectionBuilder::LuxurySectionBuilder(Builder::SectionBuilder &builder)
 : _builder(builder) {
 }
 
-Builder::SectionBuilder &LuxurySectionBuilder::base() {
-	return _builder;
-}
-
 Ui::SettingsButton *LuxurySectionBuilder::addSettingToggle(
 		SettingToggleArgs &&args) {
 	auto getter = [g = args.getter] {

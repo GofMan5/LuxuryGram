@@ -551,12 +551,14 @@ void ApiWrap::toggleHistoryArchived(
 		} else {
 			const auto &settings = LuxurySettings::getInstance();
 			if (settings.hideAllChatsFolder()) {
-				if (const auto window = Core::App().activeWindow()) {
-					if (const auto controller = window->sessionController()) {
-						const auto filters = &_session->data().chatsFilters();
-						const auto lookup_id = filters->lookupId(controller->session().premium() ? 0 : 1);
-						controller->setActiveChatsFilter(lookup_id);
-					}
+				const auto window = Core::App().activeWindow();
+				const auto controller = window ? window->sessionController() : nullptr;
+				// The filter id is this account's: another account's window
+				// would switch to an unrelated folder.
+				if (controller && (&controller->session() == _session)) {
+					const auto filters = &_session->data().chatsFilters();
+					const auto lookup_id = filters->lookupId(_session->premium() ? 0 : 1);
+					controller->setActiveChatsFilter(lookup_id);
 				}
 			} else {
 				history->clearFolder();
@@ -706,7 +708,14 @@ void ApiWrap::sendMessageFail(
 			// update would: the message is either dropped, which cancels the reply,
 			// or marked deleted, and then prependPseudoReply() turns it into a
 			// quote and StripUnsendableReply() drops it from the media sends.
-			if (const auto reply = item->Get<HistoryMessageReply>()) {
+			// Only a reply the user chose names the target: a forward carries
+			// its source's reply and fails this way for a deleted source, and a
+			// topic send without a reply points at the topic root.
+			const auto reply = item->Get<HistoryMessageReply>();
+			const auto explicitReply = reply
+				&& !item->Get<HistoryMessageForwarded>()
+				&& reply->messageId() != item->topicRootId();
+			if (explicitReply) {
 				const auto replyToId = reply->messageId();
 				const auto peerId = reply->externalPeerId()
 					? reply->externalPeerId()

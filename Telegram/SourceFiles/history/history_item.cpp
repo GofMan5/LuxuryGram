@@ -5513,42 +5513,46 @@ void HistoryItem::updateReactions(const MTPMessageReactions *reactions) {
 	// LuxuryGram: watch hook. A genuine change of this message's reaction
 	// state is a watchable event: the resulting counted summary is what
 	// the Watcher timeline shows.
-	auto summary = QString();
-	if (reactions) {
-		for (const auto &count : reactions->data().vresults().v) {
-			const auto &entry = count.data();
-			const auto reactionId = Data::ReactionFromMTP(entry.vreaction());
-			auto label = reactionId.paid()
-				? u"⭐"_q
-				: reactionId.emoji();
-			if (const auto custom = reactionId.custom()) {
-				const auto document = _history->owner().document(custom);
-				if (const auto sticker = document->sticker()) {
-					label = sticker->alt;
+	// Gated here, not only in noteReactions: building the summary resolves
+	// every custom reaction document, wasted work with the watcher off.
+	if (LuxuryOnline::TrackingAllowed()) {
+		auto summary = QString();
+		if (reactions) {
+			for (const auto &count : reactions->data().vresults().v) {
+				const auto &entry = count.data();
+				const auto reactionId = Data::ReactionFromMTP(entry.vreaction());
+				auto label = reactionId.paid()
+					? u"⭐"_q
+					: reactionId.emoji();
+				if (const auto custom = reactionId.custom()) {
+					const auto document = _history->owner().document(custom);
+					if (const auto sticker = document->sticker()) {
+						label = sticker->alt;
+					}
+					if (label.isEmpty()) {
+						label = tr::luxury_WatcherCustomReaction(
+							tr::now,
+							lt_id,
+							QString::number(custom));
+					}
 				}
 				if (label.isEmpty()) {
-					label = tr::luxury_WatcherCustomReaction(
-						tr::now,
-						lt_id,
-						QString::number(custom));
+					continue;
 				}
+				if (!summary.isEmpty()) {
+					summary += u", "_q;
+				}
+				summary += label + u" ×"_q + QString::number(entry.vcount().v);
 			}
-			if (label.isEmpty()) {
-				continue;
-			}
-			if (!summary.isEmpty()) {
-				summary += u", "_q;
-			}
-			summary += label + u" ×"_q + QString::number(entry.vcount().v);
 		}
+		const auto context = originalText().text;
+		LuxuryOnline::noteReactions(
+			_history->peer,
+			id.bare,
+			summary,
+			context.isEmpty() ? notificationText().text : context,
+			base::unixtime::now());
 	}
-	const auto context = originalText().text;
-	LuxuryOnline::noteReactions(
-		_history->peer,
-		id.bare,
-		summary,
-		context.isEmpty() ? notificationText().text : context,
-		base::unixtime::now());
 	const auto hasUnread = _reactions && _reactions->hasUnread();
 	if (hasUnread && !hadUnread) {
 		_flags |= MessageFlag::HasUnreadReaction;

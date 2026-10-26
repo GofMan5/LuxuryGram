@@ -147,21 +147,21 @@ QString ExactLastSeenText(QDateTime tillFull, QDateTime nowFull) {
 // approximate server status (no exact till, not online now, not long-ago),
 // never a bot/service account, with a recorded offline moment. No text is
 // built here so timeout and rendering share one condition.
-bool HasTrackedOfflineMoment(
+std::optional<int> TrackedOfflineMoment(
 		not_null<UserData*> user,
 		LastseenStatus status,
 		TimeId now) {
 	if (!LuxurySettings::getInstance().showLastSeenSeconds()
 		|| !LuxurySettings::getInstance().trackOnlineHistory()) {
-		return false;
+		return std::nullopt;
 	}
 	if (user->isBot() || user->isServiceUser()) {
-		return false;
+		return std::nullopt;
 	}
 	if (status.onlineTill() != 0 || status.isOnline(now) || status.isLongAgo()) {
-		return false;
+		return std::nullopt;
 	}
-	return LuxuryOnline::lastOfflineAt(user).has_value();
+	return LuxuryOnline::lastOfflineAt(user);
 }
 
 // Tracked exact time for approximate server statuses. The server only sends
@@ -172,10 +172,7 @@ bool HasTrackedOfflineMoment(
 std::optional<QString> TrackedOfflineText(
 		not_null<UserData*> user,
 		TimeId now) {
-	if (!HasTrackedOfflineMoment(user, user->lastseen(), now)) {
-		return std::nullopt;
-	}
-	const auto at = LuxuryOnline::lastOfflineAt(user);
+	const auto at = TrackedOfflineMoment(user, user->lastseen(), now);
 	if (!at) {
 		return std::nullopt;
 	}
@@ -572,7 +569,7 @@ crl::time OnlineChangeTimeout(Data::LastseenStatus status, TimeId now) {
 crl::time OnlineChangeTimeout(not_null<UserData*> user, TimeId now) {
 	if (user->isServiceUser() || user->isBot()) {
 		return kMaxOnlineChangeTimeout;
-	} else if (HasTrackedOfflineMoment(user, user->lastseen(), now)) {
+	} else if (TrackedOfflineMoment(user, user->lastseen(), now)) {
 		return kMinOnlineChangeTimeout;
 	}
 	return OnlineChangeTimeout(user->lastseen(), now);

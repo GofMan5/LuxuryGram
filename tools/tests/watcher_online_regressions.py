@@ -68,6 +68,7 @@ namespace MTP {using ShiftedDcId=int;constexpr int ConnectedState=2;}
 namespace crl {using time=long long;time clock=100;time now(){return clock;}}
 constexpr auto kNoUpdatesAfterSleepTimeout=5,kNoUpdatesTimeout=30;
 #define MTP_LOG(...) do{}while(false)
+namespace LuxuryOnline {bool tracking=true;bool TrackingAllowed(){return tracking;}}
 struct UserData;
 struct PeerData {virtual~PeerData()=default;virtual UserData*asUser(){return nullptr;}};
 struct Event {long long fakeId;bool online;int at;};
@@ -98,7 +99,8 @@ b.observe(true,120);account.reset(2);assert(b.tracker.start()==120&&session.u.di
 a.observe(true,200);session.u.checkLastUpdate(false);assert(a.tracker.start()==200);session.u.checkLastUpdate(true);assert(a.tracker.start()==200);
 a.observe(true,201);session.u.mtpNewSessionCreated();assert(!a.tracker.start()&&session.u._updatesSeq==0&&session.u.diffs==2);
 account.p=nullptr;account.state(1,0);account.reset(1);assert(Core::app.rotations==3);
-std::cout<<"Actual Session reset + MTProto state/reset + sleep/new-session callbacks PASS: media DC isolation, multi-user gap, no fabricated departure, resumed independent interval, absent account session\n";
+a.observe(true,300);LuxuryOnline::tracking=false;session.d.resetTrackedPresence();assert(a.tracker.start()==300);LuxuryOnline::tracking=true;session.d.resetTrackedPresence();assert(!a.tracker.start());
+std::cout<<"Actual Session reset + MTProto state/reset + sleep/new-session callbacks PASS: media DC isolation, multi-user gap, no fabricated departure, resumed independent interval, absent account session, tracking-off gate\n";
 }
 '''.replace('long long(events.size()+1)', 'static_cast<long long>(events.size()+1)'), extra=('-I', str(Path(__file__).resolve().parents[2] / 'Telegram/SourceFiles')))
 

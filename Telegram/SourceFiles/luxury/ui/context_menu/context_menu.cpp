@@ -72,6 +72,22 @@ namespace {
 // characters; the full name goes to the clipboard on activation.
 constexpr auto kMaxMediaNameLength = 20;
 
+// Filters compile as ICU regular expressions: a selection like "why?" or
+// "(lol" must match itself, not a pattern or nothing. Only ASCII syntax is
+// quoted; ICU rejects a backslash before a letter, Cyrillic included.
+QString LiteralPattern(const QString &text) {
+	auto result = QString();
+	result.reserve(text.size() * 2);
+	for (const auto ch : text) {
+		const auto code = ch.unicode();
+		if (code < 128 && !ch.isLetterOrNumber() && !ch.isSpace() && ch != '_') {
+			result.append('\\');
+		}
+		result.append(ch);
+	}
+	return result;
+}
+
 Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> controller, not_null<PeerData*> peer, ID topicId) {
 	return [=] {
 		controller->show(Ui::MakeConfirmBox({
@@ -95,6 +111,37 @@ Fn<void()> ClearDeletedMessagesHandler(not_null<Window::SessionController*> cont
 			.confirmText = tr::luxury_ClearDeletedMessagesActionText(tr::now),
 			.cancelText = tr::lng_cancel(),
 			.confirmStyle = &st::attentionBoxButton,
+		}));
+	};
+}
+
+Fn<void()> ClearWatcherDataHandler(not_null<Window::SessionController*> controller, not_null<PeerData*> peer) {
+	return [=] {
+		controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+			const auto alsoFiles = std::make_shared<base::weak_qptr<Ui::Checkbox>>();
+			Ui::ConfirmBox(box, {
+				.text = tr::luxury_ClearOnlineHistoryText(tr::now),
+				.confirmed = [=](Fn<void()> close) {
+					if (*alsoFiles && (*alsoFiles)->checked()) {
+						LuxuryFeatures::Watch::clearKeptMediaForDialog(
+							peer->session().uniqueId(),
+							ID(peer->id.value));
+					}
+					LuxuryOnline::clearHistory(peer);
+					close();
+				},
+				.confirmText = tr::luxury_WatcherClearAction(tr::now),
+				.confirmStyle = &st::attentionBoxButton,
+			});
+			const auto skip = st::defaultBoxCheckbox.margin.top();
+			*alsoFiles = box->addRow(
+				object_ptr<Ui::Checkbox>(
+					box,
+					tr::luxury_WatcherClearKeptFilesAlso(tr::now),
+					true,
+					st::defaultBoxCheckbox),
+				st::boxRowPadding + QMargins(0, skip, 0, skip));
+			(*alsoFiles)->setAllowTextLines();
 		}));
 	};
 }
@@ -464,30 +511,7 @@ void AddLuxuryGramActions(PeerData *peerData,
 					&st::menuIconInfo);
 				addAction({
 					.text = tr::luxury_ClearOnlineHistoryMenuText(tr::now),
-					.handler = [=] {
-						sessionController->show(Box([=](not_null<Ui::GenericBox*> box) {
-							box->addRow(object_ptr<Ui::FlatLabel>(
-								box,
-								tr::luxury_ClearOnlineHistoryText(tr::now),
-								st::boxLabel));
-							const auto alsoFiles = box->addRow(
-								object_ptr<Ui::Checkbox>(
-									box,
-									tr::luxury_WatcherClearKeptFilesAlso(tr::now),
-									true,
-									st::defaultBoxCheckbox));
-							box->addButton(tr::luxury_ClearOnlineHistoryMenuText(), [=] {
-								if (alsoFiles && alsoFiles->checked()) {
-									LuxuryFeatures::Watch::clearKeptMediaForDialog(
-										peerData->session().uniqueId(),
-										ID(peerData->id.value));
-								}
-								LuxuryOnline::clearHistory(peerData);
-								box->closeBox();
-							}, st::attentionBoxButton);
-							box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
-						}));
-					},
+					.handler = ClearWatcherDataHandler(sessionController, peerData),
 					.icon = &st::menuIconClearAttention,
 					.isAttention = true,
 				});
@@ -930,7 +954,6 @@ void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 
 	const auto mediaSize = media ? getMediaSize(item) : QString();
 	const auto mediaMime = media ? getMediaMime(item) : QString();
-	// todo: bitrate (?)
 	const auto mediaName = media ? getMediaName(item) : QString();
 	const auto mediaResolution = media ? getMediaResolution(item) : QString();
 	const auto mediaDC = media ? getMediaDC(item) : QString();
@@ -1161,22 +1184,33 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 
 			if (useNoQuote) {
 				if (currentItem->richPage() && session->premium()) {
+					const auto forwardPlain = [=] {
+						auto resolvedDraft = history->resolveForwardDraft({
+							.ids = MessageIdsList{ itemId },
+							.options = Data::ForwardOptions::NoSenderNames,
+						});
+						// The rich copy runs in the background, the message can
+						// be gone by the time it gives up.
+						if (!resolvedDraft.items.empty()) {
+							session->api().forwardMessages(
+								std::move(resolvedDraft),
+								action,
+								[] {});
+						}
+					};
 					if (preserveReply) {
 						const auto weakSession = base::make_weak(session);
 						crl::async([=]
 						{
-							LuxuryForward::forwardRichMessage(weakSession, itemId, action);
+							// A rich page that cannot be rebuilt (media upload
+							// failed, empty after pruning) is still repeated,
+							// without the reply rather than not at all.
+							if (!LuxuryForward::forwardRichMessage(weakSession, itemId, action)) {
+								crl::on_main(weakSession, forwardPlain);
+							}
 						});
 					} else {
-						const auto forwardDraft = Data::ForwardDraft{
-							.ids = MessageIdsList{ itemId },
-							.options = Data::ForwardOptions::NoSenderNames,
-						};
-						auto resolvedDraft = history->resolveForwardDraft(forwardDraft);
-						session->api().forwardMessages(
-							std::move(resolvedDraft),
-							action,
-							[] {});
+						forwardPlain();
 					}
 				} else {
 					auto message = ApiWrap::MessageToSend(action);
@@ -1348,7 +1382,7 @@ void AddCreateFilterAction(not_null<Ui::PopupMenu*> menu,
 		[=]
 		{
 			RegexFilter filter;
-			filter.text = selectedText.toStdString();
+			filter.text = LiteralPattern(selectedText).toStdString();
 			filter.enabled = true;
 			filter.caseInsensitive = true;
 			filter.reversed = false;

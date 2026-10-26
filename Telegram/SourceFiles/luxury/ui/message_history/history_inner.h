@@ -10,13 +10,9 @@
 #include "luxury/ui/message_history/history_section.h"
 #include "base/timer.h"
 #include "history/view/history_view_element.h"
-#include "menu/menu_antispam_validator.h"
-#include "mtproto/sender.h"
 #include "ui/rp_widget.h"
 #include "ui/effects/animations.h"
 #include "ui/widgets/tooltip.h"
-
-struct ChatRestrictionsInfo;
 
 namespace Main {
 class Session;
@@ -208,10 +204,8 @@ private:
 	// ClickHandler::clearActive(), so a hovered or pressed Element of this section
 	// stays reachable from anywhere in the app once this widget is gone.
 	void clearDisplayPointers();
-	void performDrag();
 	int itemTop(not_null<const Element*> view) const;
 	void repaintItem(const Element *view);
-	void refreshItem(not_null<const Element*> view);
 	void resizeItem(not_null<Element*> view);
 	QPoint mapPointToItem(QPoint point, const Element *view) const;
 
@@ -219,7 +213,6 @@ private:
 	void savePhotoToFile(not_null<PhotoData*> photo);
 	void saveDocumentToFile(not_null<DocumentData*> document);
 	void copyContextImage(not_null<PhotoData*> photo);
-	void showStickerPackInfo(not_null<DocumentData*> document);
 	void cancelContextDownload(not_null<DocumentData*> document);
 	void showContextInFolder(not_null<DocumentData*> document);
 	void openContextGif(FullMsgId itemId);
@@ -274,7 +267,6 @@ private:
 	MsgId _itemId;
 	ID _topicId;
 	const not_null<History*> _history;
-	MTP::Sender _api;
 
 	const std::unique_ptr<Ui::PathShiftGradient> _pathGradient;
 	std::shared_ptr<Ui::ChatTheme> _theme;
@@ -284,7 +276,6 @@ private:
 	std::map<not_null<const HistoryItem*>, not_null<Element*>> _itemsByData;
 	base::flat_map<not_null<const HistoryItem*>, TimeId> _itemDates;
 	base::flat_map<not_null<const HistoryItem*>, MsgId> _sourceMessageIds;
-	base::flat_set<FullMsgId> _animatedStickersPlayed;
 	base::flat_map<not_null<PeerData*>, Ui::PeerUserpicView> _userpics;
 	base::flat_map<not_null<PeerData*>, Ui::PeerUserpicView> _userpicsCache;
 	int _itemsTop = 0;

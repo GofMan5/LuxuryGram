@@ -75,8 +75,7 @@ void MessageShotBox::setupContent() {
 		|| shotSettings.cloudThemeId() != 0;
 	if (hasSavedTheme) {
 		savedThemeApplyResult = LuxuryFeatures::MessageShot::applySavedThemePalette(
-			_selectedPalette,
-			nullptr);
+			_selectedPalette);
 		if (savedThemeApplyResult != LuxuryFeatures::MessageShot::SavedThemeApplyResult::Failed) {
 			_config.st = std::make_shared<Ui::ChatStyle>(_selectedPalette.get());
 		} else {
@@ -240,7 +239,6 @@ void MessageShotBox::setupContent() {
 	};
 
 	if (savedThemeApplyResult == LuxuryFeatures::MessageShot::SavedThemeApplyResult::AwaitingAsync) {
-		const auto weakBox = base::make_weak(this);
 		// Built while the controller is guaranteed alive: the async
 		// failure path must not dereference it.
 		const auto fallbackStyle = std::make_shared<Ui::ChatStyle>(
@@ -249,7 +247,7 @@ void MessageShotBox::setupContent() {
 			_config.controller,
 			_selectedPalette,
 			[=](bool applied) {
-				if (!weakBox) {
+				if (!weak) {
 					return;
 				}
 				if (!applied) {
@@ -281,6 +279,10 @@ void MessageShotBox::setupContent() {
 			box->themeSelected() | rpl::on_next(
 				[=](const ShotThemeSelection &selection) mutable
 				{
+					// Subscribed on the selector's lifetime, which may outlive this box.
+					if (!weak) {
+						return;
+					}
 					_savedThemeLifetime.destroy();
 					_selectedPalette->reset();
 					_selectedPalette->load(selection.palette);
@@ -303,14 +305,14 @@ void MessageShotBox::setupContent() {
 					selectedTheme->force_assign(selection.name);
 					updatePreview();
 				},
-				content->lifetime());
+				box->lifetime());
 
 			box->boxClosing() | rpl::on_next(
 				[=]
 				{
 					LuxuryFeatures::MessageShot::setChoosingTheme(false);
 				},
-				content->lifetime());
+				box->lifetime());
 
 			_config.controller->show(std::move(box));
 		});

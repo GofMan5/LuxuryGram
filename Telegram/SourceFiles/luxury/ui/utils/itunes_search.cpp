@@ -270,13 +270,23 @@ QList<ItunesTrack> parseTracks(const QByteArray &json) {
 QString pickArtworkUrl(const QList<ItunesTrack> &tracks,
 					   const QString &targetTitle,
 					   const QStringList &baseArtists) {
-	if (tracks.isEmpty()) return {};
+	const auto sameArtist = [&](const ItunesTrack &t) {
+		return hasCommonArtist(baseArtists, t.artistName);
+	};
 	for (const auto &t : tracks) {
-		if (!t.trackName.compare(targetTitle, Qt::CaseInsensitive) && hasCommonArtist(baseArtists, t.artistName)) {
+		if (!t.trackName.compare(targetTitle, Qt::CaseInsensitive)
+			&& (baseArtists.isEmpty() || sameArtist(t))) {
 			return t.artworkUrl100;
 		}
 	}
-	return tracks.first().artworkUrl100;
+	// An edition of the same artist ("Remastered", "Live") is still the
+	// right cover; the first search hit by another artist is not.
+	for (const auto &t : tracks) {
+		if (sameArtist(t)) {
+			return t.artworkUrl100;
+		}
+	}
+	return {};
 }
 
 QUrl buildItunesUrl(const QString &performer, const QString &title) {

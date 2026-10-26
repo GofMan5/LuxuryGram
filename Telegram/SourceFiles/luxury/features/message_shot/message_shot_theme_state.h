@@ -49,8 +49,7 @@ QString embeddedThemeDisplayName(Window::Theme::EmbeddedType type);
 std::shared_ptr<style::palette> getPersistedPalette();
 void setPersistedPalette(std::shared_ptr<style::palette> palette);
 SavedThemeApplyResult applySavedThemePalette(
-	std::shared_ptr<style::palette> palette,
-	Fn<void(bool applied)> onApplied);
+	std::shared_ptr<style::palette> palette);
 void subscribeToCloudThemeLoad(
 	not_null<Window::SessionController*> controller,
 	std::shared_ptr<style::palette> palette,

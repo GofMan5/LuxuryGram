@@ -395,6 +395,23 @@ QString ReachableFolder(const QString &path) {
 		std::condition_variable checked;
 		std::optional<bool> exists;
 	};
+	// A probe still hanging on this path means the share is still offline:
+	// answer from it instead of stacking another thread and another wait on
+	// every save. Once that probe returns, the next call checks again.
+	static auto stuckGuard = std::mutex();
+	static auto stuckPath = QString();
+	static auto stuck = std::weak_ptr<State>();
+	{
+		const auto lock = std::lock_guard(stuckGuard);
+		if (stuckPath == path) {
+			if (const auto probe = stuck.lock()) {
+				const auto probeLock = std::lock_guard(probe->mutex);
+				if (!probe->exists) {
+					return fallback;
+				}
+			}
+		}
+	}
 	const auto state = std::make_shared<State>();
 	std::thread([=] {
 		const auto exists = QDir(path).exists();
@@ -407,7 +424,14 @@ QString ReachableFolder(const QString &path) {
 		lock,
 		std::chrono::milliseconds(kFolderCheckTimeout),
 		[&] { return state->exists.has_value(); });
-	return (checked && *state->exists) ? path : fallback;
+	if (!checked) {
+		lock.unlock();
+		const auto stuckLock = std::lock_guard(stuckGuard);
+		stuckPath = path;
+		stuck = state;
+		return fallback;
+	}
+	return *state->exists ? path : fallback;
 }
 
 bool GetDefault(

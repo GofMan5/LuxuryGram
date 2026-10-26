@@ -20,7 +20,7 @@ def lookup(text):
     start = text.find(template)
     if start < 0:
         start = text.index('PeerData *getPeerFromDialogId(')
-    return text[start:text.index('QString filterZalgo(')]
+    return text[start:text.index('int safeCutPosition(')]
 
 
 def fixture(text):

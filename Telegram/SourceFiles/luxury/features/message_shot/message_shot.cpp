@@ -6,7 +6,6 @@
 // Copyright @Radolyn, 2026
 #include "luxury/features/message_shot/message_shot.h"
 
-#include "qguiapplication.h"
 #include "lang_auto.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/ui/boxes/message_shot_box.h"
@@ -427,6 +426,8 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			// calculate the size of the image
 			int width = st::msgMaxWidth + (st::boxPadding.left() + st::boxPadding.right());
 			auto height = qint64(0);
+			const auto revealSpoilers = LuxurySettings::getInstance()
+				.messageShotSettings().revealSpoilers();
 
 			for (int i = 0; i < messages.size(); i++) {
 				const auto &message = messages[i];
@@ -440,7 +441,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 				}
 				view->itemDataChanged(); // refresh reactions
 				height += view->resizeGetHeight(width);
-				if (LuxurySettings::getInstance().messageShotSettings().revealSpoilers()) {
+				if (revealSpoilers) {
 					view->revealSpoilers();
 				}
 			}
@@ -605,8 +606,6 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 }
 
 namespace {
-
-// 🥀🥀🥀
 
 std::shared_ptr<Ui::ChatStyle> BuildShotChatStyle(
 		not_null<Window::SessionController*> controller) {

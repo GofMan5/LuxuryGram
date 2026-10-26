@@ -8,13 +8,6 @@
 
 namespace LuxuryMapper {
 
-template<typename MTPObject>
-[[nodiscard]] MTPObject deserializeObject(
-	const std::vector<char> &serialized);
-
-template<typename MTPObject>
-[[nodiscard]] std::vector<char> serializeObject(MTPObject object);
-
 [[nodiscard]] std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<HistoryItem*> item);
 [[nodiscard]] MTPVector<MTPMessageEntity> deserializeTextWithEntities(
 	const std::vector<char> &serialized);

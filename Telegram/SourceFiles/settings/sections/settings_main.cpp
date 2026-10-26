@@ -268,8 +268,8 @@ void Cover::initViewers() {
 		refreshNameGeometry(width());
 	}, lifetime());
 
-	rpl::single(
-		tr::marked(IDString(_user))
+	IDValue(
+		_user
 	) | rpl::on_next([=](const TextWithEntities &value) {
 		_idText = value.text;
 		updateIdText();

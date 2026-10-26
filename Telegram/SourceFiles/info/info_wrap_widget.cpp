@@ -61,6 +61,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/features/filters/filters_cache_controller.h"
 #include "luxury/ui/settings/filters/edit_filter.h"
 #include "luxury/ui/settings/filters/settings_filters_list.h"
+#include "luxury/ui/settings/settings_filters.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "inline_bots/bot_attach_web_view.h"
 #include "styles/style_luxury_settings.h"
@@ -529,7 +530,7 @@ void WrapWidget::setupTopBarMenuToggle() {
 				auto icon = base::make_unique_q<Ui::IconButton>(_topBar, st::filtersExcludeIcon);
 
 				const auto excludeButton = _topBar->addButton(std::move(icon));
-				excludeButton->addClickHandler([=, content = _content.data()]
+				excludeButton->addClickHandler([=]
 				{
 					// Reopen the list in "what can still be excluded" mode.
 					controller->luxuryFilters.showExclude = false;
@@ -819,6 +820,15 @@ void WrapWidget::finishShowContent() {
 		updateContentGeometry();
 	}, _content->lifetime());
 
+	// Only the filter pages show filter state; every other section rebuilt
+	// itself, scroll and all, on each filter edit.
+	const auto section = _controller->section();
+	const auto filterPage = (section.type() == Section::Type::Settings)
+		&& (section.settingsType() == ::Settings::LuxuryFilters::Id()
+			|| section.settingsType() == ::Settings::LuxuryFiltersList::Id());
+	if (!filterPage) {
+		return;
+	}
 	FiltersCacheController::updates() | rpl::on_next([=]
 	{
 		// Updates fire from inside clicks on this very page (a filters

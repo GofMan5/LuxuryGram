@@ -94,36 +94,49 @@ void FillImportFiltersBox(not_null<Ui::GenericBox*> box, bool import) {
 		}
 	});
 
+	const auto submit = [=]
+	{
+		const auto isURL = intoURL->current();
+
+		if (import) {
+			if (isURL) {
+				const auto link = importURLField->getLastText().trimmed();
+				if (link.isEmpty()) {
+					importURLField->showError();
+					return;
+				}
+				FilterUtils::getInstance().importFromLink(link);
+			} else {
+				FilterUtils::getInstance().importFromJson(
+					QGuiApplication::clipboard()->text().toUtf8());
+			}
+		} else {
+			if (isURL) {
+				FilterUtils::getInstance().publishFilters();
+			} else {
+				const auto data = FilterUtils::getInstance().exportFilters();
+				QGuiApplication::clipboard()->setText(data);
+
+				Toast::Show(tr::lng_text_copied(tr::now));
+			}
+		}
+		box->closeBox();
+	};
 	const auto actionButton = box->addButton(
 		import ? tr::luxury_FiltersMenuImport() : tr::luxury_FiltersMenuExport(),
-		[=]
-		{
-			const auto isURL = intoURL.get()->current();
-
-			if (import) {
-				if (isURL) {
-					const auto link = importURLField->getLastText().trimmed();
-					if (link.isEmpty()) {
-						importURLField->showError();
-						return;
-					}
-					FilterUtils::getInstance().importFromLink(link);
-				} else {
-					FilterUtils::getInstance().importFromJson(
-						QGuiApplication::clipboard()->text().toUtf8());
-				}
-			} else {
-				if (isURL) {
-					FilterUtils::getInstance().publishFilters();
-				} else {
-					const auto data = FilterUtils::getInstance().exportFilters();
-					QGuiApplication::clipboard()->setText(data);
-
-					Toast::Show(tr::lng_text_copied(tr::now));
-				}
-			}
-			box->closeBox();
-		});
+		submit);
+	if (importURLField) {
+		importURLField->submits() | rpl::on_next([=] {
+			submit();
+		}, importURLField->lifetime());
+	}
+	box->setFocusCallback([=] {
+		if (import && intoURL->current()) {
+			importURLField->setFocusFast();
+		} else {
+			box->setFocus();
+		}
+	});
 	const auto buttonWidth = box->width()
 		- rect::m::sum::h(st::giveawayGiftCodeBox.buttonPadding);
 	actionButton->widthValue() | rpl::filter([=]

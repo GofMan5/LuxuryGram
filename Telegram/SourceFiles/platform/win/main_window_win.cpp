@@ -112,13 +112,13 @@ private:
 	return nullptr;
 }
 
-void UpdateTaskbarRelaunchIcon(HWND hWnd) {
+bool UpdateTaskbarRelaunchIcon(HWND hWnd, const QString &icoPath) {
 	auto propertyStore = ComPtr<IPropertyStore>();
 	auto hr = SHGetPropertyStoreForWindow(
 		hWnd,
 		IID_PPV_ARGS(&propertyStore));
 	if (!SUCCEEDED(hr)) {
-		return;
+		return false;
 	}
 
 	const auto setString = [&](
@@ -136,9 +136,8 @@ void UpdateTaskbarRelaunchIcon(HWND hWnd) {
 	setString(AppUserModelId::Key(), AppUserModelId::Id());
 	setString(
 		PKEY_AppUserModel_RelaunchIconResource,
-		QDir::toNativeSeparators(LuxuryAssets::appIcoPath()).toStdWString()
-			+ L",0");
-	propertyStore->Commit();
+		QDir::toNativeSeparators(icoPath).toStdWString() + L",0");
+	return SUCCEEDED(propertyStore->Commit());
 }
 
 struct RealSize {
@@ -649,7 +648,13 @@ void MainWindow::updateTaskbarAndIconCounters() {
 		GetSystemMetrics(SM_CXICON),
 		GetSystemMetrics(SM_CYICON));
 	const auto supportMode = session && session->supportMode();
-	UpdateTaskbarRelaunchIcon(_hWnd);
+	// This runs on every unread counter change; the shell property store is
+	// COM plus a write, and the relaunch icon only follows the app icon.
+	if (const auto ico = LuxuryAssets::appIcoPath(); ico != _relaunchIcoPath) {
+		if (UpdateTaskbarRelaunchIcon(_hWnd, ico)) {
+			_relaunchIcoPath = ico;
+		}
+	}
 
 	auto iconSmallPixmap16 = Tray::IconWithCounter(
 		Tray::CounterLayerArgs(16, counter, muted),

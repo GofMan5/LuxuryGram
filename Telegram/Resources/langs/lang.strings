@@ -8967,6 +8967,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_DCLocationAmsterdam" = "Amsterdam, Netherlands";
 "luxury_DCLocationSingapore" = "Singapore";
 "luxury_UnknownPeer" = "Unknown (ID: {id})";
+"luxury_IdValue" = "ID: {id}";
 "luxury_UnknownSection" = "Unknown section.";
 "luxury_FiltersQuickShadowBan" = "Shadow Ban";
 "luxury_FiltersQuickUnshadowBan" = "Unshadow Ban";
@@ -9043,10 +9044,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ClearOnlineHistoryMenuText" = "Clear Watcher Data";
 "luxury_ClearOnlineHistoryText" = "Clear all Watcher data for this chat? Online history and events are removed; the messages list is not.";
 "luxury_WatcherClearKeptFilesAlso" = "Also delete saved media files";
+"luxury_WatcherClearAction" = "Clear";
 "luxury_OnlineHistoryTitle" = "Watcher";
 "luxury_OnlineHistoryEarlier#one" = "+{count} earlier";
 "luxury_OnlineHistoryEarlier#other" = "+{count} earlier";
-"luxury_OnlineHistorySince" = "since {time}";
 "luxury_OnlineHistorySessions" = "Sessions";
 "luxury_OnlineHistoryEvents" = "Events";
 "luxury_OnlineHistorySessionsEmpty" = "No sessions recorded yet.";
@@ -9207,6 +9208,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_ConfirmationVoice" = "Do you want to send this voice message?";
 "luxury_ConfirmationRound" = "Do you want to send this round video?";
 "luxury_UpdateLuxuryGram" = "Update LuxuryGram";
+"luxury_GitHubReleases" = "GitHub Releases";
 "luxury_ContextSelectBetween" = "Select messages between";
 "luxury_MessageSelfDestructingOpened" = "Self-destructing media opened";
 "luxury_PassportRowReady" = "Ready";

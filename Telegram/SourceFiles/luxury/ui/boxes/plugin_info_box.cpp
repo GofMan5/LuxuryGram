@@ -52,26 +52,16 @@ QString Truncated(const QString &text, int limit) {
 	return text.left(safeCutPosition(text, limit));
 }
 
-QString ExtractField(const QString &data, const QString &key) {
-	// supports probably all kinds of weird python syntax + both " and '
-	// "description"
-	// """description"""
-	// (
-	// 	"description\n\n"
-	// 	"description\n"
-	// )
-	static const auto quotedValue = QRegularExpression(
+const QRegularExpression &QuotedValue() {
+	static const auto result = QRegularExpression(
 		uR"field((?:"""((?:\\[\s\S]|(?!""")[^\\])*)"""|'''((?:\\[\s\S]|(?!''')[^\\])*)'''|(?!""")"((?:\\.|[^\r\n"\\])*)"|(?!''')'((?:\\.|[^\r\n'\\])*)'))field"_q);
-	const auto re = QRegularExpression(
-		uR"(__%1__\s*=\s*(?:%2|\((?:\s*%2)+\s*\)))"_q.arg(
-			key,
-			quotedValue.pattern()));
-	const auto match = re.match(data);
-	if (!match.hasMatch()) {
-		return {};
-	}
-	auto result = QString();
-	auto parts = quotedValue.globalMatch(match.captured());
+	return result;
+}
+
+QStringList QuotedParts(const QString &text) {
+	const auto &quotedValue = QuotedValue();
+	auto result = QStringList();
+	auto parts = quotedValue.globalMatch(text);
 	while (parts.hasNext()) {
 		const auto partMatch = parts.next();
 		auto part = partMatch.captured(1);
@@ -85,9 +75,44 @@ QString ExtractField(const QString &data, const QString &key) {
 		part.replace(u"\\\""_q, u"\""_q);
 		part.replace(u"\\'"_q, u"'"_q);
 		part.replace(u"\\\\"_q, u"\\"_q);
-		result += part;
+		result.append(part);
 	}
 	return result;
+}
+
+QString ExtractField(const QString &data, const QString &key) {
+	// supports probably all kinds of weird python syntax + both " and '
+	// "description"
+	// """description"""
+	// (
+	// 	"description\n\n"
+	// 	"description\n"
+	// )
+	const auto re = QRegularExpression(
+		uR"(__%1__\s*=\s*(?:%2|\((?:\s*%2)+\s*\)))"_q.arg(
+			key,
+			QuotedValue().pattern()));
+	const auto match = re.match(data);
+	return match.hasMatch()
+		? QuotedParts(match.captured()).join(QString())
+		: QString();
+}
+
+QStringList ExtractList(const QString &data, const QString &key) {
+	// __requirements__ = ["mpmath", 'tinydb'], the form exteraGram documents.
+	const auto re = QRegularExpression(
+		uR"(__%1__\s*=\s*\[\s*(?:%2\s*(?:,\s*)?)*\])"_q.arg(
+			key,
+			QuotedValue().pattern()));
+	const auto match = re.match(data);
+	return match.hasMatch() ? QuotedParts(match.captured()) : QStringList();
+}
+
+QString RequirementName(const QString &requirement) {
+	// The PEP 508 project name in front of extras, versions and markers.
+	static const auto name = QRegularExpression(
+		u"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"_q);
+	return name.match(requirement).captured();
 }
 
 TextWithEntities ParsePluginDescriptionPlain(const QString &text) {
@@ -378,9 +403,11 @@ void FillPluginInfoBox(
 				st::defaultTableSmallButton);
 			chip->setTextTransform(
 				Ui::RoundButtonTextTransform::NoTransform);
-			chip->setClickedCallback([dep] {
-				File::OpenUrl(
-					u"https://pypi.org/project/"_q + dep + u"/"_q);
+			const auto project = u"https://pypi.org/project/"_q
+				+ RequirementName(dep)
+				+ u"/"_q;
+			chip->setClickedCallback([project] {
+				File::OpenUrl(project);
 			});
 			chips.push_back(chip);
 		}
@@ -465,19 +492,20 @@ PluginMetadata ParsePluginMetadata(const QByteArray &data) {
 		ExtractField(text, u"min_version"_q),
 		32);
 
-	const auto reqString = Truncated(
-		ExtractField(text, u"requirements"_q),
-		kMaxRequirementsTextLength);
-	if (!reqString.isEmpty()) {
-		for (const auto &part : reqString.split(',')) {
-			const auto trimmed = Truncated(
-				part.trimmed(),
-				kMaxRequirementLength);
-			if (!trimmed.isEmpty()) {
-				metadata.requirements.append(trimmed);
-				if (metadata.requirements.size() >= kMaxRequirements) {
-					break;
-				}
+	auto requirements = ExtractList(text, u"requirements"_q);
+	if (requirements.isEmpty()) {
+		requirements = Truncated(
+			ExtractField(text, u"requirements"_q),
+			kMaxRequirementsTextLength).split(',');
+	}
+	for (const auto &part : requirements) {
+		const auto trimmed = Truncated(
+			part.trimmed(),
+			kMaxRequirementLength);
+		if (!RequirementName(trimmed).isEmpty()) {
+			metadata.requirements.append(trimmed);
+			if (metadata.requirements.size() >= kMaxRequirements) {
+				break;
 			}
 		}
 	}

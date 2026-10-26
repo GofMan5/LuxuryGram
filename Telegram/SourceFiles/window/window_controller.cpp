@@ -29,6 +29,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/themes/window_theme_editor.h"
 #include "ui/boxes/confirm_box.h"
 #include "data/components/promo_suggestions.h"
+#include "data/data_session.h"
+#include "data/data_stories.h"
+#include "data/data_story.h"
 #include "data/data_thread.h"
 #include "settings/settings_common.h"
 #include "apiwrap.h" // ApiWrap::acceptTerms.
@@ -608,20 +611,39 @@ void Controller::openInMediaView(Media::View::OpenRequest &&request) {
 			&& !ghost.sendReadStoriesLocked()
 			&& !ghost.isGhostModeActive();
 		if (suggestGhostMode) {
+			// The box can outlive the story (expired, deleted) and the
+			// account, so look both up again on the click.
 			const auto controller = request.controller();
+			const auto weakController = base::make_weak(controller);
+			const auto weakSession = base::make_weak(&story->session());
+			const auto storyId = story->fullId();
 			const auto context = request.storiesContext();
+			const auto open = [=](bool disableGhostOnClose) {
+				const auto session = weakSession.get();
+				if (!session || (controller && !weakController)) {
+					return;
+				}
+				const auto found = session->data().stories().lookup(storyId);
+				if (!found) {
+					return;
+				}
+				if (disableGhostOnClose) {
+					LuxuryState::setDisableGhostModeOnStoryClose(session);
+				}
+				_openInMediaViewRequests.fire(Media::View::OpenRequest(
+					weakController.get(),
+					*found,
+					context));
+			};
 			show(Ui::MakeConfirmBox({
 				.text = tr::luxury_SuggestGhostModeStoryText(tr::now, tr::rich),
 				.confirmed = [=](Fn<void()> close) {
 					close();
-					LuxuryState::setDisableGhostModeOnStoryClose(&story->session());
-					_openInMediaViewRequests.fire(
-						Media::View::OpenRequest(controller, story, context));
+					open(true);
 				},
 				.cancelled = [=](Fn<void()> close) {
 					close();
-					_openInMediaViewRequests.fire(
-						Media::View::OpenRequest(controller, story, context));
+					open(false);
 				},
 				.confirmText = tr::luxury_SuggestGhostModeStoryActionTextYes(),
 				.cancelText = tr::luxury_SuggestGhostModeStoryActionTextNo(),

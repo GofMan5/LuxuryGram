@@ -6,16 +6,14 @@
 // Copyright @Radolyn, 2026
 #include "luxury/ui/message_history/history_section.h"
 
-#include "apiwrap.h"
 #include "base/timer.h"
 #include "core/shortcuts.h"
-#include "data/data_channel.h"
+#include "data/data_peer.h"
 #include "data/data_session.h"
 #include "info/profile/info_profile_values.h"
 #include "lang/lang_keys.h"
 #include "luxury/ui/message_history/history_inner.h"
 #include "profile/profile_back_button.h"
-#include "ui/boxes/confirm_box.h"
 #include "ui/controls/userpic_button.h"
 #include "ui/effects/animations.h"
 #include "ui/widgets/buttons.h"
@@ -23,7 +21,6 @@
 #include "ui/widgets/scroll_area.h"
 #include "ui/widgets/shadow.h"
 #include "ui/ui_utility.h"
-#include "window/themes/window_theme.h"
 #include "window/window_adaptive.h"
 #include "window/window_session_controller.h"
 
@@ -463,13 +460,6 @@ void Widget::paintEvent(QPaintEvent *e) {
 	} else if (controller()->contentOverlapped(this, e)) {
 		return;
 	}
-	//if (hasPendingResizedItems()) {
-	//	updateListSize();
-	//}
-
-	//auto ms = crl::now();
-	//_historyDownShown.step(ms);
-
 	const auto clip = e->rect();
 	SectionWidget::PaintBackground(controller(), _inner->theme(), this, clip);
 }

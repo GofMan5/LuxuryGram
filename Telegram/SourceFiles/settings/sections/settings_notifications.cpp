@@ -386,7 +386,7 @@ void NotificationsCount::paintEvent(QPaintEvent *e) {
 	// support for top center notifications
 	auto sampleLeft = screenRect.x() + screenRect.width() / 2 - st::notificationSampleSize.width() / 2;
 	auto sampleTop = screenRect.y() + st::notificationsSampleTopSkip;
-	if (static_cast<int>(_chosenCorner) == 4) {
+	if (Core::Settings::IsTopCenterCorner(_chosenCorner)) {
 		auto count = _oldCount;
 		for (int i = 0; i != kMaxNotificationsCount; ++i) {
 			auto opacity = _sampleOpacities[i].value((i < count) ? 1. : 0.);

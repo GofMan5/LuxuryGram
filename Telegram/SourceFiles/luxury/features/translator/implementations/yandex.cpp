@@ -39,7 +39,6 @@ QPointer<QNetworkReply> YandexTranslator::startSingleTranslation(
 	const MultiThreadArgs &args
 ) {
 	const auto &text = args.parsedData.text;
-	// const auto &fromLang = args.parsedData.fromLang;
 	const auto &toLang = args.parsedData.toLang;
 	const auto onSuccess = args.onSuccess;
 	const auto onFail = args.onFail;

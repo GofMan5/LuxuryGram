@@ -385,11 +385,12 @@ void Polls::sendVotes(
 			}
 		}
 		_session->updates().applyUpdates(result);
+		// The updates just applied may have deleted the message.
 		const auto &ghost = LuxurySettings::ghost(_session);
-		if (!ghost.sendReadMessages()
-			&& ghost.markReadAfterAction()
-			&& item) {
-			readHistory(item);
+		if (!ghost.sendReadMessages() && ghost.markReadAfterAction()) {
+			if (const auto voted = _session->data().message(itemId)) {
+				readHistory(voted);
+			}
 		}
 	}).fail([=](const MTP::Error &error) {
 		_pollVotesRequestIds.erase(itemId);

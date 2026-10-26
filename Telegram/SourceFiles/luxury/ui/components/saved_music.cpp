@@ -47,15 +47,6 @@ QRgb AdjustHsl(QRgb color, float luminance, float saturation = -1.0f) {
 	return Luxury::Ui::ColorUtils::HSLToRGB(hsl);
 }
 
-QRgb BlendARGB(QRgb color1, QRgb color2, float ratio) {
-	const auto inverseRatio = 1.0f - ratio;
-	const auto r = static_cast<int>(qRed(color1) * inverseRatio + qRed(color2) * ratio);
-	const auto g = static_cast<int>(qGreen(color1) * inverseRatio + qGreen(color2) * ratio);
-	const auto b = static_cast<int>(qBlue(color1) * inverseRatio + qBlue(color2) * ratio);
-	const auto a = static_cast<int>(qAlpha(color1) * inverseRatio + qAlpha(color2) * ratio);
-	return qRgba(r, g, b, a);
-}
-
 QColor GetNoCoverBgColor(std::optional<QColor> overrideBg) {
 	if (overrideBg) {
 		return Ui::BlendColors(
@@ -78,7 +69,7 @@ QPixmap MakeNoCoverImage(const QSize &size) {
 	struct Cache {
 		QPixmap pixmap;
 		QSize size;
-		uint64 theme = 0;
+		QColor fill;
 	};
 	static auto cache = Cache();
 	[[maybe_unused]] static const auto cleanup = [] {
@@ -93,35 +84,35 @@ QPixmap MakeNoCoverImage(const QSize &size) {
 		return true;
 	}();
 
-	const auto theme = Window::Theme::Background()->id();
+	const auto fill = Window::Theme::IsNightMode()
+		? st::windowBoldFg->c.darker()
+		: st::windowBoldFg->c.lighter();
+	const auto physical = size * style::DevicePixelRatio();
 	if (!cache.pixmap.isNull()
-		&& cache.size == size
-		&& cache.theme == theme) {
+		&& cache.size == physical
+		&& cache.fill == fill) {
 		return cache.pixmap;
 	}
 
-	auto image = QImage(size, QImage::Format_ARGB32);
+	auto image = QImage(physical, QImage::Format_ARGB32);
 	if (image.isNull()) {
 		return QPixmap();
 	}
-	const auto bgColor = Window::Theme::IsNightMode()
-		? st::windowBoldFg->c.darker()
-		: st::windowBoldFg->c.lighter();
-	image.fill(bgColor);
+	image.fill(fill);
 	{
 		auto p = Painter(&image);
 		auto hq = PainterHighQualityEnabler(p);
 
 		auto svgIcon = QSvgRenderer(u":/gui/icons/luxury/nocover.svg"_q);
 		p.setPen(st::windowBoldFg->p);
-		svgIcon.render(&p, QRect(0, 0, size.width(), size.height()));
+		svgIcon.render(&p, QRect(QPoint(), physical));
 	}
 	const auto img = Image(std::move(image));
 	cache.pixmap = img.pix(
 		size,
 		Images::PrepareArgs{ .options = Images::Option::RoundSmall });
-	cache.size = size;
-	cache.theme = theme;
+	cache.size = physical;
+	cache.fill = fill;
 	return cache.pixmap;
 }
 
@@ -202,7 +193,10 @@ std::optional<QRgb> ExtractColorFromCover(const QImage &cover) {
 	}
 
 	if (Luxury::Ui::ColorUtils::calculateContrast(whiteColor, adjustedColor) < kMinTextContrast) {
-		adjustedColor = BlendARGB(adjustedColor, qRgb(0, 0, 0), 0.3f);
+		adjustedColor = Ui::BlendColors(
+			QColor::fromRgba(adjustedColor),
+			Qt::black,
+			0.3).rgba();
 	}
 
 	return adjustedColor;
@@ -237,6 +231,12 @@ LuxuryMusicButton::LuxuryMusicButton(
 
 	_title->setAttribute(Qt::WA_TransparentForMouseEvents);
 	_performer->setAttribute(Qt::WA_TransparentForMouseEvents);
+
+	style::PaletteChanged(
+	) | rpl::on_next([=] {
+		refreshTextColors();
+		update();
+	}, lifetime());
 
 	downloadAndMakeCover(data.msgId);
 
@@ -295,7 +295,6 @@ void LuxuryMusicButton::makeCover() {
 		generation,
 		performerText = _performerText,
 		titleText = _titleText,
-		overrideBg = _overrideBg,
 		existingDraw,
 		existingBackground,
 		noCover = cover.noCover,
@@ -324,7 +323,6 @@ void LuxuryMusicButton::makeCover() {
 			noCover,
 			fetched,
 			extractedColor,
-			overrideBg,
 			adaptiveColor,
 			size
 		]() mutable {
@@ -334,9 +332,7 @@ void LuxuryMusicButton::makeCover() {
 			}
 
 			auto pixmap = QPixmap();
-			if (noCover) {
-				pixmap = MakeNoCoverImage(QSize(size, size));
-			} else if (fetched) {
+			if (fetched) {
 				const auto image = Image(std::move(background));
 				pixmap = image.pix(
 					QSize(size, size),
@@ -344,34 +340,20 @@ void LuxuryMusicButton::makeCover() {
 						.options = Images::Option::RoundSmall,
 						.outer = QSize(size, size),
 					});
-			} else {
+			} else if (!noCover) {
 				pixmap = QPixmap::fromImage(existingDraw);
 			}
-			const auto color = extractedColor
-				? QColor::fromRgb(*extractedColor)
-				: GetNoCoverBgColor(overrideBg);
 			const auto effectiveNoCover = noCover
 				|| (adaptiveColor && !extractedColor);
 			strong->_currentCover = {
 				.pix = std::move(pixmap),
-				.bg = color,
+				.bg = extractedColor
+					? std::make_optional(QColor::fromRgb(*extractedColor))
+					: std::nullopt,
 				.noCover = effectiveNoCover,
+				.placeholder = noCover,
 			};
-
-			const auto &settings = LuxurySettings::getInstance();
-			const auto &current = *strong->_currentCover;
-			if (!current.noCover
-				&& settings.adaptiveCoverColor()
-				&& !current.pix.isNull()) {
-				strong->_title->setTextColorOverride(Qt::white);
-				strong->_performer->setTextColorOverride(performerColor);
-			} else {
-				const auto color = overrideBg
-					? st::groupCallMembersFg->c
-					: st::windowBoldFg->c;
-				strong->_title->setTextColorOverride(color);
-				strong->_performer->setTextColorOverride(color);
-			}
+			strong->refreshTextColors();
 
 			strong->repaint();
 			strong->_title->repaint();
@@ -379,6 +361,25 @@ void LuxuryMusicButton::makeCover() {
 			strong->_onReady.fire({});
 		});
 	});
+}
+
+void LuxuryMusicButton::refreshTextColors() {
+	if (!_currentCover) {
+		return;
+	}
+	const auto &cover = *_currentCover;
+	if (!cover.noCover
+		&& LuxurySettings::getInstance().adaptiveCoverColor()
+		&& !cover.pix.isNull()) {
+		_title->setTextColorOverride(Qt::white);
+		_performer->setTextColorOverride(performerColor);
+	} else {
+		const auto color = _overrideBg
+			? st::groupCallMembersFg->c
+			: st::windowBoldFg->c;
+		_title->setTextColorOverride(color);
+		_performer->setTextColorOverride(color);
+	}
 }
 
 void LuxuryMusicButton::paintEvent(QPaintEvent *e) {
@@ -393,22 +394,26 @@ void LuxuryMusicButton::paintEvent(QPaintEvent *e) {
 	const auto size = font->height + skip + font->height;
 
 	const auto &settings = LuxurySettings::getInstance();
-	const auto cover = *_currentCover;
+	const auto &cover = *_currentCover;
+	const auto bg = cover.bg.value_or(GetNoCoverBgColor(_overrideBg));
 	if (cover.noCover || !settings.adaptiveCoverColor()) {
-		p.fillRect(e->rect(), cover.bg);
+		p.fillRect(e->rect(), bg);
 		paintRipple(p, QPoint());
 	} else {
 		QRadialGradient gradient(rect().topRight(), rect().width() * 2.0);
-		gradient.setColorAt(0, cover.bg);
-		gradient.setColorAt(1, QColor::fromRgb(AdjustHsl(cover.bg.rgb(), 1.5f)));
+		gradient.setColorAt(0, bg);
+		gradient.setColorAt(1, QColor::fromRgb(AdjustHsl(bg.rgb(), 1.5f)));
 		p.fillRect(rect(), gradient);
 		paintRipple(p, QPoint());
 	}
 
-	if (!cover.pix.isNull()) {
+	const auto pix = cover.placeholder
+		? MakeNoCoverImage(QSize(size, size))
+		: cover.pix;
+	if (!pix.isNull()) {
 		auto hq = PainterHighQualityEnabler(p);
 		const auto coverRect = QRect(st::infoMusicButtonPadding.left(), st::infoMusicButtonPadding.top(), size, size);
-		p.drawPixmap(coverRect, cover.pix);
+		p.drawPixmap(coverRect, pix);
 	}
 }
 

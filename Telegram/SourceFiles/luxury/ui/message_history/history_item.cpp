@@ -7,13 +7,8 @@
 #include "luxury/ui/message_history/history_item.h"
 
 #include "api/api_text_entities.h"
-#include "base/unixtime.h"
-#include "core/application.h"
-#include "core/click_handler_types.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
-#include "data/data_file_origin.h"
-#include "data/data_forum_topic.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
 #include "history/view/history_view_element.h"
@@ -21,9 +16,7 @@
 #include "history/history_item.h"
 #include "lang/lang_keys.h"
 #include "luxury/data/entities.h"
-#include "luxury/ui/message_history/history_inner.h"
 #include "luxury/utils/luxury_mapper.h"
-#include "ui/basic_click_handlers.h"
 #include "ui/text/text_utilities.h"
 
 namespace MessageHistory {
@@ -42,8 +35,16 @@ OwnedItem::OwnedItem(OwnedItem &&other)
 }
 
 OwnedItem &OwnedItem::operator=(OwnedItem &&other) {
-	_data = base::take(other._data);
-	_view = base::take(other._view);
+	if (this != &other) {
+		// Same order as the admin log's OwnedItem: the outgoing view goes
+		// with the _view assignment, before the item it points to.
+		const auto old = base::take(_data);
+		_data = base::take(other._data);
+		_view = base::take(other._view);
+		if (old) {
+			old->destroy();
+		}
+	}
 	return *this;
 }
 
@@ -122,7 +123,12 @@ void GenerateItems(
 
 	const auto addSimpleTextMessage = [&](TextWithEntities &&text)
 	{
-		addPart(makeSimpleTextMessage(std::move(text)), 0, MsgId(message.messageId));
+		// The bubble shows when the copy was saved; the tooltip adds when
+		// the message itself was sent.
+		addPart(
+			makeSimpleTextMessage(std::move(text)),
+			TimeId(message.date),
+			MsgId(message.messageId));
 	};
 
 	const auto text = QString::fromStdString(message.text);

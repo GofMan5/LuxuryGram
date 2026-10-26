@@ -386,7 +386,6 @@ void loadDocumentSync(
 		WeakSession session,
 		FullMsgId itemId,
 		const QString &path,
-		qint64 expectedSize,
 		const Cancelled &cancelled) {
 	if (path.isEmpty()) {
 		return;
@@ -421,12 +420,9 @@ void loadDocumentSync(
 		rpl::single() | rpl::then(
 			DocumentLoadUpdates(strong, document)
 		) | rpl::filter([=] {
-			// The stat is the only way to know the file is fully written, but it
-			// must not run on every downloader tick in the app: while this one is
-			// still loading, the answer cannot be yes.
-			return document->status == FileDownloadFailed
-				|| (!document->loading()
-					&& QFileInfo(path).size() == expectedSize);
+			// Done, failed or cancelled from the download bar: the loader is gone
+			// either way, and the caller checks the size on disk afterwards.
+			return !document->loading();
 		}) | rpl::take(1) | rpl::on_next([latch] {
 			latch->countDown();
 		}, *lifetime);

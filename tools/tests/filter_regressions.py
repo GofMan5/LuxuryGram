@@ -18,7 +18,7 @@ utils = read('luxury/features/filters/filters_utils.cpp')
 groups = read('data/data_groups.cpp')
 cache = read('luxury/features/filters/filters_cache_controller.cpp')
 session = read('data/data_session.cpp')
-evaluate = controller[controller.index('std::optional<bool> isFiltered('):controller.index('bool isBlocked(')]
+evaluate = controller[controller.index('std::optional<bool> isFiltered('):controller.rindex('} // namespace', 0, controller.index('bool isBlocked('))]
 compile_pattern = utils[utils.index('bool CompilesPattern('):utils.index('enum class PeerResolveHintType')]
 group_functions = groups[groups.index('Groups::Groups('):groups.index('not_null<HistoryItem*> Groups::findItemToEdit')]
 invalidate = cache[cache.index('void invalidate(not_null<HistoryItem*> item)'):cache.index('void invalidateSession(')]
@@ -29,8 +29,8 @@ assert 'isEnabled(' not in filtered
 assert 'settings.filtersEnabledInChats() || item->history()->peer->isBroadcast()' in filtered
 edit = session[session.index('void Session::updateEditedMessage('):session.index('void Session::processMessages(')]
 assert edit.count('FiltersController::invalidate(existing);') == 1
-assert edit.index('proceed:') < edit.index('FiltersController::invalidate(existing);') < edit.index('existing->isLocalUpdateMedia()') < edit.index('existing->applyEdition(')
-assert edit.rfind('goto proceed;') < edit.index('proceed:')
+assert edit.index('LuxuryMessages::addEditedMessage(') < edit.index('FiltersController::invalidate(existing);') < edit.index('existing->isLocalUpdateMedia()') < edit.index('existing->applyEdition(')
+assert 'goto ' not in edit
 cpp = r'''
 #include <algorithm>
 #include <iostream>

@@ -27,7 +27,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang_auto.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/ui/components/saved_music.h"
-#include "luxury/utils/telegram_helpers.h"
+#include "base/call_delayed.h"
 #include "data/data_document.h"
 #include "styles/style_menu_icons.h"
 #include "ui/widgets/popup_menu.h"
@@ -143,21 +143,12 @@ void SetupSavedMusic(
 										  },
 										  musicButton->lifetime());
 
-				const auto weak = base::make_weak(musicButton);
-				musicButton->entity()->onReady() | rpl::on_next(
-					[=]
-					{
-						// fix animation glitch
-						dispatchToMainThread(
-							[=]
-							{
-								if (const auto strong = weak.get()) {
-									strong->show(anim::type::normal);
-								}
-							},
-							st::widgetFadeDuration);
-					},
-					musicButton->lifetime());
+				musicButton->entity()->onReady() | rpl::on_next([=] {
+					// fix animation glitch
+					base::call_delayed(st::widgetFadeDuration, musicButton, [=] {
+						musicButton->show(anim::type::normal);
+					});
+				}, musicButton->lifetime());
 			}
 			divider->toggle(true, anim::type::normal);
 		}

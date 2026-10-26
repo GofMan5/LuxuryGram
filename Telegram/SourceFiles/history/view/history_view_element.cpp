@@ -758,9 +758,10 @@ QString DateTooltipText(not_null<Element*> view) {
 		dateText += '\n' + tr::lng_you_paid_stars(tr::now, lt_count, stars);
 	}
 	if (!item->isLocal()) {
-		dateText += '\n';
-		dateText += "ID: ";
-		dateText += QString::number(item->id.bare);
+		dateText += '\n' + tr::luxury_IdValue(
+			tr::now,
+			lt_id,
+			QString::number(item->id.bare));
 	}
 	return dateText;
 }
@@ -792,20 +793,6 @@ void UnreadBar::paint(
 		p.translate(-previousTranslation, 0);
 	}
 	const auto st = context.st;
-	/*const auto bottom = y + height();
-	y += marginTop();
-	p.fillRect(
-		0,
-		y,
-		w,
-		height() - marginTop() - st::lineWidth,
-		st->historyUnreadBarBg());
-	p.fillRect(
-		0,
-		bottom - st::lineWidth,
-		w,
-		st::lineWidth,
-		st->historyUnreadBarBorder());*/
 	p.setFont(st::historyUnreadBarFont);
 	p.setPen(st->historyUnreadBarFg());
 
@@ -3213,8 +3200,11 @@ Element *Element::previousInBlocks() const {
 
 Element *Element::previousDisplayedInBlocks() const {
 	auto result = previousInBlocks();
-	while (result && ((result->data()->isEmpty() || result->isHidden()) && !isMessageHidden(data()))) {
-		result = result->previousInBlocks();
+	if (!isMessageHidden(data())) {
+		while (result
+			&& (result->data()->isEmpty() || result->isHidden())) {
+			result = result->previousInBlocks();
+		}
 	}
 	return result == this ? nullptr : result;
 }
@@ -3234,8 +3224,11 @@ Element *Element::nextInBlocks() const {
 
 Element *Element::nextDisplayedInBlocks() const {
 	auto result = nextInBlocks();
-	while (result && ((result->data()->isEmpty() || result->isHidden()) && !isMessageHidden(data()))) {
-		result = result->nextInBlocks();
+	if (!isMessageHidden(data())) {
+		while (result
+			&& (result->data()->isEmpty() || result->isHidden())) {
+			result = result->nextInBlocks();
+		}
 	}
 	return result == this ? nullptr : result;
 }

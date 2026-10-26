@@ -17,7 +17,6 @@
 #include "config.h"
 #include "core/core_settings.h"
 #include "core/application.h"
-#include "base/call_delayed.h"
 #include "base/debug_log.h"
 #include "base/unixtime.h"
 #include "core/mime_type.h"
@@ -125,14 +124,6 @@ Main::Session *getSession(ID userId) {
 	}
 
 	return nullptr;
-}
-
-void dispatchToMainThread(const std::function<void()> &callback, int delay) {
-	if (delay > 0) {
-		base::call_delayed(crl::time(delay), qApp, callback);
-	} else {
-		crl::on_main(callback);
-	}
 }
 
 ID getDialogIdFromPeer(not_null<PeerData*> peer) {
@@ -346,16 +337,6 @@ QString getDCName(int dc) {
 		: u"DC%1, %2"_q.arg(dc).arg(name);
 }
 
-QString getLocalizedAt() {
-	static const auto val = tr::lng_mediaview_date_time(
-		tr::now,
-		lt_date,
-		"",
-		lt_time,
-		"");
-	return val;
-}
-
 namespace {
 
 // Called for every message on layout, and the format only depends on the
@@ -396,11 +377,12 @@ QString formatTimeWithSeconds(const QTime &time) {
 }
 
 QString formatDateTime(const QDateTime &date) {
-	const auto datePart = systemLocale().toString(
-		date.date(),
-		QLocale::ShortFormat);
-
-	return datePart + getLocalizedAt() + formatTimeWithSeconds(date.time());
+	return tr::lng_mediaview_date_time(
+		tr::now,
+		lt_date,
+		systemLocale().toString(date.date(), QLocale::ShortFormat),
+		lt_time,
+		formatTimeWithSeconds(date.time()));
 }
 
 QString formatMessageTime(const QTime &time) {
@@ -665,8 +647,9 @@ void processMessagesDelete(
 		const std::vector<not_null<HistoryItem*>> &items) {
 	auto toStore = std::vector<not_null<HistoryItem*>>();
 	toStore.reserve(items.size());
+	// The caller filtered by isMessageSavable(); asserting it again here
+	// redid every check per item, Expects() runs in release builds too.
 	for (const auto &item : items) {
-		Expects(isMessageSavable(item));
 		if (item->isDeleted()) {
 			continue;
 		}

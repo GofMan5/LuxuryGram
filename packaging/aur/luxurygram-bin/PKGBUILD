@@ -3,7 +3,7 @@
 pkgname=luxurygram-bin
 _appname=LuxuryGram
 _appid=com.luxurygram.desktop
-pkgver=1.0.19
+pkgver=1.0.20
 pkgrel=1
 pkgdesc='Telegram Desktop fork with privacy controls, anti-recall tools and translation (prebuilt binary)'
 arch=('x86_64')
@@ -64,7 +64,7 @@ source=(
   "LICENSE-${pkgver}::${_raw}/LICENSE"
 )
 sha256sums=(
-  'a30755b18c76d4440cb455e587ccf4fd88f228abd01cbf46715030054136a11a'
+  'b7d7d3065fa28ee6ab6a3a03aa709e7300f579798cbc00f80a719665e8bbc2c9'
   'b9fb27a1976d5bb53fb5a97d7c07c04612d7eb29528fd5585051384476197dcb'
   '3bbe828e2f8f84e2017e5b59b935c2c18af60c4214ae1f84fc58a9c8c4e85a84'
   '98cb0f4dc9c039e9663764d2593aa9f0686a922d7962201299109c62c4fd01e1'

@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "ui/ui_utility.h"
 #include "styles/style_chat_helpers.h"
+#include "styles/style_luxury_styles.h"
 
 namespace Ui {
 
@@ -55,7 +56,7 @@ void SilentToggle::paintEvent(QPaintEvent *e) {
 void SilentToggle::mouseMoveEvent(QMouseEvent *e) {
 	RippleButton::mouseMoveEvent(e);
 	if (rect().contains(e->pos())) {
-		Ui::Tooltip::Show(350, this);
+		Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 	} else {
 		Ui::Tooltip::Hide();
 	}

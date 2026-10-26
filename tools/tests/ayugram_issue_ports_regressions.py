@@ -1259,6 +1259,12 @@ struct Var {
 };
 constexpr auto kMaxMarkLength = MARK;
 HELPER
+namespace tr {
+struct now_t {};
+inline constexpr now_t now;
+struct phrase { QString operator()(now_t) const { return QString(u"edited"); } };
+inline constexpr phrase lng_edited;
+} // namespace tr
 struct LuxurySettings {
     Var<QString> _deletedMark;
     Var<QString> _editedMark;
@@ -1581,6 +1587,13 @@ int main() {
     std::printf("offline share: %lld ms -> %s\n", waited, result.c_str());
     assert(result == "C:/Users/u/Downloads");
     assert(waited < 5000);
+    // The share is still hanging: the next save must not wait again.
+    const auto again = clock::now();
+    assert(ReachableFolder(share) == "C:/Users/u/Downloads");
+    const auto waitedAgain = std::chrono::duration_cast<std::chrono::milliseconds>(
+        clock::now() - again).count();
+    std::printf("still offline: %lld ms\n", waitedAgain);
+    assert(waitedAgain < 500);
     std::fflush(stdout);
     std::_Exit(0);
 }

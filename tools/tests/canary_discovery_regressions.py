@@ -55,8 +55,10 @@ def source_contracts(checker):
     assert "returnfalse;" in unpack[lane:unpack.index("if(verified->adoptManifest)", lane)]
 
     start = compact(function(checker, "void Updater::start(bool forceWait)"))
+    # A plain 'if': 'if constexpr' discards the only MtpChecker construction
+    # in stable builds and GCC -Werror fails on the unused constructor.
     assert re.search(
-        r"elseif\(sendRequest\)\{ifconstexpr\(BuildIsCanary\)\{"
+        r"elseif\(sendRequest\)\{if\(BuildIsCanary\)\{"
         r"startImplementation\(&_httpImplementation,std::make_unique<MtpChecker>\(LookupCanarySession\(\),_testing\)\);"
         r"\}else\{startImplementation\(&_httpImplementation,std::make_unique<HttpChecker>\(_testing\)\);\}",
         start), "Actual Updater::start must select MTP for canaries, HTTP otherwise"

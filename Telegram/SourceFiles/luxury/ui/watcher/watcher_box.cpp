@@ -46,6 +46,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <numbers>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -63,7 +64,7 @@
 namespace LuxuryWatcher {
 namespace {
 
-constexpr auto kPi = 3.14159265358979323846;
+constexpr auto kPi = std::numbers::pi;
 
 // Timeline kinds beyond the stored WatchKind set: the deleted and edited
 // message tables feed the same Events timeline, so their kinds live here
@@ -119,23 +120,11 @@ struct TrackedEvent {
 	ID rowId = 0;
 };
 
-[[nodiscard]] QColor Blended(
-		const style::color &from,
-		const style::color &toward,
-		float64 alpha) {
-	const auto &a = from->c;
-	const auto &b = toward->c;
-	return QColor(
-		int(std::round(a.red() + (b.red() - a.red()) * alpha)),
-		int(std::round(a.green() + (b.green() - a.green()) * alpha)),
-		int(std::round(a.blue() + (b.blue() - a.blue()) * alpha)));
-}
-
 [[nodiscard]] QColor CardBackgroundColor() {
 	// A card is a raised plate: in the dark theme the blend goes toward
 	// the light text color, in the light theme toward the dark one, so the
 	// same alpha reads as elevation in both.
-	return Blended(st::windowBg, st::windowFg, kCardBgBlend);
+	return anim::color(st::windowBg, st::windowFg, kCardBgBlend);
 }
 
 void PaintCardShell(Painter &p, int width, int height) {
@@ -485,8 +474,7 @@ public:
 	// The box reads the first state before subscribing to countsChanged().
 	[[nodiscard]] std::array<int, 3> counts() const {
 		const auto sessions = int(_sessions.size());
-		const auto events = int(sortedEvents().size());
-		return { sessions + events, sessions, events };
+		return { sessions + _eventTotal, sessions, _eventTotal };
 	}
 
 protected:
@@ -519,6 +507,9 @@ private:
 	// Rows hidden below the loaded events window (deleted and edited
 	// history are uncapped); disclosed by the events section title.
 	int _eventEarlier = 0;
+	// Size of the merged events list as of the last rebuild; counts()
+	// reads it instead of merging the three tables again.
+	int _eventTotal = 0;
 	Ui::FlatLabel *_sessionsTitle = nullptr;
 	Ui::FlatLabel *_eventsTitle = nullptr;
 	LuxuryUi::EmptyBlock *_sessionEmpty = nullptr;
@@ -720,7 +711,7 @@ SessionCard::SessionCard(
 		update();
 		return true;
 	});
-	if (_active) {
+	if (_active && !anim::Disabled()) {
 		_pulse.start();
 	}
 	setToolTip(_startLabel + u" "_q + _startValue
@@ -749,7 +740,9 @@ void SessionCard::setActive(bool active) {
 		? tr::luxury_OnlineHistoryOpen(tr::now)
 		: tr::luxury_WatcherEndUnobserved(tr::now);
 	if (active) {
-		_pulse.start();
+		if (!anim::Disabled()) {
+			_pulse.start();
+		}
 		tick();
 	} else {
 		_pulse.stop();
@@ -1272,17 +1265,36 @@ void WatcherBody::reload() {
 			userId,
 			dialogId,
 			kHistoryReadLimit);
-		auto deleted = LuxuryMessages::getDeletedMessages(
+		auto deleted = LuxuryMessages::getDeletedMessagesForDialog(
 			userId,
 			dialogId,
-			0,
-			0,
-			0,
 			kHistoryReadLimit);
 		auto edits = LuxuryMessages::getEditedMessagesForDialog(
 			userId,
 			dialogId,
 			kHistoryReadLimit);
+		// Both reads are newest-first windows over uncapped tables. Below
+		// the oldest row of a window that hit the cap, the other table
+		// would still show rows while this one shows none, so the merged
+		// timeline is cut at that horizon and the rest joins the count of
+		// earlier rows instead of showing as a lopsided tail.
+		auto horizon = 0;
+		for (const auto list : { &deleted, &edits }) {
+			if (int(list->size()) == kHistoryReadLimit) {
+				// fakeId order is not timestamp order for legacy rows without
+				// entityCreateDate, so the oldest row is not always the last.
+				auto oldest = MessageTimestamp(list->back());
+				for (const auto &message : *list) {
+					oldest = std::min(oldest, MessageTimestamp(message));
+				}
+				horizon = std::max(horizon, oldest);
+			}
+		}
+		for (const auto list : { &deleted, &edits }) {
+			std::erase_if(*list, [&](const LuxuryMessageBase &message) {
+				return MessageTimestamp(message) < horizon;
+			});
+		}
 		// The events window is capped; the two tables it reads are not.
 		// Their real row counts say how much history the window hides,
 		// so the disclosure is a measured number, never a guess.
@@ -1477,6 +1489,7 @@ void WatcherBody::rebuild() {
 
 	const auto sessionList = sortedSessions();
 	const auto eventList = sortedEvents();
+	_eventTotal = int(eventList.size());
 	std::erase_if(_expandedEvents, [&](const auto &key) {
 		return std::none_of(eventList.begin(), eventList.end(), [&](const auto &event) {
 			return key == std::pair(event.kind, event.rowId);

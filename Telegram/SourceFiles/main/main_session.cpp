@@ -316,7 +316,18 @@ Session::Session(
 		appConfigRefreshed();
 	}, _lifetime);
 
-	InitializeBlockedPeers(this);
+	// Only blocked-hiding reads the list. Walking it marks every blocked peer
+	// and each mark re-lays out the open chats, so not at every start with
+	// the filter off, which is the default.
+	const auto &luxury = LuxurySettings::getInstance();
+	rpl::combine(
+		luxury.filtersEnabledValue(),
+		luxury.hideFromBlockedValue()
+	) | rpl::filter([](bool enabled, bool hideBlocked) {
+		return enabled && hideBlocked;
+	}) | rpl::take(1) | rpl::on_next([=] {
+		InitializeBlockedPeers(this);
+	}, _lifetime);
 }
 
 void Session::appConfigRefreshed() {

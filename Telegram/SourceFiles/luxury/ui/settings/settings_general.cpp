@@ -38,6 +38,9 @@ namespace {
 
 void BuildTranslator(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 	builder.addSubsectionTitle(tr::lng_translate_settings_subtitle());
+	// The window this section lives in; the active one can be another
+	// account's or none at all while the app is in the background.
+	const auto controller = builder.controller();
 
 	auto *settings = &LuxurySettings::getInstance();
 
@@ -87,7 +90,7 @@ void BuildTranslator(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 		.st = &st::settingsButtonNoIcon,
 		.label = std::move(currentVal),
 		.onClick = [=] {
-			if (const auto controller = Core::App().activeWindow()->sessionController()) {
+			if (controller) {
 				controller->show(Box(
 						[=](not_null<Ui::GenericBox*> box) {
 							const auto save = [=](int index) {
@@ -124,8 +127,8 @@ void BuildTranslator(SectionBuilder &builder, LuxurySectionBuilder &luxury) {
 			| rpl::map([](LanguageId id) {
 				return Ui::LanguageName(id);
 			}),
-		.onClick = [] {
-			if (const auto controller = Core::App().activeWindow()->sessionController()) {
+		.onClick = [=] {
+			if (controller) {
 				controller->show(Ui::ChooseTranslateToBox(
 					Core::App().settings().translateTo(),
 					[](LanguageId) {}));

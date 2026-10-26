@@ -90,6 +90,7 @@ private:
 	HICON _iconBig = nullptr;
 	HICON _iconSmall = nullptr;
 	HICON _iconOverlay = nullptr;
+	QString _relaunchIcoPath;
 
 	BitmapPointer _dwmThumbnail;
 	BitmapPointer _dwmPreview;

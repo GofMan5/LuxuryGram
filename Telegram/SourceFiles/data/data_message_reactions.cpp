@@ -1527,9 +1527,12 @@ void Reactions::send(not_null<HistoryItem*> item, bool addToRecent) {
 		_sentRequests.remove(id);
 		_owner->session().api().applyUpdates(result);
 
+		// The updates just applied may have deleted the message.
 		const auto &ghost = LuxurySettings::ghost(&_owner->session());
-		if (!ghost.sendReadMessages() && ghost.markReadAfterAction() && item) {
-			readHistory(item);
+		if (!ghost.sendReadMessages() && ghost.markReadAfterAction()) {
+			if (const auto reacted = _owner->message(id)) {
+				readHistory(reacted);
+			}
 		}
 	}).fail([=](const MTP::Error &error) {
 		_sentRequests.remove(id);

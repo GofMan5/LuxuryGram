@@ -130,6 +130,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/ui/dialogs_video_userpic.h"
 #include "styles/style_chat.h"
 #include "styles/style_menu_icons.h"
+#include "styles/style_luxury_styles.h"
 
 #include <QtGui/QClipboard>
 #include <QtWidgets/QApplication>
@@ -3256,7 +3257,6 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			int max) -> HistoryItemsList {
 		auto current = from;
 		auto collected = HistoryItemsList();
-		collected.reserve(max);
 		collected.push_back(from);
 		collected.push_back(to);
 		const auto toId = to->fullId();
@@ -5771,7 +5771,7 @@ void HistoryInner::mouseActionUpdate() {
 		|| dragState.cursor == CursorState::Forwarded
 		|| dragState.cursor == CursorState::FromPhoto
 		|| dragState.customTooltip) {
-		Ui::Tooltip::Show(350, this);
+		Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 	}
 
 	Qt::CursorShape cur = style::cur_default;

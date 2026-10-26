@@ -23,8 +23,9 @@ struct MusicButtonData;
 struct ResultCover
 {
 	QPixmap pix;
-	QColor bg;
+	std::optional<QColor> bg;
 	bool noCover = true;
+	bool placeholder = true;
 };
 
 class LuxuryMusicButton final : public Ui::RippleButton
@@ -42,6 +43,7 @@ public:
 private:
 	void downloadAndMakeCover(FullMsgId msgId);
 	void makeCover();
+	void refreshTextColors();
 
 	void paintEvent(QPaintEvent *e) override;
 	int resizeGetHeight(int newWidth) override;

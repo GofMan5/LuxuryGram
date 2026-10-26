@@ -47,6 +47,7 @@ struct Cache
 	std::unordered_map<ID, std::unordered_set<HashablePattern, PatternHasher>> exclusionsByDialogId;
 };
 
+// Null before the startup warm-up finishes; updates() fires once it has.
 [[nodiscard]] std::shared_ptr<const Cache> snapshot();
 
 std::optional<bool> isFiltered(not_null<HistoryItem*> item);

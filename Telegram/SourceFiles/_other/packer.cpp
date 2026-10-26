@@ -850,7 +850,7 @@ int main(int argc, char *argv[])
 #else // use liblzma for others
 	const int32 hSigLen = 512, hShaLen = 32, hPropsLen = 0, hOriginalSizeLen = sizeof(int32), hSize = hSigLen + hShaLen + hOriginalSizeLen; // header
 
-	compressed.resize(hSize + resultSize + 1024 * 1024); // rsa signature + sha1 + lzma props + max compressed size
+	compressed.resize(hSize + resultSize + 1024 * 1024); // rsa signature + sha256 + lzma props + max compressed size
 
 	size_t compressedLen = compressed.size() - hSize;
 

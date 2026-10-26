@@ -27,6 +27,10 @@ collect = read('history/view/history_view_list_widget.cpp')
 collect = collect[collect.index('std::vector<not_null<HistoryItem*>> ListWidget::collectBetween('):collect.index('std::vector<not_null<HistoryItem*>> ListWidget::selectionUpTo(')]
 assert 'result.reserve(max);' not in collect
 assert 'std::min<size_t>(max, toIt - fromIt + 1)' in collect
+inner = read('history/history_inner_widget.cpp')
+inner = inner[inner.index('\tconst auto collectBetween = [=]('):inner.index('\tconst auto addSelectMessageAction')]
+# max is INT_MAX with the selection limit off; reserving it is a 16 GB allocation.
+assert 'reserve(' not in inner and 'collected.size() > max' in inner
 repeat = read('luxury/ui/context_menu/context_menu.cpp')
 repeat = repeat[repeat.index('\t\t\t\t\tif (!media || media->webpage())'):repeat.index('\n\t\t\t\t}', repeat.index('\t\t\t\t\tif (!media || media->webpage())'))]
 gifs = read('chat_helpers/gifs_list_widget.cpp')

@@ -34,6 +34,16 @@ auto storage = make_storage(
 			   column<EditedMessage>(&EditedMessage::userId),
 			   column<EditedMessage>(&EditedMessage::dialogId),
 			   column<EditedMessage>(&EditedMessage::messageId)),
+	// The watcher polls both tables per peer every few seconds and every insert
+	// prunes per peer; without these each of those was a full-table scan.
+	make_index("idx_online_event_userId_dialogId_fakeId",
+			   column<OnlineEvent>(&OnlineEvent::userId),
+			   column<OnlineEvent>(&OnlineEvent::dialogId),
+			   column<OnlineEvent>(&OnlineEvent::fakeId)),
+	make_index("idx_watch_event_userId_dialogId_fakeId",
+			   column<WatchEvent>(&WatchEvent::userId),
+			   column<WatchEvent>(&WatchEvent::dialogId),
+			   column<WatchEvent>(&WatchEvent::fakeId)),
 	make_table<DeletedMessage>(
 		"DeletedMessage",
 		make_column("fakeId", &DeletedMessage::fakeId, primary_key().autoincrement()),
@@ -164,6 +174,12 @@ crl::queue DatabaseQueue;
 // recovery path moves the file aside -- either one takes every saved deleted
 // message with it, for a failure that is usually a full disk or a locked file.
 bool ConvergeFailed = false;
+
+// Converge only inside initialize(). When it gives up before open_forever(),
+// every later statement reopens the file, and a converge that succeeds then
+// rewrites both message tables on whichever thread asked -- the main one for
+// addEditedMessage().
+bool ConvergeAllowed = false;
 
 // Long enough to outlast a WAL checkpoint by another connection, short enough
 // that a stuck writer surfaces as a logged failure instead of a frozen UI. Also
@@ -300,7 +316,9 @@ void shutdown() {
 	DatabaseQueue.sync([] {});
 }
 
-bool moveCurrentDatabase() {
+namespace {
+
+[[nodiscard]] bool moveCurrentDatabase() {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	const auto time = base::unixtime::now();
 	const auto source = u"./tdata/ayudata.db"_q;
@@ -336,6 +354,8 @@ bool moveCurrentDatabase() {
 	}
 	return true;
 }
+
+} // namespace
 
 std::set<std::string> tableColumns(sqlite3 *db, const std::string &table) {
 	const auto statement = statement_finalizer{
@@ -551,6 +571,8 @@ void syncSchemaWithoutLoss(Storage &database) {
 void initialize() {
 	const auto lock = std::lock_guard(DatabaseMutex);
 	ConvergeFailed = false;
+	ConvergeAllowed = true;
+	const auto converged = gsl::finally([] { ConvergeAllowed = false; });
 	// A missing file means a first run: sync_schema() below builds everything at
 	// its current shape, so the migration list must not touch it. Check before
 	// sync_schema, which creates the file.
@@ -565,7 +587,9 @@ void initialize() {
 	// not a quoted SELECT: SQLite DQS treats a missing column as a string literal.
 	storage.on_open = [](sqlite3 *db) {
 		sqlite3_busy_timeout(db, kBusyTimeoutMs);
-		convergeMessageTables(db);
+		if (ConvergeAllowed) {
+			convergeMessageTables(db);
+		}
 	};
 	storage.create_scalar_function<ContainsIgnoringCase>();
 	auto needRecovery = false;
@@ -782,6 +806,23 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 					searchQuery)
 			),
 			order_by(column<DeletedMessage>(&DeletedMessage::messageId)).desc(),
+			limit(totalLimit)
+		);
+	} catch (const std::exception &ex) {
+		LOG(("Failed to load deleted messages: %1").arg(ex.what()));
+		return {};
+	}
+}
+
+std::vector<DeletedMessage> getDeletedMessagesForDialog(ID userId, ID dialogId, int totalLimit) {
+	const auto lock = std::lock_guard(DatabaseMutex);
+	try {
+		return storage.get_all<DeletedMessage>(
+			where(
+				column<DeletedMessage>(&DeletedMessage::userId) == userId and
+				column<DeletedMessage>(&DeletedMessage::dialogId) == dialogId
+			),
+			order_by(column<DeletedMessage>(&DeletedMessage::fakeId)).desc(),
 			limit(totalLimit)
 		);
 	} catch (const std::exception &ex) {
@@ -1161,32 +1202,6 @@ bool updateRegexFilter(const RegexFilter &filter) {
 		return true;
 	} catch (std::exception &ex) {
 		LOG(("Failed to update regex filter for some reason: %1").arg(ex.what()));
-		return false;
-	}
-}
-
-bool deleteFilter(const std::vector<char> &id) {
-	const auto lock = std::lock_guard(DatabaseMutex);
-	try {
-		storage.remove_all<RegexFilter>(
-			where(column<RegexFilter>(&RegexFilter::id) == id)
-		);
-		return true;
-	} catch (std::exception &ex) {
-		LOG(("Failed to delete regex filter for some reason: %1").arg(ex.what()));
-		return false;
-	}
-}
-
-bool deleteExclusionsByFilterId(const std::vector<char> &id) {
-	const auto lock = std::lock_guard(DatabaseMutex);
-	try {
-		storage.remove_all<RegexFilterGlobalExclusion>(
-			where(column<RegexFilterGlobalExclusion>(&RegexFilterGlobalExclusion::filterId) == id)
-		);
-		return true;
-	} catch (std::exception &ex) {
-		LOG(("Failed to delete regex filter exclusion by filter id for some reason: %1").arg(ex.what()));
 		return false;
 	}
 }

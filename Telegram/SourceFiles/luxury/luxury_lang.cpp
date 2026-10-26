@@ -19,7 +19,6 @@
 #include <QFile>
 #include <QSaveFile>
 #include <QUrl>
-#include <QtNetwork/QNetworkProxy>
 
 namespace {
 
@@ -177,15 +176,6 @@ void LuxuryLanguage::fetchLanguage(const QString &id, const QString &baseId) {
 
 	auto finalLangPackId = langMapping.contains(id) ? langMapping.at(id) : id;
 	_currentLangId = finalLangPackId.isEmpty() ? baseId : finalLangPackId;
-
-	networkManager.setProxy(QNetworkProxy::NoProxy);
-	if (Core::App().settings().proxy().isEnabled()) {
-		const auto proxy = Core::App().settings().proxy().selected();
-		if (proxy.type == MTP::ProxyData::Type::Socks5 || proxy.type == MTP::ProxyData::Type::Http) {
-			const auto networkProxy = ToNetworkProxy(ToDirectIpProxy(Core::App().settings().proxy().selected()));
-			networkManager.setProxy(networkProxy);
-		}
-	}
 
 	// using `jsdelivr` since China (...and maybe other?) users have some problems with GitHub
 	// https://crowdin.com/project/ayugram/discussions/6

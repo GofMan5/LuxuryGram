@@ -69,6 +69,8 @@ struct ForwardJob {
 	Data::ForwardOptions options = Data::ForwardOptions::PreserveInfo;
 	FnMut<void()> successCallback;
 	bool slowmodeApplied = false;
+	// Core::App().settings() is main-thread only; the job runs off it.
+	int photoSideLimit = 0;
 };
 
 ForwardItem SnapshotItem(
@@ -129,6 +131,7 @@ ForwardJob SnapshotJob(
 		.options = options,
 		.successCallback = std::move(successCallback),
 		.slowmodeApplied = action.history->peer->slowmodeApplied(),
+		.photoSideLimit = PhotoSideLimit(),
 	};
 }
 
@@ -331,7 +334,8 @@ void ForwardState::updateBottomBar(
 Ui::PreparedList PrepareMedia(
 		const std::vector<ForwardItem> &items,
 		int &i,
-		std::vector<const ForwardItem*> &groupItems) {
+		std::vector<const ForwardItem*> &groupItems,
+		int photoSideLimit) {
 	const auto prepare = [&](const ForwardItem &item) {
 		auto prepared = Ui::PreparedFile(item.path);
 		if (prepared.path.isEmpty()) {
@@ -339,7 +343,7 @@ Ui::PreparedList PrepareMedia(
 			return prepared;
 		}
 		prepared.displayName = item.displayName;
-		Storage::PrepareDetails(prepared, st::sendMediaPreviewSize, PhotoSideLimit());
+		Storage::PrepareDetails(prepared, st::sendMediaPreviewSize, photoSideLimit);
 		groupItems.push_back(&item);
 		return prepared;
 	};
@@ -476,11 +480,6 @@ std::vector<FullMsgId> ItemIds(const std::vector<ForwardItem> &items) {
 	return result;
 }
 
-qint64 FileSize(const QString &path) {
-	const auto file = QFile(path);
-	return file.exists() ? file.size() : 0;
-}
-
 struct DocumentsResult {
 	// True when the user stopped the job or the session died; the caller
 	// aborts the whole forward.
@@ -503,14 +502,13 @@ DocumentsResult LoadDocuments(
 		} else if (!item.downloadable) {
 			continue;
 		}
-		if (FileSize(item.path) == item.expectedSize) {
+		if (LuxurySync::fileSize(item.path) == item.expectedSize) {
 			continue;
 		} else if (item.document) {
 			LuxurySync::loadDocumentSync(
 				job.session,
 				item.id,
 				item.path,
-				item.expectedSize,
 				cancelled);
 		} else if (item.photo) {
 			LuxurySync::loadPhotoSync(
@@ -522,13 +520,13 @@ DocumentsResult LoadDocuments(
 		if (cancelled && cancelled()) {
 			result.cancelled = true;
 			return result;
-		} else if (FileSize(item.path) != item.expectedSize) {
+		} else if (LuxurySync::fileSize(item.path) != item.expectedSize) {
 			result.failed.push_back(i);
 			LOG(("forward: media for item %1 could not be fetched, "
 				"skipping it (expected %2 bytes, got %3)")
 				.arg(i)
 				.arg(item.expectedSize)
-				.arg(FileSize(item.path)));
+				.arg(LuxurySync::fileSize(item.path)));
 		}
 	}
 	return result;
@@ -641,12 +639,16 @@ bool ForwardItems(
 			}
 		} else {
 			auto groupItems = std::vector<const ForwardItem*>();
-			auto preparedMedia = PrepareMedia(items, i, groupItems);
+			auto preparedMedia = PrepareMedia(
+				items,
+				i,
+				groupItems,
+				job.photoSideLimit);
 			for (auto j = int(preparedMedia.files.size()); j > 0;) {
 				--j;
 				const auto groupItem = groupItems[j];
 				if ((groupItem->photo || groupItem->document)
-					&& FileSize(preparedMedia.files[j].path)
+					&& LuxurySync::fileSize(preparedMedia.files[j].path)
 						< groupItem->expectedSize) {
 					preparedMedia.files.erase(preparedMedia.files.begin() + j);
 					groupItems.erase(groupItems.begin() + j);

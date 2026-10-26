@@ -17,8 +17,6 @@ class LuxurySectionBuilder {
 public:
 	explicit LuxurySectionBuilder(Builder::SectionBuilder &builder);
 
-	[[nodiscard]] Builder::SectionBuilder &base();
-
 	struct SettingToggleArgs {
 		QString id;
 		QStringList altIds;

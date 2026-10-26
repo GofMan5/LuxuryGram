@@ -776,47 +776,7 @@ void ConfirmDeleteSelectedEphemeral(
 TextWithEntities DropDisallowedCustomEmoji(
 		not_null<PeerData*> to,
 		TextWithEntities text) {
-	// LuxuryGram: allow all premium emojis (via tg://emoji?id=...)
-	return text;
-
-	if (to->session().premium() || to->isSelf()) {
-		return text;
-	}
-	const auto isLocalIconEmoji = [](const EntityInText &entity) {
-		return entity.data().startsWith(u"icon-emoji-"_q);
-	};
-	const auto channel = to->asMegagroup();
-	const auto allowSetId = channel ? channel->mgInfo->emojiSet.id : 0;
-	if (!allowSetId) {
-		const auto predicate = [&](const EntityInText &entity) {
-			return (entity.type() == EntityType::CustomEmoji)
-				&& !isLocalIconEmoji(entity);
-		};
-		text.entities.erase(
-			ranges::remove_if(text.entities, predicate),
-			text.entities.end());
-	} else {
-		const auto predicate = [&](const EntityInText &entity) {
-			if (entity.type() != EntityType::CustomEmoji) {
-				return false;
-			}
-			if (isLocalIconEmoji(entity)) {
-				return false;
-			}
-			if (const auto id = Data::ParseCustomEmojiData(entity.data())) {
-				const auto document = to->owner().document(id);
-				if (const auto sticker = document->sticker()) {
-					if (sticker->set.id == allowSetId) {
-						return false;
-					}
-				}
-			}
-			return true;
-		};
-		text.entities.erase(
-			ranges::remove_if(text.entities, predicate),
-			text.entities.end());
-	}
+	// LuxuryGram: custom emoji go through as is (tg://emoji?id=...).
 	return text;
 }
 

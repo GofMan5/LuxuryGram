@@ -4,6 +4,48 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Fixed
+
+- Dragging photos and files from Explorer into a chat works again after an update installed into a folder that needs administrator rights. The updater meant to restart the client as a normal user, but saved the restart shortcut into a folder it had just removed, so the client came back with administrator rights, and Windows drops every file dragged into an administrator window from a normal Explorer. A client already running with administrator rights needs one normal restart.
+- The experimental "Use small message bubble radius" option (Settings > Advanced > Experimental) squares off message bubbles and file thumbnails again; the bubble rounding slider ignored it.
+- The Clear Watcher Data confirmation now has the same layout as the Clear Deleted Messages box next to it. Its question used to sit almost against the top edge of the box, and the "Also delete saved media files" checkbox was pressed against the last line of the question. In Russian the box also lost its Cancel button past the left edge and cut the checkbox to "Также удалить сохранённые фай…": the confirm button now says "Clear" ("Очистить") and the checkbox wraps to a second line.
+- Settings > LuxuryGram > Other > Reset Settings now confirms with a red "Reset" ("Сбросить") button instead of a blue "Yes", so the irreversible reset of every LuxuryGram preference no longer looks as harmless as Cancel next to it.
+- Filters import from a link (Settings > LuxuryGram > Filters > Import > Import from URL) now starts on Enter in the link field instead of only on a click of Import, and when the clipboard already holds a link the box opens with the cursor in that field.
+- Saved music on a profile now follows a day/night switch while the profile is open. The song row kept its day colors: in night mode its title and performer stayed dark on the dark row (contrast 1.06:1, unreadable; 14.52:1 now) and the cover without artwork stayed light until the profile was reopened. The cover placeholder in the expanded player also keeps up with the switch instead of staying in the old theme while the player is open.
+- The saved music cover for a song without artwork is sharp on high-DPI screens. It was drawn at 100% size and stretched, so at 200% the disc icon was smeared: a 38 px picture blown up to 76 screen pixels. It is now drawn at the screen's own resolution, as in the expanded player.
+- The "edited" mark next to the time of an edited message (shown when Settings > LuxuryGram > Chats > Replace with Icons is off) now follows the interface language. It was taken before the language pack loaded, so it was always English "edited"; the first change of any LuxuryGram setting saved that word, and from then on messages and Settings > LuxuryGram > Chats > Edited Mark said "edited" in every language. Settings saved by earlier builds with that English default switch to the language's own word on the next start; a mark you typed yourself stays as it is. Reset in the Edited Mark box now keeps following the language instead of fixing the word of the language active at that moment.
+- The plugin details box (opened from a `.plugin` file in a chat) shows the dependencies of plugins that list them as `__requirements__ = ["mpmath", "tinydb"]`, the form the exteraGram plugin documentation uses. Such plugins showed no dependencies at all; 5 of the 16 public plugin files on GitHub that declare dependencies use this form. A dependency pinned to a version, such as `kangelpluginsmanager==1.4.4`, now opens its project page on PyPI instead of a page for a project named with the version, which does not exist. An entry without a package name, such as `>=2`, no longer appears as a dependency.
+- Dates in Message Details (sent, edited and forwarded) now follow the date and time template of the interface language, word order included. The connecting word between date and time was taken once, at the first use, and kept for the whole run, so after a language change it stayed in the old language; and for languages that do not put a word between date and time it was glued to the time, e.g. Uzbek showed "25.10.26  da15:30:44" instead of "25.10.26 15:30:44 da", and a template with the time first still showed the date first.
+- Watcher's Events list shows the most recent deleted messages of a chat. It read the oldest ones first, so in a chat with a long deletion history the newest deletions fell outside the loaded window. When either the deleted or the edited history is longer than the window, the timeline is now cut at the same point for both, and the rest is counted under earlier events instead of showing only one kind of event at the bottom.
+- The pulse on an active Watcher session no longer runs when animations are turned off in Telegram settings.
+- Watcher and online history open faster on large databases: the tables they read and prune for each chat are indexed by user, chat and time instead of being scanned whole.
+- Deleting a filter removes it together with its exceptions in one database transaction, so a crash in between can no longer leave orphaned exceptions behind.
+- Turning filters on no longer freezes the chat for a moment on the first painted message: the filter cache is now built in the background at startup.
+- Importing filters with several invalid patterns shows one notice with the first problem and how many more patterns were skipped, instead of stacking one notice per pattern.
+- The message screenshot theme picker no longer stays on the loading state when a theme file fails to download, and themes made only of emoji apply right away.
+- Reaction updates no longer resolve custom reaction documents when Watcher is off.
+- Selecting messages in profile media and file lists no longer rebuilds the screen reader item list on every change when no screen reader is running.
+- Streamer mode hides LuxuryGram from screen capture on Windows 10 versions before 2004 too: they reject the newer capture exclusion, and the window used to stay visible to recording.
+- A Message Width value below 1.0 in a hand-edited settings file is reset to the default instead of being kept and doing nothing.
+- Right-clicking the author name in the deleted and edited message history opens the usual message menu instead of an empty one.
+- Opening a story from the "open with or without ghost mode" prompt no longer crashes when the story expired or was deleted while the prompt was open, or when its account was logged out.
+- Voting in a poll, pressing an inline bot button or reacting with ghost mode's "mark read after action" on no longer crashes when the update that came back deleted the message.
+- Archiving a chat with archive folders switches the chat list folder only in that account's own window; another account's open window used to jump to an unrelated folder.
+- A failed forward of a message whose source reply was deleted no longer deletes a reply target in your chat; only a reply you chose yourself is treated that way.
+- The topic ID row in a forum topic profile no longer crashes when the topic was deleted while the profile was open.
+- The blocked users list is loaded only when hiding messages from blocked users is on. It was walked at every start, and each blocked user re-laid out the open chats.
+- Changes to the blocked users list re-lay out the open chat only when hiding messages from blocked users is on, and a burst of changes (such as the list loading) re-lays it out once instead of once per user. When the message field hides the emoji button, the field no longer runs under the bot keyboard hide button.
+- Save dialogs open at once when the last used folder is on a network share that went offline; after the first 2 s wait the share is no longer probed again while it stays unreachable.
+- The ripple on a reposted story's source bar is drawn in the bar's color instead of black.
+- The pinned taskbar shortcut icon is rewritten only when the icon actually changes, not on every unread counter update; a failed write is retried.
+- Local Premium applies only to your own account. With several accounts logged in, it made every other user in the account switcher look Premium.
+- "Send as sticker" in the send files box shows "Could not attach" when the image cannot be converted, instead of sending an empty sticker.
+- Searching join requests waits 1 s after typing before asking the server, as upstream Telegram does, instead of querying on almost every key.
+- A phone number link that the server rejects shows nothing instead of opening the profile of an unrelated user.
+- The "GitHub Releases" button in the About box follows the interface language.
+
 ## 1.0.20
 
 ### Added

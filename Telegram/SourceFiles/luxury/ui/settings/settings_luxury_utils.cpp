@@ -36,8 +36,6 @@
 
 #include <QGraphicsOpacityEffect>
 
-class PainterHighQualityEnabler;
-
 namespace Settings {
 namespace {
 
@@ -647,132 +645,10 @@ not_null<Button*> AddChooseButtonWithIconAndRightTextInner(not_null<Ui::Vertical
 	return button;
 }
 
-void AddChooseButtonWithIconAndRightText(not_null<Ui::VerticalLayout*> container,
-										 not_null<Window::SessionController*> controller,
-										 int initialState,
-										 std::vector<QString> options,
-										 rpl::producer<QString> text,
-										 rpl::producer<QString> boxTitle,
-										 const style::icon &icon,
-										 const Fn<void(int)> &setter) {
-	AddChooseButtonWithIconAndRightTextInner(
-		container,
-		controller,
-		initialState,
-		std::move(options),
-		std::move(text),
-		std::move(boxTitle),
-		st::settingsButton,
-		{&icon},
-		setter);
-}
-
-void AddChooseButtonWithIconAndRightText(not_null<Ui::VerticalLayout*> container,
-										 not_null<Window::SessionController*> controller,
-										 int initialState,
-										 std::vector<QString> options,
-										 rpl::producer<QString> text,
-										 rpl::producer<QString> boxTitle,
-										 const Fn<void(int)> &setter) {
-	AddChooseButtonWithIconAndRightTextInner(
-		container,
-		controller,
-		initialState,
-		std::move(options),
-		std::move(text),
-		std::move(boxTitle),
-		st::settingsButtonNoIcon,
-		{},
-		setter);
-}
-
-not_null<Button*> AddToggleInner(
-		not_null<Ui::VerticalLayout*> container,
-		rpl::producer<QString> text,
-		Fn<bool()> getter,
-		Fn<void(bool)> setter,
-		const style::SettingsButton &st,
-		Settings::IconDescriptor &&descriptor) {
-	const auto button = AddButtonWithIcon(
-		container,
-		std::move(text),
-		st,
-		std::move(descriptor));
-	button->toggleOn(
-		rpl::single(getter())
-	)->toggledValue(
-	) | rpl::filter(
-		[=](bool enabled)
-		{
-			return (enabled != getter());
-		}) | rpl::on_next(
-		[=](bool enabled)
-		{
-			setter(enabled);
-		},
-		container->lifetime());
-	return button;
-}
-
-not_null<Button*> AddToggle(
-		not_null<Ui::VerticalLayout*> container,
-		rpl::producer<QString> text,
-		Fn<bool()> getter,
-		Fn<void(bool)> setter) {
-	return AddToggleInner(
-		container,
-		std::move(text),
-		std::move(getter),
-		std::move(setter),
-		st::settingsButtonNoIcon,
-		{});
-}
-
-not_null<Button*> AddToggle(
-		not_null<Ui::VerticalLayout*> container,
-		rpl::producer<QString> text,
-		Fn<bool()> getter,
-		Fn<void(bool)> setter,
-		const style::icon &icon) {
-	return AddToggleInner(
-		container,
-		std::move(text),
-		std::move(getter),
-		std::move(setter),
-		st::settingsButton,
-		{&icon});
-}
-
 void AddSectionDivider(not_null<Ui::VerticalLayout*> container) {
 	AddSkip(container);
 	AddDivider(container);
 	AddSkip(container);
-}
-
-not_null<Button*> AddSettingToggle(
-		not_null<Ui::VerticalLayout*> container,
-		rpl::producer<QString> text,
-		BoolGetter getter,
-		BoolSetter setter) {
-	return AddToggle(
-		container,
-		std::move(text),
-		[getter] { return (LuxurySettings::getInstance().*getter)(); },
-		[setter](bool v) { (LuxurySettings::getInstance().*setter)(v); });
-}
-
-not_null<Button*> AddSettingToggle(
-		not_null<Ui::VerticalLayout*> container,
-		rpl::producer<QString> text,
-		BoolGetter getter,
-		BoolSetter setter,
-		const style::icon &icon) {
-	return AddToggle(
-		container,
-		std::move(text),
-		[getter] { return (LuxurySettings::getInstance().*getter)(); },
-		[setter](bool v) { (LuxurySettings::getInstance().*setter)(v); },
-		icon);
 }
 
 } // namespace Settings

@@ -396,6 +396,8 @@ private:
 	[[nodiscard]] HistoryItem *accessibilityItemAt(int index) const;
 	[[nodiscard]] int accessibilityIndexOfItem(
 		const HistoryItem *item) const;
+	[[nodiscard]] quintptr accessibilityIdentityOf(
+		not_null<const HistoryItem*> item) const;
 	[[nodiscard]] bool accessibilityItemCanActivate(int index) const;
 	void accessibilityFocusItem(int index, bool announce);
 

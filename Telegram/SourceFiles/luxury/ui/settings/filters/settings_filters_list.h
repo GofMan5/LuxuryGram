@@ -45,9 +45,6 @@ private:
 	std::vector<RegexFilter> filters;
 	std::vector<RegexFilter> exclusions;
 
-	Ui::FlatLabel *filtersTitle = nullptr;
-	Ui::FlatLabel *excludedTitle = nullptr;
-
 	// Snapshotted from the controller at construction: its copy is a handoff slot
 	// that the next navigation overwrites.
 	std::optional<long long> dialogId;

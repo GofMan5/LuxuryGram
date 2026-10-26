@@ -310,7 +310,7 @@ public:
 	[[nodiscard]] bool hideFastShare() const { return _hideFastShare.current(); }
 	[[nodiscard]] bool replaceBottomInfoWithIcons() const { return _replaceBottomInfoWithIcons.current(); }
 	[[nodiscard]] const QString &deletedMark() const { return _deletedMark.current(); }
-	[[nodiscard]] const QString &editedMark() const { return _editedMark.current(); }
+	[[nodiscard]] QString editedMark() const;
 	[[nodiscard]] bool unlimitedRecentStickers() const { return _unlimitedRecentStickers.current(); }
 	[[nodiscard]] bool unlimitedFavedStickers() const { return _unlimitedFavedStickers.current(); }
 	[[nodiscard]] ContextMenuVisibility showReactionsPanelInContextMenu() const { return _showReactionsPanelInContextMenu.current(); }
@@ -544,7 +544,7 @@ public:
 	[[nodiscard]] rpl::producer<bool> replaceBottomInfoWithIconsChanges() const { return _replaceBottomInfoWithIcons.changes(); }
 	[[nodiscard]] rpl::producer<QString> deletedMarkValue() const { return _deletedMark.value(); }
 	[[nodiscard]] rpl::producer<QString> deletedMarkChanges() const { return _deletedMark.changes(); }
-	[[nodiscard]] rpl::producer<QString> editedMarkValue() const { return _editedMark.value(); }
+	[[nodiscard]] rpl::producer<QString> editedMarkValue() const;
 	[[nodiscard]] rpl::producer<QString> editedMarkChanges() const { return _editedMark.changes(); }
 	[[nodiscard]] rpl::producer<bool> unlimitedRecentStickersValue() const { return _unlimitedRecentStickers.value(); }
 	[[nodiscard]] rpl::producer<bool> unlimitedRecentStickersChanges() const { return _unlimitedRecentStickers.changes(); }
@@ -710,7 +710,7 @@ private:
 	rpl::variable<bool> _hideFastShare = false;
 	rpl::variable<bool> _replaceBottomInfoWithIcons = true;
 	rpl::variable<QString> _deletedMark = QString::fromUtf8("🧹");
-	rpl::variable<QString> _editedMark;
+	rpl::variable<QString> _editedMark; // Empty follows the interface language.
 	rpl::variable<bool> _unlimitedRecentStickers = false;
 	rpl::variable<bool> _unlimitedFavedStickers = false;
 	rpl::variable<ContextMenuVisibility> _showReactionsPanelInContextMenu = ContextMenuVisibility::Visible;

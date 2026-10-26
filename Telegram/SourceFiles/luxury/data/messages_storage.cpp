@@ -142,14 +142,6 @@ void addEditedMessage(
 	}
 }
 
-std::vector<LuxuryMessageBase> getEditedMessages(not_null<HistoryItem*> item, ID minId, ID maxId, int totalLimit) {
-	const auto userId = DatabaseUserId(item->history()->session());
-	const auto dialogId = getDialogIdFromPeer(item->history()->peer);
-	const auto msgId = item->id.bare;
-
-	return getEditedMessages(userId, dialogId, msgId, minId, maxId, totalLimit);
-}
-
 std::vector<LuxuryMessageBase> getEditedMessages(
 		ID userId,
 		ID dialogId,
@@ -175,19 +167,20 @@ bool hasRevisions(not_null<HistoryItem*> item) {
 }
 
 std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
-		not_null<PeerData*> peer,
-		int totalLimit) {
-	return getEditedMessagesForDialog(
-		DatabaseUserId(peer->session()),
-		getDialogIdFromPeer(peer),
-		totalLimit);
-}
-
-std::vector<LuxuryMessageBase> getEditedMessagesForDialog(
 		ID userId,
 		ID dialogId,
 		int totalLimit) {
 	return convertToBase(LuxuryDatabase::getEditedMessagesForDialog(
+		userId,
+		dialogId,
+		totalLimit));
+}
+
+std::vector<LuxuryMessageBase> getDeletedMessagesForDialog(
+		ID userId,
+		ID dialogId,
+		int totalLimit) {
+	return convertToBase(LuxuryDatabase::getDeletedMessagesForDialog(
 		userId,
 		dialogId,
 		totalLimit));
@@ -229,19 +222,6 @@ void addDeletedMessages(const std::vector<not_null<HistoryItem*>> &items) {
 	LuxuryDatabase::async([messages = std::move(messages)]() mutable {
 		LuxuryDatabase::addDeletedMessages(std::move(messages));
 	});
-}
-
-std::vector<LuxuryMessageBase>
-getDeletedMessages(not_null<PeerData*> peer, ID topicId, ID minId, ID maxId, int totalLimit, const QString &searchQuery) {
-	const auto userId = DatabaseUserId(peer->session());
-	return getDeletedMessages(
-		userId,
-		getDialogIdFromPeer(peer),
-		topicId,
-		minId,
-		maxId,
-		totalLimit,
-		searchQuery);
 }
 
 std::vector<LuxuryMessageBase> getDeletedMessages(
@@ -323,13 +303,6 @@ std::optional<int> lastOfflineAt(not_null<UserData*> user) {
 	return (it != LastOffline.end())
 		? std::optional<int>(it->second)
 		: std::nullopt;
-}
-
-std::vector<OnlineEvent> getHistory(not_null<PeerData*> peer, int totalLimit) {
-	return LuxuryDatabase::getOnlineEvents(
-		DatabaseUserId(peer->session()),
-		getDialogIdFromPeer(peer),
-		totalLimit);
 }
 
 bool TrackingAllowed() {
@@ -445,13 +418,6 @@ void noteReactions(
 		event.extra = contextLabel;
 		LuxuryDatabase::addWatchEvent(std::move(event));
 	});
-}
-
-std::vector<WatchEvent> getWatchEvents(not_null<PeerData*> peer, int totalLimit) {
-	return LuxuryDatabase::getWatchEvents(
-		DatabaseUserId(peer->session()),
-		getDialogIdFromPeer(peer),
-		totalLimit);
 }
 
 void clearHistory(not_null<PeerData*> peer) {

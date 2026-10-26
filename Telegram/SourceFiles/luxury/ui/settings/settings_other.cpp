@@ -17,6 +17,7 @@
 #include "lang/lang_text_entity.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common.h"
+#include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "ui/vertical_list.h"
@@ -84,7 +85,8 @@ void BuildOtherThings(SectionBuilder &builder) {
 					}
 					close();
 				},
-				.confirmText = tr::lng_box_yes(),
+				.confirmText = tr::luxury_BoxActionReset(),
+				.confirmStyle = &st::attentionBoxButton,
 			}));
 		},
 	});

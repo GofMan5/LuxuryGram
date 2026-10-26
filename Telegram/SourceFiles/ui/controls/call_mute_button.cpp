@@ -20,6 +20,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/palette.h"
 #include "styles/style_widgets.h"
 #include "styles/style_calls.h"
+#include "styles/style_luxury_styles.h"
 
 #include <QtCore/QtMath>
 #include <QtCore/QCoreApplication>
@@ -757,7 +758,7 @@ void CallMuteButton::init() {
 	) | rpl::on_next([=](not_null<QEvent*> e) {
 		if (e->type() == QEvent::MouseMove) {
 			if (!_state.current().tooltip.isEmpty()) {
-				Ui::Tooltip::Show(350, this);
+				Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 			}
 		} else if (e->type() == QEvent::Leave) {
 			Ui::Tooltip::Hide();

@@ -902,11 +902,14 @@ void SendFilesBox::prepare() {
 	setCloseByOutsideClick(false);
 
 	boxClosing() | rpl::on_next([=] {
-		if (!_confirmed && !_textTaken && _cancelledCallback) {
+		if (_confirmed || _textTaken) {
+			return;
+		}
+		if (_cancelledCallback) {
 			_cancelledCallback();
 		}
 		auto text = _caption->getTextWithAppliedMarkdown();
-		if (!_confirmed && _cancelled2Callback && !text.empty()) {
+		if (_cancelled2Callback && !text.empty()) {
 			_cancelled2Callback(std::move(text));
 		}
 	}, lifetime());
@@ -1286,20 +1289,21 @@ void SendFilesBox::addMenuButton() {
 			&& std::get_if<ImageInfo>(&_list.files[0].information->media)) {
 			_menu->addAction(
 				tr::luxury_SendAsSticker(tr::now),
-				[=]() mutable
-				{
-					const auto file = std::move(_list.files[0]);
-					_list.files.clear();
+				[=] {
+					const auto sourceImage = std::get_if<ImageInfo>(
+						&_list.files[0].information->media);
 
-					const auto sourceImage = std::get_if<ImageInfo>(&file.information->media);
-
+					// Without a WEBP writer this sent an empty image.
 					QByteArray targetArray;
 					QBuffer buffer(&targetArray);
 					buffer.open(QIODevice::WriteOnly);
-					sourceImage->data.save(&buffer, "WEBP");
-
-					QImage targetImage;
-					targetImage.loadFromData(targetArray, "WEBP");
+					auto targetImage = QImage();
+					if (!sourceImage->data.save(&buffer, "WEBP")
+						|| !targetImage.loadFromData(targetArray, "WEBP")) {
+						showToast(tr::lng_attach_failed(tr::now));
+						return;
+					}
+					_list.files.clear();
 
 					addFiles(Storage::PrepareMediaFromImage(std::move(targetImage),
 															std::move(targetArray),

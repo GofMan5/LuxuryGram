@@ -7,7 +7,6 @@
 #include "luxury/ui/message_history/history_inner.h"
 
 #include "apiwrap.h"
-#include "mainwidget.h"
 #include "mainwindow.h"
 #include "api/api_attached_stickers.h"
 #include "luxury/data/luxury_database.h"
@@ -19,8 +18,6 @@
 #include "base/unixtime.h"
 #include "base/platform/base_platform_info.h"
 #include "base/qt/qt_key_modifiers.h"
-#include "boxes/sticker_set_box.h"
-#include "boxes/peers/edit_participant_box.h"
 #include "chat_helpers/message_field.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
@@ -47,6 +44,7 @@
 #include "main/main_session_settings.h"
 #include "styles/style_chat.h"
 #include "styles/style_menu_icons.h"
+#include "styles/style_luxury_styles.h"
 #include "ui/inactive_press.h"
 #include "ui/painter.h"
 #include "ui/ui_utility.h"
@@ -70,6 +68,12 @@ constexpr auto kMessagesFirstPage = 20;
 constexpr auto kMessagesPerPage = 30;
 
 constexpr auto kClearUserpicsAfter = 50;
+
+[[nodiscard]] int DateHeight() {
+	return st::msgServicePadding.top()
+		+ st::msgServiceFont->height
+		+ st::msgServicePadding.bottom();
+}
 
 } // namespace
 
@@ -222,8 +226,7 @@ void InnerWidget::enumerateDates(Method method) {
 			auto dateTop = qMax(itemtop, _visibleTop) + st::msgServiceMargin.top();
 
 			// Do not let the date go below the single-day messages pack bottom line.
-			auto dateHeight = st::msgServicePadding.bottom() + st::msgServiceFont->height + st::msgServicePadding.top();
-			dateTop = qMin(dateTop, lowestInOneDayItemBottom - dateHeight);
+			dateTop = qMin(dateTop, lowestInOneDayItemBottom - DateHeight());
 
 			// Call the template callback function that was passed
 			// and return if it finished everything it needed.
@@ -255,7 +258,6 @@ InnerWidget::InnerWidget(
 	  _itemId(itemId),
 	  _topicId(topicId),
 	  _history(peer->owner().history(peer)),
-	  _api(&_peer->session().mtp()),
 	  _pathGradient(
 		  HistoryView::MakePathShiftGradient(
 			  controller->chatStyle(),
@@ -299,14 +301,6 @@ InnerWidget::InnerWidget(
 							 {
 								 if (view->delegate() == this) {
 									 resizeItem(view);
-								 }
-							 },
-							 lifetime());
-	session().data().itemViewRefreshRequest(
-	) | rpl::on_next([=](auto item)
-							 {
-								 if (const auto view = viewForItem(item)) {
-									 refreshItem(view);
 								 }
 							 },
 							 lifetime());
@@ -450,8 +444,7 @@ void InnerWidget::toggleScrollDateShown() {
 
 void InnerWidget::repaintScrollDateCallback() {
 	auto updateTop = _visibleTop;
-	auto updateHeight = st::msgServiceMargin.top() + st::msgServicePadding.top() + st::msgServiceFont->height
-		+ st::msgServicePadding.bottom();
+	auto updateHeight = st::msgServiceMargin.top() + DateHeight();
 	update(0, updateTop, width(), updateHeight);
 }
 
@@ -1081,7 +1074,7 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 				return true;
 			});
 
-			auto dateHeight = st::msgServicePadding.bottom() + st::msgServiceFont->height + st::msgServicePadding.top();
+			const auto dateHeight = DateHeight();
 			auto scrollDateOpacity = _scrollDateOpacity.value(_scrollDateShown ? 1. : 0.);
 			enumerateDates([&](not_null<Element*> view, int itemtop, int dateTop)
 			{
@@ -1096,20 +1089,12 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 					const auto correctDateTop = itemtop + st::msgServiceMargin.top();
 					dateInPlace = (dateTop < correctDateTop + dateHeight);
 				}
-				//bool noFloatingDate = (item->date.date() == lastDate && displayDate);
-				//if (noFloatingDate) {
-				//	if (itemtop < showFloatingBefore) {
-				//		noFloatingDate = false;
-				//	}
-				//}
-
 				// paint the date if it intersects the painted rect
 				if (dateTop < clip.top() + clip.height()) {
-					auto opacity = (dateInPlace/* || noFloatingDate*/) ? 1. : scrollDateOpacity;
+					auto opacity = dateInPlace ? 1. : scrollDateOpacity;
 					if (opacity > 0.) {
 						p.setOpacity(opacity);
-						const auto dateY = /*noFloatingDate ? itemtop :*/
-							(dateTop - st::msgServiceMargin.top());
+						const auto dateY = dateTop - st::msgServiceMargin.top();
 						const auto width = view->width();
 						if (const auto date = view->Get<HistoryView::DateBadge>()) {
 							date->paint(p, context.st, dateY, width, true);
@@ -1254,9 +1239,6 @@ void InnerWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 	auto lnkIsVideo = lnkDocument ? lnkDocument->isVideoFile() : false;
 	auto lnkIsVoice = lnkDocument ? lnkDocument->isVoiceMessage() : false;
 	auto lnkIsAudio = lnkDocument ? lnkDocument->isAudioFile() : false;
-	const auto fromId = PeerId(link
-								   ? link->property(kPeerLinkPeerIdProperty).toULongLong()
-								   : 0);
 	if (lnkPhoto || lnkDocument) {
 		if (isUponSelected > 0) {
 			_menu->addAction(tr::lng_context_copy_selected(tr::now),
@@ -1371,11 +1353,6 @@ void InnerWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				}
 			}
 		}
-	} else if (fromId) {
-		// suggest to block
-		//		if (const auto participant = session().data().peer(fromId)) {
-		//			suggestRestrictParticipant(participant);
-		//		}
 	} else {
 		// maybe cursor on some text history item?
 		const auto item = view ? view->data().get() : nullptr;
@@ -1499,10 +1476,6 @@ void InnerWidget::copyContextImage(not_null<PhotoData*> photo) {
 
 void InnerWidget::copySelectedText() {
 	TextUtilities::SetClipboardText(getSelectedText());
-}
-
-void InnerWidget::showStickerPackInfo(not_null<DocumentData*> document) {
-	StickerSetBox::Show(_controller->uiShow(), document);
 }
 
 void InnerWidget::cancelContextDownload(not_null<DocumentData*> document) {
@@ -1707,7 +1680,6 @@ void InnerWidget::mouseActionFinish(const QPoint &screenPos, Qt::MouseButton but
 	_mouseAction = MouseAction::None;
 	_mouseActionItem = nullptr;
 	_mouseSelectType = TextSelectType::Letters;
-	//_widget->noSelectingScroll(); // TODO
 
 	if (QGuiApplication::clipboard()->supportsSelection()
 		&& _selectedItem
@@ -1762,11 +1734,6 @@ void InnerWidget::updateSelected() {
 			|| (itemPoint - _dragStartPosition).manhattanLength() >= QApplication::startDragDistance()) {
 			if (_mouseAction == MouseAction::PrepareDrag) {
 				_mouseAction = MouseAction::Dragging;
-				InvokeQueued(this,
-							 [this]
-							 {
-								 performDrag();
-							 });
 			}
 		}
 		StateRequest request;
@@ -1808,7 +1775,7 @@ void InnerWidget::updateSelected() {
 	if (dragState.link
 		|| dragState.cursor == CursorState::Date
 		|| dragState.cursor == CursorState::Forwarded) {
-		Ui::Tooltip::Show(350, this);
+		Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 	}
 
 	auto cursor = style::cur_default;
@@ -1843,7 +1810,6 @@ void InnerWidget::updateSelected() {
 					setFocus();
 				}
 			}
-		} else if (_mouseAction == MouseAction::Dragging) {
 		}
 
 		if (ClickHandler::getPressed()) {
@@ -1859,19 +1825,9 @@ void InnerWidget::updateSelected() {
 		pressedView->updatePressed(adjustedPoint);
 	}
 
-	//if (_mouseAction == MouseAction::Selecting) {
-	//	_widget->checkSelectingScroll(mousePos);
-	//} else {
-	//	_widget->noSelectingScroll();
-	//} // TODO
-
 	if (_mouseAction == MouseAction::None && (lnkChanged || cursor != _cursor)) {
 		setCursor(_cursor = cursor);
 	}
-}
-
-void InnerWidget::performDrag() {
-	if (_mouseAction != MouseAction::Dragging) return;
 }
 
 int InnerWidget::itemTop(not_null<const Element*> view) const {
@@ -1889,11 +1845,6 @@ void InnerWidget::repaintItem(const Element *view) {
 
 void InnerWidget::resizeItem(not_null<Element*> view) {
 	updateSize();
-}
-
-void InnerWidget::refreshItem(not_null<const Element*> view) {
-	// No need to refresh views in admin log.
-	// sogl
 }
 
 QPoint InnerWidget::mapPointToItem(QPoint point, const Element *view) const {

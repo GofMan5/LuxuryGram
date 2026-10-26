@@ -42,9 +42,8 @@ int BubbleRadiusOverride = -1;
 	} else if (sliderValue >= kBubbleRadiusSliderMax) {
 		return maximum;
 	}
-	const auto result = (sliderValue * maximum + (kBubbleRadiusSliderMax / 2))
+	return (sliderValue * maximum + (kBubbleRadiusSliderMax / 2))
 		/ kBubbleRadiusSliderMax;
-	return (result < 0) ? 0 : (result > maximum) ? maximum : result;
 }
 
 base::options::toggle UseSmallMsgBubbleRadius({
@@ -71,25 +70,15 @@ void ClearBubbleRadiusOverride() {
 }
 
 int BubbleRadiusSmall() {
-	static auto cachedValue = -1;
-	static auto cachedRadius = st::bubbleRadiusSmall;
-	const auto value = EffectiveBubbleRadiusValue();
-	if (cachedValue != value) {
-		cachedValue = value;
-		cachedRadius = MapBubbleRadius(value, st::bubbleRadiusSmall);
-	}
-	return cachedRadius;
+	return MapBubbleRadius(EffectiveBubbleRadiusValue(), st::bubbleRadiusSmall);
 }
 
 int BubbleRadiusLarge() {
-	static auto cachedValue = -1;
-	static auto cachedRadius = st::bubbleRadiusLarge;
-	const auto value = EffectiveBubbleRadiusValue();
-	if (cachedValue != value) {
-		cachedValue = value;
-		cachedRadius = MapBubbleRadius(value, st::bubbleRadiusLarge);
-	}
-	return cachedRadius;
+	return MapBubbleRadius(
+		EffectiveBubbleRadiusValue(),
+		(UseSmallMsgBubbleRadius.value()
+			? st::bubbleRadiusSmall
+			: st::bubbleRadiusLarge));
 }
 
 int BubbleCornerRadius(BubbleCornerRounding corner) {
@@ -103,25 +92,17 @@ int BubbleCornerRadius(BubbleCornerRounding corner) {
 }
 
 int MsgFileThumbRadiusSmall() {
-	static auto cachedValue = -1;
-	static auto cachedRadius = st::msgFileThumbRadiusSmall;
-	const auto value = EffectiveBubbleRadiusValue();
-	if (cachedValue != value) {
-		cachedValue = value;
-		cachedRadius = MapBubbleRadius(value, st::msgFileThumbRadiusSmall);
-	}
-	return cachedRadius;
+	return MapBubbleRadius(
+		EffectiveBubbleRadiusValue(),
+		st::msgFileThumbRadiusSmall);
 }
 
 int MsgFileThumbRadiusLarge() {
-	static auto cachedValue = -1;
-	static auto cachedRadius = st::msgFileThumbRadiusLarge;
-	const auto value = EffectiveBubbleRadiusValue();
-	if (cachedValue != value) {
-		cachedValue = value;
-		cachedRadius = MapBubbleRadius(value, st::msgFileThumbRadiusLarge);
-	}
-	return cachedRadius;
+	return MapBubbleRadius(
+		EffectiveBubbleRadiusValue(),
+		(UseSmallMsgBubbleRadius.value()
+			? st::msgFileThumbRadiusSmall
+			: st::msgFileThumbRadiusLarge));
 }
 
 }

@@ -101,6 +101,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_message_reactions.h"
 #include "data/data_peer_values.h"
 #include "styles/style_chat.h"
+#include "styles/style_luxury_styles.h"
 #include "styles/style_window.h" // columnMaximalWidthLeft
 
 #include <QtWidgets/QApplication>
@@ -108,6 +109,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/features/filters/filters_cache_controller.h"
+#include "luxury/luxury_settings.h"
 #include "luxury/utils/telegram_helpers.h"
 
 
@@ -663,13 +665,22 @@ ListWidget::ListWidget(
 		}
 	}, lifetime());
 
+	// Same gate and folding as HistoryWidget: the block list loads one
+	// IsBlocked per peer, and each pass re-lays out every row.
+	const auto filtersRefreshQueued = lifetime().make_state<bool>(false);
 	rpl::merge(
 		_session->changes().peerUpdates(
 			Data::PeerUpdate::Flag::IsBlocked
-		) | rpl::to_empty,
+		) | rpl::filter([] {
+			const auto &settings = LuxurySettings::getInstance();
+			return settings.filtersEnabled() && settings.hideFromBlocked();
+		}) | rpl::to_empty,
 		FiltersCacheController::updates()
-	) | rpl::on_next([=] {
+	) | rpl::filter([=] {
+		return !std::exchange(*filtersRefreshQueued, true);
+	}) | rpl::on_next([=] {
 		crl::on_main(this, [=] {
+			*filtersRefreshQueued = false;
 			if (_viewsCapacity.empty()) {
 				for (const auto &view : _items) {
 					view->setPendingResize();
@@ -5374,7 +5385,7 @@ void ListWidget::mouseActionUpdate() {
 		|| dragState.cursor == CursorState::Forwarded
 		|| dragState.cursor == CursorState::FromPhoto
 		|| dragState.customTooltip) {
-		Ui::Tooltip::Show(350, this); // LuxuryGram: upstream waits 1000.
+		Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 	}
 
 	if (_mouseAction == MouseAction::None) {

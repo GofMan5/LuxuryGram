@@ -37,9 +37,9 @@ assert 'luxury_WatcherRevisionUnavailable' in box
 assert 'luxury_WatcherNextSavedText' in box
 assert 'recordedEdits.contains({ edited.messageId, at, edited.text })' in box
 assert 'event.extra = afterText.toStdString();' in storage
-assert 'LuxuryMessages::addEditedMessage(existing, afterText)' in session
+assert 'LuxuryMessages::addEditedMessage(existing, after.text)' in session
 edit = session.split('void Session::updateEditedMessage', 1)[1]
-assert edit.index('LuxuryMessages::addEditedMessage(existing, afterText)') < edit.index('existing->applyEdition')
+assert edit.index('LuxuryMessages::addEditedMessage(existing, after.text)') < edit.index('existing->applyEdition')
 reaction = item.split('void HistoryItem::updateReactions(', 1)[1].split('bool HistoryItem::changeReactions', 1)[0]
 assert '.left(200)' not in reaction and 'context.replace' not in reaction
 assert 'if (!summary.isEmpty()) {\n\t\t\tLuxuryOnline::noteReactions' not in reaction

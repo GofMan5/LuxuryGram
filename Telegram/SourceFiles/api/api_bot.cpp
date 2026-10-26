@@ -439,12 +439,15 @@ void ActivateBotButton(ClickHandlerContext context, BotButtonLookup lookup) {
 		auto query = RequestPeerQuery();
 		Assert(button->data.size() == sizeof(query));
 		memcpy(&query, button->data.data(), sizeof(query));
-		const auto peer = item->history()->peer;
+		// The item can be gone by the time the user picks; its history lives
+		// as long as the session does.
+		const auto history = item->history();
+		const auto peer = history->peer;
 		const auto itemId = item->id;
 		const auto id = int32(button->buttonId);
 		const auto chosen = [=](std::vector<not_null<PeerData*>> result) {
 			using Flag = MTPmessages_SendBotRequestedPeer::Flag;
-			markReadAfterAction(item->history());
+			markReadAfterAction(history);
 			peer->session().api().request(MTPmessages_SendBotRequestedPeer(
 				MTP_flags(Flag::f_msg_id),
 				peer->input(),
@@ -586,7 +589,8 @@ void ActivateBotButton(ClickHandlerContext context, BotButtonLookup lookup) {
 			auto stream = QDataStream(button->data);
 			stream >> suggestedName >> suggestedUsername;
 		}
-		const auto peer = item->history()->peer;
+		const auto history = item->history();
+		const auto peer = history->peer;
 		const auto itemId = item->id;
 		const auto id = int32(button->buttonId);
 		const auto bot = item->getMessageBot();
@@ -600,7 +604,7 @@ void ActivateBotButton(ClickHandlerContext context, BotButtonLookup lookup) {
 			.suggestedUsername = suggestedUsername,
 			.done = [=](not_null<UserData*> createdBot) {
 				using Flag = MTPmessages_SendBotRequestedPeer::Flag;
-				markReadAfterAction(item->history());
+				markReadAfterAction(history);
 				peer->session().api().request(
 					MTPmessages_SendBotRequestedPeer(
 						MTP_flags(Flag::f_msg_id),

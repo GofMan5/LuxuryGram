@@ -41,8 +41,6 @@ std::unordered_map<uint64, std::unordered_set<long long>> showingFilteredMessage
 	return (i != end(showingFilteredMessages)) && i->second.contains(peerId);
 }
 
-} // namespace
-
 constexpr auto kRegexEvaluationBudgetMs = 25;
 constexpr auto kRegexStackLimitBytes = 1024 * 1024;
 
@@ -137,6 +135,8 @@ std::optional<bool> isFiltered(
 	return false;
 }
 
+} // namespace
+
 bool isBlocked(const not_null<HistoryItem*> item) {
 	const auto &settings = LuxurySettings::getInstance();
 
@@ -213,17 +213,20 @@ bool filtered(const not_null<HistoryItem*> item) {
 	if (cached) {
 		return *cached;
 	}
-	const auto group = item->history()->owner().groups().find(item);
 	const auto cache = FiltersCacheController::snapshot();
+	if (!cache) {
+		return false;
+	}
+	const auto group = item->history()->owner().groups().find(item);
 	const auto res = isFiltered(
 		FilterUtils::extractAllText(item, group),
 		getDialogIdFromPeer(item->history()->peer),
 		cache,
 		settings.filtersEnabledInChats() || item->history()->peer->isBroadcast());
 
-	// sometimes item has empty text.
-	// so we cache result only if
-	// processed item is filterable
+	// nullopt means "not decided", left uncached. A run that hit the regex
+	// budget is cached as not filtered on purpose: retrying it would spend
+	// the budget again on every paint of the message.
 	if (res) {
 		FiltersCacheController::putFiltered(item, group, *res, cache);
 		return *res;

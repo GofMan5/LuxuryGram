@@ -313,9 +313,25 @@ int main() {
 			data.documentProgress.fire(&data.documentValue);
 		});
 		const auto start = Test::Clock::time;
-		loadDocumentSync(base::make_weak(session.get()), FullMsgId{ 1, 3 }, QString("item.bin"), 10, nullptr);
+		loadDocumentSync(base::make_weak(session.get()), FullMsgId{ 1, 3 }, QString("item.bin"), nullptr);
 		assert(elapsedSince(start) < prompt);
 		assert(data.documentValue.saves == 1);
+	}
+	{
+		// Cancelled from the download bar: the loader is gone, status stays
+		// normal. The wait must end now, not after the 15-minute timeout.
+		files.clear();
+		Test::steps.clear();
+		auto session = std::make_unique<Main::Session>();
+		auto &data = session->data();
+		data.item.mediaValue.documentValue = &data.documentValue;
+		Test::steps.push_back([&] {
+			data.documentValue.loadingFlag = false;
+			data.documentProgress.fire(&data.documentValue);
+		});
+		const auto start = Test::Clock::time;
+		loadDocumentSync(base::make_weak(session.get()), FullMsgId{ 1, 3 }, QString("item.bin"), nullptr);
+		assert(elapsedSince(start) < prompt);
 	}
 	std::puts("forward media failure PASS: photo/document failures by id and by message end the wait at once, other files' progress does not, an earlier photo failure is retried, successes unchanged; real loaders/rpl/weak_ptr, Qt/session/files/clock doubles");
 }

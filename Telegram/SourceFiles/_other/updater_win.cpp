@@ -456,6 +456,12 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE prevInstance, LPWSTR cmdPara
 				hres = psl->QueryInterface(IID_IPersistFile, (LPVOID*)&ppf);
 
 				if (SUCCEEDED(hres)) {
+					// update() removed tupdates unless it runs from there, so the link
+					// could not be saved and the client restarted elevated, where
+					// Windows drops files dragged in from Explorer. The client clears
+					// a tupdates/temp without a ready file on start.
+					CreateDirectory(L"tupdates", 0);
+					CreateDirectory(L"tupdates\\temp", 0);
 					wstring lnk = L"tupdates\\temp\\temp.lnk";
 					hres = ppf->Save(lnk.c_str(), TRUE);
 					if (!SUCCEEDED(hres)) {

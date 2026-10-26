@@ -631,7 +631,7 @@ void BottomInfo::layoutDateText() {
 
 		auto full = TextWithEntities{};
 		if (_data.flags & Data::Flag::Sponsored) {
-			// ...
+			// Sponsored messages show no date.
 		} else if (_data.flags & Data::Flag::Imported) {
 			full.append(burnt).append(deleted).append(date).append(' ').append(tr::lng_imported(tr::now));
 		} else if (name.isEmpty()) {

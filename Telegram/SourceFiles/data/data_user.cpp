@@ -672,13 +672,10 @@ bool UserData::isFake() const {
 }
 
 bool UserData::isPremium() const {
-	if (id) {
-		const auto &settings = LuxurySettings::getInstance();
-		if (settings.localPremium()) {
-			if (getSession(id.value)) {
-				return true;
-			}
-		}
+	// Local premium is for our own accounts only. isSelf() is this session's
+	// user; every other account's self-user lives in its own session.
+	if (isSelf() && LuxurySettings::getInstance().localPremium()) {
+		return true;
 	}
 
 	return flags() & UserDataFlag::Premium;

@@ -80,6 +80,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat.h"
 #include "styles/style_credits.h" // giftBoxHiddenMark
 #include "styles/style_chat_helpers.h"
+#include "styles/style_luxury_styles.h"
 
 #include <algorithm>
 #include <iterator>
@@ -991,12 +992,19 @@ void ListWidget::refreshRows() {
 	if (globalMediaMusic) {
 		_globalMediaSliceViewChanges.fire_copy(_globalMediaSliceView);
 	}
-	for (auto i = begin(_accessibilityIdentities)
-		; i != end(_accessibilityIdentities);) {
-		if (accessibilityIndexOfItem(i->first.get()) < 0) {
-			i = _accessibilityIdentities.erase(i);
-		} else {
-			++i;
+	if (!_accessibilityIdentities.empty()) {
+		// One pass over the rows, not one per remembered identity.
+		auto present = base::flat_set<not_null<const HistoryItem*>>();
+		for (const auto &layout : accessibilityItems()) {
+			present.emplace(layout->getItem());
+		}
+		for (auto i = begin(_accessibilityIdentities)
+			; i != end(_accessibilityIdentities);) {
+			if (!present.contains(i->first)) {
+				i = _accessibilityIdentities.erase(i);
+			} else {
+				++i;
+			}
 		}
 	}
 	if (_accessibilityFocusedItem) {
@@ -1061,11 +1069,20 @@ void ListWidget::accessibilitySelectionChanged() {
 	_accessibilitySelectionUpdateScheduled = true;
 	crl::on_main(this, [=] {
 		_accessibilitySelectionUpdateScheduled = false;
+		if (!Ui::ScreenReaderModeActive()) {
+			// Nothing listens; forgetting what was announced makes the first
+			// change after a screen reader appears report the whole selection.
+			_accessibilitySelectedIdentities.clear();
+			return;
+		}
 		auto selected = base::flat_set<quintptr>();
-		for (const auto &entry : _selected) {
-			const auto index = accessibilityIndexOfItem(entry.first);
-			if (index >= 0) {
-				selected.emplace(accessibilityChildIdentity(index));
+		if (!_selected.empty()) {
+			const auto items = accessibilityItems();
+			for (auto i = 0, count = int(items.size()); i != count; ++i) {
+				const auto item = items[i]->getItem();
+				if (_selected.contains(item.get())) {
+					selected.emplace(accessibilityIdentityOf(item));
+				}
 			}
 		}
 		auto changed = std::vector<quintptr>();
@@ -1171,15 +1188,15 @@ bool ListWidget::accessibilityChildSupportsActions(int index) const {
 
 quintptr ListWidget::accessibilityChildIdentity(int index) const {
 	const auto item = accessibilityItemAt(index);
-	if (!item) {
-		return 0;
+	return item ? accessibilityIdentityOf(item) : 0;
+}
+
+quintptr ListWidget::accessibilityIdentityOf(
+		not_null<const HistoryItem*> item) const {
+	auto &identity = _accessibilityIdentities[item];
+	if (!identity) {
+		identity = ++_accessibilityIdentityCounter;
 	}
-	const auto found = _accessibilityIdentities.find(item);
-	if (found != _accessibilityIdentities.end()) {
-		return found->second;
-	}
-	const auto identity = ++_accessibilityIdentityCounter;
-	_accessibilityIdentities.emplace(item, identity);
 	return identity;
 }
 
@@ -2614,7 +2631,7 @@ void ListWidget::mouseActionUpdate(const QPoint &globalPosition) {
 		Ui::Tooltip::Hide();
 	}
 	if (dragState.link) {
-		Ui::Tooltip::Show(350, this);
+		Ui::Tooltip::Show(st::luxuryTooltipDelay, this);
 	}
 
 	if (_mouseAction == MouseAction::None) {

@@ -28,7 +28,7 @@ photo_cancel = photo_data[photo_data.index('Fn<void()> PhotoData::cancelLoadCall
 history = read('luxury/ui/message_history/history_inner.cpp')
 assert 'view->data()->id);' not in history[history.index('// Media a watched chat'):history.index('if (_menu->empty())', history.index('// Media a watched chat'))]
 assert '_sourceMessageIds.find(view->data())->second' in history and '_sourceMessageIds.emplace(item->data(), realId);' in history
-assert '0, MsgId(message.messageId)' in read('luxury/ui/message_history/history_item.cpp')
+assert 'TimeId(message.date),\n\t\t\tMsgId(message.messageId));' in read('luxury/ui/message_history/history_item.cpp').replace('\r\n', '\n')
 assert source.count('getSession(') == 0
 assert 'sessionDataAboutToBeCleared()' in source
 assert '{ u"v2_*"_q }' in source

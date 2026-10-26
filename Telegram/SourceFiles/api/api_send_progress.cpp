@@ -119,9 +119,7 @@ void SendProgressManager::send(const Key &key, int progress) {
 
 	// LuxuryGram sendUploadProgress
 	const auto &ghost = LuxurySettings::ghost(_session);
-	if (!ghost.sendUploadProgress())
-	{
-		DEBUG_LOG(("[LuxuryGram] Don't send upload progress"));
+	if (!ghost.sendUploadProgress()) {
 		return;
 	}
 
