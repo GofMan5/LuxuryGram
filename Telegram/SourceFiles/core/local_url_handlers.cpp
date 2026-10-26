@@ -2234,9 +2234,9 @@ QString TryConvertUrlToLocal(QString url) {
 			}
 			return base + added + (params.isEmpty() ? QString() : '&' + params);
 		} else if (const auto luxurySettingsMatch = regex_match(
-			u"^(?:luxurySettings|exteraSettings)/?\?(.+)$"_q, query, matchOptions)) {
+			u"^(?:luxurySettings|exteraSettings)/?\\?(.+)$"_q, query, matchOptions)) {
 			return u"tg://ayusettings?"_q + luxurySettingsMatch->captured(1);
-		} else if (regex_match(u"^getpremium(/|\?|#|$)"_q, query, matchOptions)) {
+		} else if (regex_match(u"^getpremium(/|\\?|#|$)"_q, query, matchOptions)) {
 			return GetPremiumLocalUrl(query);
 		} else if (const auto usernameMatch = regex_match(u"^"
 			"([a-zA-Z0-9\\.\\_]+)"

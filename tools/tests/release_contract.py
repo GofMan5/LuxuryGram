@@ -32,6 +32,14 @@ assert release.index('Recheck before changing') < release.index('Publish update 
 assert 'gh release edit "$TAG" --draft' not in release and '--clobber' not in release
 assert 'group: luxury-release-${{ inputs.tag }}' in release
 assert release.index('python3 Telegram/build/check_release_mutability.py "$TAG"\n') < release.index('gh release edit "$TAG"')
+# 7.3 compiles the generated wallet_engine.cpp binding from the library cache;
+# a prune that drops it fails configure on every warm Windows build.
+prune = next(l for l in canary.splitlines() if 'run: find $LibrariesPath' in l).strip()
+assert "-path '*/src/wallet_engine/*'" in prune
+win = (ROOT / '.github/workflows/win.yml').read_text('utf-8')
+for workflow in (win, release):
+    assert prune in [l.strip() for l in workflow.splitlines()]
+assert '-libs-v2-' not in win and '-release-libs-v1-' not in release
 
 def opener(product=None, updates=None, failure=None):
     def request(req, timeout):

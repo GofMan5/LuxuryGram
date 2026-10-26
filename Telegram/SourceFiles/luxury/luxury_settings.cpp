@@ -2146,6 +2146,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_RegistrationDateUnavailable", "Не удалось узнать дату создания." },
 	{ "luxury_LastSeenAgo", "({elapsed} назад)" },
 	{ "luxury_UpdateLuxuryGram", "Обновить LuxuryGram" },
+	{ "luxury_GitHubReleases", "Релизы на GitHub" },
 	{ "luxury_ContextSelectBetween", "Выделить сообщения между" },
 	{ "luxury_PlayerExpand", "Открыть расширенный плеер" },
 	{ "luxury_PlayerTitle", "Сейчас играет" },

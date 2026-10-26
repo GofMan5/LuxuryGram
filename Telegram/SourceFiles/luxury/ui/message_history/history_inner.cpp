@@ -661,6 +661,10 @@ bool InnerWidget::elementHideTopicButton(not_null<const Element*> view) {
 	return false;
 }
 
+HistoryView::GramReadLine *InnerWidget::elementGramReadLine() {
+	return nullptr;
+}
+
 void InnerWidget::clearDisplayPointers() {
 	_visibleTopItem = nullptr;
 	_visibleTopFromItem = 0;

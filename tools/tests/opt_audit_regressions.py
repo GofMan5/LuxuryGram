@@ -153,6 +153,23 @@ def check(root=None, read=source):
     radius = read(SRC + 'ui/chat/chat_style_radius.cpp')
     assert 'cachedRadius' not in radius
     assert radius.count('UseSmallMsgBubbleRadius.value()') == 2
+    # The 7.3.3 merge dropped a backslash from both patterns: C++ read "\?" as
+    # "?", so luxurySettings?x captured "?x" and getpremium? matched nothing.
+    urls = read(SRC + 'core/local_url_handlers.cpp')
+    assert r'u"^(?:luxurySettings|exteraSettings)/?\\?(.+)$"_q' in urls
+    assert r'u"^getpremium(/|\\?|#|$)"_q' in urls
+    # 7.3.3 added a pure virtual to ElementDelegate and the luxury history
+    # viewer stayed abstract: Linux CI failed on it, nothing here compiles.
+    import re
+    element = read(SRC + 'history/view/history_view_element.h')
+    delegate = element[element.index('class ElementDelegate'):element.index('class DefaultElementDelegate')]
+    pure = re.findall(r'(\w+)\([^;]*?\)\s*(?:const\s*)?= 0;', delegate, re.S)
+    assert 'elementGramReadLine' in pure
+    for header in ('luxury/ui/message_history/history_inner.h',
+                   'history/admin_log/history_admin_log_inner.h',
+                   'history/view/history_view_list_widget.h'):
+        text = read(SRC + header)
+        assert not [name for name in pure if name + '(' not in text], header
     print('Optimisation audit contracts PASS')
 
 
