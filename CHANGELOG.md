@@ -9,7 +9,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 ### Changed
 
 - Synced with upstream Telegram Desktop 7.3.3, up from 7.2.9: Money (the TON wallet card, with unique gifts moved to the blockchain and shown on the card), replies quoting rich messages, the new QR code design for public usernames, emoji from Unicode 17, Ctrl+Enter to submit the rich message editor, audio tracks of a rich message played as a playlist, screen reader improvements, and upstream fixes for text rendering that ignored system settings on Windows, Chinese characters on older Windows, the ANGLE media viewer and video tint, Windows Focus Mode, '?' opening the shortcuts legend instead of typing, and a set of crashes. LuxuryGram features stay where they were; the Wallet item joins the side menu next to them.
-- Windows builds compile the Rust components (wallet engine) that upstream added in 7.3, and the Windows CI now builds the Qt 5 leg by name, since Telegram Desktop builds Qt 6 on Windows by default from 7.3.2 on.
+- Windows builds compile the Rust components (wallet engine) that upstream added in 7.3, and the Windows CI builds Qt 6 on every architecture, as upstream does: Telegram Desktop 7.3 no longer compiles with Qt 5 on Windows. The generated language key lookup is split into smaller functions, since the Windows ARM64 compiler refused it as one function once LuxuryGram's keys were added to 7.3.3's.
 
 ### Fixed
 
