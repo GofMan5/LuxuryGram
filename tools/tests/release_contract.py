@@ -40,6 +40,12 @@ win = (ROOT / '.github/workflows/win.yml').read_text('utf-8')
 for workflow in (win, release):
     assert prune in [l.strip() for l in workflow.splitlines()]
 assert '-libs-v2-' not in win and '-release-libs-v1-' not in release
+# The MSBuild legs ran out of compiler heap with a cl.exe per core; only
+# they get the cap, Ninja and the Ninja-built release take no MSBuild flags.
+assert '[ -z "$GENERATOR" ] && MSBUILD_ARGS="-- /p:CL_MPCount=2"' in win
+assert 'cmake --build ..\\out --config Debug --parallel %TDESKTOP_BUILD_NATIVE%' in win
+assert win.count('cmake --build') == 1
+assert 'TDESKTOP_BUILD_GENERATOR=-G "Ninja Multi-Config"' in release
 
 def opener(product=None, updates=None, failure=None):
     def request(req, timeout):

@@ -270,6 +270,13 @@ jobs:
           fi
           echo "TDESKTOP_BUILD_GENERATOR=$GENERATOR" >> $GITHUB_ENV
 
+          # MSBuild's /MP runs a cl.exe per core inside Telegram.vcxproj and
+          # since 7.3.3 the Debug compiles ran the runner out of memory
+          # (C1060 on tray.cpp, apiwrap.cpp, qrc_luxury). Ninja was fine.
+          MSBUILD_ARGS=""
+          [ -z "$GENERATOR" ] && MSBUILD_ARGS="-- /p:CL_MPCount=2"
+          echo "TDESKTOP_BUILD_NATIVE=$MSBUILD_ARGS" >> $GITHUB_ENV
+
           [ -n "$GENERATOR" ] && ARCH=""
           echo "TDESKTOP_BUILD_ARCH=$ARCH" >> $GITHUB_ENV
 
@@ -315,7 +322,7 @@ jobs:
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
           %TDESKTOP_BUILD_DEFINE%
 
-          cmake --build ..\out --config Debug --parallel
+          cmake --build ..\out --config Debug --parallel %TDESKTOP_BUILD_NATIVE%
 
       - name: Move artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
