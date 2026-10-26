@@ -15,7 +15,8 @@ dnf -y install epel-release
 dnf config-manager --set-enabled powertools
 dnf -y install cmake autoconf automake libtool pkgconfig make patch git \
 	python3.11-pip python3.11-devel gperf flex bison clang-tools-extra \
-	lld ccache nasm file which wget perl-open perl-XML-Parser perl-IPC-Cmd perl-Time-Piece \
+	lld ccache nasm file which wget perl-open perl-XML-Parser perl-IPC-Cmd \
+	perl-Time-Piece \
 	xorg-x11-util-macros $TOOLSET-gcc $TOOLSET-gcc-c++ $TOOLSET-binutils \
 	$TOOLSET-gdb $TOOLSET-libasan-devel libffi-devel fontconfig-devel \
 	freetype-devel libX11-devel wayland-devel alsa-lib-devel \
@@ -161,7 +162,7 @@ RUN <<EOF
 git init patches
 cd patches
 git remote add origin https://github.com/desktop-app/patches.git
-git fetch --depth=1 origin aec474953ff7ee9b6e4cd9b8658288ea86d124f3
+git fetch --depth=1 origin 845a383f7abe8e44f92dfdcd566d603066ec2696
 git reset --hard FETCH_HEAD
 rm -rf .git
 EOF
@@ -876,6 +877,7 @@ cd qt5
 git submodule update --init --recursive --depth=1 \
 	qtbase qtdeclarative qtwayland qtimageformats qtsvg qtshadertools
 find $PWD/../patches/qtbase_$QT -type f -print0 | sort -z | xargs -r0 git -C qtbase apply
+find $PWD/../patches/qtsvg_$QT -type f -print0 | sort -z | xargs -r0 git -C qtsvg apply
 find $PWD/../patches/qtwayland_$QT -type f -print0 | sort -z | xargs -r0 git -C qtwayland apply
 cmake -B build . \
 	-DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -952,7 +954,7 @@ RUN --mount=type=cache,target=/var/cache/ccache <<EOF
 git init tg_owt
 cd tg_owt
 git remote add origin https://github.com/desktop-app/tg_owt.git
-git fetch --depth=1 origin d1cf250ea73de26c4c1f0a3c8173eb2648efbb04
+git fetch --depth=1 origin 07fb35bc33b3e79125a1beab7690e830f183f5d8
 git reset --hard FETCH_HEAD
 git submodule update --init --recursive --depth=1
 cmake -B build . -DTG_OWT_DLOPEN_PIPEWIRE=ON
@@ -991,32 +993,54 @@ cd ..
 rm -rf tde2e
 EOF
 
-FROM patches AS tlottie
+FROM patches AS tdesktop_rust
 RUN <<EOF
 RUST_TOOLCHAIN=1.96.1
 export RUSTUP_HOME=/usr/src/rustup
 export CARGO_HOME=/usr/src/cargo
+export CARGO_BUILD_JOBS={{ JOBS or "default" }}
 wget -O rustup-init.sh https://sh.rustup.rs
 sh rustup-init.sh -y --no-modify-path --profile minimal --default-toolchain $RUST_TOOLCHAIN
 rm rustup-init.sh
 export RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN
 export PATH=$CARGO_HOME/bin:$PATH
-export DESTDIR=/usr/src/tlottie-cache
+export DESTDIR=/usr/src/tdesktop_rust-cache
 git init tlottie
 cd tlottie
 git remote add origin https://github.com/dkaraush/tlottie.git
-git fetch --depth=1 origin 31f1b542f88e7b4be9a01e749920d857535fc715
+git fetch --depth=1 origin 92df98dc209bc39b1e567ec74a8c86a0af5239de
 git reset --hard FETCH_HEAD
-git apply ../patches/tlottie.patch
-cargo rustc --lib --release --locked \
-	--features c-api --crate-type staticlib \
-	--target x86_64-unknown-linux-gnu \
-	-- --print native-static-libs
-mkdir -p $DESTDIR/usr/local/lib $DESTDIR/usr/local/include/tlottie
-objcopy --strip-debug target/x86_64-unknown-linux-gnu/release/libtlottie.a $DESTDIR/usr/local/lib/libtlottie.a
-cp include/tlottie.h $DESTDIR/usr/local/include/tlottie/tlottie.h
 cd ..
-rm -rf tlottie rustup cargo
+git init wallet-engine
+cd wallet-engine
+git remote add origin https://github.com/i582/wallet-engine.git
+git fetch --depth=1 origin e59e0d89d7ee90c388bf36e3334c5b276f396697
+git reset --hard FETCH_HEAD
+git apply ../patches/wallet-engine.patch
+cd ..
+# One archive for every Rust library. Each staticlib carries its own copy of
+# the Rust standard library, so separate builds define the runtime symbols
+# that must stay global twice and the linker refuses the binary.
+cargo new --lib --vcs none tdesktop_rust
+cd tdesktop_rust
+printf 'pub use ::tlottie;\npub use ::wallet_engine;\n' > src/lib.rs
+cargo add --path ../tlottie --features c-api
+cargo add --path ../wallet-engine
+cargo rustc --lib --release \
+	--crate-type staticlib --crate-type cdylib \
+	--config "profile.release.opt-level={% if MINSIZE %}'z'{% else %}3{% endif %}" \
+	--config "profile.release.lto='{% if LTO %}thin{% else %}off{% endif %}'" \
+	--config "profile.release.codegen-units=1" \
+	--config "profile.release.panic='unwind'" \
+	-- --print native-static-libs
+mkdir -p $DESTDIR/usr/local/lib64 $DESTDIR/usr/local/include/tlottie $DESTDIR/usr/local/include/wallet_engine
+objcopy --strip-debug target/release/libtdesktop_rust.a $DESTDIR/usr/local/lib64/libtdesktop_rust.a
+cp ../tlottie/include/tlottie.h $DESTDIR/usr/local/include/tlottie/tlottie.h
+cargo run --manifest-path ../wallet-engine/bindgen/cpp/bindgen/Cargo.toml --locked -- \
+	--library --out-dir $DESTDIR/usr/local/include/wallet_engine \
+	target/release/libtdesktop_rust.so
+cd ..
+rm -rf tlottie wallet-engine tdesktop_rust rustup cargo
 EOF
 
 FROM builder
@@ -1060,7 +1084,7 @@ COPY --link --from=breakpad /usr/src/breakpad-cache /
 COPY --link --from=webrtc /usr/src/webrtc-cache /
 COPY --link --from=ada /usr/src/ada-cache /
 COPY --link --from=tde2e /usr/src/tde2e-cache /
-COPY --link --from=tlottie /usr/src/tlottie-cache /
+COPY --link --from=tdesktop_rust /usr/src/tdesktop_rust-cache /
 
 COPY --link --from=patches /usr/src/patches patches
 RUN <<EOF

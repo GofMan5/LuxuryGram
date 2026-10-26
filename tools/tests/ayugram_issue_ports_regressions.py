@@ -689,6 +689,10 @@ struct QRectF {
     QRectF(QPointF a, QPointF z) : l(a.x()), t(a.y()), r(z.x()), b(z.y()) {}
     double x() const { return l; }
     double y() const { return t; }
+    double left() const { return l; }
+    double top() const { return t; }
+    double right() const { return r; }
+    double bottom() const { return b; }
     double width() const { return r - l; }
     double height() const { return b - t; }
     QSizeF size() const { return { r - l, b - t }; }
@@ -719,6 +723,7 @@ struct ItemCanvas {
     QRectF _contentRect;
     QMarginsF _brushMargins;
     Scene *scene() { return &sceneData; }
+    QRectF drawableRect() const { return sceneData.rect; }
     void computeContentRect(const QPointF &p) BODY
 };
 int main() {
@@ -789,6 +794,7 @@ struct Box {
     Caption *_caption = &caption;
     Requests _textWithTagsRequests;
     bool _confirmed = false;
+    bool _stashed = false;
     bool _textTaken = false;
     Fn<void()> _cancelledCallback;
     Fn<void(const TextWithTags&)> _cancelled2Callback;

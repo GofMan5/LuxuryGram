@@ -235,6 +235,8 @@ public:
 		const MessageSelection &selection) const override;
 	TextSelection selectionFromQuote(
 		const SelectedQuote &quote) const override;
+	HighlightYRange richQuoteHighlightYRange(
+		const Ui::ChatPaintRichQuote &quote) const override;
 	TextSelection adjustSelection(
 		TextSelection selection,
 		TextSelectType type) const override;
@@ -291,8 +293,6 @@ public:
 	[[nodiscard]] bool isSignedAuthorElided() const override;
 
 	void itemDataChanged() override;
-
-	VerticalRepaintRange verticalRepaintRange() const override;
 
 	void applyGroupAdminChanges(
 		const base::flat_set<UserId> &changes) override;

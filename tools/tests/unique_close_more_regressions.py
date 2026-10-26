@@ -25,7 +25,7 @@ def check(root, path=OWNER):
 #include <string>
 using QString=std::string;template<class T>using Fn=std::function<T>;
 namespace tr{constexpr int now=0;QString lng_close(int){return "Close";}QString lng_credits_more_options(int){return "More Options";}QString lng_gift_craft_menu_button(int){return "Craft";}}
-struct Style{};namespace st{const Style uniqueCloseButton,uniqueMenuButton,uniqueCraftButton,popupMenuWithIcons;}
+struct Style{};namespace style{using IconButton=Style;}namespace st{const Style uniqueCloseButton,uniqueMenuButton,uniqueCraftButton,popupMenuWithIcons;}
 struct QPoint{};struct QCursor{static QPoint pos(){return {};}};
 struct Lifetime{std::shared_ptr<void>held;template<class T>T*make_state(){auto p=std::make_shared<T>();held=p;return p.get();}};
 struct Value{};
@@ -40,6 +40,7 @@ template<class T>T*CreateChild(GenericBox*p,const Style&s){return new T(p,s);}}
 namespace base{template<class T>struct unique_qptr{std::unique_ptr<T>p;unique_qptr()=default;unique_qptr(std::nullptr_t){}unique_qptr&operator=(std::nullptr_t){p.reset();return *this;}explicit operator bool()const{return bool(p);}T*get()const{return p.get();}T*operator->()const{return p.get();}};template<class T,class...A>unique_qptr<T>make_unique_q(A&&...a){unique_qptr<T>r;r.p=std::make_unique<T>(std::forward<A>(a)...);return r;}}
 namespace Settings{struct CreditsEntryBoxStyleOverrides{const Style*menu=nullptr;};
 Ui::IconButton*lastClose,*lastMenu,*lastCraft;
+void AddUniqueCloseMoreButton(not_null<Ui::GenericBox*>,CreditsEntryBoxStyleOverrides,Fn<void(not_null<Ui::PopupMenu*>)> =nullptr,Fn<void()> =nullptr,const style::IconButton* =nullptr,const style::IconButton* =nullptr);
 ''' + body.replace('const auto close = Ui::CreateChild<Ui::IconButton>(', 'const auto close = lastClose = Ui::CreateChild<Ui::IconButton>(', 1)
            .replace('const auto menu = fillMenu', 'const auto menu = lastMenu = fillMenu', 1)
            .replace('const auto craft = launchCraft', 'const auto craft = lastCraft = launchCraft', 1) + r'''

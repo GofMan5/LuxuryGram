@@ -41,7 +41,7 @@ def check(root):
 #include <string>
 #include <type_traits>
 #include <vector>
-using uint16=uint16_t;using int64=int64_t;using EffectId=int;using TimeId=int;
+using uint16=uint16_t;using uint32=uint32_t;using int64=int64_t;using EffectId=int;using TimeId=int;
 struct QDateTime{};
 struct QString:std::string{using std::string::string;QString(std::string s):std::string(std::move(s)){}bool isEmpty()const{return empty();}};
 template<class T>using not_null=T;

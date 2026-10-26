@@ -546,17 +546,11 @@ void AddPostLinkAction(
 		&& !request.link->copyToClipboardContextItemText().isEmpty()) {
 		return;
 	}
-	const auto itemId = item->fullId();
-	const auto context = request.view
-		? request.view->context()
-		: Context::History;
-	const auto controller = request.navigation->parentController();
-	menu->addAction(
-		(item->history()->peer->isMegagroup()
-			? tr::lng_context_copy_message_link
-			: tr::lng_context_copy_post_link)(tr::now),
-		[=] { CopyPostLink(controller, itemId, context); },
-		&st::menuIconLink);
+	AddPostLinkAction(
+		menu,
+		request.navigation->parentController(),
+		item,
+		(request.view ? request.view->context() : Context::History));
 }
 
 MessageIdsList ExtractIdsList(const SelectedItems &items) {
@@ -861,7 +855,7 @@ bool AddReplyToMessageAction(
 	const auto &quote = request.quote;
 	auto text = (todoListTaskId
 		? tr::lng_context_reply_to_task
-		: quote.highlight.quote.empty()
+		: !quote
 		? tr::lng_context_reply_msg
 		: tr::lng_context_quote_and_reply)(
 			tr::now,
@@ -872,6 +866,7 @@ bool AddReplyToMessageAction(
 			.quote = quote.highlight.quote,
 			.quoteOffset = quote.highlight.quoteOffset,
 			.todoItemId = todoListTaskId,
+			.richQuote = quote.highlight.richQuote,
 		}, base::IsCtrlPressed());
 	}, &st::menuIconReply);
 	return true;
@@ -1685,6 +1680,23 @@ void EditTagBox(
 
 } // namespace
 
+void AddPostLinkAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<Window::SessionController*> controller,
+		not_null<HistoryItem*> item,
+		Context context) {
+	if (!item->hasDirectLink() || IsAnchoredEphemeral(item)) {
+		return;
+	}
+	const auto itemId = item->fullId();
+	menu->addAction(
+		(item->history()->peer->isMegagroup()
+			? tr::lng_context_copy_message_link
+			: tr::lng_context_copy_post_link)(tr::now),
+		[=] { CopyPostLink(controller, itemId, context); },
+		&st::menuIconLink);
+}
+
 std::optional<QString> CurrentVoiceTimecode(FullMsgId itemId) {
 	const auto state = ::Media::Player::instance()->getState(
 		AudioMsgId::Type::Voice);
@@ -1900,30 +1912,16 @@ void FillContextMenuItems(
 			result->addAction(tr::lng_profile_copy_phone(tr::now), [=] {
 				QGuiApplication::clipboard()->setText(phone);
 			}, &st::menuIconCopy);
-		} else if (const auto gift = itemMedia
-			? itemMedia->gift()
-			: nullptr) {
-			const auto peer = view->data()->history()->peer;
-			const auto user = peer->asUser();
-			if (!user
-				|| (!user->isInaccessible()
-					&& !user->isNotificationsUser())) {
-				const auto controller = list->controller();
-				const auto starGiftUpgrade = gift->upgrade
-					&& (gift->type == Data::GiftType::StarGift);
-				const auto isGift = gift->slug.isEmpty() || !gift->channel;
-				const auto out = view->data()->out();
-				const auto outgoingGift = isGift
-					&& (starGiftUpgrade ? !out : out);
-				if (outgoingGift
-					&& gift->type != Data::GiftType::BirthdaySuggest) {
-					result->addAction(
-						tr::lng_context_gift_send(tr::now),
-						crl::guard(controller, [=] {
-							Ui::ShowStarGiftBox(controller, peer);
-						}),
-						&st::menuIconGiftPremium);
-				}
+		} else if (itemMedia && itemMedia->gift()) {
+			AddGiftMessageAction(result, view->data(), list->controller());
+		}
+		if (view->data()->isRegular()
+			&& view->data()->Has<HistoryServiceGramTransfer>()) {
+			if (const auto user = view->data()->history()->peer->asUser()) {
+				Window::AddSendMoneyAction(
+					list->controller(),
+					user,
+					Ui::Menu::CreateAddActionCallback(result));
 			}
 		}
 		if (const auto document = media ? media->getDocument() : nullptr) {
@@ -2365,6 +2363,43 @@ void AttachPollOptionTabs(
 			reposition();
 		}
 	}, tabs->lifetime());
+}
+
+void AddGiftMessageAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<HistoryItem*> item,
+		not_null<Window::SessionController*> controller) {
+	const auto media = item->media();
+	const auto gift = media ? media->gift() : nullptr;
+	if (!gift || gift->type == Data::GiftType::BirthdaySuggest) {
+		return;
+	}
+	const auto peer = item->history()->peer;
+	const auto user = peer->asUser();
+	const auto isGift = gift->slug.isEmpty() || !gift->channel;
+	if (!isGift
+		|| (user
+			&& (user->isInaccessible() || user->isNotificationsUser()))) {
+		return;
+	}
+	const auto starGiftUpgrade = gift->upgrade
+		&& (gift->type == Data::GiftType::StarGift);
+	const auto out = item->out();
+	const auto outgoingGift = starGiftUpgrade ? !out : out;
+	if (!outgoingGift
+		&& (gift->type == Data::GiftType::ChatTheme
+			|| gift->type == Data::GiftType::GiftOffer
+			|| !Ui::CanSendStarGiftTo(peer))) {
+		return;
+	}
+	menu->addAction(
+		(outgoingGift
+			? tr::lng_context_gift_send(tr::now)
+			: tr::lng_gift_send_title(tr::now)),
+		crl::guard(controller, [=] {
+			Ui::ShowStarGiftBox(controller, peer);
+		}),
+		&st::menuIconGiftPremium);
 }
 
 void AddPollActions(

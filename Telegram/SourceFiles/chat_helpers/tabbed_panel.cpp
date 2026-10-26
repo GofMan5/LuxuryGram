@@ -145,14 +145,6 @@ not_null<TabbedSelector*> TabbedPanel::selector() const {
 	return _selector;
 }
 
-rpl::producer<bool> TabbedPanel::pauseAnimations() const {
-	return _pauseAnimations.events();
-}
-
-bool TabbedPanel::isSelectorStolen() const {
-	return (_selector->parent() != this);
-}
-
 void TabbedPanel::moveBottomRight(int bottom, int right) {
 	const auto isNew = (_bottom != bottom || _right != right);
 	_bottom = bottom;
@@ -463,7 +455,6 @@ void TabbedPanel::setAnimationsPaused(bool paused) {
 			_regularWindow->disableGifPauseReason(_selector->level());
 		}
 	}
-	_pauseAnimations.fire_copy(paused);
 }
 
 void TabbedPanel::hideFinished() {

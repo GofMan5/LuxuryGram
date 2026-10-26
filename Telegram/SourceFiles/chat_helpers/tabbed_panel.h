@@ -44,9 +44,7 @@ public:
 		object_ptr<TabbedSelector> selector);
 	TabbedPanel(QWidget *parent, TabbedPanelDescriptor &&descriptor);
 
-	[[nodiscard]] bool isSelectorStolen() const;
 	[[nodiscard]] not_null<TabbedSelector*> selector() const;
-	[[nodiscard]] rpl::producer<bool> pauseAnimations() const;
 
 	void moveBottomRight(int bottom, int right);
 	void moveTopRight(int top, int right);
@@ -106,7 +104,6 @@ private:
 	Window::SessionController * const _regularWindow = nullptr;
 	const object_ptr<TabbedSelector> _ownedSelector = { nullptr };
 	const not_null<TabbedSelector*> _selector;
-	rpl::event_stream<bool> _pauseAnimations;
 	bool _animationsPaused = false;
 
 	int _contentMaxHeight = 0;

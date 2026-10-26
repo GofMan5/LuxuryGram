@@ -42,7 +42,9 @@ namespace Window {
 class SessionController;
 } // namespace Window
 
-[[nodiscard]] bool UrlRequiresConfirmation(const QUrl &url);
+[[nodiscard]] bool UrlRequiresConfirmation(
+	not_null<Main::Session*> session,
+	const QUrl &url);
 
 // Our links open without a confirmation, so a web login token someone else
 // put into such a link would log the user in to the sender's account.
@@ -262,5 +264,17 @@ public:
 private:
 	TimeId _date = 0;
 	QString _entityData;
+
+};
+
+class TonAddressClickHandler : public ClickHandler {
+public:
+	explicit TonAddressClickHandler(QString address);
+
+	void onClick(ClickContext context) const override;
+	TextEntity getTextEntity() const override;
+
+private:
+	QString _address;
 
 };

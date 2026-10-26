@@ -22,12 +22,17 @@ class UserData;
 struct HistoryMessageReply;
 struct PreparedServiceText;
 struct HistoryMessageReplyMarkup;
+class ReplyKeyboard;
 
 namespace Data {
 class Thread;
 struct Reaction;
 struct ReactionId;
 } // namespace Data
+
+namespace Iv {
+struct BuiltRichQuote;
+} // namespace Iv
 
 namespace Window {
 class SessionController;
@@ -38,6 +43,7 @@ class PathShiftGradient;
 struct BubblePattern;
 struct ChatPaintContext;
 struct ChatPaintHighlight;
+struct ChatPaintRichQuote;
 class ChatStyle;
 struct ReactionFlyAnimationArgs;
 class ReactionFlyAnimation;
@@ -63,9 +69,11 @@ enum class InfoDisplayType : char;
 struct StateRequest;
 struct TextState;
 struct MessageSelection;
+class GramReadLine;
 class Media;
 class Reply;
 struct HistoryMessageRichPage;
+struct HighlightYRange;
 
 enum class Context : char {
 	History,
@@ -80,6 +88,7 @@ enum class Context : char {
 	ScheduledTopic,
 	ChatPreview,
 	WelcomeMessages,
+	MediaEditor,
 };
 
 enum class OnlyEmojiAndSpaces : char {
@@ -160,6 +169,7 @@ public:
 		Element *replacing) = 0;
 	virtual QString elementAuthorRank(not_null<const Element*> view) = 0;
 	virtual bool elementHideTopicButton(not_null<const Element*> view) = 0;
+	virtual GramReadLine *elementGramReadLine() = 0;
 
 	virtual ~ElementDelegate() {
 	}
@@ -226,6 +236,7 @@ public:
 		Element *replacing) override;
 	QString elementAuthorRank(not_null<const Element*> view) override;
 	bool elementHideTopicButton(not_null<const Element*> view) override;
+	GramReadLine *elementGramReadLine() override;
 
 };
 
@@ -417,7 +428,7 @@ struct SelectedQuote {
 	bool overflown = false;
 
 	explicit operator bool() const {
-		return item && !highlight.quote.empty();
+		return item && (!highlight.quote.empty() || highlight.richQuote);
 	}
 	friend inline bool operator==(SelectedQuote, SelectedQuote) = default;
 };
@@ -459,6 +470,8 @@ public:
 	[[nodiscard]] not_null<HistoryItem*> data() const;
 	[[nodiscard]] not_null<History*> history() const;
 	[[nodiscard]] Media *media() const;
+	[[nodiscard]] bool hasCommentsButton() const;
+	[[nodiscard]] ReplyKeyboard *inlineReplyKeyboard() const;
 	[[nodiscard]] Context context() const;
 	void refreshDataId();
 
@@ -584,12 +597,20 @@ public:
 		const MessageSelection &selection) const;
 	[[nodiscard]] Iv::RichPageBlocksSlice selectedRichBlocks(
 		const MessageSelection &selection) const;
+	[[nodiscard]] std::optional<Iv::BuiltRichQuote> selectedRichQuote(
+		const MessageSelection &selection) const;
+	[[nodiscard]] SelectedQuote selectedReplyQuote(
+		const MessageSelection &selection) const;
 	virtual SelectedQuote selectedQuote(
 		TextSelection selection) const = 0;
 	virtual SelectedQuote selectedQuote(
 		const MessageSelection &selection) const;
 	virtual TextSelection selectionFromQuote(
 		const SelectedQuote &quote) const = 0;
+	[[nodiscard]] Ui::ChatPaintRichQuote richSelectionFromQuote(
+		const SelectedQuote &quote) const;
+	[[nodiscard]] virtual HighlightYRange richQuoteHighlightYRange(
+		const Ui::ChatPaintRichQuote &quote) const;
 	[[nodiscard]] virtual TextSelection adjustSelection(
 		TextSelection selection,
 		TextSelectType type) const;
@@ -669,7 +690,7 @@ public:
 		int top = 0;
 		int height = 0;
 	};
-	[[nodiscard]] virtual VerticalRepaintRange verticalRepaintRange() const;
+	[[nodiscard]] VerticalRepaintRange verticalRepaintRange() const;
 
 	[[nodiscard]] virtual bool isSignedAuthorElided() const;
 
@@ -778,6 +799,10 @@ protected:
 		Painter &p,
 		const PaintContext &context,
 		int geometryHeight) const;
+	void paintSwipeReplyIcon(
+		Painter &p,
+		const PaintContext &context,
+		QRect g) const;
 
 	[[nodiscard]] ClickHandlerPtr fromLink() const;
 

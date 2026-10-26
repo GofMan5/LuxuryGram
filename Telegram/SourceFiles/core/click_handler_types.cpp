@@ -14,6 +14,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/local_url_handlers.h"
 #include "core/file_utilities.h"
 #include "mainwidget.h"
+#include "main/main_account.h"
+#include "main/main_app_config.h"
+#include "main/main_domain.h"
 #include "main/main_session.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/text/text_utilities.h"
@@ -37,6 +40,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_schedule_box.h"
 #include "history/view/history_view_scheduled_section.h"
 #include "menu/menu_send.h"
+#include "wallet/wallet_panel.h"
 #include "data/data_types.h"
 #include "styles/style_calls.h" // groupCallBoxLabel
 #include "styles/style_chat_helpers.h"
@@ -121,6 +125,65 @@ constexpr auto kReminderSetToastDuration = 4 * crl::time(1000);
 	return result;
 }
 
+[[nodiscard]] std::vector<QString> DefaultWhitelistedDomains() {
+	return {
+		u"telegram.dog"_q,
+		u"telegram.me"_q,
+		u"telegram.org"_q,
+		u"t.me"_q,
+		u"telegra.ph"_q,
+		u"te.legra.ph"_q,
+		u"graph.org"_q,
+		u"telesco.pe"_q,
+		u"fragment.com"_q,
+	};
+}
+
+[[nodiscard]] std::vector<QString> WhitelistedDomains(
+		const Main::AppConfig &config) {
+	return config.get<std::vector<QString>>(
+		u"whitelisted_domains"_q,
+		DefaultWhitelistedDomains());
+}
+
+[[nodiscard]] std::vector<QString> WhitelistedDomains(
+		const ClickHandlerContext &my) {
+	const auto &domain = Core::App().domain();
+	const auto window = my.sessionWindow.get();
+	const auto account = window
+		? &window->session().account()
+		: my.peer
+		? &my.peer->session().account()
+		: domain.started()
+		? &domain.active()
+		: nullptr;
+	return account
+		? WhitelistedDomains(account->appConfig())
+		: DefaultWhitelistedDomains();
+}
+
+[[nodiscard]] bool HostInDomains(
+		const QString &host,
+		const std::vector<QString> &domains) {
+	return ranges::any_of(domains, [&](const QString &domain) {
+		return !domain.isEmpty()
+			&& host.endsWith(domain, Qt::CaseInsensitive)
+			&& (host.size() == domain.size()
+				|| host[host.size() - domain.size() - 1] == '.');
+	});
+}
+
+[[nodiscard]] bool HostInAnyWhitelist(const QString &host) {
+	using Entry = Main::Domain::AccountWithIndex;
+	return HostInDomains(host, DefaultWhitelistedDomains())
+		|| ranges::any_of(Core::App().domain().accounts(), [&](
+				const Entry &entry) {
+			return HostInDomains(
+				host,
+				WhitelistedDomains(entry.account->appConfig()));
+		});
+}
+
 [[nodiscard]] bool IsTelegramShortLinkHost(const QUrl &url) {
 	using namespace qthelp;
 
@@ -130,8 +193,11 @@ constexpr auto kReminderSetToastDuration = 4 * crl::time(1000);
 		RegExOption::CaseInsensitive).valid();
 }
 
-[[nodiscard]] bool HiddenUrlRequiresConfirmation(const QUrl &url) {
-	return UrlRequiresConfirmation(url) || IsTelegramShortLinkHost(url);
+[[nodiscard]] bool HiddenUrlRequiresConfirmation(
+		const QUrl &url,
+		const ClickHandlerContext &my) {
+	return !HostInDomains(url.host(), WhitelistedDomains(my))
+		|| IsTelegramShortLinkHost(url);
 }
 
 [[nodiscard]] bool IsWebAuthTokenPart(QStringView part) {
@@ -326,20 +392,12 @@ void DoneSetReminder(std::shared_ptr<ChatHelpers::Show> show) {
 
 } // namespace
 
-bool UrlRequiresConfirmation(const QUrl &url) {
-	using namespace qthelp;
-
-	return !regex_match(
-		"(^|\\.)("
-		"telegram\\.(org|me|dog)"
-		"|t\\.me"
-		"|te\\.?legra\\.ph"
-		"|graph\\.org"
-		"|fragment\\.com"
-		"|telesco\\.pe"
-		")$",
+bool UrlRequiresConfirmation(
+		not_null<Main::Session*> session,
+		const QUrl &url) {
+	return !HostInDomains(
 		url.host(),
-		RegExOption::CaseInsensitive);
+		WhitelistedDomains(session->appConfig()));
 }
 
 QString UrlWithoutWebAuthTokens(const QString &url) {
@@ -353,9 +411,8 @@ QString UrlWithoutWebAuthTokens(const QString &url) {
 	while (host.endsWith('.')) {
 		host.chop(1);
 	}
-	auto check = QUrl();
-	check.setHost(host);
-	if (host.isEmpty() || UrlRequiresConfirmation(check)) {
+	// Stripping a foreign token is always safe, so check the widest list.
+	if (host.isEmpty() || !HostInAnyWhitelist(host)) {
 		return url;
 	}
 	const auto query = WithoutWebAuthTokenParams(
@@ -454,7 +511,7 @@ void HiddenUrlClickHandler::Open(QString url, QVariant context) {
 		};
 		const auto requiresConfirmation = forceConfirmation
 			|| (confirmAfterIvFallback && !canTryIv)
-			|| (HiddenUrlRequiresConfirmation(parsedUrl)
+			|| (HiddenUrlRequiresConfirmation(parsedUrl, my)
 				&& !skipConfirmation);
 		// LuxuryGram: the switch is about web pages. A hidden file:, smb: or
 		// search-ms: target hands the link to a local handler, so it keeps the
@@ -580,7 +637,10 @@ void BotGameUrlClickHandler::onClick(ClickContext context) const {
 		: nullptr;
 	const auto media = item ? item->media() : nullptr;
 	const auto game = media ? media->game() : nullptr;
-	if (url.startsWith(u"tg://"_q, Qt::CaseInsensitive) || !_bot || !game) {
+	if (url.startsWith(u"tg://"_q, Qt::CaseInsensitive)
+		|| Core::IsGetPremiumLocalUrl(url)
+		|| !_bot
+		|| !game) {
 		openLink();
 		return;
 	}
@@ -883,4 +943,22 @@ QString FormattedDateClickHandler::tooltip() const {
 	return QLocale().toString(
 		base::unixtime::parse(_date),
 		QLocale::LongFormat);
+}
+
+TonAddressClickHandler::TonAddressClickHandler(QString address)
+: _address(std::move(address)) {
+}
+
+void TonAddressClickHandler::onClick(ClickContext context) const {
+	if (context.button != Qt::LeftButton) {
+		return;
+	}
+	const auto my = context.other.value<ClickHandlerContext>();
+	if (const auto controller = my.sessionWindow.get()) {
+		Wallet::OpenAddressEntity(controller, _address);
+	}
+}
+
+auto TonAddressClickHandler::getTextEntity() const -> TextEntity {
+	return { EntityType::TonAddress };
 }

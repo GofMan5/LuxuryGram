@@ -74,13 +74,17 @@ public:
 	// widget and image to assertions. Keep readiness limited to identity and
 	// paint availability; geometry/raster expectations belong in |inspect|
 	// so a mismatch is a FAIL with actual values, never a timeout.
+	// |skipReason| becomes the capture stage's own Stage::skipReason: a
+	// non-empty answer when the stage begins writes TEST_RESULT: N/A and
+	// skips it; left empty the stage is unchanged.
 	void captureAndInspect(
 		const QString &name,
 		Fn<QWidget*()> resolve,
 		Fn<bool(QWidget*)> ready,
 		Fn<void(QWidget*, const QImage &)> inspect,
 		crl::time timeout = kDefaultStageTimeout,
-		Fn<QString(QWidget*)> readinessDetails = {});
+		Fn<QString(QWidget*)> readinessDetails = {},
+		Fn<QString()> skipReason = {});
 
 	// Release point for per-scenario timers, rpl::lifetimes, watchers, and
 	// raw cross-stage pointers. finish() runs every registered callback
@@ -92,11 +96,32 @@ public:
 	// drain nor wait for it, and they run before Complete() and Core::Quit().
 	// They also run when a teardown stage already ran, so they must be safe
 	// to call after teardown. A registration made after finish() has already
-	// run executes immediately and is never silently dropped.
+	// run executes immediately and is never silently dropped. The
+	// Test-session helper's finish verification (FinishSessionGate in
+	// test_session_gate.h) runs after every callback registered before or
+	// during finish(), and before the post-quit fuse and the drain. Only
+	// while a switch back's post-switch drain is outstanding - that
+	// verification switched an account back, or the watchdog finished the
+	// runner while the helper's restore stage was still waiting its drain -
+	// does finish() also wait what is left of that drain, yielding to the
+	// event loop, and take its fresh verification
+	// (FinishSessionGateAfterDrain) before running the drain, Complete() and
+	// Core::Quit() once; a timer that arrives before the drain's recorded end
+	// waits the rest again, so neither the verification nor the completion
+	// comes early. The post-quit fuse is armed before that wait, its
+	// deadline extended by it. Without the helper, or when it is already
+	// settled (nothing was switched back, or the restore stage finished its
+	// drain and its fresh check), finish() goes on at once.
 	void onFinish(Fn<void()> callback);
 
 	[[nodiscard]] bool empty() const;
 
+	// Logs SCENARIO_START, arms the watchdog, then runs the session gate
+	// (test_session_gate.h) before the first stage begins: it logs every
+	// account's environment and, when it refuses, writes one
+	// "fixture gate: session gate" FAIL and gives every stage its skip
+	// reason, so each writes TEST_RESULT: N/A, none of their callbacks runs
+	// and the run still reaches finish() and TEST_COMPLETE.
 	void start();
 
 private:
