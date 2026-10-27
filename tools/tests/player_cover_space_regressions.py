@@ -97,6 +97,8 @@ Instance Player;
 not_null<Instance*> instance() { return &Player; }
 } // namespace Media::Player
 namespace Core {
+// The real Core has a Settings class that hides ::Settings.
+class Settings {};
 struct Application {
     bool locked = false;
     Window::Controller *window = nullptr;

@@ -184,7 +184,7 @@ bool HandleSpacePlayPause(
 			|| focus->inherits("QLineEdit")
 			|| focus->inherits("QTextEdit")
 			|| focus->inherits("QPlainTextEdit")
-			|| dynamic_cast<Settings::AbstractSection*>(focus))) {
+			|| dynamic_cast<::Settings::AbstractSection*>(focus))) {
 		return false;
 	}
 	const auto window = app->activeWindow();
