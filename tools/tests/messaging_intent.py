@@ -55,6 +55,7 @@ cpp = r'''
 #include <memory>
 #include <string>
 #include <utility>
+#include <set>
 #include <vector>
 #include <gsl/gsl>
 using gsl::not_null;
@@ -86,12 +87,12 @@ Api::MessageToSend prepare(Action action, bool downloadable, Data::ForwardOption
 PREP_HERE
  return message;
 }
-struct HistoryItem { int id; bool selectable = true; };
+struct HistoryItem { int id; bool selectable = true; int fullId() const { return id; } };
 struct View { HistoryItem *item; HistoryItem *data() { return item; } };
 struct Delegate { bool listIsItemGoodForSelection(HistoryItem *item) { return item->selectable; } };
 namespace ranges { template <class C, class V> auto find(const C &c, const V &v) { return std::find(c.begin(), c.end(), v); } }
 struct ListWidget {
- std::vector<not_null<View*>> _items; Delegate *_delegate;
+ std::vector<not_null<View*>> _items; Delegate *_delegate; std::set<int> _selected;
  View *viewForItem(HistoryItem *item) const { for (auto view : _items) if(view->item == item) return view; return nullptr; }
  std::vector<not_null<HistoryItem*>> collectBetween(not_null<HistoryItem*>, not_null<HistoryItem*>, int) const;
 };

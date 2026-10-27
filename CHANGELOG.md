@@ -4,6 +4,22 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- The message context menu, next to Forward and Forward Selected, has two submenus. Forward Options opens the chat picker already set to Hide Sender Name, or to Hide Caption when the message has a caption. Forward to Saved Messages forwards straight to Saved Messages, with no chat picker, as is, without the sender name, or without the caption, and shows the usual "Message forwarded to Saved Messages" toast without closing any window you open meanwhile. If Saved Messages cannot take the messages, an error box explains why and the selection is kept. Inside Saved Messages itself only Forward Options is offered. Both work for a single message, an album and a selection, and offer only the variants the forward box would offer for those messages. A Forward Variants row under Context Menu Elements in Settings can hide both submenus or move them to the extended menu.
+- Clicking the cover art in the expanded music player opens it in the system's default image viewer. The pointer turns into a hand over a real cover; the "no cover" placeholder is not clickable.
+- Space pauses and resumes the playing song or voice message in the main window whenever the keyboard focus is not in a text field: in the chat list, in channels and other chats without a message field, in profiles and in boxes. A typed space is never lost: in a chat with a message field, focus stays in that field and Space keeps typing. Space also keeps its usual job on controls focused with Tab and on a Settings row picked with the arrow keys. With nothing playing, in the media viewer, and in screen reader mode, Space works as before.
+
+### Changed
+
+- Select messages between extends a selected range up to the full selection limit: select one more message above or below the range and choose Select messages between again, and everything from the range's nearest edge to that message is selected. Messages already selected inside the range used to count against the 100-message limit a second time, so a 40-message range plus a message 30 below it lost the action although the result is 70 messages; now the action is offered whenever the result fits in 100. Select up to this message also no longer refuses a downward range that lands exactly on the limit; it was one message short going down but not going up. This works in chats and in replies, scheduled messages and other message lists.
+
+### Fixed
+
+- A voice or round video message paused in the record bar survives the automatic app lock: after unlocking, the chat is still open with the draft in the bar, ready to play, resume or send. The lock screen used to close the open chat once it slid in (and again when the locked window was closed to the tray or taskbar), and closing the chat threw the draft away. A recording still running when the app locks is paused into a draft the same way without pulling the window to the front, and Enter or Space typed into the passcode field no longer sends or plays the draft behind the lock. This replaces the one-second post-unlock guard from 1.0.20, which never caught the real cause.
+
 ## 1.0.21
 
 ### Changed

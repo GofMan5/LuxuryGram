@@ -9736,6 +9736,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_SearchByIDResults" = "Found by ID";
 "luxury_ContextCopyCallbackData" = "Copy Callback Data";
 "luxury_RepeatMessage" = "Repeat Message";
+"luxury_ForwardOptions" = "Forward Options";
+"luxury_ForwardToSaved" = "Forward to Saved Messages";
+"luxury_ForwardVariantsMenuText" = "Forward Variants";
 "luxury_RegisterURLScheme" = "Register URL Scheme";
 "luxury_PluginVersion" = "Version";
 "luxury_PluginNoDescription" = "No description provided.";
@@ -9765,6 +9768,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "luxury_PlayerTitle" = "Now playing";
 "luxury_PlayerSaveCover" = "Save cover";
 "luxury_PlayerSaveCoverFailed" = "Couldn't save the cover image.";
+"luxury_PlayerOpenCover" = "Open cover in image viewer";
 "luxury_SavedMusicLoadError" = "Couldn't load music files";
 "luxury_SavedMusicRetry" = "Try again";
 "luxury_StartupInterface" = "Loading interface…";

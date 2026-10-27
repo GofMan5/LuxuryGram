@@ -584,6 +584,16 @@ bool AddForwardSelectedAction(
 			ExtractIdsList(request.selectedItems),
 			callback);
 	}, &st::menuIconForward);
+	const auto weak = base::make_weak(list);
+	LuxuryUi::AddForwardVariantsActions(
+		menu,
+		list->controller(),
+		ExtractIdsList(request.selectedItems),
+		[=] {
+			if (const auto strong = weak.get()) {
+				strong->cancelSelection();
+			}
+		});
 	return true;
 }
 
@@ -618,6 +628,10 @@ bool AddForwardMessageAction(
 					: MessageIdsList{ 1, itemId }));
 		}
 	}, &st::menuIconForward);
+	LuxuryUi::AddForwardVariantsActions(
+		menu,
+		list->controller(),
+		asGroup ? owner->itemOrItsGroup(item) : MessageIdsList{ 1, itemId });
 	return true;
 }
 

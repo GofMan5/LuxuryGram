@@ -3309,7 +3309,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			if (nextItem->fullId() == toId) {
 				return collected;
 			}
-			if (nextItem->canBeSelected()) {
+			// Messages already selected inside the range are not counted
+			// against the limit, so a selected range can be extended.
+			if (nextItem->canBeSelected()
+				&& !isSelectedAsGroup(&_selected, nextItem)) {
 				collected.push_back(nextItem);
 			}
 			current = nextItem;
@@ -3360,9 +3363,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				}
 				const auto start = (topToBottom ? nearestItem : toItem);
 				const auto end = (topToBottom ? toItem : nearestItem);
+				// The nearest endpoint is already selected in both directions.
 				const auto left = LuxuryMaxSelectedItems()
 					- selectedState.count
-					+ (topToBottom ? 0 : 1);
+					+ 1;
 				if (collectBetween(start, end, left).empty()) {
 					return;
 				}
@@ -3534,6 +3538,11 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				_menu->addAction(tr::lng_context_forward_selected(tr::now), [=] {
 					_widget->forwardSelected();
 				}, &st::menuIconForward);
+				LuxuryUi::AddForwardVariantsActions(
+					_menu,
+					controller,
+					getSelectedForwardItems(),
+					crl::guard(this, [=] { _widget->clearSelected(); }));
 			}
 			if (selectedState.count > 0 && selectedState.canDeleteCount == selectedState.count) {
 				_menu->addAction(tr::lng_context_delete_selected(tr::now), [=] {
@@ -3612,6 +3621,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					_menu->addAction(tr::lng_context_forward_msg(tr::now), [=] {
 						forwardItem(itemId);
 					}, &st::menuIconForward);
+					LuxuryUi::AddForwardVariantsActions(
+						_menu,
+						controller,
+						MessageIdsList{ 1, itemId });
 				}
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {
@@ -3880,6 +3893,11 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				_menu->addAction(tr::lng_context_forward_selected(tr::now), [=] {
 					_widget->forwardSelected();
 				}, &st::menuIconForward);
+				LuxuryUi::AddForwardVariantsActions(
+					_menu,
+					controller,
+					getSelectedForwardItems(),
+					crl::guard(this, [=] { _widget->clearSelected(); }));
 			}
 			if (selectedState.count > 0 && selectedState.count == selectedState.canDeleteCount) {
 				_menu->addAction(tr::lng_context_delete_selected(tr::now), [=] {
@@ -3911,6 +3929,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					_menu->addAction(tr::lng_context_forward_msg(tr::now), [=] {
 						forwardAsGroup(itemId);
 					}, &st::menuIconForward);
+					LuxuryUi::AddForwardVariantsActions(
+						_menu,
+						controller,
+						session->data().itemOrItsGroup(item));
 				}
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {

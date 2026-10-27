@@ -40,6 +40,8 @@
 #include "data/data_user.h"
 #include "history/history.h"
 #include "history/history_item_components.h"
+#include "history/history_item_helpers.h"
+#include "history/view/controls/history_view_forward_panel.h"
 #include "history/view/history_view_context_menu.h"
 #include "history/view/history_view_element.h"
 #include "main/main_session.h"
@@ -1249,6 +1251,123 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 			}
 		},
 		&st::luxuryRepeatMenuIcon);
+}
+
+void AddForwardVariantsActions(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<Window::SessionController*> controller,
+		MessageIdsList ids,
+		Fn<void()> done) {
+	using Options = Data::ForwardOptions;
+	const auto &settings = LuxurySettings::getInstance();
+	if (!needToShowItem(settings.showForwardVariantsInContextMenu())) {
+		return;
+	}
+	const auto session = &controller->session();
+	const auto items = session->data().idsToItems(ids);
+	if (items.empty()) {
+		return;
+	}
+	// Same gates and labels as the forward options in the draft panel.
+	const auto canHideAuthor = HistoryView::Controls::CanHideForwardAuthor(
+		session,
+		items);
+	const auto canDropNames = canHideAuthor
+		&& HistoryView::Controls::HasDropForwardedInfoSetting(items);
+	const auto captionsCount = ItemsForwardCaptionsCount(items);
+	const auto canDropCaptions = canHideAuthor && (captionsCount > 0);
+	const auto namesText = (ItemsForwardSendersCount(items) == 1)
+		? tr::lng_forward_action_hide_sender(tr::now)
+		: tr::lng_forward_action_hide_senders(tr::now);
+	const auto captionsText = (captionsCount == 1)
+		? tr::lng_forward_action_hide_caption(tr::now)
+		: tr::lng_forward_action_hide_captions(tr::now);
+
+	const auto choose = [=](Options options) {
+		return crl::guard(controller, [=] {
+			Window::ShowForwardMessagesBox(
+				controller,
+				Data::ForwardDraft{ .ids = ids, .options = options },
+				Fn<void()>(done));
+		});
+	};
+	// Upstream one-click path. The share box callback would close
+	// whatever layer is open when the request finishes.
+	const auto toSaved = [=](Options options) {
+		return crl::guard(controller, [=] {
+			const auto items = session->data().idsToItems(ids);
+			if (items.empty()) {
+				return;
+			}
+			const auto self = std::vector<not_null<Data::Thread*>>{
+				session->data().history(session->userPeerId()),
+			};
+			const auto error = GetErrorForSending(
+				self,
+				{ .forward = &items });
+			if (error.error) {
+				controller->show(MakeSendErrorBox(error, false));
+				return;
+			}
+			Window::ForwardToSelf(
+				controller->uiShow(),
+				{ .ids = ids, .options = options });
+			if (done) {
+				done();
+			}
+		});
+	};
+
+	// Upstream never forwards from Saved Messages into itself in one click.
+	const auto fromSaved = (ids.front().peer == session->userPeerId());
+	if (!canDropNames && !canDropCaptions) {
+		if (fromSaved) {
+			return;
+		}
+		menu->addAction(
+			tr::luxury_ForwardToSaved(tr::now),
+			toSaved(Options::PreserveInfo),
+			&st::menuIconSavedMessages);
+		return;
+	}
+	const auto callback = Ui::Menu::CreateAddActionCallback(menu);
+	const auto fill = [&](Fn<Fn<void()>(Options)> make, bool plain) {
+		return [&, make, plain](not_null<Ui::PopupMenu*> submenu) {
+			if (plain) {
+				submenu->addAction(
+					tr::lng_context_forward_msg(tr::now),
+					make(Options::PreserveInfo),
+					&st::menuIconForward);
+			}
+			if (canDropNames) {
+				submenu->addAction(
+					namesText,
+					make(Options::NoSenderNames),
+					&st::menuIconUserHide);
+			}
+			if (canDropCaptions) {
+				submenu->addAction(
+					captionsText,
+					make(Options::NoNamesAndCaptions),
+					&st::menuIconCaptionHide);
+			}
+		};
+	};
+	callback(Window::PeerMenuCallback::Args{
+		.text = tr::luxury_ForwardOptions(tr::now),
+		.handler = nullptr,
+		.icon = &st::menuIconForward,
+		.fillSubmenu = fill(choose, false),
+	});
+	if (fromSaved) {
+		return;
+	}
+	callback(Window::PeerMenuCallback::Args{
+		.text = tr::luxury_ForwardToSaved(tr::now),
+		.handler = nullptr,
+		.icon = &st::menuIconSavedMessages,
+		.fillSubmenu = fill(toSaved, true),
+	});
 }
 
 void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {

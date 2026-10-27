@@ -67,6 +67,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/mtproto_dc_options.h"
 #include "mtproto/mtproto_config.h"
 #include "mtproto/web_proxy/web_proxy_transport.h"
+#include "media/audio/media_audio.h"
 #include "media/audio/media_audio_track.h"
 #include "media/player/media_player_instance.h"
 #include "media/player/media_player_float.h"
@@ -82,6 +83,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/cached_round_corners.h"
 #include "ui/power_saving.h"
 #include "ui/screen_reader_mode.h"
+#include "settings/settings_common.h" // Settings::AbstractSection.
 #include "storage/storage_domain.h"
 #include "storage/storage_databases.h"
 #include "storage/storage_folder_archive.h"
@@ -155,6 +157,49 @@ base::options::toggle OptionSkipUrlSchemeRegister({
 	.name = "Skip URL scheme register",
 	.description = "Don't re-register tg:// URL scheme on autoupdate.",
 });
+
+// Space pauses or resumes the loaded track unless the focused widget can
+// use it: text inputs, Tab-focusable controls, Settings keyboard navigation,
+// screen reader navigation.
+bool HandleSpacePlayPause(
+		not_null<Application*> app,
+		not_null<QObject*> object,
+		QKeyEvent *event) {
+	const auto modifiers = event->modifiers()
+		& ~(Qt::KeypadModifier | Qt::GroupSwitchModifier);
+	if (event->key() != Qt::Key_Space
+		|| modifiers != Qt::NoModifier
+		|| app->passcodeLocked()
+		|| Ui::ScreenReaderModeActive()) {
+		return false;
+	}
+	// The filter sees the event again on every parent it propagates to:
+	// decide once, for the widget that receives it first.
+	const auto focus = QApplication::focusWidget();
+	const auto receiver = focus ? focus : QApplication::activeWindow();
+	if (!receiver || object.get() != receiver) {
+		return false;
+	} else if (focus
+		&& ((focus->focusPolicy() & Qt::TabFocus)
+			|| focus->inherits("QLineEdit")
+			|| focus->inherits("QTextEdit")
+			|| focus->inherits("QPlainTextEdit")
+			|| dynamic_cast<Settings::AbstractSection*>(focus))) {
+		return false;
+	}
+	const auto window = app->activeWindow();
+	if (!window || receiver->window() != window->widget()) {
+		return false;
+	}
+	const auto player = Media::Player::instance();
+	const auto type = player->getActiveType();
+	if (Media::Player::IsStoppedOrStopping(player->getState(type).state)) {
+		return false;
+	} else if (!event->isAutoRepeat()) {
+		player->playPause(type);
+	}
+	return true;
+}
 
 } // namespace
 
@@ -765,6 +810,8 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 		} else if (Shortcuts::HandlePossibleChatSwitch(event)) {
 			return true;
 		} else if (HandleKeysLegendHotkey(this, object, event)) {
+			return true;
+		} else if (HandleSpacePlayPause(this, object, event)) {
 			return true;
 		}
 	} break;

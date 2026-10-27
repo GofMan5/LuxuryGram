@@ -61,6 +61,7 @@ private:
 		const AudioMsgId &current);
 	void setCover(QImage image);
 	void saveCover();
+	void openCover();
 	void handleSongUpdate(const Media::Player::TrackState &state);
 	void handlePlaylistUpdate();
 	void handleSeekProgress(float64 progress);

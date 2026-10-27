@@ -824,6 +824,7 @@ void LuxurySettings::validate() {
 	validateEnum(_showEditsHistoryInContextMenu, defaults._showEditsHistoryInContextMenu);
 	validateEnum(_showReadUntilInContextMenu, defaults._showReadUntilInContextMenu);
 	validateEnum(_showExpireMediaInContextMenu, defaults._showExpireMediaInContextMenu);
+	validateEnum(_showForwardVariantsInContextMenu, defaults._showForwardVariantsInContextMenu);
 
 	validateEnum(_translationProvider, defaults._translationProvider, 3);
 	if ((_translationProvider.current() == TranslationProvider::Native)
@@ -1194,6 +1195,12 @@ void LuxurySettings::setShowExpireMediaInContextMenu(ContextMenuVisibility val) 
 	save();
 }
 
+void LuxurySettings::setShowForwardVariantsInContextMenu(ContextMenuVisibility val) {
+	if (_showForwardVariantsInContextMenu.current() == val) return;
+	_showForwardVariantsInContextMenu = val;
+	save();
+}
+
 void LuxurySettings::setShowAttachButtonInMessageField(bool val) {
 	if (_showAttachButtonInMessageField.current() == val) return;
 	_showAttachButtonInMessageField = val;
@@ -1555,6 +1562,7 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"showEditsHistoryInContextMenu", s._showEditsHistoryInContextMenu.current()},
 		{"showReadUntilInContextMenu", s._showReadUntilInContextMenu.current()},
 		{"showExpireMediaInContextMenu", s._showExpireMediaInContextMenu.current()},
+		{"showForwardVariantsInContextMenu", s._showForwardVariantsInContextMenu.current()},
 		{"showAttachButtonInMessageField", s._showAttachButtonInMessageField.current()},
 		{"showCommandsButtonInMessageField", s._showCommandsButtonInMessageField.current()},
 		{"showEmojiButtonInMessageField", s._showEmojiButtonInMessageField.current()},
@@ -1724,6 +1732,7 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	s._showEditsHistoryInContextMenu = j.value("showEditsHistoryInContextMenu", defaults._showEditsHistoryInContextMenu.current());
 	s._showReadUntilInContextMenu = j.value("showReadUntilInContextMenu", defaults._showReadUntilInContextMenu.current());
 	s._showExpireMediaInContextMenu = j.value("showExpireMediaInContextMenu", defaults._showExpireMediaInContextMenu.current());
+	s._showForwardVariantsInContextMenu = j.value("showForwardVariantsInContextMenu", defaults._showForwardVariantsInContextMenu.current());
 	s._showAttachButtonInMessageField = j.value("showAttachButtonInMessageField", defaults._showAttachButtonInMessageField.current());
 	s._showCommandsButtonInMessageField = j.value("showCommandsButtonInMessageField", defaults._showCommandsButtonInMessageField.current());
 	s._showEmojiButtonInMessageField = j.value("showEmojiButtonInMessageField", defaults._showEmojiButtonInMessageField.current());
@@ -1932,6 +1941,9 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_RegisterURLScheme", "Зарегистрировать URL-схему" },
 	{ "luxury_RemoveMessageTail", "Убирать хвост сообщений" },
 	{ "luxury_RepeatMessage", "Повторить сообщение" },
+	{ "luxury_ForwardOptions", "Параметры пересылки" },
+	{ "luxury_ForwardToSaved", "Переслать в Избранное" },
+	{ "luxury_ForwardVariantsMenuText", "Варианты пересылки" },
 	{ "luxury_ReplaceMarksWithIcons", "Заменить на иконки" },
 	{ "luxury_ResetSettings", "Сбросить настройки" },
 	{ "luxury_ResetSettingsConfirmation", "Сбросить **все** настройки LuxuryGram к значениям по умолчанию?" },
@@ -2152,6 +2164,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_PlayerTitle", "Сейчас играет" },
 	{ "luxury_PlayerSaveCover", "Сохранить обложку" },
 	{ "luxury_PlayerSaveCoverFailed", "Не удалось сохранить обложку." },
+	{ "luxury_PlayerOpenCover", "Открыть обложку в просмотрщике" },
 	{ "luxury_SavedMusicLoadError", "Не удалось загрузить музыку" },
 	{ "luxury_SavedMusicRetry", "Попробовать снова" },
 	{ "luxury_StartupInterface", "Загрузка интерфейса…" },

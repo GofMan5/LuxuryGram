@@ -138,7 +138,6 @@ private:
 	void stop(bool send);
 	void stopRecording(StopType type, bool ttlBeforeHide = false);
 	void visibilityAnimate(bool show, Fn<void()> &&callback);
-	void hideFastUnchecked();
 
 	void drawDuration(QPainter &p);
 	void drawRedCircle(QPainter &p);
@@ -192,7 +191,6 @@ private:
 	crl::time _resumeRawDuration = 0;
 	bool _resumeFromTrimmedListen = false;
 	rpl::variable<bool> _paused;
-	crl::time _draftGuardUntil = 0;
 
 	base::Timer _startTimer;
 

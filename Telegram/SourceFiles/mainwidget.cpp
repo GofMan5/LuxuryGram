@@ -70,6 +70,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_account.h"
 #include "main/main_domain.h"
 #include "media/audio/media_audio.h"
+#include "media/audio/media_audio_capture.h"
 #include "media/player/media_player_panel.h"
 #include "media/player/media_player_widget.h"
 #include "media/player/media_player_dropdown.h"
@@ -2280,7 +2281,9 @@ std::vector<Window::SavedChat> MainWidget::chatStackForSave() const {
 
 bool MainWidget::preventsCloseSection(Fn<void()> callback) const {
 	if (Core::App().passcodeLocked()) {
-		return false;
+		// No discard box behind the lock: keep the chat with a voice draft.
+		const auto capture = ::Media::Capture::instance();
+		return capture && capture->started();
 	}
 	auto copy = callback;
 	return (_mainSection && _mainSection->preventsClose(std::move(copy)))

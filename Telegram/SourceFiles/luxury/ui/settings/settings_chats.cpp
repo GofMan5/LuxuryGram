@@ -385,6 +385,15 @@ void BuildContextMenuElements(SectionBuilder &builder, LuxurySectionBuilder &lux
 		.setter = [](int i) { LuxurySettings::getInstance().setShowExpireMediaInContextMenu(static_cast<ContextMenuVisibility>(i)); },
 		.icon = { &st::menuIconTTLAny },
 	});
+	luxury.addChooseButton({
+		.id = u"luxury/showForwardVariantsInContextMenu"_q,
+		.title = tr::luxury_ForwardVariantsMenuText(),
+		.boxTitle = tr::luxury_SettingsContextMenuTitle(),
+		.initialSelection = static_cast<int>(settings->showForwardVariantsInContextMenu()),
+		.options = options,
+		.setter = [](int i) { LuxurySettings::getInstance().setShowForwardVariantsInContextMenu(static_cast<ContextMenuVisibility>(i)); },
+		.icon = { &st::menuIconForward },
+	});
 	if (settings->filtersEnabled()) {
 		luxury.addChooseButton({
 			.id = u"luxury/showAddFilterInContextMenu"_q,

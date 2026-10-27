@@ -65,6 +65,11 @@ void AddUserMessagesAction(
 	HistoryItem *item);
 void AddMessageDetailsAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
 void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, HistoryView::Context context);
+void AddForwardVariantsActions(
+	not_null<Ui::PopupMenu*> menu,
+	not_null<Window::SessionController*> controller,
+	MessageIdsList ids,
+	Fn<void()> done = nullptr);
 void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
 void AddBurnAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item);
 void AddCreateFilterAction(not_null<Ui::PopupMenu*> menu,

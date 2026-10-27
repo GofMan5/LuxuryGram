@@ -2019,7 +2019,10 @@ std::vector<not_null<HistoryItem*>> ListWidget::collectBetween(
 			return {};
 		}
 		const auto item = (*i)->data();
-		if (_delegate->listIsItemGoodForSelection(item)) {
+		// Messages already selected inside the range are not counted
+		// against the limit, so a selected range can be extended.
+		if (_delegate->listIsItemGoodForSelection(item)
+			&& !_selected.contains(item->fullId())) {
 			result.push_back(item);
 		}
 	}
@@ -2056,9 +2059,10 @@ std::vector<not_null<HistoryItem*>> ListWidget::selectionUpTo(
 	}
 	const auto startItem = topToBottom ? nearestItem : toItem.get();
 	const auto endItem = topToBottom ? toItem.get() : nearestItem;
+	// The nearest endpoint is already selected in both directions.
 	const auto left = LuxuryMaxSelectedItems()
 		- int(_selected.size())
-		+ (topToBottom ? 0 : 1);
+		+ 1;
 	return collectBetween(startItem, endItem, left);
 }
 

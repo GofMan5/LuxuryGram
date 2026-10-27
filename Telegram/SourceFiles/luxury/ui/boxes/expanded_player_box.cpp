@@ -20,6 +20,7 @@
 #include "media/audio/media_audio.h"
 #include "media/player/media_player_button.h"
 #include "media/player/media_player_instance.h"
+#include "storage/storage_account.h"
 #include "ui/image/image.h"
 #include "ui/painter.h"
 #include "ui/style/style_core_scale.h"
@@ -58,11 +59,12 @@ void ExpandedPlayerBox::prepare() {
 	setupContent();
 }
 
-class ExpandedPlayerBox::CoverWidget final : public Ui::RpWidget {
+class ExpandedPlayerBox::CoverWidget final : public Ui::AbstractButton {
 public:
 	CoverWidget(QWidget *parent, int radius)
-	: RpWidget(parent)
+	: AbstractButton(parent)
 	, _radius(radius) {
+		setDisabled(true);
 		style::PaletteChanged(
 		) | rpl::on_next([=] {
 			_placeholder = QImage();
@@ -74,6 +76,7 @@ public:
 		_image = std::move(image);
 		_prepared = QImage();
 		_placeholder = QImage();
+		setDisabled(_image.isNull());
 		update();
 	}
 
@@ -286,6 +289,8 @@ void ExpandedPlayerBox::setupContent() {
 	_cover = content->add(
 		object_ptr<CoverWidget>(content, st::luxuryPlayerCoverRadius),
 		st::luxuryPlayerCoverPadding);
+	_cover->setClickedCallback([=] { openCover(); });
+	_cover->setAccessibleName(tr::luxury_PlayerOpenCover(tr::now));
 	_titleLabel = content->add(
 		object_ptr<Ui::FlatLabel>(content, st::luxuryPlayerTitle),
 		st::luxuryPlayerTitlePadding);
@@ -480,6 +485,28 @@ void ExpandedPlayerBox::saveCover() {
 				}
 			});
 		}));
+}
+
+void ExpandedPlayerBox::openCover() {
+	const auto image = _cover->image();
+	if (image.isNull()) {
+		return;
+	}
+	const auto folder = _controller->session().local().tempDirectory();
+	// A name per click: quick repeated clicks must not share one file.
+	const auto path = folder + u"cover_%1.png"_q.arg(crl::now());
+	const auto controller = _controller;
+	crl::async([=] {
+		QDir().mkpath(folder);
+		if (image.save(path)) {
+			File::Launch(path);
+		} else {
+			crl::on_main(controller, [=] {
+				controller->showToast(
+					tr::luxury_PlayerSaveCoverFailed(tr::now));
+			});
+		}
+	});
 }
 
 void ExpandedPlayerBox::handleSongUpdate(

@@ -324,6 +324,7 @@ public:
 	[[nodiscard]] ContextMenuVisibility showEditsHistoryInContextMenu() const { return _showEditsHistoryInContextMenu.current(); }
 	[[nodiscard]] ContextMenuVisibility showReadUntilInContextMenu() const { return _showReadUntilInContextMenu.current(); }
 	[[nodiscard]] ContextMenuVisibility showExpireMediaInContextMenu() const { return _showExpireMediaInContextMenu.current(); }
+	[[nodiscard]] ContextMenuVisibility showForwardVariantsInContextMenu() const { return _showForwardVariantsInContextMenu.current(); }
 	[[nodiscard]] bool showAttachButtonInMessageField() const { return _showAttachButtonInMessageField.current(); }
 	[[nodiscard]] bool showCommandsButtonInMessageField() const { return _showCommandsButtonInMessageField.current(); }
 	[[nodiscard]] bool showEmojiButtonInMessageField() const { return _showEmojiButtonInMessageField.current(); }
@@ -422,6 +423,7 @@ public:
 	void setShowEditsHistoryInContextMenu(ContextMenuVisibility val);
 	void setShowReadUntilInContextMenu(ContextMenuVisibility val);
 	void setShowExpireMediaInContextMenu(ContextMenuVisibility val);
+	void setShowForwardVariantsInContextMenu(ContextMenuVisibility val);
 	void setShowAttachButtonInMessageField(bool val);
 	void setShowCommandsButtonInMessageField(bool val);
 	void setShowEmojiButtonInMessageField(bool val);
@@ -572,6 +574,8 @@ public:
 	[[nodiscard]] rpl::producer<ContextMenuVisibility> showReadUntilInContextMenuChanges() const { return _showReadUntilInContextMenu.changes(); }
 	[[nodiscard]] rpl::producer<ContextMenuVisibility> showExpireMediaInContextMenuValue() const { return _showExpireMediaInContextMenu.value(); }
 	[[nodiscard]] rpl::producer<ContextMenuVisibility> showExpireMediaInContextMenuChanges() const { return _showExpireMediaInContextMenu.changes(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showForwardVariantsInContextMenuValue() const { return _showForwardVariantsInContextMenu.value(); }
+	[[nodiscard]] rpl::producer<ContextMenuVisibility> showForwardVariantsInContextMenuChanges() const { return _showForwardVariantsInContextMenu.changes(); }
 	[[nodiscard]] rpl::producer<bool> showAttachButtonInMessageFieldValue() const { return _showAttachButtonInMessageField.value(); }
 	[[nodiscard]] rpl::producer<bool> showAttachButtonInMessageFieldChanges() const { return _showAttachButtonInMessageField.changes(); }
 	[[nodiscard]] rpl::producer<bool> showCommandsButtonInMessageFieldValue() const { return _showCommandsButtonInMessageField.value(); }
@@ -724,6 +728,7 @@ private:
 	rpl::variable<ContextMenuVisibility> _showEditsHistoryInContextMenu = ContextMenuVisibility::Visible;
 	rpl::variable<ContextMenuVisibility> _showReadUntilInContextMenu = ContextMenuVisibility::Visible;
 	rpl::variable<ContextMenuVisibility> _showExpireMediaInContextMenu = ContextMenuVisibility::Visible;
+	rpl::variable<ContextMenuVisibility> _showForwardVariantsInContextMenu = ContextMenuVisibility::Visible;
 	rpl::variable<bool> _showAttachButtonInMessageField = true;
 	rpl::variable<bool> _showCommandsButtonInMessageField = true;
 	rpl::variable<bool> _showEmojiButtonInMessageField = true;

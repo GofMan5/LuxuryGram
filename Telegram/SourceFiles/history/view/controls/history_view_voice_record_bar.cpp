@@ -76,7 +76,6 @@ constexpr auto kLockArcAngle = 15.;
 
 constexpr auto kHideWaveformBgOffset = 50;
 constexpr auto kTrimPlaybackEpsilon = 0.0001;
-constexpr auto kPostUnlockDraftGuardMs = crl::time(1000);
 
 enum class FilterType {
 	Continue,
@@ -2488,8 +2487,11 @@ void VoiceRecordBar::init() {
 
 	Core::App().passcodeLockChanges(
 	) | rpl::on_next([=](bool locked) {
-		if (!locked) {
-			_draftGuardUntil = crl::now() + kPostUnlockDraftGuardMs;
+		if (locked && isRecording()) {
+			// Pause into a draft the lock screen keeps alive.
+			_fullRecord = true;
+			stopRecording(StopType::Listen);
+			_lockShowing = false;
 		}
 	}, lifetime());
 
@@ -2782,7 +2784,9 @@ void VoiceRecordBar::startRecording() {
 	}) | rpl::on_next([=] {
 		auto keyFilterCallback = [=](not_null<QEvent*> e) {
 			using Result = base::EventFilterResult;
-			if (_send->type() != Ui::SendButton::Type::Record
+			if (Core::App().passcodeLocked()) {
+				return Result::Continue;
+			} else if (_send->type() != Ui::SendButton::Type::Record
 				&& _send->type() != Ui::SendButton::Type::Round) {
 				return Result::Continue;
 			}
@@ -2879,15 +2883,6 @@ void VoiceRecordBar::finish() {
 }
 
 void VoiceRecordBar::hideFast() {
-	// A section re-show right after the passcode is unlocked used to
-	// silently discard a paused voice draft: keep it for a short time.
-	if (isListenState() && (crl::now() < _draftGuardUntil)) {
-		return;
-	}
-	hideFastUnchecked();
-}
-
-void VoiceRecordBar::hideFastUnchecked() {
 	hide();
 	_lock->hide();
 	_level->hide();
@@ -2979,8 +2974,10 @@ void VoiceRecordBar::stopRecording(StopType type, bool ttlBeforeHide) {
 			const auto weak = base::make_weak(recorder);
 			recorder->pause([=](Ui::RoundVideoResult data) {
 				crl::on_main(weak, [=, data = std::move(data)]() mutable {
-					window()->raise();
-					window()->activateWindow();
+					if (!Core::App().passcodeLocked()) {
+						window()->raise();
+						window()->activateWindow();
+					}
 
 					_paused = true;
 					_data = std::move(data);
@@ -3018,8 +3015,10 @@ void VoiceRecordBar::stopRecording(StopType type, bool ttlBeforeHide) {
 				_paused = true;
 				_data = std::move(combined);
 
-				window()->raise();
-				window()->activateWindow();
+				if (!Core::App().passcodeLocked()) {
+					window()->raise();
+					window()->activateWindow();
+				}
 				_listen = std::make_unique<ListenWrap>(
 					this,
 					_st,
@@ -3257,7 +3256,7 @@ void VoiceRecordBar::hideAnimated() {
 	}
 	_lockShowing = false;
 	visibilityAnimate(false, [=] {
-		hideFastUnchecked();
+		hideFast();
 		stopRecording(StopType::Cancel);
 	});
 }
@@ -3381,7 +3380,9 @@ void VoiceRecordBar::installListenStateFilter() {
 	_keyFilterInRecordingState = nullptr;
 	auto keyFilterCallback = [=](not_null<QEvent*> e) {
 		using Result = base::EventFilterResult;
-		if (!(_send->type() == Ui::SendButton::Type::Send
+		if (Core::App().passcodeLocked()) {
+			return Result::Continue;
+		} else if (!(_send->type() == Ui::SendButton::Type::Send
 			|| _send->type() == Ui::SendButton::Type::Schedule)) {
 			return Result::Continue;
 		}
@@ -3422,7 +3423,7 @@ void VoiceRecordBar::showDiscardBox(
 	}
 	auto sure = [=, callback = std::move(callback)](Fn<void()> &&close) {
 		if (animated == anim::type::instant) {
-			hideFastUnchecked();
+			hideFast();
 			stopRecording(StopType::Cancel);
 		} else {
 			hideAnimated();
