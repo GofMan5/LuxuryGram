@@ -24,6 +24,7 @@
 #include "ui/chat/attach/attach_prepare.h"
 #include "ui/text/text_utilities.h"
 
+#include <thread>
 #include <unordered_map>
 
 namespace LuxuryForward {
@@ -794,7 +795,7 @@ void intelligentForward(
 	session->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
 		state->requestStop();
 	}, *lifetime);
-	crl::async([
+	std::thread([
 		job = std::move(job),
 		chunks = std::move(chunks),
 		state,
@@ -802,7 +803,7 @@ void intelligentForward(
 	]() mutable {
 		RunIntelligentForward(job, chunks, state);
 		crl::on_main_sync([&] { lifetime->destroy(); });
-	});
+	}).detach();
 }
 
 void forwardMessages(
@@ -826,7 +827,7 @@ void forwardMessages(
 	session->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
 		state->requestStop();
 	}, *lifetime);
-	crl::async([
+	std::thread([
 		job = std::move(job),
 		items = std::move(items),
 		state,
@@ -834,7 +835,7 @@ void forwardMessages(
 	]() mutable {
 		RunForward(job, items, state);
 		crl::on_main_sync([&] { lifetime->destroy(); });
-	});
+	}).detach();
 }
 
 } // namespace LuxuryForward
