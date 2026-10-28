@@ -29,6 +29,8 @@ inline constexpr int64_t kWsFailBackoffBase = 30 * 1000;
 inline constexpr int64_t kWsFailBackoffMax = 15 * 60 * 1000;
 inline constexpr int64_t kWsDirectProbeFirst = 5 * 60 * 1000;
 inline constexpr int64_t kWsDirectProbeMax = 60 * 60 * 1000;
+inline constexpr int64_t kWsTcpStallBase = 2 * 60 * 1000;
+inline constexpr int64_t kWsTcpStallMax = 30 * 60 * 1000;
 inline constexpr int64_t kWsHandshakeTimeout = 6000;
 inline constexpr int64_t kWsPingInterval = 30000;
 inline constexpr size_t kWsMaxHead = 8192;
@@ -148,6 +150,32 @@ private:
 // Only a failure before the first payload byte marks the route bad.
 [[nodiscard]] bool WsCountsAsRouteFailure(bool received);
 
+// Ordered: a refused racer outweighs a network failure in one round.
+// Worked (the racer got MTProto bytes) clears the round instead.
+enum class WsFailure {
+	None,
+	Network,
+	Refused,
+	Worked,
+};
+
+// The WS racers of one connectToServer round fail as one: the route gets a
+// single failure when the last racer ends without a win, not one per IP.
+class WsRound final {
+public:
+	void add();
+
+	// A racer failed or was given up on. Returns what to record when it
+	// was the last one, None before that and for a round already recorded.
+	[[nodiscard]] WsFailure ended(WsFailure racer);
+
+private:
+	int _racers = 0;
+	WsFailure _failure = WsFailure::None;
+	bool _worked = false;
+
+};
+
 struct WsKey {
 	int dc = 0;
 	bool media = false;
@@ -186,6 +214,11 @@ struct WsRouteState {
 	int64_t wsCooldownUntil = 0;
 	int64_t directProbeAt = 0;
 	int64_t directProbeStep = 0;
+	// After an established TCP session went silent (DPI passing the
+	// handshake), WS gets the next rounds alone until tcpStallUntil or
+	// until WS fails or stalls too.
+	int tcpStalls = 0;
+	int64_t tcpStallUntil = 0;
 };
 
 // Transitions return the route before the change, for logging.

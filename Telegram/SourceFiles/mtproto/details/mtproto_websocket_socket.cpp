@@ -37,6 +37,7 @@ WebSocketSocket::WebSocketSocket(
 	bool protocolForFiles)
 : AbstractSocket(thread)
 , _endpoint(std::move(endpoint))
+, _protocolForFiles(protocolForFiles)
 , _startTimer(thread, [=] { start(); })
 , _handshakeTimer(thread, [=] {
 	handleError(kWsTimeoutCode, u"handshake timeout"_q);
@@ -44,14 +45,6 @@ WebSocketSocket::WebSocketSocket(
 , _pingTimer(thread, [=] { sendPingIfIdle(); }) {
 	_socket.moveToThread(thread);
 	_socket.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
-	if (protocolForFiles) {
-		_socket.setSocketOption(
-			QAbstractSocket::SendBufferSizeSocketOption,
-			kFilesSendBufferSize);
-		_socket.setSocketOption(
-			QAbstractSocket::ReceiveBufferSizeSocketOption,
-			kFilesReceiveBufferSize);
-	}
 	// Signals of an aborted attempt (the media host retry) carry an old
 	// generation and are dropped.
 	const auto wrap = [&](auto handler) {
@@ -65,6 +58,10 @@ WebSocketSocket::WebSocketSocket(
 		};
 	};
 	using Error = QAbstractSocket::SocketError;
+	connect(
+		&_socket,
+		&QAbstractSocket::connected,
+		wrap([=] { applyBufferOptions(); }));
 	connect(
 		&_socket,
 		&QSslSocket::encrypted,
@@ -114,6 +111,18 @@ void WebSocketSocket::start() {
 		QString::fromStdString(_endpoint.ip),
 		quint16(kWsPort),
 		host);
+}
+
+void WebSocketSocket::applyBufferOptions() {
+	// Qt drops options set before the socket engine exists.
+	if (_protocolForFiles) {
+		_socket.setSocketOption(
+			QAbstractSocket::SendBufferSizeSocketOption,
+			kFilesSendBufferSize);
+		_socket.setSocketOption(
+			QAbstractSocket::ReceiveBufferSizeSocketOption,
+			kFilesReceiveBufferSize);
+	}
 }
 
 void WebSocketSocket::sendUpgrade() {
@@ -215,7 +224,7 @@ void WebSocketSocket::readFrames() {
 		_pingTimer.cancel();
 		sendFrame(WsOpcode::Close, {});
 		log(u"closed by server"_q);
-		recordFailure(false, u"closed"_q);
+		noteFailure(false);
 		_disconnected.fire({});
 	}
 }
@@ -231,7 +240,7 @@ void WebSocketSocket::socketDisconnected() {
 	_pingTimer.cancel();
 	log(u"disconnected"_q);
 	// F4: after the first MTProto bytes this only reconnects.
-	recordFailure(false, u"disconnected"_q);
+	noteFailure(false);
 	_disconnected.fire({});
 }
 
@@ -285,8 +294,13 @@ void WebSocketSocket::timedOut() {
 	// SessionPrivate gave up on every racer: a started WS that never
 	// answered is a network failure. A delayed one that never started is not.
 	if (_startedAt && !_failed) {
-		recordFailure(false, u"connect timeout"_q);
+		log(u"connect timeout"_q);
+		noteFailure(false);
 	}
+}
+
+WsFailure WebSocketSocket::failure() const {
+	return _decoder.received() ? WsFailure::Worked : _failure;
 }
 
 bool WebSocketSocket::isConnected() {
@@ -338,27 +352,16 @@ void WebSocketSocket::handleError(int errorCode, const QString &reason) {
 	_pingTimer.cancel();
 	logError(errorCode, reason);
 	log(reason);
-	recordFailure(errorCode == kWsRefusedCode, reason);
+	noteFailure(errorCode == kWsRefusedCode);
 	_error.fire({});
 }
 
-void WebSocketSocket::recordFailure(bool refused, const QString &reason) {
-	if (_recorded) {
-		return;
-	}
-	_recorded = true;
+void WebSocketSocket::noteFailure(bool refused) {
 	// F4: only a failure before the first MTProto byte marks the route.
-	if (!WsCountsAsRouteFailure(_decoder.received())) {
-		return;
-	}
-	auto &table = WsRouteTable::Instance();
-	const auto was = table.failed(_endpoint.key, refused, crl::now());
-	const auto now = table.route(_endpoint.key);
-	if (was != now) {
-		log(u"route %1 -> %2 (%3)"_q.arg(
-			QString::fromLatin1(WsRouteName(was)),
-			QString::fromLatin1(WsRouteName(now)),
-			reason));
+	// SessionPrivate records it once per round, see WsRound.
+	if (_failure == WsFailure::None
+		&& WsCountsAsRouteFailure(_decoder.received())) {
+		_failure = refused ? WsFailure::Refused : WsFailure::Network;
 	}
 }
 

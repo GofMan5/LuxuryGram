@@ -38,6 +38,19 @@ namespace {
 	return value;
 }
 
+[[nodiscard]] bool HasToken(std::string_view list, std::string_view token) {
+	while (!list.empty()) {
+		const auto comma = list.find(',');
+		if (EqualNoCase(Trim(list.substr(0, comma)), token)) {
+			return true;
+		} else if (comma == std::string_view::npos) {
+			break;
+		}
+		list.remove_prefix(comma + 1);
+	}
+	return false;
+}
+
 } // namespace
 
 std::string WsHost(int dc, bool media) {
@@ -161,6 +174,8 @@ WsHandshakeResult WsParseUpgradeResponse(
 	}
 	auto accepted = false;
 	auto binary = false;
+	auto upgrade = false;
+	auto connection = false;
 	while (!rest.empty()) {
 		const auto lineEnd = rest.find("\r\n");
 		const auto line = rest.substr(0, lineEnd);
@@ -175,9 +190,13 @@ WsHandshakeResult WsParseUpgradeResponse(
 			accepted = (value == expectedAccept);
 		} else if (EqualNoCase(name, "sec-websocket-protocol")) {
 			binary = EqualNoCase(value, "binary");
+		} else if (EqualNoCase(name, "upgrade")) {
+			upgrade = EqualNoCase(value, "websocket");
+		} else if (EqualNoCase(name, "connection")) {
+			connection = HasToken(value, "upgrade");
 		}
 	}
-	result.status = (accepted && binary)
+	result.status = (accepted && binary && upgrade && connection)
 		? WsHandshake::Ok
 		: WsHandshake::BadAccept;
 	return result;
@@ -345,6 +364,27 @@ bool WsCountsAsRouteFailure(bool received) {
 	return !received;
 }
 
+void WsRound::add() {
+	++_racers;
+}
+
+WsFailure WsRound::ended(WsFailure racer) {
+	if (_racers <= 0) {
+		return WsFailure::None;
+	}
+	if (racer == WsFailure::Worked) {
+		_worked = true;
+	} else {
+		_failure = std::max(_failure, racer);
+	}
+	if (--_racers > 0) {
+		return WsFailure::None;
+	}
+	const auto result = _worked ? WsFailure::None : _failure;
+	*this = WsRound();
+	return result;
+}
+
 const char *WsRouteName(WsRoute route) {
 	switch (route) {
 	case WsRoute::Direct: return "Direct";
@@ -380,11 +420,17 @@ WsDecision WsRouteTable::decide(WsKey key, WsMode mode, int64_t nowMs) {
 	const auto state = (i != end(_states)) ? i->second : WsRouteState();
 	// A bad route only delays WS behind TCP, it never drops a candidate.
 	const auto cooling = (nowMs < state.wsCooldownUntil);
+	// TCP passed the handshake and then went silent: priority would let it
+	// win every race, so WS goes alone until the stall window ends.
+	const auto tcpStalling = (nowMs < state.tcpStallUntil);
 	result.useWs = true;
-	result.useTcp = (state.route != WsRoute::WebSocket)
-		|| cooling
-		|| (nowMs >= state.directProbeAt);
-	result.wsDelayMs = (state.route == WsRoute::Direct || cooling)
+	result.useTcp = cooling
+		|| (!tcpStalling
+			&& ((state.route != WsRoute::WebSocket)
+				|| (nowMs >= state.directProbeAt)));
+	// The head start only matters when TCP races.
+	result.wsDelayMs = (result.useTcp
+		&& (state.route == WsRoute::Direct || cooling))
 		? kWsDirectHeadStart
 		: 0;
 	return result;
@@ -436,6 +482,8 @@ WsRoute WsRouteTable::failed(WsKey key, bool refused, int64_t nowMs) {
 	auto lock = std::lock_guard(_mutex);
 	auto &state = _states[key];
 	const auto was = state.route;
+	// WS is no way around a stalling TCP: TCP races again.
+	state.tcpStallUntil = std::min(state.tcpStallUntil, nowMs);
 	if (refused) {
 		state.wsCooldownUntil = nowMs + kWsRefusedCooldown;
 		state.wsFailures = 0;
@@ -448,18 +496,27 @@ WsRoute WsRouteTable::failed(WsKey key, bool refused, int64_t nowMs) {
 	return was;
 }
 
-WsRoute WsRouteTable::stalled(
-		WsKey key,
-		bool websocket,
-		[[maybe_unused]] int64_t nowMs) {
+WsRoute WsRouteTable::stalled(WsKey key, bool websocket, int64_t nowMs) {
 	auto lock = std::lock_guard(_mutex);
 	auto &state = _states[key];
 	const auto was = state.route;
-	// The session was established, so this is no route failure: only
-	// forget the winner so the next round races both without a delay.
+	// The session was established, so this is no WS route failure: forget
+	// the winner and, for TCP, keep it out of the next rounds for a while.
 	if (state.route == (websocket ? WsRoute::WebSocket : WsRoute::Direct)) {
 		state.route = WsRoute::Unknown;
 	}
+	if (websocket) {
+		// WS is no better: TCP races again, the stall ladder is kept.
+		state.tcpStallUntil = std::min(state.tcpStallUntil, nowMs);
+		return was;
+	}
+	if (nowMs - state.tcpStallUntil > kWsTcpStallMax) {
+		state.tcpStalls = 0;
+	}
+	++state.tcpStalls;
+	const auto window = kWsTcpStallBase
+		<< (std::min(state.tcpStalls, 5) - 1);
+	state.tcpStallUntil = nowMs + std::min(window, kWsTcpStallMax);
 	return was;
 }
 

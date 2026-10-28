@@ -25,6 +25,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/platform/base_platform_info.h"
 
 #include <QtCore/QTime>
+#include <QtNetwork/QNetworkProxy>
 
 #include <ksandbox.h>
 #include <zlib.h>
@@ -34,6 +35,24 @@ namespace details {
 namespace {
 
 constexpr auto kIntSize = static_cast<int>(sizeof(mtpPrime));
+
+// "Use system proxy" is also the no-proxy default, so ask the OS whether a
+// proxy would carry a socket to the WS fronts. The lookup can block (WPAD),
+// as it does for every TCP racer here, so it runs on the session thread.
+[[nodiscard]] bool SystemProxyPresent() {
+	const auto list = QNetworkProxyFactory::systemProxyForQuery(
+		QNetworkProxyQuery(
+			u"kws2.web.telegram.org"_q,
+			443,
+			QString(),
+			QNetworkProxyQuery::TcpSocket));
+	if (list.isEmpty()) {
+		return false;
+	}
+	const auto type = list.front().type();
+	return (type != QNetworkProxy::NoProxy)
+		&& (type != QNetworkProxy::DefaultProxy);
+}
 constexpr auto kWaitForBetterTimeout = crl::time(2000);
 constexpr auto kMinConnectedTimeout = crl::time(1000);
 constexpr auto kMaxConnectedTimeout = crl::time(8000);
@@ -221,6 +240,7 @@ void SessionPrivate::appendTestConnection(
 	});
 	const auto weak = _testConnections.back().data.get();
 	if (ws) {
+		_wsRound.add();
 		// Tcp without a proxy is never wrapped in ResolvingConnection.
 		Expects(protocol == DcOptions::Variants::Tcp);
 		Expects(_options->proxy.type == ProxyData::Type::None);
@@ -306,29 +326,58 @@ void SessionPrivate::appendWebSocketConnections(
 
 void SessionPrivate::wsSucceeded(const TestConnection &winner) {
 	_connectionWebSocket = winner.websocket;
-	if (_currentDcType == DcType::Cdn
-		|| _currentDcType == DcType::Temporary
-		|| _instance->isKeysDestroyer()) {
+	// A winner ends the round: WS racers still pending are no failure.
+	_wsRound = WsRound();
+	// Proxy, cdn, special dc, keys destroyer or Off: nothing to learn.
+	if (!_wsAllowed) {
 		return;
 	}
-	const auto key = wsKey();
-	auto &table = WsRouteTable::Instance();
-	const auto was = table.succeeded(
-		key,
+	const auto was = WsRouteTable::Instance().succeeded(
+		wsKey(),
 		winner.websocket,
 		crl::now(),
 		_wsTcpOffered);
-	const auto now = table.route(key);
-	if (was != now) {
-		const auto line = QTime::currentTime().toString(u"HH:mm:ss"_q)
-			+ u" %1: route %2 -> %3 (%4)"_q.arg(
-				QString::fromStdString(WsKeyName(key)),
-				QString::fromLatin1(WsRouteName(was)),
-				QString::fromLatin1(WsRouteName(now)),
-				winner.data->tag());
-		WsLog::Instance().add(line.toStdString());
-		LOG(("WS: %1").arg(line));
+	wsLogRoute(was, winner.data->tag());
+}
+
+void SessionPrivate::wsRacerEnded(
+		not_null<AbstractConnection*> connection) {
+	const auto i = ranges::find(
+		_testConnections,
+		connection.get(),
+		[](const TestConnection &test) { return test.data.get(); });
+	if (i == end(_testConnections) || !i->websocket) {
+		return;
 	}
+	// One failure per round, when its last WS racer is gone (see WsRound).
+	const auto failure = _wsRound.ended(
+		static_cast<TcpConnection*>(i->data.get())->webSocketFailure());
+	if (failure == WsFailure::None || !_wsAllowed) {
+		return;
+	}
+	const auto was = WsRouteTable::Instance().failed(
+		wsKey(),
+		(failure == WsFailure::Refused),
+		crl::now());
+	wsLogRoute(was, (failure == WsFailure::Refused)
+		? u"ws refused"_q
+		: u"ws failed"_q);
+}
+
+void SessionPrivate::wsLogRoute(WsRoute was, const QString &reason) {
+	const auto key = wsKey();
+	const auto now = WsRouteTable::Instance().route(key);
+	if (was == now) {
+		return;
+	}
+	const auto line = QTime::currentTime().toString(u"HH:mm:ss"_q)
+		+ u" %1: route %2 -> %3 (%4)"_q.arg(
+			QString::fromStdString(WsKeyName(key)),
+			QString::fromLatin1(WsRouteName(was)),
+			QString::fromLatin1(WsRouteName(now)),
+			reason);
+	WsLog::Instance().add(line.toStdString());
+	LOG(("WS: %1").arg(line));
 }
 
 int16 SessionPrivate::getProtocolDcId() const {
@@ -422,6 +471,7 @@ void SessionPrivate::destroyAllConnections() {
 	_waitForConnectedTimer.cancel();
 	_testConnections.clear();
 	_connection = nullptr;
+	_wsRound = WsRound();
 }
 
 void SessionPrivate::cdnConfigChanged() {
@@ -1116,6 +1166,7 @@ void SessionPrivate::connectToServer(bool afterConfig) {
 		}
 	}
 	auto wsDecision = WsDecision();
+	_wsAllowed = false;
 	if (_options->proxy.type == ProxyData::Type::Mtproto
 		|| _options->proxy.type == ProxyData::Type::Web) {
 		// host, port, secret for mtproto proxy are taken from proxy.
@@ -1131,14 +1182,19 @@ void SessionPrivate::connectToServer(bool afterConfig) {
 		const auto useIPv6 = special ? false : _options->useIPv6;
 		const auto useTcp = special ? true : _options->useTcp;
 		const auto useHttp = special ? false : _options->useHttp;
+		const auto wsMode = WsMode(_options->webSocketMode);
+		const auto systemProxy = _options->systemProxy
+			&& (wsMode != WsMode::Off)
+			&& SystemProxyPresent();
 		const auto wsAllowed = WsAllowed(
-			WsMode(_options->webSocketMode),
+			wsMode,
 			bareDc,
 			_instance->isTestMode(),
 			_options->proxy.type != ProxyData::Type::None,
-			_options->systemProxy,
+			systemProxy,
 			special || (_currentDcType == DcType::Cdn),
 			_instance->isKeysDestroyer());
+		_wsAllowed = wsAllowed;
 		wsDecision = wsAllowed
 			? WsRouteTable::Instance().decide(
 				wsKey(),
@@ -1328,12 +1384,16 @@ void SessionPrivate::waitReceivedFailed() {
 			_waitForReceived * 2,
 			kMaxReceiveTimeout);
 	}
-	if (_connection) {
-		// Established but silent: forget the winner, never a WS failure.
-		WsRouteTable::Instance().stalled(
+	if (_connection && _wsAllowed) {
+		// Established but silent: never a WS failure; a silent TCP hands
+		// the next rounds to WS (DPI that passes the handshake).
+		const auto was = WsRouteTable::Instance().stalled(
 			wsKey(),
 			_connectionWebSocket,
 			crl::now());
+		wsLogRoute(was, _connectionWebSocket
+			? u"ws stalled"_q
+			: u"tcp stalled"_q);
 	}
 	doDisconnect();
 	if (_retryTimer.isActive()) {
@@ -1373,6 +1433,13 @@ void SessionPrivate::waitBetterFailed() {
 void SessionPrivate::connectingTimedOut() {
 	for (const auto &connection : _testConnections) {
 		connection.data->timedOut();
+	}
+	auto racers = std::vector<not_null<AbstractConnection*>>();
+	for (const auto &connection : _testConnections) {
+		racers.push_back(connection.data.get());
+	}
+	for (const auto racer : racers) {
+		wsRacerEnded(racer);
 	}
 	doDisconnect();
 }
@@ -2518,6 +2585,7 @@ void SessionPrivate::onConnected(
 
 void SessionPrivate::onDisconnected(
 		not_null<AbstractConnection*> connection) {
+	wsRacerEnded(connection);
 	removeTestConnection(connection);
 
 	if (_testConnections.empty()) {
@@ -2785,6 +2853,7 @@ void SessionPrivate::onError(
 			instance->badConfigurationError();
 		});
 	}
+	wsRacerEnded(connection);
 	removeTestConnection(connection);
 
 	if (_testConnections.empty()) {

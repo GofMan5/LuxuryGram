@@ -15,7 +15,8 @@ memory, log ring) is `mtproto/details/mtproto_websocket_logic.*`, covered by
 `tools/tests/ws_transport_regressions.py`. The socket is
 `mtproto/details/mtproto_websocket_socket.*`; `TcpConnection` creates it for
 connections marked as WebSocket, so MTProto obfuscation, framing and timeouts
-are the ones TCP already uses.
+are the ones TCP already uses. The socket buffer sizes are applied once the
+TCP connection is up, when Qt has a socket engine to take them.
 
 ## Endpoint facts (live-probed 2026-10-28)
 
@@ -40,10 +41,13 @@ are the ones TCP already uses.
 ## When WebSocket is not used
 
 No WS candidates are added when any of these holds: the mode is Off; any
-proxy is set in the app (MTProto, SOCKS5, HTTP) or the system proxy is used;
-the DC is a temporary (special) or CDN one; the session belongs to the keys
+proxy is set in the app (MTProto, SOCKS5, HTTP); "use system proxy" is set
+and the OS reports a real proxy for `kws2.web.telegram.org:443`, asked on
+the session thread at each connect (with no system proxy configured WS
+stays available); the DC is a temporary (special) or CDN one; the session belongs to the keys
 destroyer; the DC has no kws front (production 1..5 and 203, test 1..3 have
-one). The status line then says why.
+one). The status line then says why. Connections made in such a round never
+update the route memory, whichever racer wins or stalls.
 
 ## Candidates
 
@@ -66,6 +70,7 @@ are the constants in the logic header.
 | Unknown | TCP and WS race at once |
 | Direct | TCP first, WS starts 2 s later |
 | WebSocket, WS cooling down | TCP only |
+| TCP stall window open (WS not cooling down) | WS only |
 | WebSocket, direct re-probe due | TCP and WS race at once |
 | WebSocket, otherwise | WS only |
 
@@ -78,8 +83,18 @@ decision with neither TCP nor WS is impossible: TCP is forced on.
 | WS wins | route WebSocket, next direct re-probe in 5 min; each re-probe TCP loses doubles the interval up to 60 min |
 | WS refused (HTTP status other than 101) | WS cooldown 30 min; a WebSocket route becomes Unknown |
 | WS network failure before the first MTProto byte, or a WS connection that stalls | WS cooldown 30 s, 60 s, 120 s … up to 15 min; the second failure in a row turns a WebSocket route into Unknown |
-| TCP connected but stalled | a Direct route becomes Unknown |
-| mode change, proxy change, network reachability change | everything is forgotten |
+| TCP connected but stalled | a Direct route becomes Unknown; TCP sits out the next rounds for 2 min, then 4, 8, 16 and at most 30 min on repeated stalls (the ladder restarts after a quiet 30 min). A WS failure or a WS stall inside the window brings TCP back at once |
+| mode change, proxy turned on or off, network reachability change | everything is forgotten (switching from one proxy to another keeps the memory: no route is learned through a proxy) |
+
+The TCP stall window exists for DPI that lets the TCP handshake through and
+then drops the traffic: TCP connects first and wins every race on priority,
+so without the window WS would never be tried.
+
+Failures are counted per connection round, not per racer. A round of three
+WS candidates that all fail is one failure (a refusal if any of them was
+refused), recorded when the last WS racer of the round fails or the round
+times out. A round that a winner ends records nothing for the losers, and
+neither does one where any WS racer received MTProto bytes.
 
 ## Failure modes avoided
 
@@ -112,7 +127,8 @@ Each line starts with `HH:MM:SS` and names the DC key, for example
 - candidate start: `dc2 ws 149.154.167.220 sni=kws2.web.telegram.org`;
 - upgraded, with the handshake time in ms;
 - refused, with the HTTP status line;
-- bad accept (the upgrade answer did not match the key or lacked `binary`);
+- bad accept (the upgrade answer did not match the key, lacked `binary`,
+  `Upgrade: websocket` or an `upgrade` token in `Connection`);
 - TLS or socket error text, handshake timeout;
 - route transitions: `dc2 media: route Direct -> WebSocket (ws/149.154.167.220)`;
 - `mode changed: auto|off|always`, reachability reset.

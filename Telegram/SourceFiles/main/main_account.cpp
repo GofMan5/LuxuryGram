@@ -104,8 +104,11 @@ void Account::watchProxyChanges() {
 				? std::make_pair(proxy.host, proxy.port)
 				: std::make_pair(QString(), uint32(0));
 		};
-		// Routes learned through or around the old proxy are stale.
-		MTP::details::WsRouteTable::Instance().reset();
+		// Routes are learned only without a proxy, so switching between
+		// proxies keeps them; turning a proxy on or off makes them stale.
+		if (bool(change.was) != bool(change.now)) {
+			MTP::details::WsRouteTable::Instance().reset();
+		}
 		restartMtp();
 		if (_mtp && key(change.was) != key(change.now)) {
 			_mtp->reInitConnection(_mtp->mainDcId());

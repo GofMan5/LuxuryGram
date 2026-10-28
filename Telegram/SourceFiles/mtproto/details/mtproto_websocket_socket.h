@@ -37,8 +37,12 @@ public:
 	int32 debugState() override;
 	QString debugPostfix() const override;
 
+	// What this racer contributes to its round, None once it got bytes.
+	[[nodiscard]] WsFailure failure() const;
+
 private:
 	void start();
+	void applyBufferOptions();
 	void sendUpgrade();
 	void socketRead();
 	void readHandshake();
@@ -47,10 +51,11 @@ private:
 	void sendFrame(WsOpcode opcode, std::span<const uint8_t> payload);
 	void sendPingIfIdle();
 	void handleError(int errorCode, const QString &reason);
-	void recordFailure(bool refused, const QString &reason);
+	void noteFailure(bool refused);
 	void log(const QString &text) const;
 
 	WsEndpoint _endpoint;
+	bool _protocolForFiles = false;
 	QSslSocket _socket;
 	base::Timer _startTimer;
 	base::Timer _handshakeTimer;
@@ -65,7 +70,7 @@ private:
 	bool _retried = false;
 	bool _failed = false;
 	bool _closed = false;
-	bool _recorded = false;
+	WsFailure _failure = WsFailure::None;
 
 };
 

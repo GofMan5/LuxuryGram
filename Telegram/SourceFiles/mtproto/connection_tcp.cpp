@@ -686,6 +686,14 @@ void TcpConnection::setWebSocket(WsEndpoint endpoint) {
 	_webSocket = std::move(endpoint);
 }
 
+WsFailure TcpConnection::webSocketFailure() const {
+	return !_webSocket
+		? WsFailure::None
+		: _socket
+		? static_cast<const WebSocketSocket*>(_socket.get())->failure()
+		: WsFailure::None;
+}
+
 TcpConnection::~TcpConnection() = default;
 
 } // namespace details

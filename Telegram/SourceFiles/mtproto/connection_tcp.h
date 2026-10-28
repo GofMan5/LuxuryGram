@@ -45,6 +45,7 @@ public:
 
 	// Before connectToServer: tunnel through a kws WebSocket front.
 	void setWebSocket(WsEndpoint endpoint);
+	[[nodiscard]] WsFailure webSocketFailure() const;
 
 	~TcpConnection();
 
