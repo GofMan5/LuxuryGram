@@ -59,6 +59,18 @@ include(cmake/target_prepare_qrc.cmake)
 
 include(cmake/options.cmake)
 
+if (MSVC)
+    # options_win.cmake links every x64/arm64 Debug target with /DEBUG:FASTLINK
+    # even when MSVC_DEBUG_INFORMATION_FORMAT is empty (x86 already gets
+    # /DEBUG:NONE there). The CI Debug matrix leaves it empty, yet the x64
+    # MSBuild link still wrote a PDB and intermittently died on LNK1140.
+    # Appended to the same interface list so it lands after FASTLINK and wins.
+    target_link_options(common_options
+    INTERFACE
+        $<$<NOT:$<BOOL:$<GENEX_EVAL:$<TARGET_PROPERTY:MSVC_DEBUG_INFORMATION_FORMAT>>>>:/DEBUG:NONE>
+    )
+endif()
+
 include(cmake/external/qt/package.cmake)
 
 set(desktop_app_skip_libs
