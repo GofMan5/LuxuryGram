@@ -49,6 +49,15 @@ interface LuxPluginInfo {
 	readonly apiVersion: number;
 	/** LuxuryGram version, "1.0.22". */
 	readonly clientVersion: string;
+	/** The version this one replaced on update or rollback, else "". */
+	readonly previousVersion: string;
+	/** Why this load happened. */
+	readonly reason:
+		| 'startup' | 'enable' | 'reload' | 'install' | 'update' | 'rollback';
+	/** Permission ids the user approved. */
+	readonly granted: readonly string[];
+	/** UI language id, "en", "ru" or a custom pack id. */
+	readonly lang: string;
 }
 
 interface LuxPeer {
@@ -147,6 +156,8 @@ interface LuxFetchOptions {
 	method?: string;
 	headers?: { [name: string]: string };
 	body?: string;
+	/** Return the body as `base64` instead of `text()`. */
+	binary?: boolean;
 }
 
 interface LuxResponse {
@@ -155,6 +166,8 @@ interface LuxResponse {
 	headers: { [name: string]: string };
 	text(): string;
 	json(): any;
+	/** The body, base64-encoded, with `binary: true`. */
+	base64?: string;
 }
 
 declare namespace lux {
