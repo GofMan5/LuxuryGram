@@ -2336,6 +2336,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "lng_luxury_plugins_pinned", "Плагин закреплён на установленной версии." },
 	{ "lng_luxury_plugins_no_previous", "Нет предыдущей версии для отката." },
 	{ "lng_luxury_plugins_release_fallback", "В релизе {tag} нет plugin.json, установка из ветки {name}." },
+	{ "lng_luxury_plugins_up_to_date", "Плагин уже обновлён до последней версии." },
 };
 
 void applyIfRussian(not_null<Lang::Instance*> instance, const QString &id) {

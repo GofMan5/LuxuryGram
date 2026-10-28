@@ -37,12 +37,18 @@ enum class ErrorCode {
 	Pinned, // The plugin is pinned to its installed version.
 	Busy, // Being installed or checked already.
 	Files, // Local files could not be written or swapped.
+	UpToDate, // An update found nothing newer than the installed ref.
+	Consent, // The plugin asks for access the user has not reviewed.
 };
 
 inline constexpr auto kStartingName = std::string_view(".starting");
 inline constexpr auto kJournalName = std::string_view("pending.json");
 inline constexpr auto kLogMirrorLines = 100;
 inline constexpr auto kLogMirrorWindowMs = std::int64_t(60'000);
+// Stored as lastError by a crash quarantine and shown localized: the
+// registry keeps no UI language.
+inline constexpr auto kQuarantinedError = std::string_view(
+	"luxury:quarantined");
 
 // --- Crash quarantine. A plugin directory holds ".starting" from right
 // before its engine starts until the first event loop turn after that.
@@ -61,6 +67,27 @@ inline void ClearStarting(const std::filesystem::path &directory) try {
 	std::filesystem::remove(directory / kStartingName, ec);
 } catch (const std::exception &) {
 }
+
+// At most one sentinel at a time: a plugin started while another one's
+// sentinel waits for its event loop turn takes the blame alone, so a
+// crash never quarantines the plugins that started before it.
+struct StartFence {
+	std::filesystem::path pending;
+
+	void mark(const std::filesystem::path &directory) {
+		if (!pending.empty() && pending != directory) {
+			ClearStarting(pending);
+		}
+		pending = directory;
+		MarkStarting(directory);
+	}
+	void clear(const std::filesystem::path &directory) {
+		ClearStarting(directory);
+		if (pending == directory) {
+			pending.clear();
+		}
+	}
+};
 
 // True when the sentinel was there; it is removed either way.
 [[nodiscard]] inline bool TakeStarting(
@@ -98,12 +125,15 @@ namespace details {
 } // namespace details
 
 // Empty on success, else the system message in the local 8-bit encoding.
-// Both directories must live on one volume. Never throws.
+// Both directories must live on one volume. rollback: staged is
+// <target>.prev, so an undone swap puts those files back there. Never
+// throws.
 [[nodiscard]] inline std::string SwapWithJournal(
 		const std::filesystem::path &staged,
 		const std::filesystem::path &target,
 		const std::string &ref,
-		bool fresh) try {
+		bool fresh,
+		bool rollback) try {
 	namespace fs = std::filesystem;
 	auto ec = std::error_code();
 	const auto old = details::Suffixed(target, ".old");
@@ -114,6 +144,7 @@ namespace details {
 		const auto text = nlohmann::json{
 			{ "ref", ref },
 			{ "fresh", fresh },
+			{ "rollback", rollback },
 		}.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 		auto file = std::ofstream(journal, std::ios::binary | std::ios::trunc);
 		file << text;
@@ -183,6 +214,7 @@ enum class SwapRecovery {
 	}
 	auto ref = std::string();
 	auto fresh = false;
+	auto rollback = false;
 	{
 		auto file = std::ifstream(journal, std::ios::binary);
 		const auto parsed = nlohmann::json::parse(file, nullptr, false);
@@ -192,7 +224,11 @@ enum class SwapRecovery {
 			if (i != parsed.end() && i->is_string()) {
 				ref = i->get<std::string>();
 			}
+			const auto k = parsed.find("rollback");
 			fresh = (j != parsed.end()) && j->is_boolean() && j->get<bool>();
+			rollback = (k != parsed.end())
+				&& k->is_boolean()
+				&& k->get<bool>();
 		}
 	}
 	const auto old = details::Suffixed(target, ".old");
@@ -201,7 +237,14 @@ enum class SwapRecovery {
 		return SwapRecovery::Finished;
 	}
 	if (fs::exists(old, ec)) {
-		fs::remove_all(target, ec);
+		if (rollback) {
+			// target holds the former <target>.prev: it goes back there.
+			const auto prev = details::Suffixed(target, ".prev");
+			fs::remove_all(prev, ec);
+			fs::rename(target, prev, ec);
+		} else {
+			fs::remove_all(target, ec);
+		}
 		fs::rename(old, target, ec);
 	} else if (fresh) {
 		fs::remove_all(target, ec);
@@ -420,5 +463,15 @@ struct LogBudget {
 		return ++count <= kLogMirrorLines;
 	}
 };
+
+// A plugin log line mirrored into the client log stays one line there.
+[[nodiscard]] inline std::string OneLine(std::string text) {
+	for (auto &c : text) {
+		if (c == '\r' || c == '\n') {
+			c = ' ';
+		}
+	}
+	return text;
+}
 
 } // namespace Luxury::Plugins

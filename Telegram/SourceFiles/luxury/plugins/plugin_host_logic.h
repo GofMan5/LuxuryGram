@@ -517,41 +517,4 @@ inline void HideOwnPhone(nlohmann::json &value) {
 	return {};
 }
 
-// Moves staged over target: the old target is renamed aside, the staged
-// directory renamed in, then the old one deleted. Any failure puts the
-// old target back. Both must live on one volume. Empty on success, else
-// the system message in the local 8-bit encoding. Never throws.
-[[nodiscard]] inline std::string SwapDirectory(
-		const std::filesystem::path &staged,
-		const std::filesystem::path &target) try {
-	namespace fs = std::filesystem;
-	auto ec = std::error_code();
-	auto old = target;
-	old += ".old";
-	fs::remove_all(old, ec);
-	fs::create_directories(target.parent_path(), ec);
-	const auto hadOld = fs::exists(target, ec);
-	if (hadOld) {
-		fs::rename(target, old, ec);
-		if (ec) {
-			return ec.message();
-		}
-	}
-	fs::rename(staged, target, ec);
-	if (ec) {
-		const auto text = ec.message();
-		if (hadOld) {
-			fs::rename(old, target, ec);
-		}
-		return text;
-	}
-	fs::remove_all(old, ec);
-	return {};
-} catch (const std::exception &e) {
-	// path::operator+= and friends throw on allocation or conversion.
-	return e.what();
-}
-
 } // namespace Luxury::Plugins
-
-#include "luxury/plugins/plugin_install_logic.h"

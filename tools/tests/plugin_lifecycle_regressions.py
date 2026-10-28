@@ -2,18 +2,22 @@
 
 docs/plugins/ARCHITECTURE.md, recovery half. The client is not built here, so:
 - plugin_install_logic.h is compiled with -Wall -Wextra -Werror against the
-  real core units and checked: the .starting sentinel, the pending.json
-  swap journal with its finish and rollback, the registry backup choice,
+  real core units and checked: the .starting sentinel and its one-at-a-time
+  fence, the pending.json swap journal with its finish and rollback (an
+  interrupted rollback puts code.prev back), the registry backup choice,
   case-insensitive repository identity, a replaced repository, downgrades,
   ref splits, rate limits, GitHub error texts, status codes, the update
-  tally and the log mirror budget;
+  tally, the log mirror budget and its one-line text;
 - the Qt half is checked statically: commitInstall and rollback swap
   through the journal and finish it only after the registry is saved,
   recover() runs every journal and disables a plugin whose start crashed,
   load() restores a broken registry from .bak and save() writes one,
-  the engine start is fenced by the sentinel, -noplugins keeps plugins
-  stopped, they start after the first window, repositories compare
-  case-insensitively, downgrades need the flag and a failed check counts.
+  the engine start is fenced by the sentinel, plugins start one per event
+  loop turn, -noplugins or a held Shift keeps them stopped, they start after
+  the first window, repositories compare case-insensitively, downgrades need
+  the flag, an update to the same version is refused, commit and rollback
+  report error codes, the quarantine is stored as a marker, a stored setting
+  of the wrong type is ignored and a failed check counts.
 Every check is also run against a mutant it must reject.
 
 Bounded source check; not a native acceptance.
@@ -32,6 +36,7 @@ INSTALLER = PLUGINS + 'plugin_installer.cpp'
 APP = SRC + 'core/application.cpp'
 LAUNCHER = SRC + 'core/launcher.cpp'
 SETTINGS = SRC + 'settings.h'
+HEADER = PLUGINS + 'plugin_manager.h'
 CORE = ('plugin_version', 'plugin_permissions', 'plugin_manifest', 'plugin_source', 'plugin_registry')
 
 MAIN = r'''
@@ -77,6 +82,28 @@ void Sentinel(const fs::path &work) {
 	EXPECT(!TakeStarting(dir));
 }
 
+void Fence(const fs::path &work) {
+	const auto a = work / "fence" / "a";
+	const auto b = work / "fence" / "b";
+	auto fence = StartFence();
+	fence.mark(a);
+	EXPECT(fs::exists(a / ".starting"));
+	// The next start takes the blame alone.
+	fence.mark(b);
+	EXPECT(!fs::exists(a / ".starting") && fs::exists(b / ".starting"));
+	EXPECT(fence.pending == b);
+	// Stopping another plugin leaves the pending sentinel.
+	fence.clear(a);
+	EXPECT(fs::exists(b / ".starting") && fence.pending == b);
+	fence.clear(b);
+	EXPECT(!fs::exists(b / ".starting") && fence.pending.empty());
+	fence.mark(a);
+	fence.mark(a);
+	EXPECT(fs::exists(a / ".starting"));
+	fence.clear(a);
+	EXPECT(!TakeStarting(a) && !TakeStarting(b));
+}
+
 void Swap(const fs::path &work) {
 	const auto root = work / "swap";
 	const auto target = root / "code";
@@ -84,7 +111,7 @@ void Swap(const fs::path &work) {
 	Write(target / "main.js", "old");
 	Write(root / "staged" / "main.js", "new");
 
-	EXPECT(SwapWithJournal(root / "staged", target, "v2", false).empty());
+	EXPECT(SwapWithJournal(root / "staged", target, "v2", false, false).empty());
 	EXPECT(fs::exists(journal));
 	EXPECT(Read(target / "main.js") == "new");
 	EXPECT(Read(root / "code.old" / "main.js") == "old");
@@ -98,14 +125,14 @@ void Swap(const fs::path &work) {
 
 	// Died before the registry was written: the old files come back.
 	Write(root / "staged" / "main.js", "newer");
-	EXPECT(SwapWithJournal(root / "staged", target, "v3", false).empty());
+	EXPECT(SwapWithJournal(root / "staged", target, "v3", false, false).empty());
 	EXPECT(RecoverSwap(target, "v2") == SwapRecovery::RolledBack);
 	EXPECT(Read(target / "main.js") == "new");
 	EXPECT(!fs::exists(journal) && !fs::exists(root / "code.old"));
 
 	// Normal path: FinishSwap after the registry is saved.
 	Write(root / "staged" / "main.js", "newest");
-	EXPECT(SwapWithJournal(root / "staged", target, "v4", false).empty());
+	EXPECT(SwapWithJournal(root / "staged", target, "v4", false, false).empty());
 	FinishSwap(target);
 	EXPECT(!fs::exists(journal));
 	EXPECT(Read(root / "code.prev" / "main.js") == "new");
@@ -114,20 +141,30 @@ void Swap(const fs::path &work) {
 	// A fresh install that died unregistered is removed.
 	const auto fresh = work / "fresh";
 	Write(fresh / "staged" / "main.js", "x");
-	EXPECT(SwapWithJournal(fresh / "staged", fresh / "code", "v1", true).empty());
+	EXPECT(SwapWithJournal(fresh / "staged", fresh / "code", "v1", true, false).empty());
 	EXPECT(RecoverSwap(fresh / "code", "") == SwapRecovery::RolledBack);
 	EXPECT(!fs::exists(fresh / "code") && !fs::exists(fresh / "pending.json"));
 
 	// A failed swap leaves neither a journal nor moved files.
-	EXPECT(!SwapWithJournal(root / "missing", target, "v5", false).empty());
+	EXPECT(!SwapWithJournal(root / "missing", target, "v5", false, false).empty());
 	EXPECT(!fs::exists(journal) && Read(target / "main.js") == "newest");
 
 	// A broken journal still rolls back.
 	Write(root / "staged" / "main.js", "broken");
-	EXPECT(SwapWithJournal(root / "staged", target, "v6", false).empty());
+	EXPECT(SwapWithJournal(root / "staged", target, "v6", false, false).empty());
 	Write(journal, "{not json");
 	EXPECT(RecoverSwap(target, "v6") == SwapRecovery::RolledBack);
 	EXPECT(Read(target / "main.js") == "newest");
+
+	// A rollback that died unregistered: code.prev is not lost.
+	EXPECT(Read(root / "code.prev" / "main.js") == "new");
+	EXPECT(SwapWithJournal(root / "code.prev", target, "v4", false, true).empty());
+	EXPECT(Read(target / "main.js") == "new");
+	EXPECT(!fs::exists(root / "code.prev"));
+	EXPECT(RecoverSwap(target, "v6") == SwapRecovery::RolledBack);
+	EXPECT(Read(target / "main.js") == "newest");
+	EXPECT(Read(root / "code.prev" / "main.js") == "new");
+	EXPECT(!fs::exists(journal) && !fs::exists(root / "code.old"));
 }
 
 void RegistryRecovery() {
@@ -249,6 +286,9 @@ void Budget() {
 	EXPECT(budget.allow(base + kLogMirrorWindowMs));
 	EXPECT(budget.count == 1);
 	EXPECT(budget.allow(10)); // The clock went back: a new window.
+
+	EXPECT(OneLine("a\r\nb\nc") == "a  b c");
+	EXPECT(OneLine("plain") == "plain");
 }
 
 } // namespace
@@ -257,6 +297,7 @@ int main(int argc, char **argv) {
 	EXPECT(argc == 2);
 	const auto work = fs::path(argv[1]);
 	Sentinel(work);
+	Fence(work);
 	Swap(work);
 	RegistryRecovery();
 	Identity();
@@ -275,7 +316,11 @@ LOGIC_MUTANTS = (
     ('\t\t\tif (!failed++) {', '\t\t\tif (!failed) {'),
     ('return backupOk ? RegistryChoice::Backup : RegistryChoice::Empty;', 'return RegistryChoice::Empty;'),
     ('\tif (!mainExists) {\n\t\treturn RegistryChoice::Empty;', '\tif (false) {\n\t\treturn RegistryChoice::Empty;'),
-    ('\tif (fs::exists(old, ec)) {\n\t\tfs::remove_all(target, ec);', '\tif (false) {\n\t\tfs::remove_all(target, ec);'),
+    ('\tif (fs::exists(old, ec)) {\n\t\tif (rollback) {', '\tif (false) {\n\t\tif (rollback) {'),
+    ('\t\tif (rollback) {', '\t\tif (false) {'),
+    ('\t\t\tClearStarting(pending);', '\t\t\t(void)pending;'),
+    ('\t\tif (pending == directory) {\n\t\t\tpending.clear();', '\t\tif (false) {\n\t\t\tpending.clear();'),
+    ("\t\t\tc = ' ';", '\t\t\t(void)c;'),
     ('if (!ref.empty() && ref == registeredRef && fs::exists(target, ec)) {', 'if (fs::exists(target, ec)) {'),
     ('\treturn found;\n}', '\treturn false;\n}'),
     ('\t\tfile << text;\n\t\tfile.close();', '\t\tfile.close();'),
@@ -353,13 +398,29 @@ def check_quarantine(files):
     ordered(recover,
             'if (TakeStarting(FsPath(PluginRoot(id))) && plugin->enabled) {',
             'plugin->enabled = false;',
-            'plugin->lastError = tr::lng_luxury_plugins_quarantined(',
+            'plugin->lastError = std::string(kQuarantinedError);',
             'changed = true;')
+    # The registry keeps no UI language: the marker is localized on display.
+    view = body(text, 'std::optional<PluginView> Manager::plugin(')
+    assert ('.lastError = (plugin->lastError == kQuarantinedError)\n'
+            '\t\t\t? tr::lng_luxury_plugins_quarantined(tr::now)\n'
+            '\t\t\t: Text(plugin->lastError),') in view, 'the quarantine marker is shown raw'
     start = body(text, 'void Manager::Private::start(')
-    ordered(start, 'cNoPlugins()', 'MarkStarting(directory);', 'if (!raw->start()) {',
-            'ClearStarting(directory);', 'crl::on_main(this, [=] {\n\t\tClearStarting(directory);')
+    ordered(start, 'cNoPlugins()', 'fence.mark(directory);', 'if (!raw->start()) {',
+            'fence.clear(directory);', 'crl::on_main(this, [=] {\n\t\tfence.clear(directory);')
+    assert 'MarkStarting(' not in start and 'ClearStarting(' not in start, 'a sentinel outside the fence'
+    stop = body(text, 'void Manager::Private::stop(')
+    assert 'fence.clear(FsPath(PluginRoot(id)));' in stop, 'a stopped plugin keeps its sentinel'
+    # One plugin per event loop turn: never two sentinels at once.
     start_all = body(text, 'void Manager::startAll()')
-    ordered(start_all, 'if (cNoPlugins()) {', 'return;', '_private->start(')
+    ordered(start_all, 'if (cNoPlugins()) {', 'return;',
+            '} else if (QGuiApplication::queryKeyboardModifiers() & Qt::ShiftModifier) {',
+            'cSetNoPlugins(true);', 'return;', '_private->startNext(std::move(queue));')
+    assert '_private->start(' not in start_all, 'startAll starts every plugin in one turn'
+    start_next = body(text, 'void Manager::Private::startNext(')
+    ordered(start_next, 'if (queue.empty()) {', 'changes.fire({});', 'return;',
+            'start(queue.front(), "startup");', 'queue.pop_front();',
+            'crl::on_main(this, [=] {\n\t\tstartNext(queue);')
     ctor = body(text, 'Manager::Manager()')
     assert 'start(' not in ctor.replace('_private->load();', ''), 'the manager starts plugins before the window'
     app = files[APP]
@@ -397,10 +458,48 @@ def check_downgrade(files):
     text = files[MANAGER]
     commit = body(text, 'void Manager::commitInstall(')
     ordered(commit, '&& !AcceptUpdate(\n\t\t\tDecideUpdate(StoredRef(installed->source), plan.resolved),\n'
-            '\t\t\tplan.allowDowngrade)) {', 'done(tr::lng_luxury_plugins_downgrade(tr::now));\n\t\treturn;',
+            '\t\t\tplan.allowDowngrade)) {',
+            'done(\n\t\t\ttr::lng_luxury_plugins_downgrade(tr::now),\n\t\t\tErrorCode::Downgrade);\n\t\treturn;',
             'return SwapWithJournal(')
     plan = body(text, 'void Manager::Private::buildPlan(')
     ordered(plan, 'if (plan.downgrade && !updating.isEmpty()) {', 'Failed(ErrorCode::Downgrade)', 'return;')
+    # An update to the version already installed is refused, not reinstalled.
+    ordered(plan, 'decision = DecideUpdate(', 'plan.downgrade = (decision == UpdateDecision::Downgrade);',
+            '} else if (decision == UpdateDecision::UpToDate\n\t\t\t&& !updating.isEmpty()) {',
+            'Failed(ErrorCode::UpToDate),', 'tr::lng_luxury_plugins_up_to_date(tr::now));', 'return;')
+
+
+def check_errors(files):
+    text = files[MANAGER]
+    commit = body(text, 'void Manager::commitInstall(\n\t\tInstallPlan plan,\n\t\tFn<void(QString error, ErrorCode code)> done) {')
+    for code in ('Manifest', 'Conflict', 'Downgrade', 'Busy', 'Incompatible', 'Consent', 'Network', 'Files'):
+        assert f'ErrorCode::{code}' in commit, f'commitInstall never reports {code}'
+    ordered(commit, '} else if (_private->committing.contains(id)) {',
+            'done(u"The plugin is being installed already."_q, ErrorCode::Busy);')
+    ordered(commit, 'finish(error, code);', 'finish(error, ErrorCode::Network);')
+    ordered(commit, 'if (!swapped.empty()) {', 'ErrorCode::Files);', 'finish(QString(), ErrorCode::None);')
+    assert '!existing,\n\t\t\t\t\t\tfalse);' in commit, 'an install journals as a rollback'
+    forward = body(text, 'void Manager::commitInstall(\n\t\tInstallPlan plan,\n\t\tFn<void(QString error)> done) {')
+    assert 'commitInstall(std::move(plan), [=](QString error, ErrorCode) {\n\t\tdone(error);' in forward
+    rollback = body(text, 'void Manager::rollback(')
+    ordered(rollback, 'ErrorCode::NotFound);', 'done(u"The plugin is being installed already."_q, ErrorCode::Busy);',
+            'ErrorCode::NotFound);', 'plugin->previousSource.ref,\n\t\tfalse,\n\t\ttrue);',
+            'ErrorCode::Files);', 'done(QString(), ErrorCode::None);')
+    header = files[HEADER]
+    assert 'void rollback(\n\t\tconst QString &id,\n\t\tFn<void(QString error, ErrorCode code)> done);' in header
+    assert 'Fn<void(QString error, ErrorCode code)> done);\n\t// The same, for a caller that shows the text only.' in header
+    # The client log stays one line per plugin line.
+    append = body(text, 'void Manager::Private::append(')
+    assert 'Text(OneLine(lines.back().text.toStdString()))' in append, 'a plugin log line breaks the client log'
+
+
+def check_settings(files):
+    text = files[MANAGER]
+    read = body(text, 'json Manager::Private::instanceSetting(')
+    assert '(i != values.end() && SettingAccepts(setting, *i))\n\t\t\t\t? *i\n\t\t\t\t: SettingDefault(setting);' in read, \
+        'a stored value of the wrong type reaches the plugin'
+    write = body(text, 'void Manager::setSettingValue(')
+    ordered(write, 'if (i == parsed->settings.end() || !SettingAccepts(*i, value)) {', 'return;', 'values[name] = value;')
 
 
 def check_updates(files):
@@ -419,7 +518,8 @@ def check_updates(files):
     assert 'GithubErrorText(status, View(body))' in installer
 
 
-CHECKS = (check_swap, check_quarantine, check_registry, check_identity, check_downgrade, check_updates)
+CHECKS = (check_swap, check_quarantine, check_registry, check_identity, check_downgrade, check_updates,
+          check_errors, check_settings)
 MUTANTS = (
     # A swap without a journal.
     (check_swap, MANAGER, 'return SwapWithJournal(\n\t\t\t\t\t\tFsPath(staging', 'return SwapDirectory(\n\t\t\t\t\t\tFsPath(staging'),
@@ -427,9 +527,19 @@ MUTANTS = (
     (check_swap, MANAGER, '\tif (_private->save()) {\n\t\tFinishSwap(FsPath(code));', '\tFinishSwap(FsPath(code));\n\tif (_private->save()) {'),
     (check_swap, MANAGER, 'plugin ? plugin->source.ref : std::string()', 'std::string()'),
     # A sentinel that never disables the plugin.
-    (check_quarantine, MANAGER, '\t\t\tplugin->enabled = false;\n\t\t\tplugin->lastError = tr::lng_luxury_plugins_quarantined(',
-     '\t\t\tplugin->lastError = tr::lng_luxury_plugins_quarantined('),
-    (check_quarantine, MANAGER, '\tMarkStarting(directory);\n\tif (!raw->start()) {', '\tif (!raw->start()) {'),
+    (check_quarantine, MANAGER, '\t\t\tplugin->enabled = false;\n\t\t\tplugin->lastError = std::string(kQuarantinedError);',
+     '\t\t\tplugin->lastError = std::string(kQuarantinedError);'),
+    (check_quarantine, MANAGER, 'plugin->lastError = std::string(kQuarantinedError);',
+     'plugin->lastError = tr::lng_luxury_plugins_quarantined(tr::now).toStdString();'),
+    (check_quarantine, MANAGER, '\t\t? tr::lng_luxury_plugins_quarantined(tr::now)\n\t\t\t: Text(plugin->lastError),',
+     '\t\t? Text(plugin->lastError)\n\t\t\t: Text(plugin->lastError),'),
+    (check_quarantine, MANAGER, '\tfence.mark(directory);\n\tif (!raw->start()) {', '\tMarkStarting(directory);\n\tif (!raw->start()) {'),
+    (check_quarantine, MANAGER, '\tfence.clear(FsPath(PluginRoot(id)));\n', ''),
+    (check_quarantine, MANAGER, '\t_private->startNext(std::move(queue));',
+     '\tfor (const auto &id : queue) {\n\t\t_private->start(id, "startup");\n\t}'),
+    (check_quarantine, MANAGER, '\tcrl::on_main(this, [=] {\n\t\tstartNext(queue);\n\t});', '\tstartNext(queue);'),
+    (check_quarantine, MANAGER, '\t\tcSetNoPlugins(true);\n', ''),
+    (check_quarantine, MANAGER, '} else if (QGuiApplication::queryKeyboardModifiers() & Qt::ShiftModifier) {', '} else if (false) {'),
     (check_quarantine, MANAGER, '\tif (cNoPlugins()) {\n\t\tLOG(("Luxury Plugins: not started', '\tif (false) {\n\t\tLOG(("Luxury Plugins: not started'),
     (check_quarantine, APP, '\t_private->plugins->startAll();\n', ''),
     (check_quarantine, LAUNCHER, 'gNoPlugins = parseResult.contains("-noplugins");', 'gNoPlugins = false;'),
@@ -442,6 +552,21 @@ MUTANTS = (
     (check_downgrade, MANAGER, '&& !AcceptUpdate(\n\t\t\tDecideUpdate(StoredRef(installed->source), plan.resolved),\n\t\t\tplan.allowDowngrade)) {',
      '&& !AcceptUpdate(\n\t\t\tDecideUpdate(StoredRef(installed->source), plan.resolved),\n\t\t\ttrue)) {'),
     (check_downgrade, MANAGER, 'if (plan.downgrade && !updating.isEmpty()) {', 'if (false) {'),
+    (check_downgrade, MANAGER, '} else if (decision == UpdateDecision::UpToDate\n\t\t\t&& !updating.isEmpty()) {',
+     '} else if (false) {'),
+    (check_downgrade, MANAGER, 'Failed(ErrorCode::UpToDate),', 'Failed(ErrorCode::Downgrade),'),
+    # Error codes a caller can branch on.
+    (check_errors, MANAGER, 'done(u"The plugin is being installed already."_q, ErrorCode::Busy);\n\t\treturn;\n\t} else if (const auto text',
+     'done(u"The plugin is being installed already."_q, ErrorCode::Github);\n\t\treturn;\n\t} else if (const auto text'),
+    (check_errors, MANAGER, '\t\t\t\tfinish(error, ErrorCode::Network);', '\t\t\t\tfinish(error, ErrorCode::None);'),
+    (check_errors, MANAGER, '+ QString::fromLocal8Bit(swapped.c_str()), ErrorCode::Files);\n\t\t\t\treturn;',
+     '+ QString::fromLocal8Bit(swapped.c_str()), ErrorCode::None);\n\t\t\t\treturn;'),
+    (check_errors, MANAGER, 'plugin->previousSource.ref,\n\t\tfalse,\n\t\ttrue);', 'plugin->previousSource.ref,\n\t\tfalse,\n\t\tfalse);'),
+    (check_errors, MANAGER, '!existing,\n\t\t\t\t\t\tfalse);', '!existing,\n\t\t\t\t\t\ttrue);'),
+    (check_errors, MANAGER, 'Text(OneLine(lines.back().text.toStdString()))', 'lines.back().text'),
+    # A stored setting of the wrong type.
+    (check_settings, MANAGER, '(i != values.end() && SettingAccepts(setting, *i))', '(i != values.end())'),
+    (check_settings, MANAGER, 'if (i == parsed->settings.end() || !SettingAccepts(*i, value)) {', 'if (i == parsed->settings.end()) {'),
     # checkUpdates reporting failed=0 on a 403.
     (check_updates, MANAGER, '\t\t\t\tstate->tally.add(\n\t\t\t\t\tlatest.error.toStdString(),\n\t\t\t\t\tlatest.code,\n\t\t\t\t\tfalse);\n', ''),
     (check_updates, MANAGER, '.failed = tally.failed,', '.failed = 0,'),
@@ -459,7 +584,7 @@ def crlf(text):
 
 
 def check(root, read=source):
-    files = {path: crlf(read(path)) for path in (MANAGER, INSTALLER, APP, LAUNCHER, SETTINGS)}
+    files = {path: crlf(read(path)) for path in (MANAGER, HEADER, INSTALLER, APP, LAUNCHER, SETTINGS)}
     for test in CHECKS:
         test(files)
     for test, path, before, after in MUTANTS:
@@ -484,10 +609,12 @@ def check(root, read=source):
             continue  # Did not compile: rejected as well.
         if code == 0:
             raise AssertionError(f'the lifecycle fixture accepts the mutant: {after}')
-    print('Plugin lifecycle PASS: .starting quarantine, pending.json swap journal with finish and '
-          'rollback, registry.json.bak restore, case-insensitive repository identity, replaced '
-          'repository, downgrade flag, ref splits, rate limits, GitHub error texts, update tally, '
-          'log mirror budget; -noplugins, start after the first window, ETag')
+    print('Plugin lifecycle PASS: .starting quarantine with one sentinel at a time, pending.json swap '
+          'journal with finish and rollback (an interrupted rollback keeps code.prev), registry.json.bak '
+          'restore, case-insensitive repository identity, replaced repository, downgrade flag, up-to-date '
+          'refusal, ref splits, rate limits, GitHub error texts, update tally, log mirror budget and one-line '
+          'text; sequential start, -noplugins and Shift, start after the first window, commit and rollback '
+          'error codes, quarantine marker, typed settings, ETag')
 
 
 if __name__ == '__main__':

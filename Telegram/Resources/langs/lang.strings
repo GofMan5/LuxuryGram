@@ -9847,3 +9847,4 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_luxury_plugins_pinned" = "The plugin is pinned to its installed version.";
 "lng_luxury_plugins_no_previous" = "There is no previous version to roll back to.";
 "lng_luxury_plugins_release_fallback" = "Release {tag} has no plugin.json, installing from the {name} branch instead.";
+"lng_luxury_plugins_up_to_date" = "This plugin is up to date.";

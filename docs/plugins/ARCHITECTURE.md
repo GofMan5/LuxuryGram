@@ -43,7 +43,7 @@ tdata/luxury_plugins/
     code/                    downloaded files, read-only for the plugin
     code.prev/               the version before the last update (rollback)
     code.old/                replaced files while a swap is in progress
-    pending.json             swap journal {ref, fresh}, see below
+    pending.json             swap journal {ref, fresh, rollback}, see below
     .starting                exists while the plugin is starting
     data/storage.json        lux.storage (quota 5 MiB)
     data/settings.json       values of manifest settings
@@ -69,23 +69,36 @@ Recovery at startup, before any plugin runs:
   the staged files to `code`. Once the registry names the new version,
   `code.old` becomes `code.prev` and the journal goes. A journal found at
   startup is finished when the registry already holds its ref, otherwise
-  `code.old` is put back (or a fresh install is removed).
+  `code.old` is put back (or a fresh install is removed). A rollback
+  journal (`rollback: true`) first moves `code` back to `code.prev`, so an
+  interrupted rollback loses neither version.
 - `.starting` is written right before a plugin's engine starts and removed
   on the next event loop turn. Found at startup, the client died starting
   that plugin: it is disabled with a "closed unexpectedly" error the
-  Plugins page shows.
-- `-noplugins` on the command line keeps every plugin stopped for that
-  launch without changing their enabled state. Plugins start only after
-  the first window is shown.
+  Plugins page shows. The registry stores the marker `luxury:quarantined`
+  as `lastError`; `PluginView::lastError` shows it in the UI language.
+- `startAll` starts the plugins one per event loop turn, and a start
+  removes the `.starting` another plugin still holds (`StartFence`), so
+  there is never more than one sentinel and a crash disables only the
+  plugin that caused it.
+- `-noplugins` on the command line, or Shift held when `startAll` runs,
+  keeps every plugin stopped for that launch without changing their
+  enabled state. Plugins start only after the first window is shown.
 
 `Manager::rollback(id)` swaps `code.prev` back with the same journal and
 restores the previous registry source; grants never widen on a rollback.
 A pinned plugin (`setPinned`) is skipped by update checks and refuses
 `prepareUpdate`. An install of an older release than the installed one
-needs `InstallPlan::allowDowngrade`; an update never downgrades.
+needs `InstallPlan::allowDowngrade`; an update never downgrades, and
+`prepareUpdate` of the installed version fails with `ErrorCode::UpToDate`.
+`commitInstall` and `rollback` report an `ErrorCode` with their text:
+`Busy` while an install of the plugin runs, `Consent` when the plan needs
+the consent box again, `Conflict` when the plugin list or repository
+changed, `Files` when the swap failed, `None` on success.
 
 Plugin log lines are mirrored into the client `log.txt` as
-`Plugin <id> [level]: text`, at most 100 lines a minute per plugin.
+`Plugin <id> [level]: text`, one line each (line breaks become spaces), at
+most 100 lines a minute per plugin.
 
 ## Manifest: `plugin.json` at the repository root (or the linked subdir)
 

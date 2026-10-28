@@ -6,7 +6,7 @@ docs/plugins/ARCHITECTURE.md, host half. The client is not built here, so:
   query refusal, network widening and fetch ports, commit consent and the
   grant against what the consent box showed, timer clamps, the CPU budget,
   reserved hotkeys, the in-flight cap, log truncation, client
-  compatibility, settings, labels and the directory swap with rollback;
+  compatibility, settings and labels;
 - the Qt half is checked statically: every hook returns early unless a
   plugin runs, every engine entry goes through the CPU budget, api.call
   refuses forbidden and query-wrapping methods before encoding, requests
@@ -369,40 +369,9 @@ void Labels() {
 	EXPECT(AvailableLabel({ Channel::Branch, "abcdef0123", "main" }) == "abcdef0");
 }
 
-void Write(const fs::path &path, const char *text) {
-	fs::create_directories(path.parent_path());
-	std::ofstream(path) << text;
-}
-
-std::string Read(const fs::path &path) {
-	auto in = std::ifstream(path);
-	return std::string(std::istreambuf_iterator<char>(in), {});
-}
-
-void Swap(const fs::path &root) {
-	const auto target = root / "swap" / "id";
-	const auto staged = root / "swap" / ".staging" / "1";
-	Write(target / "code" / "main.js", "old");
-	Write(target / "data" / "storage.json", "{}");
-	Write(staged / "main.js", "new");
-	// The manager swaps the code directory only: data/ stays.
-	EXPECT(SwapDirectory(staged, target / "code").empty());
-	EXPECT(Read(target / "code" / "main.js") == "new");
-	EXPECT(Read(target / "data" / "storage.json") == "{}");
-	EXPECT(!fs::exists(staged));
-	EXPECT(!fs::exists(target / "code.old"));
-	// A missing staged directory fails and puts the old code back.
-	EXPECT(!SwapDirectory(root / "swap" / "missing", target / "code").empty());
-	EXPECT(Read(target / "code" / "main.js") == "new");
-	// A first install has nothing to restore.
-	Write(root / "swap" / ".staging" / "2" / "main.js", "fresh");
-	EXPECT(SwapDirectory(root / "swap" / ".staging" / "2", root / "swap" / "b" / "code").empty());
-	EXPECT(Read(root / "swap" / "b" / "code" / "main.js") == "fresh");
-}
-
 } // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char **) {
 	EXPECT(argc == 2);
 	Folding();
 	Commands();
@@ -416,7 +385,6 @@ int main(int argc, char **argv) {
 	Compatibility();
 	Settings();
 	Labels();
-	Swap(argv[1]);
 	std::cout << "plugin host fixture ok";
 }
 '''
@@ -431,7 +399,6 @@ LOGIC_MUTANTS = (
      'return (!update || !newPermissions.empty()) && !consented;'),
     ('return PermissionSet(requested.bits() & granted.bits());', 'return PermissionSet(requested.bits() | granted.bits());'),
     ('return !needed || !current || (*needed > *current);', 'return !needed || !current || (*needed >= *current);'),
-    ('\t\tif (hadOld) {\n\t\t\tfs::rename(old, target, ec);', '\t\tif (false) {\n\t\t\tfs::rename(old, target, ec);'),
     ('&& (name.size() <= 32)', '&& (name.size() <= 33)'),
     # Paid params.
     ('\t\t\t\t|| HasPaidParam(inner)) {', '\t\t\t\t) {'),
@@ -562,7 +529,7 @@ def check_hooks(files):
     # No plugin key while a text field has focus, and never a reserved one.
     assert 'if (typing) {\n\t\treturn false;\n\t}' in hotkey, 'hotkeys must not fire while typing'
     assert 'if (HotkeyReserved(keys)) {\n\t\treturn false;' in hotkey, 'hotkeys must skip reserved keys'
-    assert hotkey.index('if (typing)') < hotkey.index('for (const auto instance'), 'typing must be checked first'
+    assert hotkey.index('if (typing)') < hotkey.index('for (const auto &instance'), 'typing must be checked first'
     assert 'granted.has(Permission::Ui)' in hotkey, 'hotkeys without ui'
     # The Qt-free key constants of plugin_host_logic.h are Qt's.
     for line in ('kKeyEscape == Qt::Key_Escape', 'kKeyReturn == Qt::Key_Return', 'kKeyEnter == Qt::Key_Enter',
@@ -927,7 +894,7 @@ def check(root, read=source):
             raise AssertionError(f'the host fixture accepts the mutant: {after}')
     print('Plugin host PASS: beforeSend folding, commands, !X refusal, network and ports, '
           'consent, commit grants, timer clamps, CPU budget, reserved hotkeys, in-flight cap, '
-          'log truncation, compatibility, settings, labels, directory swap; hooks are guarded '
+          'log truncation, compatibility, settings, labels; hooks are guarded '
           'and placed, engine entries are budgeted, commit checks the reviewed bytes')
 
 
