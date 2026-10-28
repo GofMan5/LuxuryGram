@@ -37,7 +37,8 @@ inline constexpr auto kOverrunSpanUs = std::int64_t(10'000'000);
 inline constexpr auto kCpuSpanUs = std::int64_t(5'000'000);
 inline constexpr auto kCpuSpanBudgetUs = std::int64_t(500'000);
 // Every engine entry costs at least this much: the engine call, the
-// json round trip and the event loop turn around it are never free.
+// json round trip and the event loop turn around it are never free. A
+// drain of queued host events pays it once, not once per event.
 inline constexpr auto kMinChargeUs = std::int64_t(100);
 inline constexpr auto kMinInterval = 50.;
 inline constexpr auto kMinTimeout = 4.;
@@ -112,6 +113,12 @@ inline constexpr auto kMaxQueuedEvents = std::size_t(256);
 	} else if (ipv6[0] == 0x00 && ipv6[1] == 0x64
 		&& ipv6[2] == 0xFF && ipv6[3] == 0x9B && zeros(4, 12)) {
 		return embedded(); // NAT64 64:ff9b::/96.
+	} else if (ipv6[0] == 0x00 && ipv6[1] == 0x64
+		&& ipv6[2] == 0xFF && ipv6[3] == 0x9B
+		&& ipv6[4] == 0x00 && ipv6[5] == 0x01) {
+		// Local-use NAT64 64:ff9b:1::/48 (RFC 8215) embeds the IPv4 at
+		// an offset the network picks: refused as a whole.
+		return false;
 	}
 	return ((ipv6[0] & 0xFE) != 0xFC) // Unique local fc00::/7.
 		&& !(ipv6[0] == 0xFE && (ipv6[1] & 0xC0) == 0x80) // fe80::/10.
@@ -151,13 +158,18 @@ struct CpuBudget {
 	std::int64_t used = 0; // Sum of the charges in slices.
 
 	// One engine entry that ended at now (µs, monotonic) and took elapsed
-	// (µs). True when the plugin must be stopped: a rolling sum, so no
-	// idle pause lets a busy plugin start over. Amortised O(1).
+	// (µs), charged at least kMinChargeUs unless minimum is false (the later
+	// events of one drain). True when the plugin must be stopped: a
+	// rolling sum, so no idle pause lets a busy plugin start over.
+	// Amortised O(1).
 	[[nodiscard]] bool record(
 			std::int64_t now,
 			std::int64_t elapsed,
-			bool overrun) {
-		const auto charge = std::max(elapsed, kMinChargeUs);
+			bool overrun,
+			bool minimum = true) {
+		const auto charge = std::max(
+			elapsed,
+			minimum ? kMinChargeUs : std::int64_t(0));
 		slices.emplace_back(now, charge);
 		used += charge;
 		while (now - slices.front().first >= kCpuSpanUs) {
@@ -396,7 +408,8 @@ inline constexpr std::string_view kPaidParams[] = {
 inline constexpr auto kServiceUserId = std::int64_t(777000);
 
 // A scalar the encoder could turn into the long 777000: a number, or a
-// string with ASCII whitespace, one '+', leading zeros or a fraction.
+// decimal string with ASCII whitespace, one '+' or leading zeros. The
+// encoder reads no fraction or exponent in a string.
 [[nodiscard]] inline bool IsServiceUserId(const nlohmann::json &value) {
 	if (value.is_number_unsigned()) {
 		return value.get<std::uint64_t>() == std::uint64_t(kServiceUserId);
@@ -421,14 +434,21 @@ inline constexpr auto kServiceUserId = std::int64_t(777000);
 	const auto end = begin + text.size();
 	auto number = std::int64_t();
 	const auto integer = std::from_chars(begin, end, number);
-	if (integer.ec == std::errc() && integer.ptr == end) {
-		return number == kServiceUserId;
-	}
-	auto real = 0.;
-	const auto fraction = std::from_chars(begin, end, real);
-	return fraction.ec == std::errc()
-		&& fraction.ptr == end
-		&& real == double(kServiceUserId);
+	return integer.ec == std::errc()
+		&& integer.ptr == end
+		&& number == kServiceUserId;
+}
+
+// A dialog id names one peer only when its magnitude fits the 48 bits of
+// a bare id (PeerId::kChatTypeMask): the higher bits, masked off on the
+// lookup, would alias another peer, 2^48 + 777000 the service chat.
+inline constexpr auto kBareIdMask = std::uint64_t(0xFFFFFFFFFFFFULL);
+
+[[nodiscard]] inline bool IsBareDialogId(std::int64_t dialogId) {
+	const auto magnitude = (dialogId < 0)
+		? (std::uint64_t(0) - std::uint64_t(dialogId))
+		: std::uint64_t(dialogId);
+	return magnitude && (magnitude <= kBareIdMask);
 }
 
 // True if any object at any depth names the user 777000: in user_id,

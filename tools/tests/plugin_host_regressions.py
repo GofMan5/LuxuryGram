@@ -58,6 +58,7 @@ MAIN = r'''
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 
 using namespace Luxury::Plugins;
 using json = nlohmann::json;
@@ -139,7 +140,7 @@ void Queries() {
 	EXPECT(!MentionsServiceUser(json::parse(R"({"user_id":"7770001","id":"777000"})")));
 	// Every form the encoder reads as the long 777000, under every key.
 	for (const auto id : { R"("0777000")", R"("+777000")", R"(" 777000")",
-			R"("777000 ")", R"("\t+000777000\n")", R"("777000.0")", R"("7.77e5")",
+			R"("777000 ")", R"("\t+000777000\n")",
 			"777000.0", "777000", "7.77e5" }) {
 		for (const auto key : { "user_id", "peer", "from_id", "peer_id" }) {
 			EXPECT(MentionsServiceUser(json::parse(
@@ -152,6 +153,7 @@ void Queries() {
 	}
 	for (const auto id : { R"("7770000")", R"("-777000")", R"("++777000")",
 			R"("777 000")", R"("777000x")", R"("")", R"("  ")", R"("0x777000")",
+			R"("777000.0")", R"("7.77e5")",
 			"777000.5", "-777000", "77700", "true", "null" }) {
 		EXPECT(!MentionsServiceUser(json::parse(
 			std::string(R"({"user_id":)") + id + "}")));
@@ -192,6 +194,19 @@ void Queries() {
 	EXPECT(users[1]["phone"] == "15550000000");
 	EXPECT(!users[2]["users"][0].contains("phone"));
 	EXPECT(!users[3].contains("phone") && users[3]["user_id"] == "1");
+	// An id over 48 bits would mask into another peer: 2^48 + 777000 is
+	// the service chat again.
+	constexpr auto kAlias = (std::int64_t(1) << 48);
+	EXPECT(!IsBareDialogId(kAlias + 777000));
+	EXPECT(!IsBareDialogId(-(kAlias + 777000)));
+	EXPECT(!IsBareDialogId(kAlias));
+	EXPECT(!IsBareDialogId(-kAlias));
+	EXPECT(!IsBareDialogId(0));
+	EXPECT(!IsBareDialogId(std::numeric_limits<std::int64_t>::min()));
+	EXPECT(IsBareDialogId(777000));
+	EXPECT(IsBareDialogId(-1001234567890));
+	EXPECT(IsBareDialogId(kAlias - 1));
+	EXPECT(IsBareDialogId(-(kAlias - 1)));
 }
 
 void Network() {
@@ -337,6 +352,15 @@ void Cpu() {
 		}
 		EXPECT(b.slices.size() == 500 && b.used == 500 * kMinChargeUs);
 	}
+	{ // A drain of queued events pays the minimum once, not per event:
+		// a full 256-event drain of 1 us handlers costs 0.1 ms + 255 us.
+		auto b = CpuBudget();
+		for (auto i = 0; i != 256; ++i) {
+			EXPECT(!b.record(0, 1, false, i == 0));
+		}
+		EXPECT(b.used == kMinChargeUs + 255);
+		EXPECT(!b.record(0, -5, false, false) && b.used == kMinChargeUs + 255);
+	}
 }
 
 void Gestures() {
@@ -419,6 +443,10 @@ void Addresses() {
 	EXPECT(IsPublicAddress(V6({}, { 8, 8, 8, 8 })));
 	EXPECT(!IsPublicAddress(V6({ 0, 0x64, 0xFF, 0x9B }, { 192, 168, 1, 1 })));
 	EXPECT(IsPublicAddress(V6({ 0, 0x64, 0xFF, 0x9B }, { 8, 8, 8, 8 })));
+	// Local-use NAT64 64:ff9b:1::/48 is refused whatever it embeds.
+	EXPECT(!IsPublicAddress(V6({ 0, 0x64, 0xFF, 0x9B, 0, 1 }, { 10, 0, 0, 1 })));
+	EXPECT(!IsPublicAddress(V6({ 0, 0x64, 0xFF, 0x9B, 0, 1 }, { 8, 8, 8, 8 })));
+	EXPECT(IsPublicAddress(V6({ 0, 0x64, 0xFF, 0x9B, 0, 2 }, { 8, 8, 8, 8 })));
 	// Unique local, link-local, site-local and multicast IPv6.
 	for (auto first = 1; first != 256; ++first) {
 		EXPECT(IsPublicAddress(V6({ first, 0x80 }, { 1 }))
@@ -609,9 +637,12 @@ LOGIC_MUTANTS = (
     ('text = text.substr(first, text.find_last_not_of(space) - first + 1);', 'text = text.substr(first);'),
     ("if (text.front() == '+') {", "if (false) {"),
     ("if (text.front() == '+') {", "while (!text.empty() && text.front() == '+') {"),
-    ('if (integer.ec == std::errc() && integer.ptr == end) {', 'if (integer.ec == std::errc()) {'),
-    ('\t\t&& fraction.ptr == end\n', ''),
-    ('\t\t&& real == double(kServiceUserId);', '\t\t&& false;'),
+    ('\t\t&& integer.ptr == end\n', ''),
+    ('\t\t&& number == kServiceUserId;', '\t\t&& false;'),
+    # Dialog ids over 48 bits.
+    ('return magnitude && (magnitude <= kBareIdMask);', 'return magnitude != 0;'),
+    ('return magnitude && (magnitude <= kBareIdMask);', 'return magnitude && (magnitude <= kBareIdMask + 1);'),
+    ('? (std::uint64_t(0) - std::uint64_t(dialogId))', '? std::uint64_t(dialogId)'),
     ('\t\t\t|| (key == "peer")\n', ''),
     ('\t\t\t|| (key == "from_id")\n', ''),
     ('\t\t\t|| (key == "peer_id")\n', ''),
@@ -642,8 +673,9 @@ LOGIC_MUTANTS = (
     ('used += charge;', 'used = charge;'),
     ('used -= slices.front().second;', '(void)0;'),
     # Without the minimum charge a flood of trivial entries runs free.
-    ('const auto charge = std::max(elapsed, kMinChargeUs);', 'const auto charge = elapsed;'),
-    ('const auto charge = std::max(elapsed, kMinChargeUs);', 'const auto charge = std::max(elapsed, std::int64_t(0));'),
+    ('minimum ? kMinChargeUs : std::int64_t(0));', 'std::int64_t(0));'),
+    ('minimum ? kMinChargeUs : std::int64_t(0));', 'kMinChargeUs);'),
+    ('minimum ? kMinChargeUs : std::int64_t(0));', 'minimum ? kMinChargeUs : elapsed);'),
     ('while (!overruns.empty() && now - overruns.front() >= kOverrunSpanUs) {', 'while (false) {'),
     ('kMaxTimers = 64;', 'kMaxTimers = 1000;'),
     ('kMinInterval = 50.;', 'kMinInterval = 10.;'),
@@ -669,6 +701,7 @@ LOGIC_MUTANTS = (
     ('return embedded(); // IPv4-mapped.', 'return true;'),
     ('fail as 0.0.0.0/8.\n\t\treturn embedded();', '\n\t\treturn true;'),
     ('return embedded(); // NAT64 64:ff9b::/96.', 'return true;'),
+    ('\t\t&& ipv6[4] == 0x00 && ipv6[5] == 0x01) {', '\t\t&& ipv6[4] == 0x00 && ipv6[5] == 0x02) {'),
     ('return ((ipv6[0] & 0xFE) != 0xFC)', 'return (ipv6[0] != 0xFC)'),
     ('&& !(ipv6[0] == 0xFE && (ipv6[1] & 0xC0) == 0x80)', '&& true'),
     ('&& !(ipv6[0] == 0xFE && (ipv6[1] & 0xC0) == 0xC0)', '&& true'),
@@ -816,8 +849,9 @@ def check_api_call(files):
     assert 'result.size() > kInflateLimit' in gunzip, 'Gunzip must stop at kInflateLimit'
     assert 'invalidate_weak_ptrs(this);' in body(host, 'Instance::~Instance() {'), 'callbacks may outlive the instance'
     # CPU budget: every entry into JS is timed by run().
-    timed = body(host, 'Js::Outcome Instance::run(Fn<Js::Outcome()> entry) {')
-    assert '_budget.record(finished, finished - started, outcome.overrun)' in timed and 'instanceStop' in timed, \
+    timed = body(host, 'Js::Outcome Instance::run(Fn<Js::Outcome()> entry, bool minimum) {')
+    assert '\t\t&& _budget.record(\n\t\t\tfinished,\n\t\t\tfinished - started,\n\t\t\toutcome.overrun,\n\t\t\tminimum)) {' in timed \
+        and 'instanceStop' in timed, \
         'run() must stop a plugin over its CPU budget'
     for match in re.finditer(r'_engine->(\w+)\(', host):
         if match.group(1) == 'releaseFunction':
@@ -863,7 +897,7 @@ def check_api_call(files):
 def check_sandbox(files):
     host, hooks = files[HOST], files[HOOKS]
     # The CPU budget counts microseconds of a monotonic clock.
-    timed = body(host, 'Js::Outcome Instance::run(Fn<Js::Outcome()> entry) {')
+    timed = body(host, 'Js::Outcome Instance::run(Fn<Js::Outcome()> entry, bool minimum) {')
     assert 'std::chrono::steady_clock::now()' in timed and 'std::chrono::microseconds' in timed, \
         'run() must time entries in steady microseconds'
     # Events: one bounded queue, drained in one pass.
@@ -872,6 +906,8 @@ def check_sandbox(files):
         'emitLater must queue and schedule one drain'
     assert 'const auto events = _queue.take();' in emit and 'for (const auto &entry : events) {' in emit, \
         'the drain must take the whole queue'
+    assert 'auto first = true;' in emit and '}, std::exchange(first, false));' in emit, \
+        'a drain must pay the minimum CPU charge once, on its first event'
     # Clipboard: only right after a command, menu item or hotkey.
     later = body(host, 'void Instance::callLater(std::int64_t fn, json args, bool gesture) {')
     assert 'if (gesture) {\n\t\t\t\t_gestureUntil = crl::now() + kGestureMs;' in later, 'callLater must open the gesture window'
@@ -910,6 +946,14 @@ def check_sandbox(files):
         < send.index('session->api().sendMessage('), 'a queued send must check the instance first'
     assert send.index('if (IsServiceUserId(options.value("peer", json()))) {') < send.index('_requests.emplace'), \
         'messages.send must refuse the service chat'
+    assert send.index('ResolvePeer(session, *dialogId)') < send.index('} else if (!peer) {') \
+        < send.index('_requests.emplace'), 'messages.send must refuse a peer it did not resolve'
+    # The resolved peer is checked, so no 48-bit alias reaches 777000.
+    resolve = body(host, '[[nodiscard]] PeerData *ResolvePeer(')
+    assert resolve.index('if (!IsBareDialogId(dialogId)) {\n\t\treturn nullptr;') < resolve.index('getBareDialogId('), \
+        'ResolvePeer must refuse ids over 48 bits'
+    assert 'return (peer && peer->id == PeerData::kServiceNotificationsId)\n\t\t? nullptr\n\t\t: peer;' in resolve, \
+        'ResolvePeer must refuse the service chat after resolving'
     call = body(host, 'Js::HostResult Instance::apiCall(const json &args, std::uint64_t promiseId) {')
     assert 'if (!strong || !strong->_requests.contains(promiseId)) {\n\t\t\treturn true;' in call \
         and 'if (strong && strong->_requests.contains(promiseId)) {' in call, 'api.call replies must check the request'
@@ -917,8 +961,11 @@ def check_sandbox(files):
     fetch = body(host, 'Js::HostResult Instance::fetch(const json &args, std::uint64_t promiseId) {')
     assert '.toLower() == "host") {\n\t\t\t\tcontinue;' in fetch, 'a plugin Host header must be dropped'
     step = body(host, 'void Instance::fetchStep(')
-    literal = step.index('if (literal.setAddress(parsed.host())) {\n\t\tif (!IsPublic(literal)) {\n\t\t\treturn refuse(this);')
+    literal = step.index('if (isLiteral || proxied) {\n\t\tif (isLiteral && !IsPublic(literal)) {\n\t\t\treturn refuse(this);')
     assert literal < step.index('QHostInfo::lookupHost('), 'literal addresses must be checked'
+    # Behind an application proxy a local lookup would leak the name.
+    assert 'const auto proxied = (QNetworkProxy::applicationProxy().type()\n\t\t!= QNetworkProxy::NoProxy);' in step, \
+        'fetch must skip the local lookup behind an application proxy'
     looked = step[step.index('QHostInfo::lookupHost('):]
     assert '|| !strong->_requests.contains(promiseId)) {' in looked, 'a lookup must check the request'
     assert looked.index('for (const auto &address : addresses) {\n\t\t\tif (!IsPublic(address)) {\n\t\t\t\treturn refuse(strong);') \
@@ -1102,7 +1149,8 @@ MUTANTS = (
     (check_api_call, HOST, 'if (IsMethodForbidden(method)) {', 'if (false) {'),
     (check_api_call, HOST, '} else if (HasQueryParam(*combinator)) {', '} else if (false) {'),
     (check_api_call, HOST, '\tinvalidate_weak_ptrs(this);\n\t_stopping = true;', '\t_stopping = true;'),
-    (check_api_call, HOST, '&& _budget.record(finished, finished - started, outcome.overrun)) {', '&& false) {'),
+    (check_api_call, HOST, '&& _budget.record(\n\t\t\tfinished,', '&& false && _budget.record(\n\t\t\tfinished,'),
+    (check_api_call, HOST, '\t\t\toutcome.overrun,\n\t\t\tminimum)) {', '\t\t\toutcome.overrun)) {'),
     (check_api_call, HOST, 'const auto out = run([&] {\n\t\t\treturn _engine->fireTimer(id);',
      'const auto out = ([&] {\n\t\t\treturn _engine->fireTimer(id);'),
     (check_api_call, HOST, 'const auto out = run([&] { return _engine->emit("beforeSend", payload); });',
@@ -1200,10 +1248,15 @@ MUTANTS = (
     (check_sandbox, HOST, 'for (const auto promiseId : base::take(_requests)) {', 'for (const auto promiseId : _requests) {'),
     (check_sandbox, HOST, 'if (!alive || alive->_stopping || !alive->_requests.contains(promiseId)) {', 'if (!alive) {'),
     (check_sandbox, HOST, 'if (IsServiceUserId(options.value("peer", json()))) {', 'if (false) {'),
+    (check_sandbox, HOST, 'return (peer && peer->id == PeerData::kServiceNotificationsId)\n\t\t? nullptr\n\t\t: peer;', 'return peer;'),
+    (check_sandbox, HOST, '\tif (!IsBareDialogId(dialogId)) {\n\t\treturn nullptr;\n\t}\n', ''),
+    (check_sandbox, HOST, '} else if (!peer) {\n\t\treturn Result::Error("Error", "unknown peer");', '} else if (false) {\n\t\treturn Result::Error("Error", "unknown peer");'),
+    (check_sandbox, HOST, 'const auto proxied = (QNetworkProxy::applicationProxy().type()\n\t\t!= QNetworkProxy::NoProxy);', 'const auto proxied = false;'),
+    (check_sandbox, HOST, '}, std::exchange(first, false));', '});'),
     (check_sandbox, HOST, 'if (!strong || !strong->_requests.contains(promiseId)) {\n\t\t\treturn true;', 'if (!strong) {\n\t\t\treturn true;'),
     (check_sandbox, HOST, 'if (strong && strong->_requests.contains(promiseId)) {', 'if (strong) {'),
     (check_sandbox, HOST, '.toLower() == "host") {\n\t\t\t\tcontinue;', '.toLower() == "host") {\n\t\t\t\t;'),
-    (check_sandbox, HOST, '\t\tif (!IsPublic(literal)) {\n', '\t\tif (false) {\n'),
+    (check_sandbox, HOST, '\t\tif (isLiteral && !IsPublic(literal)) {\n', '\t\tif (false) {\n'),
     (check_sandbox, HOST, '\t\t\tif (!IsPublic(address)) {\n', '\t\t\tif (false) {\n'),
     (check_sandbox, HOST, 'if (!SameOrigin(reply->url(), next)) {', 'if (false) {'),
     (check_sandbox, HOST, 'std::move(kept),', 'headers,'),

@@ -279,6 +279,19 @@ lux.storage.keys();
 	const auto out = strict.loadMain("main.js");
 	CHECK(out.error.rfind("PermissionError: \"messages.send\" was not granted", 0) == 0);
 	CHECK(Has(out.error, "main.js:2"));
+
+	// A top-level await that rejects later fails the entry that settles it,
+	// once, and is not also logged as an unhandled rejection.
+	FakeHost late;
+	late.files["main.js"] = "await lux.api.call('x', {});\nthrow new RangeError('late main');\n";
+	Engine lateEngine({}, late);
+	CHECK(lateEngine.loadMain("main.js").ok());
+	CHECK(late.pendingIds.size() == 1);
+	const auto settled = lateEngine.resolve(late.pendingIds[0], nullptr);
+	CHECK(settled.error.rfind("RangeError: late main", 0) == 0);
+	CHECK(Has(settled.error, "main.js:2"));
+	CHECK(!late.logged("Unhandled promise rejection"));
+	CHECK(lateEngine.runJobs().ok());
 }
 
 void Interrupt() {
@@ -601,6 +614,9 @@ def check(root, read=source):
     assert not mutant_survives(root, engine, 'if (reported++ < kMaxRejectionReports) {', 'if (reported++ < 1000) {', 'teardown'), 'rejection cap mutant survived'
     assert not mutant_survives(root, engine, 'if (list.size() > kMaxRejectionReports) {', 'if (false) {', 'teardown'), 'rejection summary mutant survived'
     assert not mutant_survives(root, engine, '\t\t\t\tbase64: r.base64,\n', '', 'async'), 'fetch base64 mutant survived'
+    assert not mutant_survives(root, engine, '\tif (!overrun) {\n\t\tsettleMain(out);\n\t}\n', '', 'async'), 'late main rejection mutant survived'
+    assert not mutant_survives(root, engine, '\t\tforget(main);\n', '', 'async'), 'late main double report mutant survived'
+    assert not mutant_survives(root, engine, '\t\tJS_FreeValue(ctx, main);\n\t\tfor (const auto &value : internals) {', '\t\tfor (const auto &value : internals) {', 'teardown'), 'main promise leak mutant survived'
     print('Plugin JS PASS: ES modules confined to the plugin dir; beforeSend rewrite/cancel; async host calls settle later; PermissionError surfaces; CPU slice interrupts loops, regexps and job floods; memory limit without a crash; timers; $fn callbacks; file:line traces; leak-free teardown; interrupt and leak mutants caught')
 
 

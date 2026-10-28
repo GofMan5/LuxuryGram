@@ -168,10 +168,14 @@ still mentions it is refused whole, or not delivered at all. The account's
 own phone number is removed from users marked `self` and from
 `updateUserPhone` (`HideOwnPhone`).
 
-The user id is matched however it is written: a number, a decimal string
-with spaces or a `+`, or a float such as `777000.0` (`IsServiceUserId`),
-under the keys `user_id`, `peer`, `from_id`, `peer_id`, and `id` inside a
-user object, at any depth. `lux.messages.send` refuses it as `peer`.
+The user id is matched however the TL encoder would read it: a number,
+including a float such as `777000.0`, or a decimal string with ASCII
+whitespace, a `+` or leading zeros (`IsServiceUserId`), under the keys
+`user_id`, `peer`, `from_id`, `peer_id`, and `id` inside a user object, at
+any depth. `lux.messages.send` refuses it as `peer`, and checks the peer it
+resolved as well: a dialog id over 48 bits (`IsBareDialogId`), such as
+2^48 + 777000, resolves to nothing instead of being masked into the
+service chat.
 
 The user approves the requested list at install. An update that requests
 new permissions, or widens the `network` hosts, asks again before it is
@@ -244,7 +248,8 @@ One runtime and context per plugin, on the main thread.
   rolling sum: pausing does not reset it), or it overruns the slice three
   times within 10 s. The manager then disables it. Entries are timed in
   microseconds of a monotonic clock and each costs at least 0.1 ms, so a
-  flood of trivial entries is charged too.
+  flood of trivial entries is charged too. A drain of queued events pays
+  that minimum once, on its first event; the rest pay their real time.
 - Timers: at most 64 per plugin (`RangeError: too many timers`). An
   interval fires at most every 50 ms and a timeout waits at least 4 ms;
   smaller or invalid delays are raised to those.
@@ -264,7 +269,9 @@ One runtime and context per plugin, on the main thread.
   `lastError` is not written to `registry.json` on every change, and the
   manager's change signal is throttled to one per 250 ms.
 - Plugin code is ES modules; `import` resolves only inside the plugin's
-  `code/` directory.
+  `code/` directory. A top-level `await` in `main.js` may outlive the load:
+  if it rejects later, the error goes to the entry that settles it and
+  reaches the plugin's `lastError` like any other.
 - No `std`/`os` modules, no file system, no eval of remote code beyond the
   plugin's own files.
 - Host functions exchange JSON. A JS function passed as an argument reaches
@@ -300,11 +307,14 @@ lux.http.fetch(url, {method, headers, body, binary}) -> Promise<{status, headers
 //   names a port ("api.example.com:8443")
 //   binary: true returns the body as base64 instead of text
 //   Every address of the host must be public: loopback, private, link-local,
-//   CGNAT (100.64/10), ULA, multicast, 0.0.0.0, and IPv4-mapped/NAT64 forms
-//   of those are refused with PermissionError, for an IP literal and for
-//   each address the name resolves to (QHostInfo; its 60 s cache is what
-//   the connection uses). A Host header is dropped; a redirect to another
-//   origin drops Authorization, Cookie, Proxy-* and Host.
+//   CGNAT (100.64/10), ULA, multicast, 0.0.0.0, IPv4-mapped/NAT64 forms
+//   of those and all of local-use NAT64 64:ff9b:1::/48 are refused with
+//   PermissionError, for an IP literal and for each address the name
+//   resolves to (QHostInfo; its 60 s cache is what the connection uses).
+//   With an application proxy (SOCKS5/HTTP in the app settings) the proxy
+//   resolves the name, so there is no local lookup that would leak it:
+//   only an IP literal is checked. A Host header is dropped; a redirect to
+//   another origin drops Authorization, Cookie, Proxy-* and Host.
 lux.storage.get(key) / set(key, value) / remove(key) / keys()       storage
 lux.settings.get(key) / onChange(fn)          values from manifest settings, always allowed
 lux.clipboard.read() / write(text)                                  clipboard

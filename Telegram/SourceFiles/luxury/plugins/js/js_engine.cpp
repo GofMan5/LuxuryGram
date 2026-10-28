@@ -367,6 +367,7 @@ struct Engine::State {
 		std::string_view message);
 	void pump(Outcome &out);
 	void finish(Outcome &out, JSValue result);
+	void settleMain(Outcome &out);
 	void forget(JSValueConst promise);
 	void reportRejections();
 	[[nodiscard]] JSValue nativeCall(JSValueConst name, JSValueConst args);
@@ -405,6 +406,11 @@ struct Engine::State {
 	int overruns = 0;
 	bool overrun = false;
 	bool loaded = false;
+	bool loading = false;
+
+	// The main module's promise while its top-level await is pending: a
+	// later rejection becomes the error of the entry that settles it.
+	JSValue main = JS_UNDEFINED;
 };
 
 Engine::State::State(Limits limits, Host &host)
@@ -436,6 +442,7 @@ Engine::State::State(Limits limits, Host &host)
 Engine::State::~State() {
 	if (ctx) {
 		JS_SetHostPromiseRejectionTracker(rt, nullptr, nullptr);
+		JS_FreeValue(ctx, main);
 		for (const auto &value : internals) {
 			JS_FreeValue(ctx, value);
 		}
@@ -478,6 +485,10 @@ Outcome Engine::State::enter(Body &&body) {
 		} else {
 			finish(out, result);
 		}
+	}
+	loading = false;
+	if (!overrun) {
+		settleMain(out);
 	}
 	reportRejections();
 	--depth;
@@ -653,7 +664,11 @@ void Engine::State::finish(Outcome &out, JSValue result) {
 	if (JS_IsPromise(result)) {
 		const auto state = JS_PromiseState(ctx, result);
 		if (state == JS_PROMISE_PENDING) {
-			JS_FreeValue(ctx, result);
+			if (loading) {
+				main = result;
+			} else {
+				JS_FreeValue(ctx, result);
+			}
 			return;
 		}
 		const auto settled = JS_PromiseResult(ctx, result);
@@ -687,6 +702,25 @@ void Engine::State::finish(Outcome &out, JSValue result) {
 		}
 	}
 	JS_FreeValue(ctx, text);
+}
+
+void Engine::State::settleMain(Outcome &out) {
+	if (JS_IsUndefined(main)
+		|| JS_PromiseState(ctx, main) == JS_PROMISE_PENDING) {
+		return;
+	} else if (JS_PromiseState(ctx, main) == JS_PROMISE_REJECTED) {
+		forget(main);
+		const auto reason = JS_PromiseResult(ctx, main);
+		auto text = describe(reason);
+		JS_FreeValue(ctx, reason);
+		if (out.error.empty()) {
+			out.error = std::move(text);
+		} else {
+			host.log(LogLevel::Error, text);
+		}
+	}
+	JS_FreeValue(ctx, main);
+	main = JS_UNDEFINED;
 }
 
 void Engine::State::forget(JSValueConst promise) {
@@ -897,6 +931,7 @@ Outcome Engine::loadMain(std::string_view path) {
 				text.c_str());
 		}
 		state.loaded = true;
+		state.loading = true;
 		const auto compiled = state.compile(*resolved);
 		return JS_IsException(compiled)
 			? compiled

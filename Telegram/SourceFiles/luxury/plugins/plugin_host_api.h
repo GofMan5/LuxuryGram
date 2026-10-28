@@ -118,8 +118,9 @@ public:
 private:
 	using Result = Js::HostResult;
 
-	// Runs one engine entry, reports its error and charges its time.
-	[[nodiscard]] Js::Outcome run(Fn<Js::Outcome()> entry);
+	// Runs one engine entry, reports its error and charges its time, at
+	// least the budget's minimum charge unless minimum is false.
+	[[nodiscard]] Js::Outcome run(Fn<Js::Outcome()> entry, bool minimum = true);
 	void settleLater(
 		std::uint64_t promiseId,
 		bool fulfill,

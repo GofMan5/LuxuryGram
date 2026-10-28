@@ -39,6 +39,7 @@
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QHostInfo>
 #include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkProxy>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
 
@@ -167,21 +168,29 @@ constexpr auto kMaxHandlers = 100;
 	return ok ? std::make_optional<std::int64_t>(result) : std::nullopt;
 }
 
-// A dialog id of the active account only, never another account's peer.
+// A dialog id of the active account only, never another account's peer
+// and never the service chat. An id above 48 bits would be masked into
+// another peer's bare id (2^48 + 777000 into 777000), so it resolves to
+// nothing.
 [[nodiscard]] PeerData *ResolvePeer(
 		not_null<Main::Session*> session,
 		std::int64_t dialogId) {
-	const auto bare = getBareDialogId(dialogId);
-	if (!bare) {
+	if (!IsBareDialogId(dialogId)) {
 		return nullptr;
 	}
+	const auto bare = getBareDialogId(dialogId);
 	auto &data = session->data();
+	PeerData *peer = nullptr;
 	if (dialogId > 0) {
-		return data.userLoaded(UserId(bare));
+		peer = data.userLoaded(UserId(bare));
 	} else if (const auto channel = data.channelLoaded(ChannelId(bare))) {
-		return channel;
+		peer = channel;
+	} else {
+		peer = data.chatLoaded(ChatId(bare));
 	}
-	return data.chatLoaded(ChatId(bare));
+	return (peer && peer->id == PeerData::kServiceNotificationsId)
+		? nullptr
+		: peer;
 }
 
 } // namespace
@@ -306,7 +315,7 @@ bool Instance::wants(const std::string &event) const {
 
 // Every entry into the engine goes through here, so CpuBudget sees all
 // the JS time the plugin takes on the main thread.
-Js::Outcome Instance::run(Fn<Js::Outcome()> entry) {
+Js::Outcome Instance::run(Fn<Js::Outcome()> entry, bool minimum) {
 	const auto clock = [] {
 		return std::int64_t(std::chrono::duration_cast<std::chrono::microseconds>(
 			std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -319,7 +328,11 @@ Js::Outcome Instance::run(Fn<Js::Outcome()> entry) {
 		_delegate->instanceError(id, QString::fromStdString(outcome.error));
 	}
 	if (!_stopping
-		&& _budget.record(finished, finished - started, outcome.overrun)) {
+		&& _budget.record(
+			finished,
+			finished - started,
+			outcome.overrun,
+			minimum)) {
 		_stopping = true;
 		_delegate->instanceStop(id, u"The plugin used too much CPU time."_q);
 	}
@@ -339,13 +352,15 @@ void Instance::emitLater(std::string event, json payload) {
 				std::to_string(dropped)
 					+ " events were dropped, the plugin is too slow");
 		}
+		// One drain pays the minimum charge once, on its first event.
+		auto first = true;
 		for (const auto &entry : events) {
 			if (_stopping) {
 				break;
 			}
 			[[maybe_unused]] const auto out = run([&] {
 				return _engine->emit(entry.first, entry.second);
-			});
+			}, std::exchange(first, false));
 		}
 	});
 }
@@ -829,15 +844,16 @@ Js::HostResult Instance::send(const json &options, std::uint64_t promiseId) {
 	} else if (!options.is_object()) {
 		return TypeError("messages.send: options must be an object");
 	}
+	const auto dialogId = DialogId(options.value("peer", json()));
+	const auto peer = dialogId ? ResolvePeer(session, *dialogId) : nullptr;
+	const auto text = OptionText(options, "text");
+	// ResolvePeer already turns the service chat and its 48-bit aliases
+	// into nothing; this names the refusal for the plain id.
 	if (IsServiceUserId(options.value("peer", json()))) {
 		return Result::Error(
 			"PermissionError",
 			"the Telegram service chat is never available to plugins");
-	}
-	const auto dialogId = DialogId(options.value("peer", json()));
-	const auto peer = dialogId ? ResolvePeer(session, *dialogId) : nullptr;
-	const auto text = OptionText(options, "text");
-	if (!peer) {
+	} else if (!peer) {
 		return Result::Error("Error", "unknown peer");
 	} else if (text.trimmed().isEmpty()) {
 		return TypeError("messages.send: text is empty");
@@ -969,8 +985,13 @@ void Instance::fetchStep(
 		_network = std::make_unique<QNetworkAccessManager>();
 	}
 	auto literal = QHostAddress();
-	if (literal.setAddress(parsed.host())) {
-		if (!IsPublic(literal)) {
+	const auto isLiteral = literal.setAddress(parsed.host());
+	// Behind an application proxy the proxy resolves the name, and a local
+	// lookup would leak it past the proxy: only an IP literal is checked.
+	const auto proxied = (QNetworkProxy::applicationProxy().type()
+		!= QNetworkProxy::NoProxy);
+	if (isLiteral || proxied) {
+		if (isLiteral && !IsPublic(literal)) {
 			return refuse(this);
 		}
 		return fetchSend(
