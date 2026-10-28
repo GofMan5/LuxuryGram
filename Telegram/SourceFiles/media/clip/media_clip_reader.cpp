@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/clip/media_clip_check_streaming.h"
 #include "ui/chat/attach/attach_prepare.h"
 #include "ui/painter.h"
+#include "core/core_threads.h"
 #include "core/file_location.h"
 #include "base/random.h"
 #include "base/invoke_queued.h"
@@ -33,7 +34,6 @@ namespace Media {
 namespace Clip {
 namespace {
 
-constexpr auto kClipThreadsCount = 8;
 constexpr auto kAverageGifSize = 320 * 240;
 constexpr auto kWaitBeforeGifPause = crl::time(200);
 
@@ -233,7 +233,7 @@ Reader::Reader(const QByteArray &data, Callback &&callback)
 }
 
 void Reader::init(const Core::FileLocation &location, const QByteArray &data) {
-	if (Workers.size() < kClipThreadsCount) {
+	if (Workers.size() < size_t(Core::Threads::Get().clipThreads)) {
 		_threadIndex = Workers.size();
 		Workers.push_back(std::make_unique<Worker>());
 	} else {

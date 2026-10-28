@@ -70,6 +70,12 @@ enum class StickerLottieSize : uint8 {
 	StickerEmojiSize,
 	PinnedProfileUniqueGiftSize,
 };
+
+// Main thread only. Round-robin over a few renderer queues sized from
+// Core::Threads, so stickers render on several cores instead of one.
+// A shard dies with its last player and is created again on demand.
+[[nodiscard]] std::shared_ptr<Lottie::FrameRenderer> LottieRenderer();
+
 [[nodiscard]] uint8 LottieCacheKeyShift(
 	uint8 replacementsTag,
 	StickerLottieSize sizeTag);
