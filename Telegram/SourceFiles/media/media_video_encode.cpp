@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ffmpeg/ffmpeg_bytes_io_wrap.h"
 #include "ffmpeg/ffmpeg_frame_generator.h"
 #include "ffmpeg/ffmpeg_utility.h"
+#include "core/core_threads.h"
 #include "lottie/lottie_frame_generator.h"
 #include "ui/rect.h"
 
@@ -182,6 +183,7 @@ struct ColorDescription {
 	encoder->color_primaries = color.primaries;
 	encoder->color_trc = color.transfer;
 	encoder->colorspace = color.space;
+	encoder->thread_count = Core::Threads::Get().encoderThreads;
 	if (setup && !setup(encoder.get())) {
 		return {};
 	}
@@ -233,7 +235,13 @@ struct ColorDescription {
 		color,
 		AV_PIX_FMT_YUV420P,
 		0.,
-		nullptr);
+		[](not_null<AVCodecContext*> encoder) {
+			// libopenh264 threads only across slices, at most 4 of them.
+			if (encoder->thread_count > 1) {
+				encoder->slices = std::min(encoder->thread_count, 4);
+			}
+			return true;
+		});
 }
 
 [[nodiscard]] bool SetupVp9StickerOptions(
@@ -255,6 +263,11 @@ struct ColorDescription {
 		0));
 	if (error) {
 		LogError(u"av_opt_set_int"_q, error, u"auto-alt-ref"_q);
+		return false;
+	}
+	error = AvErrorWrap(av_opt_set_int(encoder->priv_data, "row-mt", 1, 0));
+	if (error) {
+		LogError(u"av_opt_set_int"_q, error, u"row-mt"_q);
 		return false;
 	}
 	return true;
@@ -557,7 +570,7 @@ bool MusicMixer::init(
 		return false;
 	}
 	const auto stream = _input->streams[_streamIndex];
-	_decoder = MakeCodecPointer({ .stream = stream });
+	_decoder = MakeCodecPointer({ .stream = stream, .threads = 1 });
 	if (!_decoder) {
 		return false;
 	}
@@ -943,7 +956,7 @@ void AudioTranscoder::addMusic(const MusicTrack &track) {
 bool AudioTranscoder::init(
 		not_null<AVFormatContext*> output,
 		not_null<AVStream*> inStream) {
-	_decoder = MakeCodecPointer({ .stream = inStream });
+	_decoder = MakeCodecPointer({ .stream = inStream, .threads = 1 });
 	if (!_decoder) {
 		return false;
 	}
@@ -2097,6 +2110,7 @@ struct TranscodeAttempt {
 		decoder = MakeCodecPointer({
 			.stream = inVideoStream,
 			.videoMaxArea = kMaxTranscodeArea,
+			.threads = Core::Threads::Get().transcodeDecode,
 		});
 		if (!decoder) {
 			return {};
