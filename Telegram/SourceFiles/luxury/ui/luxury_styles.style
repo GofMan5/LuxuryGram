@@ -64,6 +64,12 @@ topBarRecentActions: IconButton {
 	}
 }
 
+topBarPlugins: IconButton(topBarAdmins) {
+	icon: icon {{ "menu/customize", menuIconFg }};
+	iconOver: icon {{ "menu/customize", menuIconFgOver }};
+	iconPosition: point(8px, 15px);
+}
+
 unreadPillPadding: 12px;
 
 infoProfileLabeledButtonRegistrationDate: IconButton(defaultIconButton) {

@@ -108,6 +108,21 @@ public:
 	[[nodiscard]] const std::vector<Handler> &hotkeys() const {
 		return _hotkeys;
 	}
+	// UI extension points, plugin_host_ext_ui.cpp.
+	[[nodiscard]] const std::vector<Handler> &chatMenuItems() const {
+		return _chatMenuItems;
+	}
+	[[nodiscard]] const std::vector<Handler> &headerButtons() const {
+		return _headerButtons;
+	}
+	[[nodiscard]] const std::vector<Handler> &composeMenuItems() const {
+		return _composeMenuItems;
+	}
+	// The label ui.decorateMessage stored, empty for none. A cache read for
+	// layout and paint: it never enters the engine.
+	[[nodiscard]] QString decoration(
+		std::int64_t dialogId,
+		std::int64_t msgId) const;
 
 	// On the next event loop turn. emitLater queues at most
 	// kMaxQueuedEvents, dropping the oldest; a gesture call (a command,
@@ -150,6 +165,15 @@ private:
 	[[nodiscard]] Result addHandler(
 		std::string_view function,
 		const nlohmann::json &options);
+	[[nodiscard]] Result uiExt(
+		std::string_view function,
+		const nlohmann::json &args,
+		std::uint64_t promiseId);
+	[[nodiscard]] Result showForm(
+		const nlohmann::json &schema,
+		std::uint64_t promiseId);
+	// unload: drops every item and label of the plugin.
+	void clearUiExt();
 	[[nodiscard]] Result storage(
 		std::string_view function,
 		const nlohmann::json &args);
@@ -209,6 +233,11 @@ private:
 	std::vector<Handler> _menuItems;
 	std::vector<Handler> _hotkeys;
 	std::vector<std::int64_t> _settingWatchers;
+	std::vector<Handler> _chatMenuItems;
+	std::vector<Handler> _headerButtons;
+	std::vector<Handler> _composeMenuItems;
+	// (dialog id, message id) -> label, at most kMaxDecorations.
+	std::map<std::pair<std::int64_t, std::int64_t>, QString> _decorations;
 
 	std::optional<nlohmann::json> _storage;
 	std::unique_ptr<QTimer> _storageTimer;
@@ -217,6 +246,8 @@ private:
 	EventQueue _queue;
 	std::int64_t _gestureUntil = 0; // crl::now() ms.
 	std::int64_t _lastToast = 0;
+	// ui.openUrl: at most one link a second.
+	std::int64_t _lastOpenUrl = 0;
 	// One ui.alert/confirm/prompt at a time, closed on unload.
 	base::weak_qptr<Ui::BoxContent> _dialog;
 	rpl::lifetime _lifetime;

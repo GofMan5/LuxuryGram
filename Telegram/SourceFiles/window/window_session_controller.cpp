@@ -133,6 +133,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+#include "luxury/plugins/plugin_hooks_ui.h"
 
 
 namespace Window {
@@ -1724,6 +1725,19 @@ SessionController::SessionController(
 			}
 		}
 	}, lifetime());
+
+	// LuxuryGram: the plugins' 'chatOpened', once per chat opened in the
+	// main window; its sections and topics, and other windows, don't
+	// repeat it.
+	if (_isPrimary) {
+		activeChatChanges(
+		) | rpl::map([](Dialogs::Key key) {
+			return key.peer();
+		}) | rpl::distinct_until_changed(
+		) | rpl::on_next([](PeerData *peer) {
+			Luxury::Plugins::ChatOpened(peer);
+		}, lifetime());
+	}
 
 	session->data().documentLoadProgress(
 	) | rpl::filter([=](not_null<DocumentData*> document) {

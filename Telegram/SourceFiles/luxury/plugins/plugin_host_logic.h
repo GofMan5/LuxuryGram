@@ -236,6 +236,7 @@ struct EventQueue {
 		|| event == "messageDeleted"
 		|| event == "chatRead"
 		|| event == "accountChanged"
+		|| event == "chatOpened"
 		|| event == "unload";
 }
 

@@ -62,6 +62,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
+#include "luxury/plugins/plugin_hooks_ui.h"
 
 
 namespace ChatHelpers {
@@ -244,6 +245,7 @@ struct FieldAutocomplete::BotCommandRow {
 	Ui::PeerUserpicView userpic;
 	Ui::Text::String descriptionText;
 	bool ephemeral = false;
+	bool plugin = false; // LuxuryGram: a plugin /command, no @username.
 };
 
 FieldAutocomplete::FieldAutocomplete(
@@ -803,6 +805,27 @@ void FieldAutocomplete::updateFiltered(bool resetScroll) {
 			}
 			if (!brows.empty()) {
 				brows.insert(begin(brows), { .user = self }); // Edit.
+			}
+		}
+		const auto peer = _user
+			? static_cast<PeerData*>(_user)
+			: _chat
+			? static_cast<PeerData*>(_chat)
+			: static_cast<PeerData*>(_channel);
+		if (!hasUsername && peer) {
+			const auto self = peer->session().user();
+			for (const auto &[name, description]
+				: Luxury::Plugins::PluginCommands(peer)) {
+				if (listAllSuggestions
+					|| name.startsWith(_filter, Qt::CaseInsensitive)) {
+					brows.push_back({
+						.user = self,
+						.command = name,
+						.description = description,
+						.userpic = self->activeUserpicView(),
+						.plugin = true,
+					});
+				}
 			}
 		}
 	}
@@ -1400,7 +1423,7 @@ void FieldAutocomplete::Inner::paintRows(Painter &p, QRect clip) {
 			}
 
 			auto toHighlight = row.command;
-			if (withUsername) {
+			if (withUsername && !row.plugin) {
 				toHighlight += '@' + PrimaryUsername(user);
 			}
 			user->loadUserpic();
@@ -1620,7 +1643,7 @@ bool FieldAutocomplete::Inner::chooseAtIndex(
 			const auto &command = _brows->at(index).command;
 			const auto commandString = u"/%1%2"_q.arg(
 				command,
-				commandsWithUsername()
+				(commandsWithUsername() && !_brows->at(index).plugin)
 					? ('@' + PrimaryUsername(user))
 					: QString());
 			_botCommandChosen.fire({ user, commandString, method });
@@ -2027,6 +2050,32 @@ void InitFieldAutocomplete(
 	const auto sendCommand = descriptor.sendBotCommand;
 	const auto setText = descriptor.setText;
 
+	// LuxuryGram: the "Plugins" submenu of a message field, for the field's
+	// own chat. The field outlives its autocomplete across chats, so the
+	// hook goes in once and reads the chat of the latest init.
+	if (sendCommand) {
+		field->setProperty(
+			"luxuryPluginsPeer",
+			qulonglong(descriptor.peer->id.value));
+	}
+	if (sendCommand && !field->property("luxuryPluginsMenu").toBool()) {
+		field->setProperty("luxuryPluginsMenu", true);
+		const auto session = base::make_weak(&descriptor.peer->session());
+		field->addContextMenuHook([=](Ui::InputField::ContextMenuRequest r) {
+			const auto strong = session.get();
+			const auto peer = strong
+				? strong->data().peerLoaded(PeerId(PeerIdHelper(
+					field->property("luxuryPluginsPeer").toULongLong())))
+				: nullptr;
+			if (!peer) {
+				return;
+			}
+			r.customizePopupMenu([=](not_null<Ui::PopupMenu*> menu) {
+				Luxury::Plugins::FillComposeMenu(menu, peer);
+			});
+		});
+	}
+
 	raw->hashtagChosen(
 	) | rpl::on_next([=](FieldAutocomplete::HashtagChosen data) {
 		field->insertTag(data.hashtag);
@@ -2046,9 +2095,18 @@ void InitFieldAutocomplete(
 		using Method = FieldAutocompleteChooseMethod;
 		const auto byTab = (data.method == Method::ByTab);
 		const auto shortcut = data.user->isSelf();
+		const auto commands = shortcut
+			? Luxury::Plugins::PluginCommands(peer)
+			: std::vector<std::pair<QString, QString>>();
+		const auto plugin = ranges::any_of(commands, [&](
+				const std::pair<QString, QString> &entry) {
+			return (u"/"_q + entry.first) == data.command;
+		});
 
 		// Send bot command at once, if it was not inserted by pressing Tab.
-		if (byTab && data.command.size() > 1) {
+		// LuxuryGram: a plugin command goes into the field; sending it hands
+		// it to the plugin.
+		if ((byTab || plugin) && data.command.size() > 1) {
 			field->insertTag(data.command);
 		} else if (!shortcut) {
 			sendCommand(data.command);
@@ -2098,7 +2156,8 @@ void InitFieldAutocomplete(
 			&& !peer->asUser()->isBot()
 			&& (!shortcutMessages
 				|| shortcutMessages->shortcuts().list.empty()
-				|| peer->starsPerMessageChecked() != 0)) {
+				|| peer->starsPerMessageChecked() != 0)
+			&& Luxury::Plugins::PluginCommands(peer).empty()) {
 			parsed = {};
 		}
 		if (!parsed.query.isEmpty() && parsed.query[0] == '@') {
