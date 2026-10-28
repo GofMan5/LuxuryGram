@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "chat_helpers/stickers_lottie.h"
 
+#include "core/core_threads.h"
 #include "lottie/lottie_single_player.h"
 #include "lottie/lottie_multi_player.h"
 #include "data/stickers/data_stickers_set.h"
@@ -38,6 +39,19 @@ constexpr auto kDontCacheLottieAfterArea = 512 * 512;
 }
 
 } // namespace
+
+std::shared_ptr<Lottie::FrameRenderer> LottieRenderer() {
+	static auto shards = std::vector<std::weak_ptr<Lottie::FrameRenderer>>(
+		Core::Threads::Get().lottieRenderers);
+	static auto next = size_t(0);
+	auto &slot = shards[next++ % shards.size()];
+	if (auto result = slot.lock()) {
+		return result;
+	}
+	auto result = Lottie::MakeFrameRenderer();
+	slot = result;
+	return result;
+}
 
 uint8 LottieCacheKeyShift(uint8 replacementsTag, StickerLottieSize sizeTag) {
 	return ((replacementsTag << 4) & 0xF0) | (uint8(sizeTag) & 0x0F);
@@ -124,6 +138,9 @@ std::unique_ptr<Lottie::SinglePlayer> LottiePlayerFromDocument(
 		QSize box,
 		Lottie::Quality quality,
 		std::shared_ptr<Lottie::FrameRenderer> renderer) {
+	if (!renderer) {
+		renderer = LottieRenderer();
+	}
 	const auto method = [&](auto &&...args) {
 		return std::make_unique<Lottie::SinglePlayer>(
 			std::forward<decltype(args)>(args)...,
@@ -192,9 +209,15 @@ std::unique_ptr<Lottie::SinglePlayer> LottieThumbnail(
 	if (content.isEmpty()) {
 		return nullptr;
 	}
-	const auto method = [](auto &&...args) {
+	if (!renderer) {
+		renderer = LottieRenderer();
+	}
+	const auto method = [&](auto &&...args) {
 		return std::make_unique<Lottie::SinglePlayer>(
-			std::forward<decltype(args)>(args)...);
+			std::forward<decltype(args)>(args)...,
+			Lottie::Quality(),
+			nullptr,
+			std::move(renderer));
 	};
 	const auto session = thumb
 		? &thumb->owner()->session()
