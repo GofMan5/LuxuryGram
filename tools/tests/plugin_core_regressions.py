@@ -421,15 +421,29 @@ void Github() {
 	EXPECT(tag.kind == GithubKind::ReleaseTag && tag.ref == "v1.2.0" && tag.subdir.empty());
 	EXPECT(Link("alice/autoreply/releases/tag/release/2024").ref == "release/2024");
 	EXPECT(Link("alice/autoreply/releases/tag/v1.0+build.git/").ref == "v1.0+build.git");
+	const auto blob = Link("https://github.com/alice/plugins/blob/main/packages/auto/main.js");
+	EXPECT(blob.kind == GithubKind::Ref && blob.ref == "main" && blob.subdir == "packages/auto");
+	const auto rootBlob = Link("alice/plugins/blob/v1/plugin.json");
+	EXPECT(rootBlob.kind == GithubKind::Ref && rootBlob.ref == "v1" && rootBlob.subdir.empty());
+	const auto commitLink = Link("https://github.com/alice/plugins/commit/0123abc");
+	EXPECT(commitLink.kind == GithubKind::Ref && commitLink.ref == "0123abc");
+	EXPECT(Link("alice/plugins/commit/" + std::string(40, 'f')).ref == std::string(40, 'f'));
+	const auto latest = Link("https://github.com/alice/plugins/releases/latest");
+	EXPECT(latest.kind == GithubKind::Auto && latest.ref.empty());
+	const auto ssh = Link("git@github.com:Alice/Plugins.git");
+	EXPECT(ssh.owner == "Alice" && ssh.repo == "Plugins" && ssh.kind == GithubKind::Auto);
+	EXPECT(IsCommitSha(std::string(40, 'a')) && !IsCommitSha(std::string(40, 'A')) && !IsCommitSha("abc"));
 
 	for (const auto text : { "", "alice", "alice/", "/alice/autoreply", "https://gitlab.com/alice/autoreply",
 		"https://github.com.evil.com/alice/autoreply", "https://evil.com/github.com/alice/autoreply",
 		"https://user@github.com/alice/autoreply", "github.com", "https://github.com/",
 		"ftp://github.com/alice/autoreply", "file:///alice/autoreply", "alice/auto reply",
 		"al ice/autoreply", "alice/auto%20reply", "../autoreply", "alice/..", "alice/.",
-		"./autoreply", "alice/.git", "a\\b/c", "alice/auto;rm", "ali$ce/x", "alice/autoreply/blob/main/x.js",
+		"./autoreply", "alice/.git", "a\\b/c", "alice/auto;rm", "ali$ce/x", "alice/autoreply/blob/main",
 		"alice/autoreply/tree", "alice/autoreply/tree/", "alice/autoreply/releases",
-		"alice/autoreply/releases/tag", "alice/autoreply/releases/tag/", "alice/autoreply/releases/latest",
+		"alice/autoreply/releases/tag", "alice/autoreply/releases/tag/", "alice/autoreply/releases/latest/x",
+		"alice/autoreply/commit/abc",
+		"alice/autoreply/commit/zzzzzzz", "https://git@github.com:alice/autoreply",
 		"alice/autoreply/issues/1",
 		"alice/autoreply/tree/main/../secret", "alice/autoreply/tree/main/a/../../b",
 		"alice/autoreply/tree/main/%2e%2e/x", "alice/autoreply/tree/main/a%2F..%2Fb",
@@ -442,6 +456,7 @@ void Github() {
 		BadLink(text);
 	}
 	BadLink(std::string(101, 'a') + "/repo");
+	BadLink("alice/autoreply/commit/" + std::string(41, 'a'));
 
 	EXPECT(LatestReleaseUrl("alice", "autoreply") == "https://api.github.com/repos/alice/autoreply/releases/latest");
 	EXPECT(RepoUrl("alice", "autoreply") == "https://api.github.com/repos/alice/autoreply");
@@ -483,6 +498,11 @@ void Github() {
 	const auto commit = ResolvedRef{ Channel::Branch, std::string(40, 'a'), "main" };
 	EXPECT(DecideUpdate(commit, { Channel::Branch, std::string(40, 'a'), "main" }) == UpdateDecision::UpToDate);
 	EXPECT(DecideUpdate(commit, { Channel::Branch, std::string(40, 'b'), "main" }) == UpdateDecision::Available);
+	EXPECT(DecideUpdate(stored, { Channel::Release, "v0.9.0", "" }) == UpdateDecision::Downgrade);
+	EXPECT(DecideUpdate(stored, { Channel::Release, "0.9.9", "" }) == UpdateDecision::Downgrade);
+	EXPECT(DecideUpdate(stored, { Channel::Release, "nightly", "" }) == UpdateDecision::Available);
+	EXPECT(DecideUpdate(stored, { Channel::Branch, std::string(40, 'a'), "main" }) == UpdateDecision::Available);
+	EXPECT(DecideUpdate(commit, { Channel::Release, "v0.1.0", "" }) == UpdateDecision::Available);
 }
 
 void Registries() {
@@ -497,7 +517,12 @@ void Registries() {
 	plugin.requested.add(Permission::Ui);
 	plugin.requested.add(Permission::Network);
 	plugin.network = { "api.example.com" };
-	plugin.source = { "alice", "plugins", "packages/autoreply", Channel::Branch, std::string(40, 'c'), "main" };
+	plugin.source = { "alice", "plugins", "packages/autoreply", Channel::Branch, std::string(40, 'c'), "main",
+		std::string(40, 'c'), 4815162342 };
+	plugin.pinned = true;
+	plugin.previousVersion = "1.1.0";
+	plugin.previousSource = { "alice", "plugins", "packages/autoreply", Channel::Branch, std::string(40, 'd'), "main",
+		"", 4815162342 };
 	plugin.granted.add(Permission::Ui);
 	plugin.enabled = true;
 	plugin.installedAt = 1761523200;
@@ -521,9 +546,14 @@ void Registries() {
 	EXPECT(back.source.owner == "alice" && back.source.repo == "plugins" && back.source.subdir == "packages/autoreply");
 	EXPECT(back.source.channel == Channel::Branch && back.source.ref == std::string(40, 'c') && back.source.label == "main");
 	EXPECT(back.enabled && back.installedAt == 1761523200 && back.lastError == plugin.lastError);
+	EXPECT(back.source.commit == std::string(40, 'c') && back.source.repoId == 4815162342);
+	EXPECT(back.pinned && back.previousVersion == "1.1.0");
+	EXPECT(back.previousSource.ref == std::string(40, 'd') && back.previousSource.repoId == 4815162342);
+	EXPECT(back.previousSource.commit.empty() && back.loadReason.empty());
 	EXPECT(NeedsNewConsent(back.granted, back.requested));
 	const auto &empty = parsed.value().plugins[1];
 	EXPECT(empty.id == "abc" && !empty.enabled && empty.granted.empty() && empty.source.channel == Channel::Release);
+	EXPECT(!empty.pinned && empty.previousVersion.empty() && empty.source.repoId == 0 && empty.source.commit.empty());
 	EXPECT(SerializeRegistry(parsed.value()) == json);
 
 	const auto tolerant = ParseRegistry(R"({"format":7,"extra":{"x":1},"plugins":[

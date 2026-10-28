@@ -2,9 +2,13 @@
 // See LEGAL for license and copyright information.
 #include "luxury/plugins/plugin_installer.h"
 
+#include "lang/lang_keys.h"
+
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLocale>
 #include <QUrl>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
@@ -15,6 +19,7 @@ namespace {
 
 constexpr auto kTimeout = 30000;
 constexpr auto kApiLimit = qint64(1024) * 1024;
+constexpr auto kApiPrefix = std::string_view("https://api.github.com/");
 
 [[nodiscard]] QString Text(const std::string &text) {
 	return QString::fromStdString(text);
@@ -24,16 +29,33 @@ constexpr auto kApiLimit = qint64(1024) * 1024;
 	return std::string_view(body.data(), std::size_t(body.size()));
 }
 
-// A non-200 GitHub answer: its "message", otherwise the status.
-template <typename Parse>
-[[nodiscard]] QString GithubError(
-		int status,
-		const QByteArray &body,
-		Parse parse) {
-	const auto parsed = parse(View(body));
-	return !parsed
-		? Text(parsed.error())
-		: (u"GitHub: HTTP "_q + QString::number(status));
+// The code of a failed get(), see its status convention.
+[[nodiscard]] ErrorCode TransportCode(int status) {
+	return (status > 0)
+		? ErrorCode::RateLimited
+		: (status < 0)
+		? ErrorCode::TooLarge
+		: ErrorCode::Network;
+}
+
+[[nodiscard]] Resolution Failed(QString error, ErrorCode code) {
+	return { .error = std::move(error), .code = code };
+}
+
+// A non-200 GitHub answer.
+[[nodiscard]] Resolution Failed(int status, const QByteArray &body) {
+	return Failed(
+		Text(GithubErrorText(status, View(body))),
+		ClassifyStatus(status));
+}
+
+[[nodiscard]] Resolution Release(const QByteArray &body) {
+	const auto tag = ParseReleaseTag(View(body));
+	return tag
+		? Resolution{
+			.ref = { .channel = Channel::Release, .ref = tag.value() },
+		}
+		: Failed(Text(tag.error()), ErrorCode::Github);
 }
 
 } // namespace
@@ -75,6 +97,12 @@ void Installer::get(
 		QNetworkRequest::NoLessSafeRedirectPolicy);
 	request.setTransferTimeout(kTimeout);
 	request.setHeader(QNetworkRequest::UserAgentHeader, u"LuxuryGram"_q);
+	const auto api = url.starts_with(kApiPrefix);
+	if (api) {
+		if (const auto i = _etags.find(url); i != end(_etags)) {
+			request.setRawHeader("If-None-Match", i->second.first);
+		}
+	}
 	const auto reply = _network->get(request);
 	const auto tooBig = std::make_shared<bool>(false);
 	QObject::connect(reply, &QNetworkReply::downloadProgress, [=](
@@ -88,18 +116,48 @@ void Installer::get(
 	const auto weak = base::make_weak(this);
 	QObject::connect(reply, &QNetworkReply::finished, [=] {
 		reply->deleteLater();
-		if (!weak.get()) {
+		const auto strong = weak.get();
+		if (!strong) {
 			return;
 		}
 		const auto status = reply->attribute(
 			QNetworkRequest::HttpStatusCodeAttribute).toInt();
 		const auto body = reply->read(limit + 1);
+		const auto cached = (api && status == 304)
+			? strong->_etags.find(url)
+			: end(strong->_etags);
+		const auto header = [&](const char *name) {
+			return reply->rawHeader(name);
+		};
+		const auto retryAfter = header("Retry-After");
 		if (*tooBig || body.size() > limit) {
-			done(0, {}, u"The download is too large."_q);
+			done(-1, {}, u"The download is too large."_q);
 		} else if (status <= 0
 			|| reply->url().scheme().toLower() != u"https"_q) {
 			done(0, {}, reply->errorString());
+		} else if (cached != end(strong->_etags)) {
+			const auto copy = cached->second.second;
+			done(200, copy, QString());
+		} else if (IsRateLimited(
+				status,
+				View(header("X-RateLimit-Remaining")),
+				View(retryAfter))) {
+			const auto at = RateLimitResetAt(
+				View(header("X-RateLimit-Reset")),
+				View(retryAfter),
+				QDateTime::currentSecsSinceEpoch());
+			const auto time = QLocale().toString(
+				QDateTime::fromSecsSinceEpoch(at).time(),
+				QLocale::ShortFormat);
+			done(
+				status,
+				body,
+				tr::lng_luxury_plugins_rate_limited(tr::now, lt_time, time));
 		} else {
+			const auto etag = header("ETag");
+			if (api && status == 200 && !etag.isEmpty()) {
+				strong->_etags[url] = { etag, body };
+			}
 			done(status, body, QString());
 		}
 	});
@@ -107,44 +165,72 @@ void Installer::get(
 
 void Installer::resolve(
 		const GithubInput &input,
-		Fn<void(ResolvedRef, QString)> done) {
-	const auto owner = input.owner;
-	const auto repo = input.repo;
+		Fn<void(Resolution)> done) {
 	if (input.kind == GithubKind::Auto) {
 		// An empty ref lets latest() fall back to the default branch.
-		latest({ .owner = owner, .repo = repo }, std::move(done));
+		const auto subdir = input.subdir;
+		latest({ .owner = input.owner, .repo = input.repo }, [=](
+				Resolution result) {
+			result.subdir = subdir;
+			done(std::move(result));
+		});
 		return;
 	}
-	const auto ref = input.ref;
+	const auto splits = (input.kind == GithubKind::ReleaseTag)
+		? std::vector{ std::pair{ input.ref, input.subdir } }
+		: RefSplits(input.ref, input.subdir);
+	resolveSplit(input, splits, 0, std::move(done));
+}
+
+void Installer::resolveSplit(
+		const GithubInput &input,
+		std::vector<std::pair<std::string, std::string>> splits,
+		std::size_t index,
+		Fn<void(Resolution)> done) {
+	const auto owner = input.owner;
+	const auto repo = input.repo;
+	const auto ref = splits[index].first;
+	const auto subdir = splits[index].second;
 	const auto tagOnly = (input.kind == GithubKind::ReleaseTag);
 	const auto weak = base::make_weak(this);
 	get(ReleaseByTagUrl(owner, repo, ref), kApiLimit, [=](
 			int status,
 			QByteArray body,
 			QString error) {
-		if (!status) {
-			done({}, error);
+		if (!error.isEmpty()) {
+			done(Failed(error, TransportCode(status)));
 		} else if (status == 200) {
-			const auto tag = ParseReleaseTag(View(body));
-			if (!tag) {
-				done({}, Text(tag.error()));
-			} else {
-				done({ .channel = Channel::Release, .ref = tag.value() }, {});
-			}
+			auto result = Release(body);
+			result.subdir = subdir;
+			done(std::move(result));
 		} else if (status == 404 && !tagOnly) {
 			// tree/<ref> names a branch, or a tag without a release.
-			if (const auto strong = weak.get()) {
-				strong->resolveBranch(owner, repo, ref, done);
+			const auto strong = weak.get();
+			if (!strong) {
+				return;
 			}
+			strong->resolveBranch(owner, repo, ref, [=](Resolution result) {
+				const auto next = index + 1;
+				if (result.code == ErrorCode::NotFound
+					&& next < splits.size()) {
+					// tree/feature/x/plugin: the branch may be "feature/x".
+					if (const auto alive = weak.get()) {
+						alive->resolveSplit(input, splits, next, done);
+					}
+					return;
+				}
+				result.subdir = subdir;
+				done(std::move(result));
+			});
 		} else {
-			done({}, GithubError(status, body, ParseReleaseTag));
+			done(Failed(status, body));
 		}
 	});
 }
 
 void Installer::latest(
 		const PluginSource &source,
-		Fn<void(ResolvedRef, QString)> done) {
+		Fn<void(Resolution)> done) {
 	const auto owner = source.owner;
 	const auto repo = source.repo;
 	if (source.channel == Channel::Branch) {
@@ -157,37 +243,37 @@ void Installer::latest(
 			int status,
 			QByteArray body,
 			QString error) {
-		if (!status) {
-			done({}, error);
+		if (!error.isEmpty()) {
+			done(Failed(error, TransportCode(status)));
 		} else if (status == 200) {
-			const auto tag = ParseReleaseTag(View(body));
-			if (!tag) {
-				done({}, Text(tag.error()));
-			} else {
-				done({ .channel = Channel::Release, .ref = tag.value() }, {});
-			}
+			done(Release(body));
 		} else if (status == 404 && fallback) {
-			const auto strong = weak.get();
-			if (!strong) {
-				return;
+			if (const auto strong = weak.get()) {
+				strong->defaultBranch(owner, repo, done);
 			}
-			strong->get(RepoUrl(owner, repo), kApiLimit, [=](
-					int status,
-					QByteArray body,
-					QString error) {
-				if (!status) {
-					done({}, error);
-					return;
-				}
-				const auto branch = ParseDefaultBranch(View(body));
-				if (status != 200 || !branch) {
-					done({}, GithubError(status, body, ParseDefaultBranch));
-				} else if (const auto strong = weak.get()) {
-					strong->resolveBranch(owner, repo, branch.value(), done);
-				}
-			});
 		} else {
-			done({}, GithubError(status, body, ParseReleaseTag));
+			done(Failed(status, body));
+		}
+	});
+}
+
+void Installer::defaultBranch(
+		const std::string &owner,
+		const std::string &repo,
+		Fn<void(Resolution)> done) {
+	const auto weak = base::make_weak(this);
+	get(RepoUrl(owner, repo), kApiLimit, [=](
+			int status,
+			QByteArray body,
+			QString error) {
+		if (!error.isEmpty()) {
+			done(Failed(error, TransportCode(status)));
+		} else if (status != 200) {
+			done(Failed(status, body));
+		} else if (const auto branch = ParseDefaultBranch(View(body)); !branch) {
+			done(Failed(Text(branch.error()), ErrorCode::Github));
+		} else if (const auto strong = weak.get()) {
+			strong->resolveBranch(owner, repo, branch.value(), done);
 		}
 	});
 }
@@ -196,31 +282,69 @@ void Installer::resolveBranch(
 		const std::string &owner,
 		const std::string &repo,
 		const std::string &branch,
-		Fn<void(ResolvedRef, QString)> done) {
+		Fn<void(Resolution)> done) {
 	get(CommitUrl(owner, repo, branch), kApiLimit, [=](
 			int status,
 			QByteArray body,
 			QString error) {
-		if (!status) {
-			done({}, error);
-			return;
-		}
-		const auto sha = ParseCommitSha(View(body));
-		if (status != 200 || !sha) {
-			done({}, GithubError(status, body, ParseCommitSha));
+		if (!error.isEmpty()) {
+			done(Failed(error, TransportCode(status)));
+		} else if (status != 200) {
+			done(Failed(status, body));
+		} else if (const auto sha = ParseCommitSha(View(body)); !sha) {
+			done(Failed(Text(sha.error()), ErrorCode::Github));
 		} else {
-			done({
+			done({ .ref = {
 				.channel = Channel::Branch,
 				.ref = sha.value(),
 				.label = branch,
-			}, {});
+			} });
 		}
+	});
+}
+
+void Installer::identify(
+		const std::string &owner,
+		const std::string &repo,
+		const ResolvedRef &ref,
+		Fn<void(Identity)> done) {
+	const auto weak = base::make_weak(this);
+	get(RepoUrl(owner, repo), kApiLimit, [=](
+			int status,
+			QByteArray body,
+			QString error) {
+		auto result = Identity();
+		if (error.isEmpty() && status == 200) {
+			result.repoId = ParseRepoId(View(body)).value_or(0);
+		}
+		if (ref.channel == Channel::Branch && IsCommitSha(ref.ref)) {
+			result.commit = ref.ref;
+			done(std::move(result));
+			return;
+		}
+		const auto strong = weak.get();
+		if (!strong) {
+			return;
+		}
+		strong->get(CommitUrl(owner, repo, ref.ref), kApiLimit, [=](
+				int status,
+				QByteArray body,
+				QString error) {
+			auto copy = result;
+			if (error.isEmpty() && status == 200) {
+				const auto sha = ParseCommitSha(View(body));
+				if (sha) {
+					copy.commit = sha.value();
+				}
+			}
+			done(std::move(copy));
+		});
 	});
 }
 
 void Installer::manifest(
 		const PluginSource &source,
-		Fn<void(Manifest, QByteArray, QString)> done) {
+		Fn<void(Manifest, QByteArray, QString, ErrorCode)> done) {
 	const auto url = RawFileUrl(
 		source.owner,
 		source.repo,
@@ -231,18 +355,30 @@ void Installer::manifest(
 			int status,
 			QByteArray body,
 			QString error) {
-		if (!status) {
-			done({}, {}, error);
+		if (!error.isEmpty()) {
+			done({}, {}, error, TransportCode(status));
 		} else if (status == 404) {
-			done({}, {}, u"plugin.json was not found in the repository."_q);
+			done(
+				{},
+				{},
+				u"plugin.json was not found in the repository."_q,
+				ErrorCode::NotFound);
 		} else if (status != 200) {
-			done({}, {}, u"plugin.json: HTTP "_q + QString::number(status));
+			done(
+				{},
+				{},
+				u"plugin.json: HTTP "_q + QString::number(status),
+				ErrorCode::Github);
 		} else {
 			auto parsed = ParseManifest(View(body));
 			if (!parsed) {
-				done({}, {}, u"plugin.json: "_q + Text(parsed.error()));
+				done(
+					{},
+					{},
+					u"plugin.json: "_q + Text(parsed.error()),
+					ErrorCode::Manifest);
 			} else {
-				done(std::move(parsed.value()), body, {});
+				done(std::move(parsed.value()), body, {}, ErrorCode::None);
 			}
 		}
 	});
@@ -289,7 +425,7 @@ void Installer::downloadNext(std::shared_ptr<DownloadState> state) {
 			QByteArray body,
 			QString error) {
 		const auto name = Text(state->files[state->index]);
-		if (!status) {
+		if (!error.isEmpty()) {
 			state->done(name + u": "_q + error);
 			return;
 		} else if (status != 200) {

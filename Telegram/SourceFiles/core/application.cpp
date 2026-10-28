@@ -527,6 +527,10 @@ void Application::run() {
 	_lastActivePrimaryWindow->finishFirstShow();
 	splash = nullptr;
 
+	// After the window is up: a plugin that hangs or crashes on start
+	// cannot keep the client from showing.
+	_private->plugins->startAll();
+
 	if (!_lastActivePrimaryWindow->locked() && cStartToSettings()) {
 		_lastActivePrimaryWindow->showSettings();
 	}

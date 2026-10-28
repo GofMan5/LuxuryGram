@@ -2328,6 +2328,15 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "lng_luxury_plugins_ui_perm_telegram_updates_about", "Получает все обновления, которые ваш аккаунт получает от Telegram." },
 	{ "lng_luxury_plugins_ui_state_stopped", "Включён, не запущен" },
 	{ "lng_luxury_plugins_ui_consent_new_hosts", "Новая версия обращается к новым сайтам:" },
+	{ "lng_luxury_plugins_quarantined", "Отключён: клиент неожиданно закрылся при запуске этого плагина." },
+	{ "lng_luxury_plugins_rate_limited", "Достигнут лимит запросов к GitHub, повторите после {time}." },
+	{ "lng_luxury_plugins_downgrade", "Это более старая версия, чем установленная." },
+	{ "lng_luxury_plugins_repo_installed", "Этот репозиторий уже установлен как {name}." },
+	{ "lng_luxury_plugins_repo_replaced", "Репозиторий удалён и создан заново, это не обновление установленного плагина." },
+	{ "lng_luxury_plugins_pinned", "Плагин закреплён на установленной версии." },
+	{ "lng_luxury_plugins_no_previous", "Нет предыдущей версии для отката." },
+	{ "lng_luxury_plugins_release_fallback", "В релизе {tag} нет plugin.json, установка из ветки {name}." },
+	{ "lng_luxury_plugins_up_to_date", "Плагин уже обновлён до последней версии." },
 };
 
 void applyIfRussian(not_null<Lang::Instance*> instance, const QString &id) {

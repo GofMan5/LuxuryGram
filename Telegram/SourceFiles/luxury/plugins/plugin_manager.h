@@ -5,6 +5,7 @@
 #include "luxury/plugins/core/plugin_manifest.h"
 #include "luxury/plugins/core/plugin_permissions.h"
 #include "luxury/plugins/core/plugin_source.h"
+#include "luxury/plugins/plugin_install_logic.h"
 #include "luxury/libs/json.hpp"
 
 #include <QString>
@@ -39,6 +40,8 @@ struct PluginView {
 	QString lastError;
 	bool updateAvailable = false;
 	QString availableLabel; // Tag or short SHA offered by checkUpdates.
+	bool pinned = false; // checkUpdates skips it.
+	QString previousVersion; // What rollback() restores, empty for none.
 };
 
 // A resolved install or update, shown to the user before anything is
@@ -61,6 +64,18 @@ struct InstallPlan {
 	bool consented = false;
 	PermissionSet shownPermissions;
 	std::vector<std::string> shownHosts;
+	// resolved is an older release than the installed one: commitInstall
+	// refuses it unless allowDowngrade is set.
+	bool downgrade = false;
+	bool allowDowngrade = false;
+	// A fallback the user should know of, e.g. a release without
+	// plugin.json installed from the default branch instead.
+	QString notice;
+	// Why prepare failed, set with the error text.
+	ErrorCode errorCode = ErrorCode::None;
+	// The commit and repository id resolved points at, best effort.
+	std::string commit;
+	std::int64_t repoId = 0;
 };
 
 struct LogLine {
@@ -108,19 +123,45 @@ public:
 	void prepareInstall(
 		const QString &link,
 		Fn<void(InstallPlan plan, QString error)> done);
-	// Same for the installed plugin's stored source.
+	// Same for the installed plugin's stored source; UpToDate when the
+	// latest ref is the installed one.
 	void prepareUpdate(
 		const QString &id,
 		Fn<void(InstallPlan plan, QString error)> done);
 	// Downloads every file into staging, swaps it in, grants the previous
 	// grant plus what the consent box showed and starts the plugin when it
 	// was enabled (a fresh install is enabled). Anything the user was not
-	// shown fails with "review it again"; done gets an empty error on
-	// success.
+	// shown fails with "review it again" (Consent); done gets an empty
+	// error and ErrorCode::None on success, Busy while another commit of the
+	// plugin runs and Files when the files could not be written or swapped.
+	void commitInstall(
+		InstallPlan plan,
+		Fn<void(QString error, ErrorCode code)> done);
+	// The same, for a caller that shows the text only.
 	void commitInstall(InstallPlan plan, Fn<void(QString error)> done);
-	// Refreshes updateAvailable of every plugin; done gets how many have
-	// an update.
+	// Puts back the version code.prev holds, see PluginView::previousVersion.
+	// Busy while an install of it runs, Files when the swap failed.
+	void rollback(
+		const QString &id,
+		Fn<void(QString error, ErrorCode code)> done);
+	// A pinned plugin is skipped by checkUpdates and refuses prepareUpdate.
+	void setPinned(const QString &id, bool pinned);
+
+	struct UpdateCheck {
+		int available = 0;
+		int failed = 0;
+		QString firstError;
+		ErrorCode firstCode = ErrorCode::None;
+	};
+	// Refreshes updateAvailable of every plugin that is not pinned. A call
+	// while a check runs gets that check's result.
+	void checkUpdatesDetailed(Fn<void(UpdateCheck result)> done);
+	// Same, done gets how many have an update.
 	void checkUpdates(Fn<void(int available)> done);
+
+	// Starts every enabled plugin, once the first window is shown, one per
+	// event loop turn. Nothing starts with -noplugins or Shift held.
+	void startAll();
 
 	// --- Client hooks, see docs/plugins/ARCHITECTURE.md "Client hooks".
 

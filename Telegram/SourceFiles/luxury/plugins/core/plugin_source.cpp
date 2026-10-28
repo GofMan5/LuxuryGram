@@ -143,7 +143,9 @@ constexpr auto kRaw = std::string_view("https://raw.githubusercontent.com/");
 			break;
 		}
 	}
-	if (StartsWithNoCase(input, "www.")) {
+	if (!hadScheme && StartsWithNoCase(input, "git@github.com:")) {
+		return input.substr(15);
+	} else if (StartsWithNoCase(input, "www.")) {
 		input.remove_prefix(4);
 	}
 	if (StartsWithNoCase(input, "github.com/")) {
@@ -256,7 +258,11 @@ Result<GithubInput> ParseGithubInput(std::string_view input) {
 		}
 		return joined;
 	};
-	if (segments[2] == "tree" && segments.size() >= 4) {
+	const auto blob = (segments[2] == "blob" && segments.size() >= 5);
+	if (blob) {
+		segments.pop_back(); // A file: its folder is the plugin.
+	}
+	if ((segments[2] == "tree" || blob) && segments.size() >= 4) {
 		const auto ref = PercentDecode(segments[3]);
 		if (!ref || !IsValidGitRef(*ref)) {
 			return Fail("bad branch or tag name");
@@ -281,8 +287,24 @@ Result<GithubInput> ParseGithubInput(std::string_view input) {
 		result.kind = GithubKind::ReleaseTag;
 		result.ref = *tag;
 		return result;
+	} else if (segments[2] == "releases"
+		&& segments.size() == 4
+		&& segments[3] == "latest") {
+		return result;
+	} else if (segments[2] == "commit" && segments.size() == 4) {
+		const auto sha = segments[3];
+		const auto hex = std::all_of(sha.begin(), sha.end(), [](char c) {
+			return HexValue(c) >= 0;
+		});
+		if (sha.size() < 7 || sha.size() > kShaLength || !hex) {
+			return Fail("bad commit");
+		}
+		result.kind = GithubKind::Ref;
+		result.ref = std::string(sha);
+		return result;
 	}
-	return Fail("expected a repository, tree/<ref> or releases/tag/<tag> link");
+	return Fail("expected a repository, tree/<ref>, commit/<sha> or "
+		"releases/tag/<tag> link");
 }
 
 std::string LatestReleaseUrl(std::string_view owner, std::string_view repo) {
@@ -356,24 +378,40 @@ Result<std::string> ParseCommitSha(std::string_view json) {
 	}
 	auto &value = sha.value();
 	std::transform(value.begin(), value.end(), value.begin(), Lower);
-	const auto hex = std::all_of(value.begin(), value.end(), [](char c) {
-		return HexValue(c) >= 0;
-	});
-	if (value.size() != kShaLength || !hex) {
+	if (!IsCommitSha(value)) {
 		return Error{ "GitHub: commit sha is not 40 hex digits" };
 	}
 	return sha;
 }
 
+bool IsCommitSha(std::string_view sha) {
+	return (sha.size() == kShaLength)
+		&& std::all_of(sha.begin(), sha.end(), [](char c) {
+			return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+		});
+}
+
 UpdateDecision DecideUpdate(
 		const ResolvedRef &stored,
 		const ResolvedRef &latest) {
-	if (latest.ref.empty()) {
+	if (latest.ref.empty()
+		|| (stored.channel == latest.channel && stored.ref == latest.ref)) {
 		return UpdateDecision::UpToDate;
+	} else if (stored.channel == Channel::Release
+		&& latest.channel == Channel::Release) {
+		const auto version = [](std::string_view tag) {
+			if (!tag.empty() && (tag.front() == 'v' || tag.front() == 'V')) {
+				tag.remove_prefix(1);
+			}
+			return ParseVersion(tag);
+		};
+		const auto was = version(stored.ref);
+		const auto now = version(latest.ref);
+		if (was && now && *now < *was) {
+			return UpdateDecision::Downgrade;
+		}
 	}
-	return (stored.channel == latest.channel && stored.ref == latest.ref)
-		? UpdateDecision::UpToDate
-		: UpdateDecision::Available;
+	return UpdateDecision::Available;
 }
 
 } // namespace Luxury::Plugins

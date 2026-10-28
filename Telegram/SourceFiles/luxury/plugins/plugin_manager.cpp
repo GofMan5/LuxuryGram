@@ -8,6 +8,7 @@
 #include "luxury/plugins/plugin_installer.h"
 #include "base/call_delayed.h"
 #include "core/version.h"
+#include "lang/lang_keys.h"
 #include "logs.h"
 #include "settings.h"
 
@@ -17,10 +18,13 @@
 #include <QFile>
 #include <QSaveFile>
 #include <QUuid>
+#include <QtGui/QGuiApplication>
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <set>
+#include <utility>
 
 namespace Luxury::Plugins {
 namespace {
@@ -70,6 +74,20 @@ Manager *Current = nullptr;
 		&& file.commit();
 }
 
+[[nodiscard]] InstallPlan Failed(ErrorCode code) {
+	auto result = InstallPlan();
+	result.errorCode = code;
+	return result;
+}
+
+[[nodiscard]] ResolvedRef StoredRef(const PluginSource &source) {
+	return {
+		.channel = source.channel,
+		.ref = source.ref,
+		.label = source.label,
+	};
+}
+
 } // namespace
 
 struct Manager::Private final
@@ -82,18 +100,43 @@ struct Manager::Private final
 	std::map<QString, json> settings;
 	std::map<QString, QString> updates; // id -> availableLabel.
 	std::set<QString> committing;
+	std::map<QString, LogBudget> logBudgets;
+	StartFence fence;
+	// Callers of a check that is running already wait for its result.
+	std::vector<Fn<void(UpdateCheck)>> checkWaiters;
 	Installer installer;
 	rpl::event_stream<> changes;
 	bool changesQueued = false;
 
 	[[nodiscard]] InstalledPlugin *find(const QString &id);
+	// The plugin installed from owner/repo/subdir, names compared as GitHub
+	// does: case-insensitive.
+	[[nodiscard]] InstalledPlugin *installedFrom(
+		const std::string &owner,
+		const std::string &repo,
+		const std::string &subdir);
 	[[nodiscard]] const Manifest *manifest(const QString &id);
 	void load();
-	void save();
+	// Finishes or rolls back the swaps a killed launch left and disables
+	// the plugins it died starting. True when the registry changed.
+	[[nodiscard]] bool recover();
+	// prepareInstall and prepareUpdate once the ref is known. updating is
+	// the id prepareUpdate checks for; fallback allows one retry from the
+	// default branch when the latest release has no plugin.json.
+	void buildPlan(
+		GithubInput input,
+		Resolution resolution,
+		QString updating,
+		bool fallback,
+		Fn<void(InstallPlan, QString)> done);
+	bool save(); // False when registry.json could not be written.
 	void append(const QString &id, Js::LogLevel level, const QString &text);
 	void setError(const QString &id, const QString &text);
 	void fireChangesLater();
-	void start(const QString &id);
+	void start(const QString &id, const char *reason);
+	// One plugin per event loop turn, so each start's sentinel is cleared
+	// before the next one is written.
+	void startNext(std::deque<QString> queue);
 	void stop(const QString &id);
 	[[nodiscard]] json &settingsOf(const QString &id);
 
@@ -110,6 +153,19 @@ InstalledPlugin *Manager::Private::find(const QString &id) {
 	const auto key = id.toStdString();
 	for (auto &plugin : registry.plugins) {
 		if (plugin.id == key) {
+			return &plugin;
+		}
+	}
+	return nullptr;
+}
+
+InstalledPlugin *Manager::Private::installedFrom(
+		const std::string &owner,
+		const std::string &repo,
+		const std::string &subdir) {
+	for (auto &plugin : registry.plugins) {
+		if (SameRepo(owner, repo, plugin.source.owner, plugin.source.repo)
+			&& subdir == plugin.source.subdir) {
 			return &plugin;
 		}
 	}
@@ -134,54 +190,138 @@ const Manifest *Manager::Private::manifest(const QString &id) {
 
 void Manager::Private::load() {
 	QDir(Root() + u".staging"_q).removeRecursively();
-	auto file = QFile(Root() + u"registry.json"_q);
-	if (!file.exists()) {
-		return;
-	} else if (!file.open(QIODevice::ReadOnly)) {
-		LOG(("Luxury Plugins: could not read registry.json."));
-		return;
+	const auto path = Root() + u"registry.json"_q;
+	const auto backup = path + u".bak"_q;
+	const auto read = [](const QString &name) -> std::optional<Registry> {
+		auto file = QFile(name);
+		if (!file.open(QIODevice::ReadOnly)) {
+			LOG(("Luxury Plugins: could not read %1."
+				).arg(QFileInfo(name).fileName()));
+			return std::nullopt;
+		}
+		auto parsed = ParseRegistry(file.readAll().toStdString());
+		if (!parsed) {
+			LOG(("Luxury Plugins: %1 is broken: %2"
+				).arg(QFileInfo(name).fileName(), Text(parsed.error())));
+			return std::nullopt;
+		}
+		return std::move(parsed.value());
+	};
+	const auto exists = QFile::exists(path);
+	auto primary = exists ? read(path) : std::nullopt;
+	auto restored = (exists && !primary && QFile::exists(backup))
+		? read(backup)
+		: std::nullopt;
+	auto changed = false;
+	switch (ChooseRegistry(exists, primary.has_value(), restored.has_value())) {
+	case RegistryChoice::Main:
+		registry = std::move(*primary);
+		break;
+	case RegistryChoice::Backup:
+		LOG(("Luxury Plugins: registry.json restored from registry.json.bak."));
+		registry = std::move(*restored);
+		changed = true;
+		break;
+	case RegistryChoice::Empty:
+		break;
 	}
-	auto parsed = ParseRegistry(file.readAll().toStdString());
-	file.close();
-	if (!parsed) {
-		// Keep the broken file for inspection; the next save starts over.
-		LOG(("Luxury Plugins: registry.json is broken: %1"
-			).arg(Text(parsed.error())));
-		QFile::remove(Root() + u"registry.json.bad"_q);
-		QFile::rename(
-			Root() + u"registry.json"_q,
-			Root() + u"registry.json.bad"_q);
-		return;
+	if (exists && !primary) {
+		// Keep the broken file for inspection.
+		QFile::remove(path + u".bad"_q);
+		QFile::rename(path, path + u".bad"_q);
 	}
-	registry = std::move(parsed.value());
 	for (const auto &skipped : registry.skipped) {
 		LOG(("Luxury Plugins: registry entry skipped, %1"
 			).arg(Text(skipped)));
 	}
+	if (recover() || changed) {
+		save();
+	}
 }
 
-void Manager::Private::save() {
+bool Manager::Private::recover() {
+	auto changed = false;
+	const auto ids = QDir(Root() + u"plugins"_q).entryList(
+		QDir::Dirs | QDir::NoDotAndDotDot);
+	for (const auto &id : ids) {
+		const auto plugin = find(id);
+		const auto code = PluginRoot(id) + u"/code"_q;
+		const auto recovery = RecoverSwap(
+			FsPath(code),
+			plugin ? plugin->source.ref : std::string());
+		if (recovery == SwapRecovery::Finished) {
+			LOG(("Luxury Plugins: finished the install of %1.").arg(id));
+		} else if (recovery == SwapRecovery::RolledBack) {
+			LOG(("Luxury Plugins: rolled back the install of %1.").arg(id));
+		}
+		if (!plugin) {
+			continue;
+		} else if (!plugin->previousVersion.empty()
+			&& !QFileInfo::exists(code + u".prev/plugin.json"_q)) {
+			plugin->previousVersion.clear();
+			plugin->previousSource = PluginSource();
+			changed = true;
+		}
+		if (TakeStarting(FsPath(PluginRoot(id))) && plugin->enabled) {
+			// The last launch died starting it: it must not take this one.
+			LOG(("Luxury Plugins: %1 was disabled, the client closed "
+				"unexpectedly while it was starting.").arg(id));
+			plugin->enabled = false;
+			plugin->lastError = std::string(kQuarantinedError);
+			changed = true;
+		}
+	}
+	return changed;
+}
+
+bool Manager::Private::save() {
 	auto copy = registry;
 	copy.skipped.clear();
+	const auto path = Root() + u"registry.json"_q;
+	const auto backup = path + u".bak"_q;
+	// load() falls back to the last registry that was written whole.
+	if (QFile::exists(path)) {
+		QFile::remove(backup);
+		QFile::copy(path, backup);
+	}
 	if (!WriteFile(
-			Root() + u"registry.json"_q,
+			path,
 			QByteArray::fromStdString(SerializeRegistry(copy)))) {
 		LOG(("Luxury Plugins: could not write registry.json."));
+		return false;
 	}
+	return true;
 }
 
 void Manager::Private::append(
 		const QString &id,
 		Js::LogLevel level,
 		const QString &text) {
+	const auto now = QDateTime::currentMSecsSinceEpoch();
 	auto &lines = logs[id];
 	lines.push_back({
-		.time = QDateTime::currentMSecsSinceEpoch(),
+		.time = now,
 		.level = int(level),
 		.text = Text(TruncateText(text.toStdString())),
 	});
 	while (lines.size() > std::size_t(kLogLimit)) {
 		lines.pop_front();
+	}
+	// Into log.txt too, so a bug report carries it; a chatty plugin is cut.
+	auto &budget = logBudgets[id];
+	if (budget.allow(now)) {
+		const auto tag = (level == Js::LogLevel::Error)
+			? u"error"_q
+			: (level == Js::LogLevel::Warn)
+			? u"warn"_q
+			: u"info"_q;
+		LOG(("Plugin %1 [%2]: %3").arg(
+			id,
+			tag,
+			Text(OneLine(lines.back().text.toStdString()))));
+	} else if (budget.count == kLogMirrorLines + 1) {
+		LOG(("Plugin %1: too many log lines, the rest of this minute "
+			"stays in the plugin log.").arg(id));
 	}
 }
 
@@ -209,9 +349,12 @@ void Manager::Private::fireChangesLater() {
 	});
 }
 
-void Manager::Private::start(const QString &id) {
+void Manager::Private::start(const QString &id, const char *reason) {
 	const auto plugin = find(id);
-	if (!plugin || !plugin->enabled || running.contains(id)) {
+	if (cNoPlugins()
+		|| !plugin
+		|| !plugin->enabled
+		|| running.contains(id)) {
 		return;
 	}
 	const auto parsed = manifest(id);
@@ -224,6 +367,7 @@ void Manager::Private::start(const QString &id) {
 		setError(id, Text(error));
 		return;
 	}
+	plugin->loadReason = reason;
 	auto instance = std::make_unique<Plugins::Instance>(
 		*plugin,
 		*parsed,
@@ -231,10 +375,31 @@ void Manager::Private::start(const QString &id) {
 		this);
 	const auto raw = instance.get();
 	running.emplace(id, std::move(instance));
+	// Removed on the first event loop turn after the start; found by the
+	// next launch it means the start took the client down.
+	const auto directory = FsPath(PluginRoot(id));
+	fence.mark(directory);
 	if (!raw->start()) {
 		// The error is in the log and lastError already.
 		running.erase(id);
+		fence.clear(directory);
+		return;
 	}
+	crl::on_main(this, [=] {
+		fence.clear(directory);
+	});
+}
+
+void Manager::Private::startNext(std::deque<QString> queue) {
+	if (queue.empty()) {
+		changes.fire({});
+		return;
+	}
+	start(queue.front(), "startup");
+	queue.pop_front();
+	crl::on_main(this, [=] {
+		startNext(queue);
+	});
 }
 
 void Manager::Private::stop(const QString &id) {
@@ -242,6 +407,7 @@ void Manager::Private::stop(const QString &id) {
 	if (i == running.end()) {
 		return;
 	}
+	fence.clear(FsPath(PluginRoot(id)));
 	auto instance = std::move(i->second);
 	running.erase(i);
 	instance->unload();
@@ -311,9 +477,24 @@ Manager::Manager() : _private(std::make_unique<Private>()) {
 
 	Current = this;
 	_private->load();
-	for (const auto &plugin : _private->registry.plugins) {
-		_private->start(Text(plugin.id));
+}
+
+void Manager::startAll() {
+	if (cNoPlugins()) {
+		LOG(("Luxury Plugins: not started, -noplugins is set."));
+		return;
+	} else if (QGuiApplication::queryKeyboardModifiers() & Qt::ShiftModifier) {
+		// Held Shift is -noplugins for this launch: a plugin that takes the
+		// client down can be disabled without the command line.
+		LOG(("Luxury Plugins: not started, Shift was held at launch."));
+		cSetNoPlugins(true);
+		return;
 	}
+	auto queue = std::deque<QString>();
+	for (const auto &plugin : _private->registry.plugins) {
+		queue.push_back(Text(plugin.id));
+	}
+	_private->startNext(std::move(queue));
 }
 
 Manager::~Manager() {
@@ -369,7 +550,11 @@ std::optional<PluginView> Manager::plugin(const QString &id) const {
 		.granted = plugin->granted,
 		.enabled = plugin->enabled,
 		.running = _private->running.contains(id),
-		.lastError = Text(plugin->lastError),
+		.lastError = (plugin->lastError == kQuarantinedError)
+			? tr::lng_luxury_plugins_quarantined(tr::now)
+			: Text(plugin->lastError),
+		.pinned = plugin->pinned,
+		.previousVersion = Text(plugin->previousVersion),
 	};
 	for (const auto &host : plugin->network) {
 		result.network.push_back(Text(host));
@@ -405,7 +590,7 @@ void Manager::setEnabled(const QString &id, bool enabled) {
 		plugin->enabled = true;
 		plugin->lastError.clear();
 		_private->save();
-		_private->start(id);
+		_private->start(id, "enable");
 	} else {
 		_private->stop(id);
 		plugin->enabled = false;
@@ -444,7 +629,7 @@ void Manager::reload(const QString &id) {
 	plugin->lastError.clear();
 	_private->manifests.erase(id);
 	_private->save();
-	_private->start(id);
+	_private->start(id, "reload");
 	_private->changes.fire({});
 }
 
@@ -484,80 +669,177 @@ void Manager::setSettingValue(
 	}
 }
 
+void Manager::Private::buildPlan(
+		GithubInput input,
+		Resolution resolution,
+		QString updating,
+		bool fallback,
+		Fn<void(InstallPlan, QString)> done) {
+	if (!resolution.error.isEmpty()) {
+		done(Failed(resolution.code), resolution.error);
+		return;
+	}
+	const auto source = PluginSource{
+		.owner = input.owner,
+		.repo = input.repo,
+		.subdir = input.subdir,
+		.channel = resolution.ref.channel,
+		.ref = resolution.ref.ref,
+		.label = resolution.ref.label,
+	};
+	const auto weak = base::make_weak(this);
+	installer.manifest(source, [=](
+			Manifest fetched,
+			QByteArray raw,
+			QString error,
+			ErrorCode code) {
+		const auto d = weak.get();
+		if (!d) {
+			return;
+		} else if (fallback
+			&& code == ErrorCode::NotFound
+			&& source.channel == Channel::Release) {
+			// The latest release has no plugin.json: offer the default
+			// branch instead and say so.
+			const auto tag = Text(source.ref);
+			d->installer.defaultBranch(input.owner, input.repo, [=](
+					Resolution branch) {
+				const auto d = weak.get();
+				if (!d) {
+					return;
+				} else if (branch.error.isEmpty()) {
+					branch.notice = tr::lng_luxury_plugins_release_fallback(
+						tr::now,
+						lt_tag,
+						tag,
+						lt_name,
+						Text(branch.ref.label));
+				}
+				d->buildPlan(input, std::move(branch), updating, false, done);
+			});
+			return;
+		} else if (!error.isEmpty()) {
+			done(Failed(code), error);
+			return;
+		} else if (const auto text = CompatibilityError(
+				fetched,
+				LuxuryVersionStr); !text.empty()) {
+			done(Failed(ErrorCode::Incompatible), Text(text));
+			return;
+		}
+		const auto id = Text(fetched.id);
+		const auto installed = d->find(updating.isEmpty() ? id : updating);
+		const auto other = d->installedFrom(
+			input.owner,
+			input.repo,
+			input.subdir);
+		if (!updating.isEmpty() && !installed) {
+			done(Failed(ErrorCode::NotFound), u"The plugin was removed."_q);
+			return;
+		} else if (!updating.isEmpty() && id != updating) {
+			done(
+				Failed(ErrorCode::Conflict),
+				u"The new version has the id \"%1\", not \"%2\"."_q
+					.arg(id, updating));
+			return;
+		} else if (installed
+			&& !SameRepo(
+				installed->source.owner,
+				installed->source.repo,
+				input.owner,
+				input.repo)) {
+			// Another repository must not take over the id, its grants
+			// and its data.
+			done(Failed(ErrorCode::Conflict), u"A plugin with the id \"%1\" "
+				"is already installed from %2/%3."_q.arg(
+					id,
+					Text(installed->source.owner),
+					Text(installed->source.repo)));
+			return;
+		} else if (other && other != installed) {
+			done(
+				Failed(ErrorCode::Conflict),
+				tr::lng_luxury_plugins_repo_installed(
+					tr::now,
+					lt_name,
+					Text(other->name)));
+			return;
+		}
+		auto plan = InstallPlan{
+			.input = input,
+			.resolved = resolution.ref,
+			.manifest = std::move(fetched),
+			.update = (installed != nullptr),
+			.manifestBytes = raw.toStdString(),
+		};
+		auto storedId = std::int64_t();
+		auto decision = UpdateDecision::Available;
+		if (installed) {
+			plan.previouslyGranted = installed->granted;
+			decision = DecideUpdate(
+				StoredRef(installed->source),
+				plan.resolved);
+			plan.downgrade = (decision == UpdateDecision::Downgrade);
+			storedId = installed->source.repoId;
+		}
+		plan.newPermissions = MissingPermissions(
+			plan.manifest.permissions,
+			plan.previouslyGranted);
+		plan.notice = resolution.notice;
+		if (plan.downgrade && !updating.isEmpty()) {
+			// An update never goes back; an install link may, with the
+			// allowDowngrade flag.
+			done(
+				Failed(ErrorCode::Downgrade),
+				tr::lng_luxury_plugins_downgrade(tr::now));
+			return;
+		} else if (decision == UpdateDecision::UpToDate
+			&& !updating.isEmpty()) {
+			done(
+				Failed(ErrorCode::UpToDate),
+				tr::lng_luxury_plugins_up_to_date(tr::now));
+			return;
+		}
+		d->installer.identify(input.owner, input.repo, plan.resolved, [=](
+				Identity identity) {
+			if (RepoReplaced(storedId, identity.repoId)) {
+				done(
+					Failed(ErrorCode::Conflict),
+					tr::lng_luxury_plugins_repo_replaced(tr::now));
+				return;
+			}
+			auto copy = plan;
+			copy.commit = identity.commit;
+			copy.repoId = identity.repoId;
+			done(std::move(copy), QString());
+		});
+	});
+}
+
 void Manager::prepareInstall(
 		const QString &link,
 		Fn<void(InstallPlan plan, QString error)> done) {
 	const auto input = ParseGithubInput(link.trimmed().toStdString());
 	if (!input) {
-		done({}, Text(input.error()));
+		done(Failed(ErrorCode::Link), Text(input.error()));
 		return;
 	}
 	const auto weak = base::make_weak(_private.get());
-	const auto owner = input->owner;
-	const auto repo = input->repo;
-	const auto subdir = input->subdir;
-	_private->installer.resolve(input.value(), [=](
-			ResolvedRef resolved,
-			QString error) {
+	const auto parsed = input.value();
+	_private->installer.resolve(parsed, [=](Resolution resolution) {
 		const auto d = weak.get();
 		if (!d) {
 			return;
-		} else if (!error.isEmpty()) {
-			done({}, error);
-			return;
 		}
-		const auto source = PluginSource{
-			.owner = owner,
-			.repo = repo,
-			.subdir = subdir,
-			.channel = resolved.channel,
-			.ref = resolved.ref,
-			.label = resolved.label,
-		};
-		d->installer.manifest(source, [=](
-				Manifest manifest,
-				QByteArray raw,
-				QString error) {
-			const auto d = weak.get();
-			if (!d) {
-				return;
-			} else if (!error.isEmpty()) {
-				done({}, error);
-				return;
-			} else if (const auto text = CompatibilityError(
-					manifest,
-					LuxuryVersionStr); !text.empty()) {
-				done({}, Text(text));
-				return;
-			}
-			const auto installed = d->find(Text(manifest.id));
-			if (installed
-				&& (installed->source.owner != owner
-					|| installed->source.repo != repo)) {
-				// Another repository must not take over the id, its
-				// grants and its data.
-				done({}, u"A plugin with the id \"%1\" is already "
-					"installed from %2/%3."_q.arg(
-						Text(manifest.id),
-						Text(installed->source.owner),
-						Text(installed->source.repo)));
-				return;
-			}
-			auto plan = InstallPlan{
-				.input = input.value(),
-				.resolved = resolved,
-				.manifest = std::move(manifest),
-				.update = (installed != nullptr),
-				.manifestBytes = raw.toStdString(),
-			};
-			if (installed) {
-				plan.previouslyGranted = installed->granted;
-			}
-			plan.newPermissions = MissingPermissions(
-				plan.manifest.permissions,
-				plan.previouslyGranted);
-			done(std::move(plan), QString());
-		});
+		// A tree/ link may have moved segments into the branch name.
+		auto chosen = parsed;
+		chosen.subdir = resolution.subdir;
+		d->buildPlan(
+			std::move(chosen),
+			std::move(resolution),
+			QString(),
+			(parsed.kind == GithubKind::Auto),
+			done);
 	});
 }
 
@@ -566,93 +848,81 @@ void Manager::prepareUpdate(
 		Fn<void(InstallPlan plan, QString error)> done) {
 	const auto plugin = _private->find(id);
 	if (!plugin) {
-		done({}, u"The plugin is not installed."_q);
+		done(Failed(ErrorCode::NotFound), u"The plugin is not installed."_q);
+		return;
+	} else if (plugin->pinned) {
+		done(
+			Failed(ErrorCode::Pinned),
+			tr::lng_luxury_plugins_pinned(tr::now));
 		return;
 	}
 	const auto weak = base::make_weak(_private.get());
 	const auto stored = plugin->source;
-	_private->installer.latest(stored, [=](
-			ResolvedRef resolved,
-			QString error) {
-		const auto d = weak.get();
-		if (!d) {
-			return;
-		} else if (!error.isEmpty()) {
-			done({}, error);
-			return;
+	const auto input = GithubInput{
+		.owner = stored.owner,
+		.repo = stored.repo,
+		.subdir = stored.subdir,
+	};
+	_private->installer.latest(stored, [=](Resolution resolution) {
+		if (const auto d = weak.get()) {
+			d->buildPlan(input, std::move(resolution), id, false, done);
 		}
-		auto source = stored;
-		source.channel = resolved.channel;
-		source.ref = resolved.ref;
-		source.label = resolved.label;
-		d->installer.manifest(source, [=](
-				Manifest manifest,
-				QByteArray raw,
-				QString error) {
-			const auto d = weak.get();
-			if (!d) {
-				return;
-			}
-			const auto installed = d->find(id);
-			if (!error.isEmpty()) {
-				done({}, error);
-				return;
-			} else if (!installed) {
-				done({}, u"The plugin was removed."_q);
-				return;
-			} else if (Text(manifest.id) != id) {
-				done({}, u"The new version has the id \"%1\", not \"%2\"."_q
-					.arg(Text(manifest.id), id));
-				return;
-			} else if (const auto text = CompatibilityError(
-					manifest,
-					LuxuryVersionStr); !text.empty()) {
-				done({}, Text(text));
-				return;
-			}
-			auto plan = InstallPlan{
-				.input = {
-					.owner = stored.owner,
-					.repo = stored.repo,
-					.subdir = stored.subdir,
-				},
-				.resolved = resolved,
-				.manifest = std::move(manifest),
-				.update = true,
-				.previouslyGranted = installed->granted,
-				.manifestBytes = raw.toStdString(),
-			};
-			plan.newPermissions = MissingPermissions(
-				plan.manifest.permissions,
-				plan.previouslyGranted);
-			done(std::move(plan), QString());
-		});
 	});
 }
 
 void Manager::commitInstall(
 		InstallPlan plan,
-		Fn<void(QString error)> done) {
+		Fn<void(QString error, ErrorCode code)> done) {
 	const auto id = Text(plan.manifest.id);
 	const auto installed = _private->find(id);
+	const auto other = _private->installedFrom(
+		plan.input.owner,
+		plan.input.repo,
+		plan.input.subdir);
 	if (!IsValidPluginId(plan.manifest.id)) {
-		done(u"The plugin id is not valid."_q);
+		done(u"The plugin id is not valid."_q, ErrorCode::Manifest);
 		return;
 	} else if (plan.update != (installed != nullptr)) {
-		done(u"The plugin list changed, try again."_q);
+		done(u"The plugin list changed, try again."_q, ErrorCode::Conflict);
 		return;
 	} else if (installed
-		&& (installed->source.owner != plan.input.owner
-			|| installed->source.repo != plan.input.repo)) {
-		done(u"The plugin is installed from another repository."_q);
+		&& !SameRepo(
+			installed->source.owner,
+			installed->source.repo,
+			plan.input.owner,
+			plan.input.repo)) {
+		done(
+			u"The plugin is installed from another repository."_q,
+			ErrorCode::Conflict);
+		return;
+	} else if (other && other != installed) {
+		done(tr::lng_luxury_plugins_repo_installed(
+			tr::now,
+			lt_name,
+			Text(other->name)), ErrorCode::Conflict);
+		return;
+	} else if (installed
+		&& RepoReplaced(installed->source.repoId, plan.repoId)) {
+		done(
+			tr::lng_luxury_plugins_repo_replaced(tr::now),
+			ErrorCode::Conflict);
+		return;
+	} else if (installed
+		&& !AcceptUpdate(
+			DecideUpdate(StoredRef(installed->source), plan.resolved),
+			plan.allowDowngrade)) {
+		// Recomputed from the registry, plan.downgrade is a hint only.
+		done(
+			tr::lng_luxury_plugins_downgrade(tr::now),
+			ErrorCode::Downgrade);
 		return;
 	} else if (_private->committing.contains(id)) {
-		done(u"The plugin is being installed already."_q);
+		done(u"The plugin is being installed already."_q, ErrorCode::Busy);
 		return;
 	} else if (const auto text = CompatibilityError(
 			plan.manifest,
 			LuxuryVersionStr); !text.empty()) {
-		done(Text(text));
+		done(Text(text), ErrorCode::Incompatible);
 		return;
 	}
 	// Recomputed from the registry, never trusted from the plan.
@@ -666,7 +936,9 @@ void Manager::commitInstall(
 		plan.manifest.permissions,
 		plan.manifest.network);
 	if (NeedsConsent(plan.update, newPermissions, widened, plan.consented)) {
-		done(u"The plugin asks for new access, review it first."_q);
+		done(
+			u"The plugin asks for new access, review it first."_q,
+			ErrorCode::Consent);
 		return;
 	}
 	const auto source = PluginSource{
@@ -676,37 +948,43 @@ void Manager::commitInstall(
 		.channel = plan.resolved.channel,
 		.ref = plan.resolved.ref,
 		.label = plan.resolved.label,
+		.commit = plan.commit,
+		.repoId = (plan.repoId > 0 || !installed)
+			? plan.repoId
+			: installed->source.repoId,
 	};
 	_private->committing.emplace(id);
 	const auto weak = base::make_weak(_private.get());
 	const auto staging = Root()
 		+ u".staging/"_q
 		+ QUuid::createUuid().toString(QUuid::Id128);
-	const auto finish = [=](QString error) {
+	const auto finish = [=](QString error, ErrorCode code) {
 		QDir(staging).removeRecursively();
 		if (const auto d = weak.get()) {
 			d->committing.erase(id);
 		}
-		done(error);
+		done(error, code);
 	};
 	const auto reviewed = plan.manifestBytes;
 	const auto shown = plan.consented
 		? plan.shownPermissions
 		: PermissionSet();
 	const auto shownHosts = plan.shownHosts;
+	const auto notice = plan.notice;
 	_private->installer.manifest(source, [=](
 			Manifest manifest,
 			QByteArray raw,
-			QString error) {
+			QString error,
+			ErrorCode code) {
 		const auto d = weak.get();
 		if (!d) {
 			return;
 		} else if (!error.isEmpty()) {
-			finish(error);
+			finish(error, code);
 			return;
 		} else if (raw.toStdString() != reviewed) {
 			finish(u"plugin.json changed since it was reviewed, "
-				"try again."_q);
+				"try again."_q, ErrorCode::Conflict);
 			return;
 		}
 		d->installer.download(source, manifest.files, staging + u"/code"_q, [=](
@@ -715,17 +993,19 @@ void Manager::commitInstall(
 			if (!d) {
 				return;
 			} else if (!error.isEmpty()) {
-				finish(error);
+				finish(error, ErrorCode::Network);
 				return;
 			}
 			// files may not list plugin.json: keep the reviewed bytes.
 			if (!WriteFile(staging + u"/code/plugin.json"_q, raw)) {
-				finish(u"Could not write plugin.json."_q);
+				finish(u"Could not write plugin.json."_q, ErrorCode::Files);
 				return;
 			}
 			const auto existing = d->find(id);
 			if (plan.update != (existing != nullptr)) {
-				finish(u"The plugin list changed, try again."_q);
+				finish(
+					u"The plugin list changed, try again."_q,
+					ErrorCode::Conflict);
 				return;
 			}
 			// Against the registry as it is now, not as it was at prepare:
@@ -745,26 +1025,38 @@ void Manager::commitInstall(
 				manifest.network,
 				shownHosts);
 			if (!grant) {
-				finish(u"The plugin changed, review it again."_q);
+				finish(
+					u"The plugin changed, review it again."_q,
+					ErrorCode::Consent);
 				return;
 			}
 			d->stop(id);
+			const auto target = PluginRoot(id) + u"/code"_q;
+			// pending.json lets the next launch finish or undo the swap if
+			// the client dies before the registry names the new files.
 			const auto swapped = [&]() -> std::string {
 				try {
-					return SwapDirectory(
+					return SwapWithJournal(
 						FsPath(staging + u"/code"_q),
-						FsPath(PluginRoot(id) + u"/code"_q));
+						FsPath(target),
+						source.ref,
+						!existing,
+						false);
 				} catch (const std::exception &e) {
 					return e.what(); // Path conversion or allocation.
 				}
 			}();
 			if (!swapped.empty()) {
-				d->start(id); // The old version keeps running.
+				d->start(id, "reload"); // The old version keeps running.
 				finish(u"Could not replace the plugin files: "_q
-					+ QString::fromLocal8Bit(swapped.c_str()));
+					+ QString::fromLocal8Bit(swapped.c_str()), ErrorCode::Files);
 				return;
 			}
 			auto entry = existing ? *existing : InstalledPlugin();
+			if (existing) {
+				entry.previousVersion = existing->version;
+				entry.previousSource = existing->source;
+			}
 			entry.id = manifest.id;
 			entry.name = manifest.name;
 			entry.version = manifest.version;
@@ -785,60 +1077,193 @@ void Manager::commitInstall(
 			}
 			d->manifests.erase(id);
 			d->updates.erase(id);
-			d->save();
-			d->start(id);
+			if (d->save()) {
+				FinishSwap(FsPath(target));
+			}
+			if (!notice.isEmpty()) {
+				d->append(id, Js::LogLevel::Info, notice);
+			}
+			d->start(id, plan.update ? "update" : "install");
 			d->changes.fire({});
-			finish(QString());
+			finish(QString(), ErrorCode::None);
 		});
 	});
 }
 
-void Manager::checkUpdates(Fn<void(int available)> done) {
-	const auto &list = _private->registry.plugins;
-	if (list.empty()) {
-		done(0);
+void Manager::commitInstall(
+		InstallPlan plan,
+		Fn<void(QString error)> done) {
+	commitInstall(std::move(plan), [=](QString error, ErrorCode) {
+		done(error);
+	});
+}
+
+void Manager::rollback(
+		const QString &id,
+		Fn<void(QString error, ErrorCode code)> done) {
+	const auto plugin = _private->find(id);
+	const auto code = PluginRoot(id) + u"/code"_q;
+	if (!plugin) {
+		done(u"The plugin is not installed."_q, ErrorCode::NotFound);
+		return;
+	} else if (_private->committing.contains(id)) {
+		done(u"The plugin is being installed already."_q, ErrorCode::Busy);
+		return;
+	} else if (plugin->previousVersion.empty()
+		|| !QFileInfo::exists(code + u".prev/plugin.json"_q)) {
+		done(
+			tr::lng_luxury_plugins_no_previous(tr::now),
+			ErrorCode::NotFound);
 		return;
 	}
+	_private->stop(id);
+	const auto swapped = SwapWithJournal(
+		FsPath(code + u".prev"_q),
+		FsPath(code),
+		plugin->previousSource.ref,
+		false,
+		true);
+	if (!swapped.empty()) {
+		_private->start(id, "reload");
+		done(u"Could not replace the plugin files: "_q
+			+ QString::fromLocal8Bit(swapped.c_str()), ErrorCode::Files);
+		return;
+	}
+	// The files rolled back from become code.prev in FinishSwap.
+	std::swap(plugin->version, plugin->previousVersion);
+	std::swap(plugin->source, plugin->previousSource);
+	_private->manifests.erase(id);
+	if (const auto parsed = _private->manifest(id)) {
+		plugin->name = parsed->name;
+		plugin->version = parsed->version;
+		plugin->description = parsed->description;
+		plugin->author = parsed->author;
+		plugin->homepage = parsed->homepage;
+		plugin->requested = parsed->permissions;
+		// Never more than the user granted to the version rolled back
+		// from: the old manifest is not reviewed again.
+		plugin->granted = PermissionSet(
+			plugin->granted.bits() & parsed->permissions.bits());
+		auto hosts = std::vector<std::string>();
+		for (const auto &host : parsed->network) {
+			if (std::find(
+					plugin->network.begin(),
+					plugin->network.end(),
+					host) != plugin->network.end()) {
+				hosts.push_back(host);
+			}
+		}
+		plugin->network = std::move(hosts);
+	}
+	plugin->lastError.clear();
+	_private->updates.erase(id);
+	if (_private->save()) {
+		FinishSwap(FsPath(code));
+	}
+	_private->start(id, "rollback");
+	_private->changes.fire({});
+	done(QString(), ErrorCode::None);
+}
+
+void Manager::setPinned(const QString &id, bool pinned) {
+	const auto plugin = _private->find(id);
+	if (!plugin || plugin->pinned == pinned) {
+		return;
+	}
+	plugin->pinned = pinned;
+	if (pinned) {
+		_private->updates.erase(id);
+	}
+	_private->save();
+	_private->changes.fire({});
+}
+
+void Manager::checkUpdatesDetailed(Fn<void(UpdateCheck result)> done) {
+	auto &waiters = _private->checkWaiters;
+	waiters.push_back(std::move(done));
+	if (waiters.size() > 1) {
+		return; // A check is running, its result goes to every caller.
+	}
+	const auto weak = base::make_weak(_private.get());
+	const auto finish = [=](const UpdateTally &tally) {
+		const auto d = weak.get();
+		if (!d) {
+			return;
+		}
+		const auto result = UpdateCheck{
+			.available = tally.available,
+			.failed = tally.failed,
+			.firstError = Text(tally.firstError),
+			.firstCode = tally.firstCode,
+		};
+		const auto callbacks = std::exchange(
+			d->checkWaiters,
+			std::vector<Fn<void(UpdateCheck)>>());
+		d->changes.fire({});
+		for (const auto &callback : callbacks) {
+			if (callback) {
+				callback(result);
+			}
+		}
+	};
 	struct State {
 		int left = 0;
-		int available = 0;
+		UpdateTally tally;
 	};
-	const auto state = std::make_shared<State>(State{
-		.left = int(list.size()),
-	});
-	const auto weak = base::make_weak(_private.get());
-	for (const auto &plugin : list) {
+	const auto state = std::make_shared<State>();
+	auto checked = std::vector<InstalledPlugin>();
+	for (const auto &plugin : _private->registry.plugins) {
+		if (plugin.pinned) {
+			_private->updates.erase(Text(plugin.id));
+		} else {
+			checked.push_back(plugin);
+		}
+	}
+	if (checked.empty()) {
+		finish(state->tally);
+		return;
+	}
+	state->left = int(checked.size());
+	for (const auto &plugin : checked) {
 		const auto id = Text(plugin.id);
-		const auto stored = ResolvedRef{
-			.channel = plugin.source.channel,
-			.ref = plugin.source.ref,
-			.label = plugin.source.label,
-		};
-		_private->installer.latest(plugin.source, [=](
-				ResolvedRef latest,
-				QString error) {
+		const auto stored = StoredRef(plugin.source);
+		_private->installer.latest(plugin.source, [=](Resolution latest) {
 			const auto d = weak.get();
 			if (!d) {
 				return;
 			}
-			if (!error.isEmpty()) {
+			if (!latest.error.isEmpty()) {
 				d->append(
 					id,
 					Js::LogLevel::Warn,
-					u"Update check failed: "_q + error);
-			} else if (DecideUpdate(stored, latest)
-					== UpdateDecision::Available) {
-				d->updates[id] = Text(AvailableLabel(latest));
-				++state->available;
+					u"Update check failed: "_q + latest.error);
+				state->tally.add(
+					latest.error.toStdString(),
+					latest.code,
+					false);
 			} else {
-				d->updates.erase(id);
+				const auto found = (DecideUpdate(stored, latest.ref)
+					== UpdateDecision::Available);
+				if (found) {
+					d->updates[id] = Text(AvailableLabel(latest.ref));
+				} else {
+					d->updates.erase(id);
+				}
+				state->tally.add({}, ErrorCode::None, found);
 			}
 			if (!--state->left) {
-				d->changes.fire({});
-				done(state->available);
+				finish(state->tally);
 			}
 		});
 	}
+}
+
+void Manager::checkUpdates(Fn<void(int available)> done) {
+	checkUpdatesDetailed([=](UpdateCheck result) {
+		if (done) {
+			done(result.available);
+		}
+	});
 }
 
 bool Manager::active() const {

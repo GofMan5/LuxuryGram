@@ -37,8 +37,14 @@ reports the files it added.
 ```
 tdata/luxury_plugins/
   registry.json              installed plugins, grants, enabled state, source
+  registry.json.bak          the registry before the last write
+  registry.json.bad          a broken registry.json, kept for inspection
   plugins/<plugin-id>/
     code/                    downloaded files, read-only for the plugin
+    code.prev/               the version before the last update (rollback)
+    code.old/                replaced files while a swap is in progress
+    pending.json             swap journal {ref, fresh, rollback}, see below
+    .starting                exists while the plugin is starting
     data/storage.json        lux.storage (quota 5 MiB)
     data/settings.json       values of manifest settings
   .staging/<random>/         install/update in progress, renamed into place
@@ -52,6 +58,47 @@ a file system error during the swap is reported as an install error.
 Install and update write into `.staging` first and swap directories only
 after every file was downloaded and its size checked. A failed update keeps
 the old version running.
+
+Recovery at startup, before any plugin runs:
+
+- `registry.json` is written with `QSaveFile`; the previous file is copied
+  to `registry.json.bak` first. A `registry.json` that does not parse is
+  renamed to `.bad` and the registry is restored from `.bak`; a missing
+  `registry.json` is a fresh start.
+- The swap writes `pending.json` before it renames `code` to `code.old` and
+  the staged files to `code`. Once the registry names the new version,
+  `code.old` becomes `code.prev` and the journal goes. A journal found at
+  startup is finished when the registry already holds its ref, otherwise
+  `code.old` is put back (or a fresh install is removed). A rollback
+  journal (`rollback: true`) first moves `code` back to `code.prev`, so an
+  interrupted rollback loses neither version.
+- `.starting` is written right before a plugin's engine starts and removed
+  on the next event loop turn. Found at startup, the client died starting
+  that plugin: it is disabled with a "closed unexpectedly" error the
+  Plugins page shows. The registry stores the marker `luxury:quarantined`
+  as `lastError`; `PluginView::lastError` shows it in the UI language.
+- `startAll` starts the plugins one per event loop turn, and a start
+  removes the `.starting` another plugin still holds (`StartFence`), so
+  there is never more than one sentinel and a crash disables only the
+  plugin that caused it.
+- `-noplugins` on the command line, or Shift held when `startAll` runs,
+  keeps every plugin stopped for that launch without changing their
+  enabled state. Plugins start only after the first window is shown.
+
+`Manager::rollback(id)` swaps `code.prev` back with the same journal and
+restores the previous registry source; grants never widen on a rollback.
+A pinned plugin (`setPinned`) is skipped by update checks and refuses
+`prepareUpdate`. An install of an older release than the installed one
+needs `InstallPlan::allowDowngrade`; an update never downgrades, and
+`prepareUpdate` of the installed version fails with `ErrorCode::UpToDate`.
+`commitInstall` and `rollback` report an `ErrorCode` with their text:
+`Busy` while an install of the plugin runs, `Consent` when the plan needs
+the consent box again, `Conflict` when the plugin list or repository
+changed, `Files` when the swap failed, `None` on success.
+
+Plugin log lines are mirrored into the client `log.txt` as
+`Plugin <id> [level]: text`, one line each (line breaks become spaces), at
+most 100 lines a minute per plugin.
 
 ## Manifest: `plugin.json` at the repository root (or the linked subdir)
 
@@ -198,7 +245,17 @@ Accepted input:
   the default branch.
 - `https://github.com/owner/repo/tree/<ref>[/<subdir>]`: branch or tag `ref`,
   plugin lives in `subdir`.
-- `https://github.com/owner/repo/releases/tag/<tag>`: that release.
+- `https://github.com/owner/repo/releases/tag/<tag>`: that release;
+  `/releases/latest` is auto.
+- `/blob/<ref>/<subdir>/<file>` (the file's folder), `/commit/<sha>`,
+  `git@github.com:owner/repo.git`. A `tree/` ref may hold `/`: every split
+  of `feature/x/plugin` into branch and folder is tried, shortest branch
+  first.
+
+Owner and repository names compare case-insensitively: one repository
+folder can be installed once. The repository id and the commit are stored
+with the source; a repository with the same name but a new id is refused
+as an update.
 
 Resolution (all HTTPS, `api.github.com`, `User-Agent: LuxuryGram`):
 
@@ -210,9 +267,20 @@ Resolution (all HTTPS, `api.github.com`, `User-Agent: LuxuryGram`):
    `https://raw.githubusercontent.com/o/r/<ref>/<subdir/><path>`.
    Release tags and commit SHAs make installs reproducible.
 3. Update check repeats step 1 with the stored channel (and stored branch
-   label for branch channel). Update is available when the tag or SHA changed.
+   label for branch channel). Update is available when the tag or SHA changed;
+   an older release tag is a downgrade, not an update.
+4. An auto link whose latest release has no `plugin.json` falls back to the
+   default branch, and the plan says so in `InstallPlan::notice` (also
+   written to the plugin log on install).
 
-Rate limits and network errors are shown as text, never as a crash.
+Rate limits and network errors are shown as text, never as a crash. A 403
+with `X-RateLimit-Remaining: 0`, a 403 with `Retry-After` or a 429 reports
+the time requests may resume. API answers are cached by `ETag` and asked
+again with `If-None-Match`; a 304 does not count against the limit. A
+non-JSON error body reads "GitHub: HTTP <status>". Every failure carries an
+`ErrorCode` next to its text. `checkUpdatesDetailed` reports the available
+and failed counts with the first error; a call while a check runs gets the
+running check's result.
 
 ## Telegram API bridge (JSON form of TL)
 
@@ -281,7 +349,8 @@ One runtime and context per plugin, on the main thread.
 ## Plugin-facing API (`lux` global), version 1
 
 ```js
-lux.plugin            // {id, version, apiVersion, clientVersion, granted, lang}
+lux.plugin            // {id, version, previousVersion, reason, apiVersion,
+//                       clientVersion, granted, lang}
 //   granted: the permission ids the user approved; lang: the UI language id
 lux.log(...args)      // also console.log/warn/error; shown in the manager
 lux.on(event, fn)     // returns unsubscribe function
