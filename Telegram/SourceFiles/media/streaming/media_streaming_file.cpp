@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/streaming/media_streaming_loader.h"
 #include "media/streaming/media_streaming_file_delegate.h"
 #include "ffmpeg/ffmpeg_utility.h"
+#include "core/core_threads.h"
 
 namespace Media {
 namespace Streaming {
@@ -173,6 +174,7 @@ Stream File::Context::initStream(
 			.stream = info,
 			.hwAllowed = options.hwAllow,
 			.videoMaxArea = kMaxFrameArea,
+			.threads = Core::Threads::Get().streamingVideoDecode,
 		});
 		if (!result.codec) {
 			return result;
@@ -189,7 +191,10 @@ Stream File::Context::initStream(
 		if (!result.frequency) {
 			return result;
 		}
-		result.codec = FFmpeg::MakeCodecPointer({ .stream = info });
+		result.codec = FFmpeg::MakeCodecPointer({
+			.stream = info,
+			.threads = 1,
+		});
 		if (!result.codec) {
 			return result;
 		}

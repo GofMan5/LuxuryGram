@@ -17,8 +17,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #endif // !Q_OS_WIN && !Q_OS_MAC
 
 #include <QImage>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <new>
 
@@ -28,6 +30,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 extern "C" {
 #include <libavutil/opt.h>
+#include <libavutil/cpu.h>
 #include <libavutil/display.h>
 } // extern "C"
 
@@ -298,6 +301,19 @@ enum AVPixelFormat GetFormatImplementation(
 	return AV_PIX_FMT_NONE;
 }
 
+[[nodiscard]] int ResolveThreads(const AVCodec *codec, int requested) {
+	if (const auto user = OptionFFmpegThreadCount.value(); user > 0) {
+		return user;
+	} else if (requested > 0) {
+		return requested;
+	} else if (!strcmp(codec->name, "libvpx-vp9")) {
+		// libvpx "auto" is min(cpus, 64) threads plus tile and loop filter
+		// threads for every decoder, and stickers run many decoders at once.
+		return std::clamp(av_cpu_count() - 1, 1, 8);
+	}
+	return 0;
+}
+
 } // namespace
 
 const char kOptionFFmpegMultiThread[] = "ffmpeg-multithread";
@@ -487,19 +503,20 @@ CodecPointer MakeCodecPointer(CodecDescriptor descriptor) {
 		context->max_pixels = MaxPixelsForAreaLimit(
 			descriptor.videoMaxArea);
 	}
-	if (OptionFFmpegMultiThread.value()) {
-		av_opt_set_int(
-			context,
-			"threads",
-			OptionFFmpegThreadCount.value(),
-			0);
-	}
 	av_opt_set_int(context, "refcounted_frames", 1, 0);
 
 	const auto codec = FindDecoder(context);
 	if (!codec) {
 		LogError(u"avcodec_find_decoder"_q, context->codec_id);
 		return {};
+	}
+	if (OptionFFmpegMultiThread.value()) {
+		const auto threads = ResolveThreads(codec, descriptor.threads);
+		av_opt_set_int(context, "threads", threads, 0);
+		if (threads == 1) {
+			// No frame-thread latency and buffers for a single thread.
+			context->thread_type = FF_THREAD_SLICE;
+		}
 	}
 
 	if (descriptor.hwAllowed) {

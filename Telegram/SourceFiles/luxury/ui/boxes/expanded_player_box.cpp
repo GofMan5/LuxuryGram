@@ -46,6 +46,7 @@
 #include <QSvgRenderer>
 
 #include <algorithm>
+#include <thread>
 
 ExpandedPlayerBox::ExpandedPlayerBox(
 	QWidget *parent,
@@ -429,7 +430,7 @@ void ExpandedPlayerBox::refreshCover(
 	}
 	const auto sizeHint = int(st::luxuryPlayerCoverFetchSize);
 	const auto weak = base::make_weak(this);
-	crl::async([=] {
+	std::thread([=] {
 		auto image = Luxury::Ui::Itunes::FetchCover(
 			performer,
 			title,
@@ -442,7 +443,7 @@ void ExpandedPlayerBox::refreshCover(
 			}
 			setCover(std::move(image));
 		});
-	});
+	}).detach();
 }
 
 void ExpandedPlayerBox::setCover(QImage image) {

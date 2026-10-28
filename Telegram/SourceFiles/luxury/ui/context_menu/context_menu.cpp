@@ -66,6 +66,8 @@
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
 
+#include <thread>
+
 namespace LuxuryUi {
 
 namespace {
@@ -1202,7 +1204,7 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 					};
 					if (preserveReply) {
 						const auto weakSession = base::make_weak(session);
-						crl::async([=]
+						std::thread([=]
 						{
 							// A rich page that cannot be rebuilt (media upload
 							// failed, empty after pruning) is still repeated,
@@ -1210,7 +1212,7 @@ void AddRepeatMessageAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item, Hi
 							if (!LuxuryForward::forwardRichMessage(weakSession, itemId, action)) {
 								crl::on_main(weakSession, forwardPlain);
 							}
-						});
+						}).detach();
 					} else {
 						forwardPlain();
 					}

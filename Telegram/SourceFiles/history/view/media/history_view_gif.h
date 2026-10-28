@@ -272,6 +272,7 @@ private:
 	mutable std::shared_ptr<Data::DocumentMedia> _dataMedia;
 	mutable std::shared_ptr<Data::PhotoMedia> _videoCoverMedia;
 	mutable std::unique_ptr<Image> _videoThumbnailFrame;
+	mutable bool _videoThumbnailRequested = false;
 	QString _downloadSize;
 	struct {
 		Ui::Text::String text = { 1 };

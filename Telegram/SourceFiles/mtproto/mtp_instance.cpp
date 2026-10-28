@@ -20,6 +20,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_account.h" // Account::configUpdated.
 #include "core/application.h"
 #include "core/core_settings.h"
+#include "core/core_threads.h"
 #include "lang/lang_instance.h"
 #include "lang/lang_cloud_manager.h"
 #include "base/unixtime.h"
@@ -326,8 +327,7 @@ Instance::Private::Private(
 , _proxySettings(Core::App().settings().proxy()) {
 	Expects(_config != nullptr);
 
-	const auto idealThreadPoolSize = QThread::idealThreadCount();
-	_fileSessionThreads.resize(2 * std::max(idealThreadPoolSize / 2, 1));
+	_fileSessionThreads.resize(2 * Core::Threads::Get().mtpFilePerDirection);
 
 	details::unpaused(
 	) | rpl::on_next([=] {

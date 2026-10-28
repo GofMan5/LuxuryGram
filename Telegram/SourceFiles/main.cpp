@@ -5,6 +5,7 @@ the official desktop application for the Telegram messaging service.
 For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
+#include "core/core_threads.h"
 #include "core/launcher.h"
 
 extern "C" {
@@ -12,6 +13,8 @@ extern "C" {
 } // extern "C"
 
 int main(int argc, char *argv[]) {
+	Core::Threads::ApplyProcessPolicy();
+
 	// OpenSSL's own atexit handler runs OPENSSL_cleanup() on the main thread
 	// and frees the library globals while detached background tasks can still
 	// be inside OpenSSL, so an ordinary quit can fault on a worker thread.

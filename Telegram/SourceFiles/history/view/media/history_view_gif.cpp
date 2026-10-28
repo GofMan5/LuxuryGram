@@ -1215,14 +1215,26 @@ void Gif::validateVideoThumbnail() const {
 	Expects(!_videoCover);
 
 	const auto content = _dataMedia->videoThumbnailContent();
-	if (_videoThumbnailFrame || content.isEmpty()) {
+	if (_videoThumbnailFrame
+		|| _videoThumbnailRequested
+		|| content.isEmpty()) {
 		return;
 	}
-	auto info = v::get<Ui::PreparedFileInformation::Video>(
-		::Media::Clip::PrepareForSending(QString(), content).media);
-	_videoThumbnailFrame = std::make_unique<Image>(info.thumbnail.isNull()
-		? Image::BlankMedia()->original()
-		: info.thumbnail);
+	_videoThumbnailRequested = true;
+	crl::async([=, weak = base::make_weak(const_cast<Gif*>(this))] {
+		auto info = v::get<Ui::PreparedFileInformation::Video>(
+			::Media::Clip::PrepareForSending(QString(), content).media);
+		crl::on_main(weak, [=, image = std::move(info.thumbnail)]() mutable {
+			_videoThumbnailRequested = false;
+			if (_videoThumbnailFrame || !_dataMedia) {
+				return;
+			}
+			_videoThumbnailFrame = std::make_unique<Image>(image.isNull()
+				? Image::BlankMedia()->original()
+				: std::move(image));
+			repaint();
+		});
+	});
 }
 
 void Gif::validateThumbCache(
