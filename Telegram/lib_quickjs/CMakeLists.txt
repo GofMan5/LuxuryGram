@@ -23,6 +23,9 @@ set_target_properties(luxury_quickjs PROPERTIES
     C_STANDARD_REQUIRED ON
     C_EXTENSIONS ON
     C_VISIBILITY_PRESET hidden
+    # CI configures with CMAKE_COMPILE_WARNING_AS_ERROR=ON; vendored code
+    # keeps its warnings visible but never fails the build on them.
+    COMPILE_WARNING_AS_ERROR OFF
 )
 
 target_compile_definitions(luxury_quickjs PRIVATE
