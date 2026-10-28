@@ -42,6 +42,7 @@ LuxuryGram keeps the familiar Telegram Desktop foundation and adds more control 
 | **Focus** | Streamer-friendly controls that help hide sensitive information while sharing a screen. |
 | **Personalization** | Font controls, appearance options, and a more configurable desktop experience. |
 | **Productivity** | Right-click message translation into your selected language, richer media previews, and faster shortcuts. |
+| **Plugins** | Sandboxed JavaScript plugins installed from a GitHub link, with per-plugin permissions. See the [author guide](docs/plugins/AUTHORING.md). |
 | **Desktop foundation** | The mature C++/Qt architecture and platform integration inherited from Telegram Desktop. |
 
 Some features operate locally and cannot change Telegram server-side behavior. Availability may vary by platform and by the current development snapshot.

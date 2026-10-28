@@ -1,0 +1,44 @@
+{
+  "id": "dev.example.hello",
+  "name": "Hello world",
+  "version": "1.0.0",
+  "description": "Adds /hello and a hotkey that greet you",
+  "author": "example",
+  "api": 1,
+  "runtime": "js",
+  "main": "main.js",
+  "files": ["main.js"],
+  "permissions": ["ui"],
+  "settings": [
+    {
+      "key": "greeting",
+      "type": "string",
+      "title": "Greeting",
+      "description": "Shown by /hello and Ctrl+Shift+H",
+      "placeholder": "Hello",
+      "default": "Hello",
+      "locales": {"ru": {"name": "Приветствие", "description": "Показывается по /hello и Ctrl+Shift+H"}}
+    },
+    {
+      "key": "style",
+      "type": "select",
+      "title": "Style",
+      "options": ["toast", "alert"],
+      "default": "toast",
+      "locales": {"ru": {"name": "Как показывать"}}
+    },
+    {
+      "key": "repeat",
+      "type": "number",
+      "title": "Exclamation marks",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "default": 1
+    }
+  ],
+  "locales": {
+    "ru": {"name": "Привет, мир", "description": "Добавляет /hello и сочетание клавиш для приветствия"}
+  },
+  "homepage": "https://github.com/GofMan5/LuxuryGram/tree/dev/docs/plugins/examples/hello-world"
+}
