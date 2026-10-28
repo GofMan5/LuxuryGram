@@ -156,7 +156,7 @@ bool LocalCommand(not_null<History*> history, const QString &text) {
 				instance->callLater(command.fn, {
 					{ "peer", PeerJson(history->peer) },
 					{ "args", parsed->args },
-				});
+				}, true);
 				return true;
 			}
 		}
@@ -277,7 +277,7 @@ void FillMessageMenu(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 				: json{
 					{ "id", std::to_string(message->id.bare) },
 					{ "peer", PeerJson(message->history()->peer) },
-				} } });
+				} } }, true);
 		});
 	}
 	menu->addAction(
@@ -320,7 +320,7 @@ bool HandleHotkey(not_null<QObject*> object, not_null<QKeyEvent*> event) {
 		for (const auto &hotkey : instance->hotkeys()) {
 			if (hotkey.keys == keys) {
 				if (!event->isAutoRepeat()) {
-					instance->callLater(hotkey.fn, nullptr);
+					instance->callLater(hotkey.fn, nullptr, true);
 				}
 				return true;
 			}

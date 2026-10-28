@@ -7,8 +7,11 @@
 #include "luxury/plugins/js/js_engine.h"
 #include "luxury/plugins/plugin_host_logic.h"
 #include "base/weak_ptr.h"
+#include "base/weak_qptr.h"
+#include "rpl/lifetime.h"
 
 #include <QString>
+#include <QUrl>
 
 #include <map>
 #include <memory>
@@ -21,6 +24,10 @@ class QTimer;
 namespace Main {
 class Session;
 } // namespace Main
+
+namespace Ui {
+class BoxContent;
+} // namespace Ui
 
 namespace Luxury::Plugins {
 namespace Tl {
@@ -89,9 +96,12 @@ public:
 		return _hotkeys;
 	}
 
-	// On the next event loop turn.
+	// On the next event loop turn. emitLater queues at most
+	// kMaxQueuedEvents, dropping the oldest; a gesture call (a command,
+	// menu item or hotkey the user triggered) opens the clipboard for
+	// kGestureMs.
 	void emitLater(std::string event, nlohmann::json payload);
-	void callLater(std::int64_t fn, nlohmann::json args);
+	void callLater(std::int64_t fn, nlohmann::json args, bool gesture = false);
 	void settingChanged(const QString &key, const nlohmann::json &value);
 
 	// Synchronous, from ApiWrap::sendMessage: false, a string or null.
@@ -141,7 +151,19 @@ private:
 		QString url,
 		std::vector<std::pair<QByteArray, QByteArray>> headers,
 		QByteArray body,
-		int redirects);
+		int redirects,
+		bool binary);
+	// fetchStep once the address is known to be public.
+	void fetchSend(
+		std::uint64_t promiseId,
+		QString method,
+		QUrl url,
+		std::vector<std::pair<QByteArray, QByteArray>> headers,
+		QByteArray body,
+		int redirects,
+		bool binary);
+	// The active account changed: its requests and events are void.
+	void accountChanged();
 	[[nodiscard]] Result apiCall(
 		const nlohmann::json &args,
 		std::uint64_t promiseId);
@@ -171,6 +193,13 @@ private:
 	std::optional<nlohmann::json> _storage;
 	std::unique_ptr<QTimer> _storageTimer;
 	std::unique_ptr<QNetworkAccessManager> _network;
+
+	EventQueue _queue;
+	std::int64_t _gestureUntil = 0; // crl::now() ms.
+	std::int64_t _lastToast = 0;
+	// One ui.alert/confirm/prompt at a time, closed on unload.
+	base::weak_qptr<Ui::BoxContent> _dialog;
+	rpl::lifetime _lifetime;
 
 };
 

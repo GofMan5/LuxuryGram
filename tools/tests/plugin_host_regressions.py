@@ -137,6 +137,32 @@ void Queries() {
 	EXPECT(MentionsServiceUser(json::parse(R"({"user_id":777000.0})")));
 	EXPECT(MentionsServiceUser(json::parse(R"([{"_":"updateServiceNotification","message":"code"}])")));
 	EXPECT(!MentionsServiceUser(json::parse(R"({"user_id":"7770001","id":"777000"})")));
+	// Every form the encoder reads as the long 777000, under every key.
+	for (const auto id : { R"("0777000")", R"("+777000")", R"(" 777000")",
+			R"("777000 ")", R"("\t+000777000\n")", R"("777000.0")", R"("7.77e5")",
+			"777000.0", "777000", "7.77e5" }) {
+		for (const auto key : { "user_id", "peer", "from_id", "peer_id" }) {
+			EXPECT(MentionsServiceUser(json::parse(
+				std::string("{\"") + key + "\":" + id + "}")));
+		}
+		EXPECT(MentionsServiceUser(json::parse(
+			std::string(R"({"_":"user","id":)") + id + "}")));
+		EXPECT(!MentionsServiceUser(json::parse(
+			std::string(R"({"_":"message","id":)") + id + "}")));
+	}
+	for (const auto id : { R"("7770000")", R"("-777000")", R"("++777000")",
+			R"("777 000")", R"("777000x")", R"("")", R"("  ")", R"("0x777000")",
+			"777000.5", "-777000", "77700", "true", "null" }) {
+		EXPECT(!MentionsServiceUser(json::parse(
+			std::string(R"({"user_id":)") + id + "}")));
+	}
+	EXPECT(MentionsServiceUser(json{ { "user_id", std::int64_t(777000) } }));
+	EXPECT(MentionsServiceUser(json{ { "user_id", std::uint64_t(777000) } }));
+	EXPECT(MentionsServiceUser(json::parse(R"({"peer":{"user_id":"777000"}})")));
+	EXPECT(MentionsServiceUser(json::parse(R"({"_":"peerUser","user_id":"+777000"})")));
+	EXPECT(MentionsServiceUser(json::parse(R"({"q":[{"from_id":{"_":"peerUser","user_id":" 0777000"}}]})")));
+	EXPECT(MentionsServiceUser(json::parse(R"({"_":"userFull","id":777000.0})")));
+	EXPECT(MentionsServiceUser(json::parse(R"({"_":"userEmpty","id":"777000"})")));
 	EXPECT(!MentionsServiceUser(json::parse(R"({"message":"777000","_":"updateNewMessage"})")));
 	auto history = json::parse(R"({"messages":[
 		{"id":1,"peer_id":{"user_id":"777000"}},
@@ -150,6 +176,13 @@ void Queries() {
 	EXPECT(!StripServiceUser(shortMessage));
 	auto clean = json::parse(R"({"users":[{"id":"777000"}]})");
 	EXPECT(StripServiceUser(clean) && clean["users"].size() == 1);
+	// The service user object itself leaves users[], its neighbours stay.
+	auto dialogs = json::parse(R"({"users":[{"_":"user","id":"777000","first_name":"Telegram"},
+		{"_":"user","id":"42"}],"chats":[]})");
+	EXPECT(StripServiceUser(dialogs) && dialogs["users"].size() == 1
+		&& dialogs["users"][0]["id"] == "42");
+	auto padded = json::parse(R"({"_":"updateShortMessage","user_id":"0777000"})");
+	EXPECT(!StripServiceUser(padded));
 	auto users = json::parse(R"([{"_":"user","self":true,"phone":"79990001122","id":"1"},
 		{"_":"user","phone":"15550000000","id":"2"},
 		{"users":[{"_":"user","self":true,"phone":"79990001122"}]},
@@ -209,50 +242,55 @@ void Grants() {
 }
 
 void Timers() {
-	EXPECT(TimerDelay(json(0), true) == 10);
-	EXPECT(TimerDelay(json(5), true) == 10);
-	EXPECT(TimerDelay(json(std::nan("")), true) == 10);
-	EXPECT(TimerDelay(json("x"), true) == 10);
+	EXPECT(TimerDelay(json(0), true) == 50);
+	EXPECT(TimerDelay(json(5), true) == 50);
+	EXPECT(TimerDelay(json(49.9), true) == 50);
+	EXPECT(TimerDelay(json(std::nan("")), true) == 50);
+	EXPECT(TimerDelay(json("x"), true) == 50);
+	EXPECT(kMaxTimers == 64);
 	EXPECT(TimerDelay(json(-5), false) == 4);
 	EXPECT(TimerDelay(json(2), false) == 4);
 	EXPECT(TimerDelay(json(std::nan("")), false) == 4);
 	EXPECT(TimerDelay(json(7), false) == 7);
-	EXPECT(TimerDelay(json(20), true) == 20);
+	EXPECT(TimerDelay(json(20), true) == 50);
+	EXPECT(TimerDelay(json(60), true) == 60);
 	EXPECT(TimerDelay(json(1e300), false) == (1 << 30));
 }
 
 void Cpu() {
+	constexpr auto ms = std::int64_t(1000); // The budget counts µs.
 	{ // Three overruns within 10 s stop it.
 		auto b = CpuBudget();
 		EXPECT(!b.record(0, 0, true));
-		EXPECT(!b.record(4000, 0, true));
-		EXPECT(b.record(9000, 0, true));
+		EXPECT(!b.record(4000 * ms, 0, true));
+		EXPECT(b.record(9000 * ms, 0, true));
 	}
 	{ // Spread wider they do not.
 		auto b = CpuBudget();
 		EXPECT(!b.record(0, 0, true));
-		EXPECT(!b.record(6000, 0, true));
-		EXPECT(!b.record(12000, 0, true));
-		EXPECT(b.record(15000, 0, true));
+		EXPECT(!b.record(6000 * ms, 0, true));
+		EXPECT(!b.record(12000 * ms, 0, true));
+		EXPECT(b.record(15000 * ms, 0, true));
 	}
 	{ // More than 500 ms within 5 s stops it; exactly 500 does not.
 		auto b = CpuBudget();
 		for (auto i = 0; i != 5; ++i) {
-			EXPECT(!b.record(i * 1000, 100, false));
+			EXPECT(!b.record(i * 1000 * ms, 100 * ms, false));
 		}
-		EXPECT(b.record(4500, 1, false));
+		EXPECT(b.record(4500 * ms, 1, false));
 	}
 	{ // Steady 100 ms a second stays within budget forever.
 		auto b = CpuBudget();
 		for (auto i = 0; i != 60; ++i) {
-			EXPECT(!b.record(i * 1000, 100, false));
+			EXPECT(!b.record(i * 1000 * ms, 100 * ms, false));
 		}
+		EXPECT(b.slices.size() == 5 && b.used == 500 * ms);
 	}
 	{ // Busy 4 s, idle 1 s, again: pausing does not reset the sum.
 		auto b = CpuBudget();
-		auto stopped = 0;
-		for (auto now = 0; now < 30'000 && !stopped; now += 250) {
-			if ((now / 1000) % 5 != 4 && b.record(now, 33, false)) {
+		auto stopped = std::int64_t(0);
+		for (auto now = std::int64_t(0); now < 30'000 && !stopped; now += 250) {
+			if ((now / 1000) % 5 != 4 && b.record(now * ms, 33 * ms, false)) {
 				stopped = now;
 			}
 		}
@@ -260,26 +298,147 @@ void Cpu() {
 	}
 	{ // The same rate with an idle second is 4/5 of it: 105 ms a second stays.
 		auto b = CpuBudget();
-		for (auto now = 0; now < 60'000; now += 1000) {
+		for (auto now = std::int64_t(0); now < 60'000; now += 1000) {
 			if ((now / 1000) % 5 != 4) {
-				EXPECT(!b.record(now, 105, false));
+				EXPECT(!b.record(now * ms, 105 * ms, false));
 			}
 		}
 	}
 	{ // One slice over the whole budget.
 		auto b = CpuBudget();
-		EXPECT(b.record(0, 501, false));
+		EXPECT(b.record(0, 501 * ms, false));
 	}
 	{ // Slices older than 5 s no longer count.
 		auto b = CpuBudget();
-		EXPECT(!b.record(0, 500, false));
-		EXPECT(!b.record(5000, 500, false));
-		EXPECT(b.record(9999, 1, false));
+		EXPECT(!b.record(0, 500 * ms, false));
+		EXPECT(!b.record(5000 * ms, 500 * ms, false));
+		EXPECT(b.record(9999 * ms, 1, false));
 	}
 	{ // A negative elapsed time never pays back.
 		auto b = CpuBudget();
-		EXPECT(!b.record(0, -1000, false));
-		EXPECT(b.record(1, 501, false));
+		EXPECT(!b.record(0, -1000 * ms, false));
+		EXPECT(b.record(1, 500 * ms, false));
+	}
+	{ // 10000 trivial entries a tenth of a millisecond apart: each costs
+		// the minimum charge, so a flood of 1 µs entries is stopped too.
+		auto b = CpuBudget();
+		auto stopped = 0;
+		for (auto i = 0; i != 10000 && !stopped; ++i) {
+			if (b.record(std::int64_t(i) * 100, 1, false)) {
+				stopped = i + 1;
+			}
+		}
+		EXPECT(stopped == 5001); // 5001 * 100 µs > 500 ms.
+	}
+	{ // The same entries one per 10 ms stay far within budget.
+		auto b = CpuBudget();
+		for (auto i = 0; i != 10000; ++i) {
+			EXPECT(!b.record(std::int64_t(i) * 10 * ms, 1, false));
+		}
+		EXPECT(b.slices.size() == 500 && b.used == 500 * kMinChargeUs);
+	}
+}
+
+void Gestures() {
+	EXPECT(GestureActive(999, 1000));
+	EXPECT(!GestureActive(1000, 1000));
+	EXPECT(!GestureActive(5, 0)); // No gesture yet.
+	EXPECT(kGestureMs == 1000);
+	EXPECT(ToastAllowed(5, 0));
+	EXPECT(!ToastAllowed(1999, 1000));
+	EXPECT(ToastAllowed(2000, 1000));
+}
+
+void Events() {
+	auto q = EventQueue();
+	EXPECT(q.push("message", json(1))); // First: schedule a drain.
+	EXPECT(!q.push("update", json(2)));
+	auto taken = q.take();
+	EXPECT(taken.size() == 2 && taken[0].first == "message" && taken[1].second == 2);
+	EXPECT(q.events.empty());
+	for (auto i = 0; i != int(kMaxQueuedEvents) + 10; ++i) {
+		EXPECT(q.push("update", json(i)) == (i == 0));
+	}
+	EXPECT(q.events.size() == kMaxQueuedEvents && q.dropped == 10);
+	EXPECT(q.events.front().second == 10); // The oldest went first.
+	EXPECT(q.events.back().second == int(kMaxQueuedEvents) + 9);
+	EXPECT(q.take().size() == kMaxQueuedEvents && q.dropped == 0);
+	EXPECT(q.push("update", json(0)));
+	q.clear();
+	EXPECT(q.events.empty() && q.dropped == 0 && q.push("x", json()));
+	for (const auto name : { "message", "messageOut", "beforeSend", "update", "unload" }) {
+		EXPECT(KnownEvent(name));
+	}
+	for (const auto name : { "", "Message", "updates", "ping", "beforesend" }) {
+		EXPECT(!KnownEvent(name));
+	}
+}
+
+std::array<std::uint8_t, 16> V4(int a, int b, int c, int d) {
+	return { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF,
+		std::uint8_t(a), std::uint8_t(b), std::uint8_t(c), std::uint8_t(d) };
+}
+
+std::array<std::uint8_t, 16> V6(
+		std::initializer_list<int> head,
+		std::initializer_list<int> tail = {}) {
+	auto result = std::array<std::uint8_t, 16>();
+	auto i = std::size_t(0);
+	for (const auto byte : head) {
+		result[i++] = std::uint8_t(byte);
+	}
+	i = 16 - tail.size();
+	for (const auto byte : tail) {
+		result[i++] = std::uint8_t(byte);
+	}
+	return result;
+}
+
+void Addresses() {
+	// Every first octet: only the public unicast ranges pass.
+	for (auto a = 0; a != 256; ++a) {
+		const auto expected = (a != 0 && a != 10 && a != 127 && a < 224);
+		if (a != 100 && a != 169 && a != 172 && a != 192) {
+			EXPECT(IsPublicAddress(V4(a, 1, 2, 3)) == expected);
+		}
+	}
+	for (auto b = 0; b != 256; ++b) {
+		EXPECT(IsPublicAddress(V4(100, b, 0, 1)) == (b < 64 || b >= 128));
+		EXPECT(IsPublicAddress(V4(169, b, 0, 1)) == (b != 254));
+		EXPECT(IsPublicAddress(V4(172, b, 0, 1)) == (b < 16 || b >= 32));
+		EXPECT(IsPublicAddress(V4(192, b, 0, 1)) == (b != 168));
+	}
+	EXPECT(IsPublicAddress(V4(8, 8, 8, 8)));
+	EXPECT(IsPublicAddress(V4(149, 154, 167, 99)));
+	EXPECT(!IsPublicAddress(V4(255, 255, 255, 255)));
+	EXPECT(!IsPublicAddress(V6({}))); // 0.0.0.0 and :: both.
+	EXPECT(!IsPublicAddress(V6({}, { 1 }))); // ::1.
+	// Deprecated IPv4-compatible and NAT64 forms carry the IPv4 verdict.
+	EXPECT(!IsPublicAddress(V6({}, { 127, 0, 0, 1 })));
+	EXPECT(!IsPublicAddress(V6({}, { 10, 0, 0, 1 })));
+	EXPECT(IsPublicAddress(V6({}, { 8, 8, 8, 8 })));
+	EXPECT(!IsPublicAddress(V6({ 0, 0x64, 0xFF, 0x9B }, { 192, 168, 1, 1 })));
+	EXPECT(IsPublicAddress(V6({ 0, 0x64, 0xFF, 0x9B }, { 8, 8, 8, 8 })));
+	// Unique local, link-local, site-local and multicast IPv6.
+	for (auto first = 1; first != 256; ++first) {
+		EXPECT(IsPublicAddress(V6({ first, 0x80 }, { 1 }))
+			== (first != 0xFC && first != 0xFD && first != 0xFE && first != 0xFF));
+	}
+	EXPECT(!IsPublicAddress(V6({ 0xFE, 0x80 }, { 1 })));
+	EXPECT(!IsPublicAddress(V6({ 0xFE, 0xBF }, { 1 })));
+	EXPECT(!IsPublicAddress(V6({ 0xFE, 0xC0 }, { 1 })));
+	EXPECT(IsPublicAddress(V6({ 0xFE, 0x7F }, { 1 })));
+	EXPECT(IsPublicAddress(V6({ 0x20, 0x01, 0x0D, 0xB8 }, { 1 })));
+	EXPECT(IsPublicAddress(V6({ 0x2A, 0x00, 0x14, 0x50 }, { 0x0E })));
+	EXPECT(IsPublicAddress(V6({ 0, 0, 0, 1 }, { 1 }))); // Not the ::/96 block.
+	// Cross-origin redirects drop credentials, case-insensitively.
+	for (const auto name : { "Authorization", "cookie", "COOKIE", "Host",
+			"Proxy-Authorization", "proxy-connection" }) {
+		EXPECT(StripOnCrossOrigin(name));
+	}
+	for (const auto name : { "Accept", "Content-Type", "X-Cookie", "Hostname",
+			"Authorization2", "proxy" }) {
+		EXPECT(!StripOnCrossOrigin(name));
 	}
 }
 
@@ -411,6 +570,9 @@ int main(int argc, char **argv) {
 	Grants();
 	Timers();
 	Cpu();
+	Gestures();
+	Events();
+	Addresses();
 	Hotkeys();
 	Truncate();
 	Compatibility();
@@ -440,8 +602,23 @@ LOGIC_MUTANTS = (
     ('\t"allow_paid_floodskip",\n', ''),
     ('key) != std::end(kPaidParams)', 'key) == std::end(kPaidParams)'),
     # Service chat.
-    ('&& inner.get<std::string>() == "updateServiceNotification") {', '&& false) {'),
-    ('&& inner.get<std::int64_t>() == 777000)', '&& false)'),
+    ('if (typeName == "updateServiceNotification") {', 'if (false) {'),
+    ('return value.get<std::int64_t>() == kServiceUserId;', 'return false;'),
+    ('return value.get<std::uint64_t>() == std::uint64_t(kServiceUserId);', 'return false;'),
+    ('return value.get<double>() == double(kServiceUserId);', 'return false;'),
+    ('text = text.substr(first, text.find_last_not_of(space) - first + 1);', 'text = text.substr(first);'),
+    ("if (text.front() == '+') {", "if (false) {"),
+    ("if (text.front() == '+') {", "while (!text.empty() && text.front() == '+') {"),
+    ('if (integer.ec == std::errc() && integer.ptr == end) {', 'if (integer.ec == std::errc()) {'),
+    ('\t\t&& fraction.ptr == end\n', ''),
+    ('\t\t&& real == double(kServiceUserId);', '\t\t&& false;'),
+    ('\t\t\t|| (key == "peer")\n', ''),
+    ('\t\t\t|| (key == "from_id")\n', ''),
+    ('\t\t\t|| (key == "peer_id")\n', ''),
+    ('|| (user && key == "id");', '|| (key == "id");'),
+    ('|| (user && key == "id");', ';'),
+    ('\t\t\t|| (typeName == "userEmpty")\n', ''),
+    ('\t\t\t|| (typeName == "userFull");', ';'),
     ('\t\t\treturn MentionsServiceUser(element);', '\t\t\treturn false;'),
     ('\treturn !MentionsServiceUser(value);\n}', '\treturn true;\n}'),
     ('\t\t\tvalue.erase("phone");', '\t\t\t(void)0;'),
@@ -459,12 +636,46 @@ LOGIC_MUTANTS = (
     ('const auto low = repeat ? kMinInterval : kMinTimeout;', 'const auto low = kMinTimeout;'),
     ('return (ms >= low) // False for NaN as well.', 'return !(ms < low)'),
     # CPU budget.
-    ('return now - slice.first >= kCpuSpanMs;', 'return false;'),
-    ('return now - slice.first >= kCpuSpanMs;', 'return now - slice.first >= 1000;'),
-    ('|| (used > kCpuSpanBudgetMs);', '|| (used >= kCpuSpanBudgetMs);'),
-    ('used += took;', 'used = took;'),
-    ('std::max(elapsed, std::int64_t(0))', 'elapsed'),
-    ('return now - at >= kOverrunSpanMs;', 'return false;'),
+    ('while (now - slices.front().first >= kCpuSpanUs) {', 'while (false) {'),
+    ('while (now - slices.front().first >= kCpuSpanUs) {', 'while (now - slices.front().first >= 1\'000\'000) {'),
+    ('|| (used > kCpuSpanBudgetUs);', '|| (used >= kCpuSpanBudgetUs);'),
+    ('used += charge;', 'used = charge;'),
+    ('used -= slices.front().second;', '(void)0;'),
+    # Without the minimum charge a flood of trivial entries runs free.
+    ('const auto charge = std::max(elapsed, kMinChargeUs);', 'const auto charge = elapsed;'),
+    ('const auto charge = std::max(elapsed, kMinChargeUs);', 'const auto charge = std::max(elapsed, std::int64_t(0));'),
+    ('while (!overruns.empty() && now - overruns.front() >= kOverrunSpanUs) {', 'while (false) {'),
+    ('kMaxTimers = 64;', 'kMaxTimers = 1000;'),
+    ('kMinInterval = 50.;', 'kMinInterval = 10.;'),
+    # Gestures, toasts, the event queue.
+    ('return now < until;', 'return now <= until;'),
+    ('return !last || now - last >= kToastIntervalMs;', 'return now - last >= kToastIntervalMs;'),
+    ('return !last || now - last >= kToastIntervalMs;', 'return !last || now - last > kToastIntervalMs;'),
+    ('\t\t\tevents.pop_front();\n', ''),
+    ('\t\t\t++dropped;\n', ''),
+    ('\t\treturn first;', '\t\treturn true;'),
+    ('\t\tdropped = 0;\n\t\treturn std::exchange', '\t\treturn std::exchange'),
+    ('\t\t|| event == "messageOut"\n', ''),
+    ('\t\t|| event == "unload";', ';'),
+    # Fetch addresses.
+    ('return (a != 0)', 'return true'),
+    ('&& (a != 10)', '&& true'),
+    ('&& !(a == 100 && (b & 0xC0) == 64)', '&& !(a == 100 && (b & 0xC0) == 0)'),
+    ('&& (a != 127)', '&& true'),
+    ('&& !(a == 169 && b == 254)', '&& true'),
+    ('&& !(a == 172 && (b & 0xF0) == 16)', '&& !(a == 172 && b == 16)'),
+    ('&& !(a == 192 && b == 168)', '&& true'),
+    ('&& (a < 224);', '&& (a < 255);'),
+    ('return embedded(); // IPv4-mapped.', 'return true;'),
+    ('fail as 0.0.0.0/8.\n\t\treturn embedded();', '\n\t\treturn true;'),
+    ('return embedded(); // NAT64 64:ff9b::/96.', 'return true;'),
+    ('return ((ipv6[0] & 0xFE) != 0xFC)', 'return (ipv6[0] != 0xFC)'),
+    ('&& !(ipv6[0] == 0xFE && (ipv6[1] & 0xC0) == 0x80)', '&& true'),
+    ('&& !(ipv6[0] == 0xFE && (ipv6[1] & 0xC0) == 0xC0)', '&& true'),
+    ('&& (ipv6[0] != 0xFF); // Multicast.', ';'),
+    ('return (c >= \'A\' && c <= \'Z\') ? char(c - \'A\' + \'a\') : c;', 'return c;'),
+    ('|| (lower == "host")', ''),
+    ('|| lower.starts_with("proxy-");', ';'),
     # Hotkeys.
     ('if (key == kKeyEscape || key == kKeyReturn || key == kKeyEnter) {', 'if (key == kKeyEscape || key == kKeyReturn) {'),
     ('((modifiers & ~std::uint32_t(kShiftModifier))\n\t\t\t== std::uint32_t(kControlModifier));',
@@ -562,7 +773,7 @@ def check_hooks(files):
     # No plugin key while a text field has focus, and never a reserved one.
     assert 'if (typing) {\n\t\treturn false;\n\t}' in hotkey, 'hotkeys must not fire while typing'
     assert 'if (HotkeyReserved(keys)) {\n\t\treturn false;' in hotkey, 'hotkeys must skip reserved keys'
-    assert hotkey.index('if (typing)') < hotkey.index('for (const auto instance'), 'typing must be checked first'
+    assert hotkey.index('if (typing)') < hotkey.index('for (const auto &instance'), 'typing must be checked first'
     assert 'granted.has(Permission::Ui)' in hotkey, 'hotkeys without ui'
     # The Qt-free key constants of plugin_host_logic.h are Qt's.
     for line in ('kKeyEscape == Qt::Key_Escape', 'kKeyReturn == Qt::Key_Return', 'kKeyEnter == Qt::Key_Enter',
@@ -647,6 +858,81 @@ def check_api_call(files):
     assert handler.rstrip('}').rstrip().endswith('stored = true;\n\treturn Result::Value(nullptr);'), \
         'only a stored handler may keep its function'
     assert handler.count('stored = true;') == 1
+
+
+def check_sandbox(files):
+    host, hooks = files[HOST], files[HOOKS]
+    # The CPU budget counts microseconds of a monotonic clock.
+    timed = body(host, 'Js::Outcome Instance::run(Fn<Js::Outcome()> entry) {')
+    assert 'std::chrono::steady_clock::now()' in timed and 'std::chrono::microseconds' in timed, \
+        'run() must time entries in steady microseconds'
+    # Events: one bounded queue, drained in one pass.
+    emit = body(host, 'void Instance::emitLater(std::string event, json payload) {')
+    assert 'if (_stopping || !_queue.push(std::move(event), std::move(payload))) {\n\t\treturn;' in emit, \
+        'emitLater must queue and schedule one drain'
+    assert 'const auto events = _queue.take();' in emit and 'for (const auto &entry : events) {' in emit, \
+        'the drain must take the whole queue'
+    # Clipboard: only right after a command, menu item or hotkey.
+    later = body(host, 'void Instance::callLater(std::int64_t fn, json args, bool gesture) {')
+    assert 'if (gesture) {\n\t\t\t\t_gestureUntil = crl::now() + kGestureMs;' in later, 'callLater must open the gesture window'
+    for site in ('\t\t\t\t}, true);\n\t\t\t\treturn true;', '} } }, true);', 'instance->callLater(hotkey.fn, nullptr, true);'):
+        assert site in hooks, f'a user action does not pass the gesture: {site}'
+    assert hooks.count('callLater(') == 3, 'every callLater site must decide the gesture'
+    calls = body(host, 'Js::HostResult Instance::call(')
+    gate = calls.index('&& !GestureActive(crl::now(), _gestureUntil)) {')
+    assert calls.index('function.substr(0, 10) == "clipboard."') < gate < calls.index('"clipboard.read"'), \
+        'the clipboard must be gated by a gesture'
+    assert '{ "granted", _plugin.granted.ids() },' in calls and '{ "lang", Lang::LanguageIdOrDefault(' in calls, \
+        'plugin.info lacks granted or lang'
+    subscribe = body(host, 'Js::HostResult Instance::subscribe(')
+    assert 'if (delta > 0 && !KnownEvent(event)) {\n\t\treturn TypeError(' in subscribe, 'unknown events must throw'
+    # Dialogs: not over the passcode, one at a time, named, rate-limited toasts.
+    ui = body(host, 'Js::HostResult Instance::ui(')
+    locked = ui.index('Core::App().passcodeLocked()')
+    assert ui.index('"ui.add"') < locked < ui.index('function == "ui.toast"'), 'ui must refuse while locked'
+    assert 'if (!ToastAllowed(now, _lastToast)) {' in ui and '_lastToast = now;' in ui, 'toasts must be rate-limited'
+    assert '} else if (_dialog) {\n\t\treturn Result::Error(' in ui, 'one dialog per plugin'
+    assert ui.count('_dialog = box.data();') == 2 and 'strong->_dialog = nullptr;' in ui, 'dialogs must be tracked'
+    assert 'const auto title = custom.isEmpty() ? name : (name + u": "_q + custom);' in ui \
+        and '.title = v::text::data(title),' in ui and 'box->setTitle(rpl::single(title));' in ui, \
+        'dialog titles must name the plugin'
+    for signature in ('void Instance::unload() {', 'Instance::~Instance() {'):
+        assert 'if (const auto dialog = _dialog.get()) {\n\t\tdialog->closeBox();' in body(host, signature), \
+            f'{signature} must close the dialog'
+    # Account switch or logout: pending promises reject, late replies drop.
+    assert '.activeSessionChanges(\n\t\t) | rpl::on_next([=](Main::Session *) {\n\t\t\taccountChanged();' \
+        in body(host, 'bool Instance::start() {'), 'start() must follow the active account'
+    changed = body(host, 'void Instance::accountChanged() {')
+    assert '_queue.clear();' in changed and 'for (const auto promiseId : base::take(_requests)) {' in changed, \
+        'accountChanged must reject the pending requests'
+    send = body(host, 'Js::HostResult Instance::send(const json &options, std::uint64_t promiseId) {')
+    assert send.index('if (!alive || alive->_stopping || !alive->_requests.contains(promiseId)) {') \
+        < send.index('session->api().sendMessage('), 'a queued send must check the instance first'
+    assert send.index('if (IsServiceUserId(options.value("peer", json()))) {') < send.index('_requests.emplace'), \
+        'messages.send must refuse the service chat'
+    call = body(host, 'Js::HostResult Instance::apiCall(const json &args, std::uint64_t promiseId) {')
+    assert 'if (!strong || !strong->_requests.contains(promiseId)) {\n\t\t\treturn true;' in call \
+        and 'if (strong && strong->_requests.contains(promiseId)) {' in call, 'api.call replies must check the request'
+    # Fetch: public addresses only, credentials stay on their origin.
+    fetch = body(host, 'Js::HostResult Instance::fetch(const json &args, std::uint64_t promiseId) {')
+    assert '.toLower() == "host") {\n\t\t\t\tcontinue;' in fetch, 'a plugin Host header must be dropped'
+    step = body(host, 'void Instance::fetchStep(')
+    literal = step.index('if (literal.setAddress(parsed.host())) {\n\t\tif (!IsPublic(literal)) {\n\t\t\treturn refuse(this);')
+    assert literal < step.index('QHostInfo::lookupHost('), 'literal addresses must be checked'
+    looked = step[step.index('QHostInfo::lookupHost('):]
+    assert '|| !strong->_requests.contains(promiseId)) {' in looked, 'a lookup must check the request'
+    assert looked.index('for (const auto &address : addresses) {\n\t\t\tif (!IsPublic(address)) {\n\t\t\t\treturn refuse(strong);') \
+        < looked.index('strong->fetchSend('), 'every resolved address must be public'
+    assert step.count('fetchSend(') == 2 and '_network->' not in step, 'fetchStep must only send through fetchSend'
+    sent = body(host, 'void Instance::fetchSend(')
+    assert '|| !strong->_requests.contains(promiseId)) {' in sent, 'a reply must check the request'
+    assert 'if (!SameOrigin(reply->url(), next)) {' in sent \
+        and 'return StripOnCrossOrigin(header.first.toStdString());' in sent and 'std::move(kept),' in sent, \
+        'cross-origin redirects must drop credentials'
+    assert 'if (binary) {\n\t\t\tresult["base64"] = bytes.toBase64().toStdString();' in sent, 'binary bodies come as base64'
+    same = body(host, '[[nodiscard]] bool SameOrigin(const QUrl &a, const QUrl &b) {')
+    assert '(a.host().toLower() == b.host().toLower())' in same and '(port(a) == port(b))' in same \
+        and '(a.scheme().toLower() == b.scheme().toLower())' in same, 'SameOrigin must compare scheme, host and port'
 
 
 def check_commit(files):
@@ -790,7 +1076,7 @@ def check_sites(files):
 
 
 CANCEL = '\tif (!sent) {\n\t\t// A plugin cancelled it: the text stays in the field.\n\t\treturn;\n\t} else if (animate) {'
-CHECKS = (check_hooks, check_names, check_api_call, check_commit, check_manager_api, check_resource, check_sites)
+CHECKS = (check_hooks, check_names, check_api_call, check_sandbox, check_commit, check_manager_api, check_resource, check_sites)
 MUTANTS = (
     (check_hooks, HOOKS, 'return (manager && manager->active()) ? manager : nullptr;', 'return manager;'),
     (check_hooks, HOOKS, 'bool LocalCommand(not_null<History*> history, const QString &text) {\n\tconst auto manager = Active();',
@@ -889,6 +1175,40 @@ MUTANTS = (
     (check_sites, DOCS, '- business and bot grants: `account.updateConnectedBot`,', '- business and bot grants:'),
     (check_sites, APP, '\t// Plugins get \'unload\' while windows and sessions are still alive.\n\t_private->plugins = nullptr;\n', ''),
     (check_sites, INNER, '\t\tLuxury::Plugins::FillMessageMenu(_menu, item);\n', ''),
+    # Sandbox hardening.
+    (check_sandbox, HOST, 'std::chrono::steady_clock::now()', 'std::chrono::system_clock::now()'),
+    (check_sandbox, HOST, 'std::chrono::microseconds', 'std::chrono::milliseconds'),
+    (check_sandbox, HOST, 'if (_stopping || !_queue.push(std::move(event), std::move(payload))) {',
+     'if (_stopping) {\n\t\treturn;\n\t}\n\tif (false) {'),
+    (check_sandbox, HOST, 'const auto events = _queue.take();', 'const auto events = std::deque<std::pair<std::string, json>>{ _queue.events.front() };'),
+    (check_sandbox, HOST, '\t\t\tif (gesture) {\n\t\t\t\t_gestureUntil = crl::now() + kGestureMs;', '\t\t\tif (true) {\n\t\t\t\t_gestureUntil = crl::now() + kGestureMs;'),
+    (check_sandbox, HOOKS, 'instance->callLater(hotkey.fn, nullptr, true);', 'instance->callLater(hotkey.fn, nullptr);'),
+    (check_sandbox, HOOKS, '} } }, true);', '} } });'),
+    (check_sandbox, HOOKS, '\t\t\t\t}, true);\n\t\t\t\treturn true;', '\t\t\t\t});\n\t\t\t\treturn true;'),
+    (check_sandbox, HOST, '&& !GestureActive(crl::now(), _gestureUntil)) {', '&& false) {'),
+    (check_sandbox, HOST, '{ "granted", _plugin.granted.ids() },', ''),
+    (check_sandbox, HOST, 'if (delta > 0 && !KnownEvent(event)) {', 'if (false) {'),
+    (check_sandbox, HOST, 'Core::App().passcodeLocked()', 'false'),
+    (check_sandbox, HOST, 'if (!ToastAllowed(now, _lastToast)) {', 'if (false) {'),
+    (check_sandbox, HOST, '_lastToast = now;', ''),
+    (check_sandbox, HOST, '} else if (_dialog) {', '} else if (false) {'),
+    (check_sandbox, HOST, 'strong->_dialog = nullptr;', ''),
+    (check_sandbox, HOST, 'const auto title = custom.isEmpty() ? name : (name + u": "_q + custom);', 'const auto title = custom;'),
+    (check_sandbox, HOST, '\t_stopping = true;\n\t_queue.clear();\n\tif (const auto dialog = _dialog.get()) {\n\t\tdialog->closeBox();\n\t}\n',
+     '\t_stopping = true;\n\t_queue.clear();\n'),
+    (check_sandbox, HOST, '\t\t\taccountChanged();', '\t\t\t;'),
+    (check_sandbox, HOST, 'for (const auto promiseId : base::take(_requests)) {', 'for (const auto promiseId : _requests) {'),
+    (check_sandbox, HOST, 'if (!alive || alive->_stopping || !alive->_requests.contains(promiseId)) {', 'if (!alive) {'),
+    (check_sandbox, HOST, 'if (IsServiceUserId(options.value("peer", json()))) {', 'if (false) {'),
+    (check_sandbox, HOST, 'if (!strong || !strong->_requests.contains(promiseId)) {\n\t\t\treturn true;', 'if (!strong) {\n\t\t\treturn true;'),
+    (check_sandbox, HOST, 'if (strong && strong->_requests.contains(promiseId)) {', 'if (strong) {'),
+    (check_sandbox, HOST, '.toLower() == "host") {\n\t\t\t\tcontinue;', '.toLower() == "host") {\n\t\t\t\t;'),
+    (check_sandbox, HOST, '\t\tif (!IsPublic(literal)) {\n', '\t\tif (false) {\n'),
+    (check_sandbox, HOST, '\t\t\tif (!IsPublic(address)) {\n', '\t\t\tif (false) {\n'),
+    (check_sandbox, HOST, 'if (!SameOrigin(reply->url(), next)) {', 'if (false) {'),
+    (check_sandbox, HOST, 'std::move(kept),', 'headers,'),
+    (check_sandbox, HOST, '(port(a) == port(b))', 'true'),
+    (check_sandbox, HOST, 'result["base64"] = bytes.toBase64().toStdString();', 'result["body"] = bytes.toStdString();'),
 )
 
 
