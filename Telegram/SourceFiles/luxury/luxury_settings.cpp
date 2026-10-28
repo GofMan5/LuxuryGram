@@ -19,11 +19,15 @@
 #include "base/debug_log.h"
 #include "base/timer.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "crl/crl_on_main.h"
 #include "features/filters/filters_cache_controller.h"
 #include "features/translator/luxury_translator.h"
+#include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
+#include "mtproto/mtp_instance.h"
+#include "mtproto/details/mtproto_websocket_logic.h"
 #include "platform/platform_translate_provider.h"
 #include "rpl/combine.h"
 #include "window/window_controller.h"
@@ -33,6 +37,7 @@
 #include <QFile>
 #include <QSaveFile>
 #include <QThread>
+#include <QTime>
 
 #include <charconv>
 
@@ -61,6 +66,12 @@ NLOHMANN_JSON_SERIALIZE_ENUM(TranslationProvider, {
 	{TranslationProvider::Google, "google"},
 	{TranslationProvider::Yandex, "yandex"},
 	{TranslationProvider::Native, "native"},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM(WebSocketTransport, {
+	{WebSocketTransport::Off, "off"},
+	{WebSocketTransport::Auto, "auto"},
+	{WebSocketTransport::Always, "always"},
 })
 
 NLOHMANN_JSON_SERIALIZE_ENUM(SendWithoutSoundOption, {
@@ -621,6 +632,9 @@ void LuxurySettings::load() {
 	}
 
 	settings.validate();
+	// Accounts start MTP after this, so handing the mode over is enough.
+	MTP::SetWebSocketMode(
+		MTP::details::WsMode(int(settings.webSocketTransport())));
 }
 
 void LuxurySettings::save() {
@@ -669,6 +683,7 @@ bool LuxurySettings::reset() {
 		|| (settings.disableStories() != defaults.disableStories())
 		|| (settings.filterZalgo() != defaults.filterZalgo());
 	const auto wasStreamerMode = settings.streamerMode();
+	const auto wasWebSocketTransport = settings.webSocketTransport();
 
 	settings = LuxurySettings();
 
@@ -687,6 +702,9 @@ bool LuxurySettings::reset() {
 	FiltersCacheController::dropResults();
 	repaintApp();
 	Core::App().tray().updateMenuText();
+	if (wasWebSocketTransport != settings.webSocketTransport()) {
+		settings.applyWebSocketTransport();
+	}
 
 	save();
 	return needsRestart;
@@ -827,6 +845,7 @@ void LuxurySettings::validate() {
 	validateEnum(_showForwardVariantsInContextMenu, defaults._showForwardVariantsInContextMenu);
 
 	validateEnum(_translationProvider, defaults._translationProvider, 3);
+	validateEnum(_webSocketTransport, defaults._webSocketTransport, 2);
 	if ((_translationProvider.current() == TranslationProvider::Native)
 		&& !Platform::IsTranslateProviderAvailable()) {
 		_translationProvider = defaults._translationProvider.current();
@@ -1453,6 +1472,33 @@ void LuxurySettings::setTranslationProvider(TranslationProvider val) {
 	save();
 }
 
+void LuxurySettings::setWebSocketTransport(WebSocketTransport val) {
+	if (_webSocketTransport.current() == val) return;
+	_webSocketTransport = val;
+	save();
+	applyWebSocketTransport();
+}
+
+void LuxurySettings::applyWebSocketTransport() const {
+	const auto mode = MTP::details::WsMode(int(webSocketTransport()));
+	MTP::SetWebSocketMode(mode);
+	MTP::details::WsRouteTable::Instance().reset();
+	const auto name = (mode == MTP::details::WsMode::Off)
+		? "off"
+		: (mode == MTP::details::WsMode::Always)
+		? "always"
+		: "auto";
+	const auto line = QTime::currentTime().toString(u"HH:mm:ss"_q)
+		+ u" mode changed: "_q
+		+ QString::fromLatin1(name);
+	MTP::details::WsLog::Instance().add(line.toStdString());
+	LOG(("WS: %1").arg(line));
+	for (const auto &entry : Core::App().domain().accounts()) {
+		entry.account->restartMtp();
+	}
+	Core::App().settings().proxy().connectionTypeChangesNotify();
+}
+
 void LuxurySettings::setAdaptiveCoverColor(bool val) {
 	if (_adaptiveCoverColor.current() == val) return;
 	_adaptiveCoverColor = val;
@@ -1603,6 +1649,7 @@ void to_json(nlohmann::json &j, const LuxurySettings &s) {
 		{"voiceConfirmation", s._voiceConfirmation.current()},
 		{"roundConfirmation", s._roundConfirmation.current()},
 		{"translationProvider", s._translationProvider.current()},
+		{"webSocketTransport", s._webSocketTransport.current()},
 		{"adaptiveCoverColor", s._adaptiveCoverColor.current()},
 		{"improveLinkPreviews", s._improveLinkPreviews.current()},
 		{"crashReporting", s._crashReporting.current()},
@@ -1773,6 +1820,7 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 	s._voiceConfirmation = j.value("voiceConfirmation", defaults._voiceConfirmation.current());
 	s._roundConfirmation = j.value("roundConfirmation", defaults._roundConfirmation.current());
 	s._translationProvider = j.value("translationProvider", defaults._translationProvider.current());
+	s._webSocketTransport = j.value("webSocketTransport", defaults._webSocketTransport.current());
 	s._adaptiveCoverColor = j.value("adaptiveCoverColor", defaults._adaptiveCoverColor.current());
 	s._improveLinkPreviews = j.value("improveLinkPreviews", defaults._improveLinkPreviews.current());
 	s._crashReporting = j.value("crashReporting", defaults._crashReporting.current());
@@ -1836,6 +1884,19 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "luxury_ContextMenuElementsHeader", "Элементы контекстного меню" },
 	{ "luxury_CrashReporting", "Отчёты о падениях" },
 	{ "luxury_CrashReportingDescription", "Если опция включена, после падения приложения будет предложено отправить отчёт. Решение за вами." },
+	{ "luxury_NetworkHeader", "Сеть" },
+	{ "luxury_WebSocketTransport", "Транспорт WebSocket" },
+	{ "luxury_WebSocketTransportOff", "Выключен" },
+	{ "luxury_WebSocketTransportAuto", "Автоматически" },
+	{ "luxury_WebSocketTransportAlways", "Всегда" },
+	{ "luxury_WebSocketTransportDescription", "Если прямое подключение к Telegram заблокировано, LuxuryGram сам переключится на зашифрованное WebSocket-соединение через веб-серверы Telegram и будет периодически проверять, заработало ли прямое подключение. Не используется, пока включён прокси." },
+	{ "luxury_WebSocketTransportProxyActive", "Транспорт WebSocket не используется, пока включён прокси." },
+	{ "luxury_WebSocketStatusOff", "Состояние: выключен, только прямое подключение." },
+	{ "luxury_WebSocketStatusProxy", "Состояние: неактивен, включён прокси." },
+	{ "luxury_WebSocketStatusConnecting", "Состояние: подключение…" },
+	{ "luxury_WebSocketStatusDirect", "Состояние: прямое подключение ({transport})." },
+	{ "luxury_WebSocketStatusActive", "Состояние: подключено через WebSocket." },
+	{ "luxury_WebSocketLog", "Журнал WebSocket" },
 	{ "luxury_DeletedMarkText", "Пометка удалённых" },
 	{ "luxury_DisableAds", "Отключить рекламу" },
 	{ "luxury_DisableChatSelectionLimit", "Без лимита выделения" },
