@@ -125,6 +125,8 @@ int main() {
 	Bounds(mid);
 	Expect(ComputeBudget(big).workers == 23, "8P+16E has 23 workers", 32);
 	Expect(ComputeBudget({ .logical = 8 }).clipThreads == 8, "clip keeps 8 at 8 logical", 8);
+	Expect(ComputeBudget({ .logical = 8 }).streamingVideoDecode == 7, "streaming uses every worker at 8 logical", 8);
+	Expect(ComputeBudget({ .logical = 4 }).streamingVideoDecode == 3, "streaming uses every worker at 4 logical", 4);
 	Expect(ComputeBudget({ .logical = 2 }).clipThreads == 8, "clip keeps 8 at 2 logical", 2);
 
 	// Summarize: 8P (2 logical each, class 1) + 16E (1 logical, class 0),
@@ -249,6 +251,7 @@ MUTANTS = (
 HEADER_MUTANTS = (
     ('std::clamp(workers / 2, 8, 16)', 'std::clamp(workers / 2, 8, 160)'),
     ('std::clamp(workers / 2, 8, 16)', 'std::clamp(workers / 2, 2, 16)'),
+    ('std::clamp(workers, 2, 16)', 'std::clamp(workers / 2, 2, 16)'),
     ('std::max(1, effective - 1)', 'std::max(1, effective)'),
     ('std::clamp((workers + 1) / 2, 1, 4)', 'std::clamp((workers + 1) / 3, 1, 4)'),
     ('std::clamp(workers / 4, 1, 8)', 'std::clamp(workers / 4, 0, 8)'),

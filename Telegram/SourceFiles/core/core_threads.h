@@ -81,7 +81,8 @@ struct Budget {
 		// Never below the fixed 8 readers it had: they sleep between frames.
 		.clipThreads = std::clamp(workers / 2, 8, 16),
 		.lottieRenderers = std::clamp(workers / 4, 1, 8),
-		.streamingVideoDecode = std::clamp(workers / 2, 2, 16),
+		// Interactive playback gets every worker, as FFmpeg auto did (cap 16).
+		.streamingVideoDecode = std::clamp(workers, 2, 16),
 		.transcodeDecode = std::clamp(workers / 2, 1, 8),
 		.encoderThreads = std::clamp(workers / 2, 1, 8),
 		// Socket hosts, not CPU work: this many for each direction.
