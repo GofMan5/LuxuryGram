@@ -29,6 +29,8 @@
 #include <QSvgRenderer>
 #include <QtCore/QCoreApplication>
 
+#include <thread>
+
 namespace Info::Profile {
 
 namespace {
@@ -290,7 +292,7 @@ void LuxuryMusicButton::makeCover() {
 	auto cover = GetCurrentCover(_mediaView, QSize(size, size));
 	const auto existingDraw = cover.pixToDraw.toImage();
 	const auto existingBackground = cover.pixToBg.toImage();
-	crl::async([
+	auto job = [
 		weak,
 		generation,
 		performerText = _performerText,
@@ -360,7 +362,15 @@ void LuxuryMusicButton::makeCover() {
 			strong->_performer->repaint();
 			strong->_onReady.fire({});
 		});
-	});
+	};
+	// Only the iTunes lookup blocks (a nested event loop for up to two
+	// timeouts), and that must not hold a pool worker the rest of the app
+	// waits on; a cover that is already here is plain CPU work.
+	if (cover.noCover) {
+		std::thread(std::move(job)).detach();
+	} else {
+		crl::async(std::move(job));
+	}
 }
 
 void LuxuryMusicButton::refreshTextColors() {
