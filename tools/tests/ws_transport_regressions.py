@@ -722,6 +722,8 @@ SOURCE_RULES = (
 	('F3 failure before payload only', SOCKET, 'void WebSocketSocket::noteFailure(', 'WsCountsAsRouteFailure(_decoder.received())', True),
 	# F4: 30s ping, pongs answered.
 	('F4 ping timer', SOCKET, None, '_pingTimer.callEach(kWsPingInterval / 2);', True),
+	# Aborted attempt: its synchronous signals keep the old generation.
+	('retry aborts before new generation', SOCKET, None, '_socket.abort();\n\t\t\t++_generation;', True),
 	('F4 ping handler', SOCKET, None, '_pingTimer(thread, [=] { sendPingIfIdle(); })', True),
 	('F4 pong reply', SOCKET, 'void WebSocketSocket::readFrames(', 'sendFrame(WsOpcode::Pong, payload);', True),
 	# F5: endpoints of the reference.
@@ -796,6 +798,7 @@ SOURCE_MUTANTS = (
 	('TLS errors ignored', SOCKET, '\t\t\t// Strict TLS: never ignored, the handshake fails.\n', '\t\t\t_socket.ignoreSslErrors();\n'),
 	('TLS no peer name', SOCKET, '\t_socket.setPeerVerifyName(host);\n', ''),
 	('5 buffers before connect', SOCKET, '\t_socket.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));\n', '\t_socket.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));\n\t_socket.setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, kFilesSendBufferSize);\n'),
+	('retry generation before abort', SOCKET, '\t\t\t_socket.abort();\n\t\t\t++_generation;\n', '\t\t\t++_generation;\n\t\t\t_socket.abort();\n'),
 	('5 buffers on encrypted', SOCKET, '&QAbstractSocket::connected,\n\t\twrap([=] { applyBufferOptions(); })', '&QSslSocket::encrypted,\n\t\twrap([=] { applyBufferOptions(); })'),
 	('4 socket records failure', SOCKET, '\t\t_failure = refused ? WsFailure::Refused : WsFailure::Network;\n', '\t\tWsRouteTable::Instance().failed(_endpoint.key, refused, crl::now());\n'),
 	('4 every racer fails', SESSION_PRIVATE, 'const auto failure = _wsRound.ended(\n\t\tstatic_cast<TcpConnection*>(i->data.get())->webSocketFailure());', 'const auto failure = static_cast<TcpConnection*>(i->data.get())->webSocketFailure();'),

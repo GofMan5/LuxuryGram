@@ -172,8 +172,10 @@ void WebSocketSocket::readHandshake() {
 			_endpoint.host.erase(suffix, 2);
 			_handshakeTimer.cancel();
 			_head.clear();
-			++_generation;
+			// abort() emits synchronously: those signals must keep the old
+			// generation so the queued handlers drop them.
 			_socket.abort();
+			++_generation;
 			start();
 		} else {
 			handleError(kWsRefusedCode, u"refused (%1)"_q.arg(status));
