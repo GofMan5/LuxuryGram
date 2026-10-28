@@ -319,9 +319,11 @@ void CustomEmojiLoader::startCacheLookup(
 	const auto size = FrameSizeFromTag(_tag, _sizeOverride);
 	const auto weak = base::make_weak(&lookup->process->guard);
 	document->owner().cacheBigFile().get(key, [=](QByteArray value) {
-		auto cache = Ui::CustomEmoji::Cache::FromSerialized(value, size);
-		crl::on_main(weak, [=, result = std::move(cache)]() mutable {
-			lookupDone(lookup, std::move(result));
+		crl::async([=, bytes = std::move(value)] {
+			auto cache = Ui::CustomEmoji::Cache::FromSerialized(bytes, size);
+			crl::on_main(weak, [=, result = std::move(cache)]() mutable {
+				lookupDone(lookup, std::move(result));
+			});
 		});
 	});
 }
@@ -390,8 +392,8 @@ void CustomEmojiLoader::check() {
 		}
 	};
 	const auto type = document->sticker()->type;
-	auto generator = [=, bytes = Lottie::ReadContent(data, filepath)]()
-	-> std::unique_ptr<Ui::FrameGenerator> {
+	auto generator = [=]() -> std::unique_ptr<Ui::FrameGenerator> {
+		const auto bytes = Lottie::ReadContent(data, filepath);
 		switch (type) {
 		case StickerType::Tgs:
 			return std::make_unique<Lottie::FrameGenerator>(bytes);
