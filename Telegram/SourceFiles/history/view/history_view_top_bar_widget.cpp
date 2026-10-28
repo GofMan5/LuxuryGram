@@ -80,6 +80,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/admin_log/history_admin_log_section.h"
 #include "styles/style_luxury_styles.h"
 #include "styles/style_luxury_icons.h"
+#include "luxury/plugins/plugin_hooks_ui.h"
 
 
 namespace HistoryView {
@@ -141,6 +142,7 @@ TopBarWidget::TopBarWidget(
 , _menuToggle(this, st::topBarMenuToggle)
 , _recentActions(this, st::topBarRecentActions)
 , _admins(this, st::topBarAdmins)
+, _plugins(this, st::topBarPlugins)
 , _titlePeerText(st::windowMinWidth / 3)
 , _onlineUpdater([=] { updateOnlineDisplay(); }) {
 	setAttribute(Qt::WA_OpaquePaintEvent);
@@ -193,6 +195,26 @@ TopBarWidget::TopBarWidget(
 
 	LuxurySettings::getInstance().quickAdminShortcutsChanges(
 	) | rpl::on_next([=](bool) {
+		updateControlsVisibility();
+	}, lifetime());
+
+	_plugins->setClickedCallback([=] {
+		const auto peer = _activeChat.key.peer();
+		if (!peer || !createMenu(_plugins, false)) {
+			return;
+		}
+		Luxury::Plugins::FillHeaderMenu(_menu.get(), peer);
+		if (_menu->empty()) {
+			closeMenu();
+			return;
+		}
+		_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
+		_menu->popup(mapToGlobal(QPoint(
+			_plugins->x() + _plugins->width() + st::topBarMenuGroupCallSkip,
+			st::topBarMenuPosition.y())));
+	});
+	Luxury::Plugins::HeaderButtonsChanges(
+	) | rpl::on_next([=] {
 		updateControlsVisibility();
 	}, lifetime());
 
@@ -299,6 +321,7 @@ TopBarWidget::TopBarWidget(
 	_search->setAccessibleName(tr::lng_shortcuts_search(tr::now));
 	_infoToggle->setAccessibleName(tr::lng_settings_section_info(tr::now));
 	_menuToggle->setAccessibleName(tr::lng_chat_menu(tr::now));
+	_plugins->setAccessibleName(tr::lng_luxury_plugins_ui_title(tr::now));
 	_back->setAccessibleName(tr::lng_go_back(tr::now));
 	_cancelChoose->setAccessibleName(tr::lng_cancel(tr::now));
 }
@@ -951,6 +974,9 @@ void TopBarWidget::setActiveChat(
 		_titleNameVersion = 0;
 		_emojiInteractionSeen = nullptr;
 		_activeChatLifetime.destroy();
+		if (peerChanged) {
+			Luxury::Plugins::ChatOpened(_activeChat.key.peer());
+		}
 		if (const auto peer = _activeChat.key.peer()) {
 			session().changes().peerFlagsValue(
 				peer,
@@ -1358,6 +1384,10 @@ void TopBarWidget::updateControlsGeometry() {
 	if (!_admins->isHidden()) {
 		_rightTaken += _admins->width();
 	}
+	_plugins->moveToRight(_rightTaken, otherButtonsTop);
+	if (!_plugins->isHidden()) {
+		_rightTaken += _plugins->width();
+	}
 
 	_search->moveToRight(_rightTaken, otherButtonsTop);
 	if (!_search->isHidden()) {
@@ -1517,6 +1547,9 @@ void TopBarWidget::updateControlsVisibility() {
 		return false;
 	}();
 	_admins->setVisible(showAdmins);
+	_plugins->setVisible(historyMode
+		&& !_chooseForReportReason
+		&& Luxury::Plugins::HasHeaderButtons(_activeChat.key.peer()));
 
 	const auto callsEnabled = [&] {
 		if (const auto peer = _activeChat.key.peer()) {

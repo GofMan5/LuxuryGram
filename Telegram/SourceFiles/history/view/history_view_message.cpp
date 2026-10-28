@@ -78,6 +78,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/features/filters/filters_controller.h"
 #include "luxury/features/message_shot/message_shot.h"
 #include "styles/style_luxury_icons.h"
+#include "luxury/plugins/plugin_hooks_ui.h"
 
 
 namespace HistoryView {
@@ -1227,6 +1228,11 @@ void Message::refreshRightBadge() {
 			? delegate()->elementAuthorRank(this)
 			: TextUtilities::RemoveEmoji(TextUtilities::SingleLine(text)))
 	};
+	// LuxuryGram: a plugin label (ui.decorateMessage), read from its cache;
+	// this never enters a plugin's engine.
+	if (tagText.empty()) {
+		tagText.text = Luxury::Plugins::MessageDecoration(item);
+	}
 	const auto boosts = item->boostsApplied();
 	const auto needBadge = !tagText.empty() || boosts;
 	if (!needBadge) {

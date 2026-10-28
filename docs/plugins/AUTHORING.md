@@ -192,7 +192,7 @@ install fails with "The plugin changed, review it again".
 | `messages.read` | `message` and `messageOut` events; full messages in menu handlers | |
 | `messages.send` | `lux.messages.send` | yes |
 | `messages.modify` | the `beforeSend` event: rewrite or cancel outgoing text | yes |
-| `ui` | `lux.ui`: toasts, dialogs, commands, message menu items, hotkeys | |
+| `ui` | `lux.ui`: toasts, dialogs and forms, commands, message, chat, header and compose menu items, hotkeys, message labels, opening chats and links; the `chatOpened` event | |
 | `network` | `lux.http.fetch` to the `network` hosts | |
 | `storage` | `lux.storage` | |
 | `clipboard` | `lux.clipboard`, only within 1 s after the user runs a command, menu item or hotkey of the plugin; otherwise `NotAllowedError` | |
@@ -209,6 +209,7 @@ what you use. Calling an API without its permission throws
 | `messageOut` | `messages.read` |
 | `beforeSend` | `messages.modify` |
 | `update` | `telegram.updates` |
+| `chatOpened` | `ui` |
 | `unload` | none |
 
 What is never available, whatever is granted:
@@ -235,6 +236,10 @@ What is never available, whatever is granted:
 | `ui.toast` | one a second; the next one throws `RangeError` |
 | Requests in flight (`fetch`, `api.call`, `messages.send`) | 16; the next one rejects with `RangeError` |
 | Commands, message menu items, hotkeys | 100 each; the same name, title or keys replaces the handler |
+| Chat menu items, header buttons, compose menu items | 100 each; the same title replaces the handler |
+| `ui.showForm` | 20 fields, 50 options a select, 256 bytes a text; one dialog or form open at a time |
+| `ui.openUrl` | http(s) only, one a second; the client asks before it opens the link |
+| `ui.decorateMessage` | 32 characters a label, 1000 messages |
 | `settings.onChange` handlers | 64 |
 | Log line, `lastError` | 4 KiB |
 | Storage | 5 MiB of JSON per plugin, written to disk 1 s after the last change |
@@ -251,7 +256,7 @@ Host calls throw, or reject their Promise, with an `Error` whose `name` is:
 | Name | When |
 | --- | --- |
 | `PermissionError` | the permission is not granted, or the call is never allowed |
-| `TypeError` | a wrong argument (bad key, empty text, reserved hotkey, unknown event in `lux.on`) |
+| `TypeError` | a wrong argument (bad key, empty text, reserved hotkey, unknown event in `lux.on`, unknown form field type) |
 | `RangeError` | a limit: handlers, timers, requests in flight, response size, toasts |
 | `NotAllowedError` | `clipboard` outside a user gesture |
 | `QuotaExceededError` | storage over 5 MiB |
@@ -270,7 +275,8 @@ its last error in the manager; the plugin keeps running. An error while
 
 The plugin loads when it is enabled and when LuxuryGram starts. Before it is
 disabled, updated or removed it gets `unload`; every handler, timer and
-pending request is released after that. Store anything you need across
+pending request is released after that, its menu items, header buttons and
+message labels disappear and an open form closes as cancelled. Store anything you need across
 restarts with `lux.storage` or read it from `lux.settings`.
 
 ## See also

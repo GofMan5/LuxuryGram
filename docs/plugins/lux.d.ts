@@ -101,6 +101,8 @@ interface LuxEvents {
 	 * id/pts. Needs `telegram.updates`.
 	 */
 	update: (event: { update: { _: string; [key: string]: LuxJson } }) => void | Promise<void>;
+	/** The chat open in the active window changed. Needs `ui`. */
+	chatOpened: (event: { peer: LuxPeer }) => void | Promise<void>;
 	/** Before the plugin is disabled, updated or removed. */
 	unload: () => void;
 }
@@ -149,6 +151,34 @@ interface LuxHotkeyOptions {
 	 */
 	keys: string;
 	handler: () => void | Promise<void>;
+}
+
+interface LuxUiItemOptions {
+	/** Not empty. Shown under "Plugins"; the same title again replaces it. */
+	title: string;
+	handler: (event: { peer: LuxPeer }) => void | Promise<void>;
+}
+
+/** One row of ui.showForm; `key` is [A-Za-z0-9_]{1,32}, unique. */
+type LuxFormField =
+	| { type: 'text'; key: string; label?: string; placeholder?: string; default?: string }
+	| { type: 'toggle'; key: string; label?: string; default?: boolean }
+	| { type: 'select'; key: string; label?: string; options: string[]; default?: string };
+
+interface LuxFormSchema {
+	/** Shown after the plugin name. */
+	title?: string;
+	/** 1 to 20 fields. An unknown type or member throws TypeError. */
+	fields: LuxFormField[];
+}
+
+interface LuxDecorateOptions {
+	/** Dialog id: a LuxPeer `id` string or a number. */
+	peer: string | number;
+	/** Message id in that chat. */
+	id: string | number;
+	/** At most 32 characters, one line; empty or omitted removes the label. */
+	text?: string;
 }
 
 interface LuxFetchOptions {
@@ -206,6 +236,30 @@ declare namespace lux {
 		function addMessageMenuItem(options: LuxMenuItemOptions): void;
 		/** Registering the same keys again replaces the handler. */
 		function addHotkey(options: LuxHotkeyOptions): void;
+		/** An item of the chat context menu and the chat header menu. */
+		function addChatMenuItem(options: LuxUiItemOptions): void;
+		/** An item of the plugins button in the chat header. */
+		function addHeaderButton(options: LuxUiItemOptions): void;
+		/** An item of the message field's context menu. */
+		function addComposeMenuItem(options: LuxUiItemOptions): void;
+		/**
+		 * Resolves to the values by key on OK, null when closed. One form
+		 * at a time; closed when the plugin unloads.
+		 */
+		function showForm(schema: LuxFormSchema): Promise<{ [key: string]: string | boolean } | null>;
+		/** The chat open in the active window, or null. */
+		function currentChat(): LuxPeer | null;
+		/** Opens the chat in the active window. */
+		function openChat(peer: string | number): void;
+		/**
+		 * http(s) only, at most one a second. The client asks the user
+		 * before it opens the link.
+		 */
+		function openUrl(url: string): void;
+		/** A label in the badge after the sender name, kept until unload. */
+		function decorateMessage(options: LuxDecorateOptions): void;
+		/** Lays the message out again. */
+		function refreshMessage(options: { peer: string | number; id: string | number }): void;
 	}
 
 	namespace http {

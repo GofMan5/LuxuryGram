@@ -115,6 +115,15 @@ const lux = {
 		addCommand: (options) => call('ui.addCommand', options),
 		addMessageMenuItem: (options) => call('ui.addMessageMenuItem', options),
 		addHotkey: (options) => call('ui.addHotkey', options),
+		addChatMenuItem: (options) => call('ui.addChatMenuItem', options),
+		addHeaderButton: (options) => call('ui.addHeaderButton', options),
+		addComposeMenuItem: (options) => call('ui.addComposeMenuItem', options),
+		showForm: (schema) => call('ui.showForm', schema),
+		currentChat: () => call('ui.currentChat'),
+		openChat: (peer) => call('ui.openChat', peer),
+		openUrl: (url) => call('ui.openUrl', url),
+		decorateMessage: (options) => call('ui.decorateMessage', options),
+		refreshMessage: (options) => call('ui.refreshMessage', options),
 	},
 	http: {
 		fetch(url, options) {

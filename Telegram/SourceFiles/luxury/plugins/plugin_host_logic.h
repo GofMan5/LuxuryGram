@@ -232,6 +232,7 @@ struct EventQueue {
 		|| event == "messageOut"
 		|| event == "beforeSend"
 		|| event == "update"
+		|| event == "chatOpened"
 		|| event == "unload";
 }
 

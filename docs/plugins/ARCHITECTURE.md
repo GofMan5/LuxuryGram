@@ -396,6 +396,7 @@ lux.on(event, fn)     // returns unsubscribe function
 //   'beforeSend'   ({peer, text}) -> string|false|undefined   messages.modify
 //   'update'       ({update})               telegram.updates, raw TL JSON,
 //                                           at-least-once: may repeat
+//   'chatOpened'   ({peer})                 ui, the active window's chat
 //   'unload'       ()                       before disable/update/remove
 //   any other name throws TypeError
 lux.messages.send({peer, text, replyTo?, silent?})   -> Promise   messages.send
@@ -405,6 +406,20 @@ lux.ui.prompt({title, placeholder?, value?}) -> Promise<string|null>  ui
 lux.ui.addCommand({name, description, handler({peer, args})})       ui
 lux.ui.addMessageMenuItem({title, handler({message})})              ui
 lux.ui.addHotkey({keys: 'Ctrl+Shift+K', handler()})                 ui
+lux.ui.addChatMenuItem({title, handler({peer})})                    ui
+lux.ui.addHeaderButton({title, handler({peer})})                    ui
+lux.ui.addComposeMenuItem({title, handler({peer})})                 ui
+//   100 each, the same title replaces the handler; removed on unload
+lux.ui.showForm({title?, fields}) -> Promise<{key: value}|null>    ui
+//   fields: 1..20 of {type: 'text'|'toggle'|'select', key, label?,
+//   default?, placeholder? (text), options (select)}; an unknown type or
+//   member throws TypeError; a dialog, see below
+lux.ui.currentChat() -> peer|null / lux.ui.openChat(peer)           ui
+lux.ui.openUrl(url)              http(s), one a second, the client's link
+//                               confirmation box (HiddenUrlClickHandler)
+lux.ui.decorateMessage({peer, id, text?}) / refreshMessage({peer, id})  ui
+//   a label of at most 32 characters in the message badge; at most 1000
+//   messages; dropped on unload and on an account switch
 //   Dialogs: one at a time per plugin, titled with the plugin name, closed
 //   when the plugin unloads; refused while the app is passcode-locked
 //   Ctrl+C/V/X/A/Z/Y, Ctrl+Enter, Enter and Esc are reserved: TypeError
@@ -446,11 +461,22 @@ Calling an API without its permission throws
 | local command | `HistoryWidget::send` and `ChatWidget::send` (topics, replies) before `sendTextWithTags` | `/name args` consumed only when an enabled plugin registered `name`; a plugin command wins over a bot command of the same name |
 | message menu | luxury context menu builder | one submenu "Plugins" with items |
 | hotkey | app event filter | plugin hotkeys after built-in ones; never while a text field has focus, never a reserved shortcut |
+| chat menu | `Window::FillDialogsEntryMenu` (chat list and the header's three-dot menu) | one submenu "Plugins" with `addChatMenuItem` items |
+| header button | `HistoryView::TopBarWidget` | one button, shown while a plugin has `addHeaderButton` items, opens their menu |
+| compose menu | message field context menu (`FieldAutocomplete` installs it once per field) | one submenu "Plugins" with `addComposeMenuItem` items |
+| chat opened | `TopBarWidget::setActiveChat`, peer changed | `chatOpened` event on the next event loop turn |
+| command list | `FieldAutocomplete`, `/` in a field | plugin commands listed with bot commands; choosing one puts it in the field, sending runs it |
+| message label | `HistoryView::Message::refreshRightBadge` | reads the plugin's label cache; `decorateMessage` fills it and asks for a relayout |
 
 `beforeSend` sees text sent through `ApiWrap::sendMessage` only: files,
 albums, stickers, GIFs, inline results and forwards bypass it. Local
 commands are read in the main chat composer only, not in topics or the
 scheduled section.
+
+Menu, button and command clicks reach the plugin through `callLater` on
+the next event loop turn; layout and paint only read caches, so no hook
+enters a plugin's engine from paint or layout. The service chat (777000)
+and chats of another account get no plugin items, labels or events.
 
 Hooks cost nothing when no plugin is enabled (single bool check).
 

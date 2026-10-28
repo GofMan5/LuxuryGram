@@ -143,6 +143,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // LuxuryGram includes
 #include "luxury/utils/telegram_helpers.h"
+#include "luxury/plugins/plugin_hooks_ui.h"
 #include "styles/style_luxury_icons.h"
 #include "luxury/ui/context_menu/context_menu.h"
 #include "luxury/features/forward/luxury_forward.h"
@@ -1936,6 +1937,7 @@ void Filler::fillContextMenuActions() {
 	addBanFromChannel();
 	addClearHistory();
 	LuxuryUi::AddDeleteOwnMessagesAction(_peer, _topic, _controller, _addAction);
+	Luxury::Plugins::FillChatMenu(_peer, _addAction);
 	addDeleteChat();
 	addLeaveChat();
 	addDeleteTopic();
@@ -1948,6 +1950,7 @@ void Filler::fillHistoryActions() {
 	addInfo();
 	LuxuryUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
 	LuxuryUi::AddOpenChannelAction(_peer, _controller, _addAction);
+	Luxury::Plugins::FillChatMenu(_peer, _addAction);
 	LuxuryUi::AddWatchChatAction(_peer, _controller, _addAction);
 	addViewAsTopics();
 	addManageChat();

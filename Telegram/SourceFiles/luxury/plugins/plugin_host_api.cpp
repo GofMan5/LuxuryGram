@@ -3,6 +3,7 @@
 #include "luxury/plugins/plugin_host_api.h"
 
 #include "luxury/plugins/plugin_host_logic.h"
+#include "luxury/plugins/plugin_ui_logic.h"
 #include "luxury/plugins/core/tl_codec.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "api/api_common.h"
@@ -104,6 +105,8 @@ constexpr auto kMaxHandlers = 100;
 		return Permission::MessagesModify;
 	} else if (event == "update") {
 		return Permission::TelegramUpdates;
+	} else if (event == "chatOpened") {
+		return Permission::Ui;
 	}
 	return std::nullopt;
 }
@@ -301,6 +304,7 @@ void Instance::unload() {
 	for (const auto fn : base::take(_settingWatchers)) {
 		_engine->releaseFunction(fn);
 	}
+	clearUiExt();
 	if (_storageTimer && _storageTimer->isActive()) {
 		writeStorage();
 	}
@@ -401,6 +405,7 @@ void Instance::accountChanged() {
 	// Replies of the old account are dropped: every reply callback checks
 	// that its promise is still in _requests.
 	_queue.clear();
+	_decorations.clear();
 	for (const auto promiseId : base::take(_requests)) {
 		settleLater(
 			promiseId,
@@ -529,6 +534,8 @@ Js::HostResult Instance::call(
 		return Result::Value(nullptr);
 	} else if (function.substr(0, 8) == "storage.") {
 		return storage(function, args);
+	} else if (IsUiExtFunction(function)) {
+		return uiExt(function, args, context.promiseId);
 	} else if (function.substr(0, 3) == "ui.") {
 		return ui(function, args, context.promiseId);
 	} else if (function == "messages.send") {
