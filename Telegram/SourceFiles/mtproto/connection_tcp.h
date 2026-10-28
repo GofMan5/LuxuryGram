@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "mtproto/connection_abstract.h"
 #include "mtproto/mtproto_auth_key.h"
+#include "mtproto/details/mtproto_websocket_logic.h"
 
 namespace MTP {
 namespace details {
@@ -41,6 +42,10 @@ public:
 
 	QString transport() const override;
 	QString tag() const override;
+
+	// Before connectToServer: tunnel through a kws WebSocket front.
+	void setWebSocket(WsEndpoint endpoint);
+	[[nodiscard]] WsFailure webSocketFailure() const;
 
 	~TcpConnection();
 
@@ -88,6 +93,7 @@ private:
 	QString _address;
 	int32 _port = 0;
 	crl::time _pingTime = 0;
+	std::optional<WsEndpoint> _webSocket;
 
 	rpl::lifetime _connectedLifetime;
 	rpl::lifetime _lifetime;

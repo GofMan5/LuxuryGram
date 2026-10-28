@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "mtproto/details/mtproto_dcenter.h"
 #include "mtproto/details/mtproto_rsa_public_key.h"
+#include "mtproto/details/mtproto_websocket_logic.h"
 #include "mtproto/special_config_request.h"
 #include "mtproto/session.h"
 #include "mtproto/mtproto_config.h"
@@ -29,6 +30,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/network_reachability.h"
 #include "test/test_rpc_retry.h"
 
+#include <QtCore/QTime>
+
 namespace MTP {
 namespace {
 
@@ -38,8 +41,17 @@ constexpr auto kConfigBecomesOldForBlockedIn = 8 * crl::time(1000);
 using namespace details;
 
 std::atomic<int> GlobalAtomicRequestId = 0;
+std::atomic<int> GlobalWebSocketMode = int(WsMode::Auto);
 
 } // namespace
+
+void SetWebSocketMode(WsMode mode) {
+	GlobalWebSocketMode = int(mode);
+}
+
+WsMode WebSocketMode() {
+	return WsMode(GlobalWebSocketMode.load());
+}
 
 namespace details {
 
@@ -336,6 +348,12 @@ Instance::Private::Private(
 
 	_networkReachability->availableChanges(
 	) | rpl::on_next([=](bool available) {
+		// A new network invalidates what we learned about blocked routes.
+		WsRouteTable::Instance().reset();
+		const auto line = QTime::currentTime().toString(u"HH:mm:ss"_q)
+			+ u" reachability reset"_q;
+		WsLog::Instance().add(line.toStdString());
+		LOG(("WS: %1").arg(line));
 		restart();
 	}, _lifetime);
 

@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/details/mtproto_dcenter.h"
 #include "mtproto/session_private.h"
 #include "mtproto/mtproto_auth_key.h"
+#include "mtproto/mtp_instance.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "base/unixtime.h"
@@ -246,7 +247,7 @@ void Session::refreshOptions() {
 		&& (proxyType != ProxyData::Type::Web);
 	const auto useIPv4 = true;
 	const auto useIPv6 = settings.tryIPv6();
-	_data->setOptions(SessionOptions(
+	auto options = SessionOptions(
 		_instance->systemLangCode(),
 		_instance->cloudLangCode(),
 		_instance->langPackName(),
@@ -254,7 +255,10 @@ void Session::refreshOptions() {
 		useIPv4,
 		useIPv6,
 		useHttp,
-		useTcp));
+		useTcp);
+	options.webSocketMode = int(WebSocketMode());
+	options.systemProxy = settings.isSystem();
+	_data->setOptions(std::move(options));
 }
 
 void Session::reInitConnection() {

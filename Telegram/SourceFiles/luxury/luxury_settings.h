@@ -48,6 +48,12 @@ enum class TranslationProvider {
 	Native = 3,
 };
 
+enum class WebSocketTransport {
+	Off = 0,
+	Auto = 1,
+	Always = 2,
+};
+
 enum class SendWithoutSoundOption {
 	Never = 0,
 	InGhostMode = 1,
@@ -365,6 +371,7 @@ public:
 	[[nodiscard]] bool voiceConfirmation() const { return _voiceConfirmation.current(); }
 	[[nodiscard]] bool roundConfirmation() const { return _roundConfirmation.current(); }
 	[[nodiscard]] TranslationProvider translationProvider() const { return _translationProvider.current(); }
+	[[nodiscard]] WebSocketTransport webSocketTransport() const { return _webSocketTransport.current(); }
 	[[nodiscard]] bool adaptiveCoverColor() const { return _adaptiveCoverColor.current(); }
 	[[nodiscard]] bool improveLinkPreviews() const { return _improveLinkPreviews.current(); }
 	[[nodiscard]] bool crashReporting() const { return _crashReporting.current(); }
@@ -464,6 +471,7 @@ public:
 	void setVoiceConfirmation(bool val);
 	void setRoundConfirmation(bool val);
 	void setTranslationProvider(TranslationProvider val);
+	void setWebSocketTransport(WebSocketTransport val);
 	void setAdaptiveCoverColor(bool val);
 	void setImproveLinkPreviews(bool val);
 	void setCrashReporting(bool val);
@@ -656,6 +664,8 @@ public:
 	[[nodiscard]] rpl::producer<bool> roundConfirmationChanges() const { return _roundConfirmation.changes(); }
 	[[nodiscard]] rpl::producer<TranslationProvider> translationProviderValue() const { return _translationProvider.value(); }
 	[[nodiscard]] rpl::producer<TranslationProvider> translationProviderChanges() const { return _translationProvider.changes(); }
+	[[nodiscard]] rpl::producer<WebSocketTransport> webSocketTransportValue() const { return _webSocketTransport.value(); }
+	[[nodiscard]] rpl::producer<WebSocketTransport> webSocketTransportChanges() const { return _webSocketTransport.changes(); }
 	[[nodiscard]] rpl::producer<bool> adaptiveCoverColorValue() const { return _adaptiveCoverColor.value(); }
 	[[nodiscard]] rpl::producer<bool> adaptiveCoverColorChanges() const { return _adaptiveCoverColor.changes(); }
 	[[nodiscard]] rpl::producer<bool> improveLinkPreviewsValue() const { return _improveLinkPreviews.value(); }
@@ -676,6 +686,9 @@ private:
 	LuxurySettings();
 
 	[[nodiscard]] uint64 getOverriddenGhostUserId(uint64 userId) const { return _useGlobalGhostMode.current() ? 0 : userId; }
+
+	// Hands the mode to MTP, forgets learned routes and reconnects every account.
+	void applyWebSocketTransport() const;
 
 	rpl::variable<bool> _saveDeletedMessages = true;
 	rpl::variable<bool> _saveDeletedMessagesEvenWhenLocked = true;
@@ -770,6 +783,7 @@ private:
 	rpl::variable<bool> _voiceConfirmation = false;
 	rpl::variable<bool> _roundConfirmation = false;
 	rpl::variable<TranslationProvider> _translationProvider = TranslationProvider::Telegram;
+	rpl::variable<WebSocketTransport> _webSocketTransport = WebSocketTransport::Auto;
 	rpl::variable<bool> _adaptiveCoverColor = true;
 	rpl::variable<bool> _improveLinkPreviews = false;
 	rpl::variable<bool> _crashReporting = true;

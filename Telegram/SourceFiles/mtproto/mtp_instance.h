@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "mtproto/details/mtproto_serialized_request.h"
 #include "mtproto/mtproto_response.h"
+#include "mtproto/details/mtproto_websocket_logic.h"
 
 namespace MTP {
 namespace details {
@@ -249,5 +250,9 @@ private:
 	const std::unique_ptr<Private> _private;
 
 };
+
+// Read by every Session::refreshOptions, set by LuxurySettings.
+void SetWebSocketMode(details::WsMode mode);
+[[nodiscard]] details::WsMode WebSocketMode();
 
 } // namespace MTP

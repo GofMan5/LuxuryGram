@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "mtproto/details/mtproto_received_ids_manager.h"
 #include "mtproto/details/mtproto_serialized_request.h"
+#include "mtproto/details/mtproto_websocket_logic.h"
 #include "mtproto/mtproto_auth_key.h"
 #include "mtproto/mtproto_dc_options.h"
 #include "mtproto/connection_abstract.h"
@@ -56,6 +57,7 @@ private:
 	struct TestConnection {
 		ConnectionPointer data;
 		int priority = 0;
+		bool websocket = false;
 	};
 	struct SentContainer {
 		crl::time sent = 0;
@@ -148,7 +150,15 @@ private:
 		DcOptions::Variants::Protocol protocol,
 		const QString &ip,
 		int port,
-		const bytes::vector &protocolSecret);
+		const bytes::vector &protocolSecret,
+		std::optional<WsEndpoint> ws = std::nullopt);
+	void appendWebSocketConnections(
+		const DcOptions::Variants &variants,
+		WsDecision decision);
+	[[nodiscard]] WsKey wsKey() const;
+	void wsSucceeded(const TestConnection &winner);
+	void wsRacerEnded(not_null<AbstractConnection*> connection);
+	void wsLogRoute(WsRoute was, const QString &reason);
 
 	// if badTime received - search for ids in sessionData->haveSent and sessionData->wereAcked and sync time/salt, return true if found
 	bool requestsFixTimeSalt(const QVector<MTPlong> &ids, const OuterInfo &info);
@@ -197,6 +207,10 @@ private:
 
 	ConnectionPointer _connection;
 	std::vector<TestConnection> _testConnections;
+	bool _connectionWebSocket = false;
+	bool _wsTcpOffered = false;
+	bool _wsAllowed = false; // This round consulted the route table.
+	WsRound _wsRound;
 	crl::time _startedConnectingAt = 0;
 
 	base::Timer _retryTimer; // exp retry timer

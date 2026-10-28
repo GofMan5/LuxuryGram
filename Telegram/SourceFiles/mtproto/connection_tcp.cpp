@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "mtproto/details/mtproto_abstract_socket.h"
 #include "mtproto/details/mtproto_web_proxy_socket.h"
+#include "mtproto/details/mtproto_websocket_socket.h"
 #include "base/bytes.h"
 #include "base/openssl_help.h"
 #include "base/random.h"
@@ -532,7 +533,12 @@ void TcpConnection::connectToServer(
 		_port = port;
 		_protocol = Protocol::Create(secret);
 	}
-	_socket = (_proxy.type == ProxyData::Type::Web)
+	_socket = _webSocket
+		? std::make_unique<WebSocketSocket>(
+			thread(),
+			*_webSocket,
+			protocolForFiles)
+		: (_proxy.type == ProxyData::Type::Web)
 		? std::make_unique<WebProxySocket>(thread(), _proxy)
 		: AbstractSocket::Create(
 			thread(),
@@ -649,7 +655,7 @@ QString TcpConnection::transport() const {
 	if (!isConnected()) {
 		return QString();
 	}
-	auto result = u"TCP"_q;
+	auto result = _webSocket ? u"WebSocket"_q : u"TCP"_q;
 	if (qthelp::is_ipv6(_address)) {
 		result += u"/IPv6"_q;
 	}
@@ -657,7 +663,7 @@ QString TcpConnection::transport() const {
 }
 
 QString TcpConnection::tag() const {
-	auto result = u"TCP"_q;
+	auto result = _webSocket ? u"WS"_q : u"TCP"_q;
 	if (qthelp::is_ipv6(_address)) {
 		result += u"/IPv6"_q;
 	} else {
@@ -672,6 +678,20 @@ void TcpConnection::socketError() {
 	}
 
 	error(kErrorCodeOther);
+}
+
+void TcpConnection::setWebSocket(WsEndpoint endpoint) {
+	Expects(_socket == nullptr);
+
+	_webSocket = std::move(endpoint);
+}
+
+WsFailure TcpConnection::webSocketFailure() const {
+	return !_webSocket
+		? WsFailure::None
+		: _socket
+		? static_cast<const WebSocketSocket*>(_socket.get())->failure()
+		: WsFailure::None;
 }
 
 TcpConnection::~TcpConnection() = default;

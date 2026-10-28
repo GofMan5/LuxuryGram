@@ -18,6 +18,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 - Plugin updates can be rolled back to the previous version (a rollback cut short by a crash keeps that version for the next try), and a plugin can be pinned to its installed version so update checks skip it. Installing an older release than the installed one has to be asked for explicitly. `lux.plugin` tells a plugin its previous version and why it was started.
 - Plugin install links accept `/blob/...`, `/commit/<sha>`, `/releases/latest`, `git@github.com:owner/repo.git` and branch names with `/`. The same repository cannot be installed twice by changing the letter case. When a release has no `plugin.json`, the plugin is installed from the default branch and its log says so. Plugin log lines also go to the client log, one line each. Updating a plugin that is already at the latest version says so instead of installing it again.
 - GitHub rate limits are reported with the time requests may resume, API answers are reused through ETag, and an update check reports how many plugins could not be checked instead of saying everything is up to date.
+- Automatic WebSocket transport: when direct connections to Telegram are blocked, the app reconnects over Telegram's web WebSocket endpoints and re-checks direct routes; switchable in Settings → Other → Network, with a status line and a log.
 
 ### Changed
 
