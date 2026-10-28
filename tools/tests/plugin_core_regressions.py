@@ -112,9 +112,10 @@ void Permissions() {
 	EXPECT(!PermissionFromId("Messages.read") && !PermissionFromId("") && !PermissionFromId("admin"));
 	EXPECT(IsDangerous(Permission::MessagesSend) && IsDangerous(Permission::MessagesModify));
 	EXPECT(IsDangerous(Permission::TelegramApi) && IsDangerous(Permission::TelegramUpdates));
+	// Copied passwords and login codes pass through the clipboard.
+	EXPECT(IsDangerous(Permission::Clipboard));
 	EXPECT(!IsDangerous(Permission::MessagesRead) && !IsDangerous(Permission::Ui)
-		&& !IsDangerous(Permission::Network) && !IsDangerous(Permission::Storage)
-		&& !IsDangerous(Permission::Clipboard));
+		&& !IsDangerous(Permission::Network) && !IsDangerous(Permission::Storage));
 
 	auto set = PermissionSet();
 	EXPECT(set.empty() && !set.anyDangerous());

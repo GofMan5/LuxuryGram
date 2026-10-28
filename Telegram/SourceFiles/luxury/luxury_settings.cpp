@@ -2321,7 +2321,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "lng_luxury_plugins_ui_perm_storage", "Хранилище" },
 	{ "lng_luxury_plugins_ui_perm_storage_about", "Хранит свои данные на этом компьютере." },
 	{ "lng_luxury_plugins_ui_perm_clipboard", "Буфер обмена" },
-	{ "lng_luxury_plugins_ui_perm_clipboard_about", "Читает и меняет буфер обмена." },
+	{ "lng_luxury_plugins_ui_perm_clipboard_about", "Читает и меняет буфер обмена сразу после того, как вы запустили команду, пункт меню или горячую клавишу плагина. Скопированные пароли и коды входа можно прочитать." },
 	{ "lng_luxury_plugins_ui_perm_telegram_api", "Telegram API" },
 	{ "lng_luxury_plugins_ui_perm_telegram_api_about", "Выполняет запросы Telegram от вашего аккаунта." },
 	{ "lng_luxury_plugins_ui_perm_telegram_updates", "Обновления Telegram" },

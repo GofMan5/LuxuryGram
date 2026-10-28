@@ -108,7 +108,7 @@ Rules:
 | `ui` | commands, menu items, hotkeys, toasts, dialogs | |
 | `network` | `lux.http.fetch` to manifest hosts only | |
 | `storage` | `lux.storage` | |
-| `clipboard` | read and write the clipboard | |
+| `clipboard` | read and write the clipboard, within 1 s after the user runs a command, menu item or hotkey of the plugin | yes |
 | `telegram.api` | `lux.api.call` raw MTProto methods | yes |
 | `telegram.updates` | raw update stream | yes |
 
@@ -167,6 +167,11 @@ including `updateServiceNotification` (`StripServiceUser`). A value that
 still mentions it is refused whole, or not delivered at all. The account's
 own phone number is removed from users marked `self` and from
 `updateUserPhone` (`HideOwnPhone`).
+
+The user id is matched however it is written: a number, a decimal string
+with spaces or a `+`, or a float such as `777000.0` (`IsServiceUserId`),
+under the keys `user_id`, `peer`, `from_id`, `peer_id`, and `id` inside a
+user object, at any depth. `lux.messages.send` refuses it as `peer`.
 
 The user approves the requested list at install. An update that requests
 new permissions, or widens the `network` hosts, asks again before it is
@@ -237,9 +242,19 @@ One runtime and context per plugin, on the main thread.
   (`CpuBudget`) stops the plugin with "The plugin used too much CPU time"
   when its JS time over the last 5 s adds up to more than 500 ms (a
   rolling sum: pausing does not reset it), or it overruns the slice three
-  times within 10 s. The manager then disables it.
-- Timers: an interval fires at most every 10 ms and a timeout waits at
-  least 4 ms; smaller or invalid delays are raised to those.
+  times within 10 s. The manager then disables it. Entries are timed in
+  microseconds of a monotonic clock and each costs at least 0.1 ms, so a
+  flood of trivial entries is charged too.
+- Timers: at most 64 per plugin (`RangeError: too many timers`). An
+  interval fires at most every 50 ms and a timeout waits at least 4 ms;
+  smaller or invalid delays are raised to those.
+- Events wait in one queue of at most 256, drained in one pass. When the
+  plugin falls behind the oldest are dropped and the log says how many.
+- At most 16 unhandled promise rejections are logged after each entry,
+  then one "...and N more" line.
+- When the active account changes or logs out, pending `fetch`, `api.call`
+  and `messages.send` promises reject with `Error: the active account
+  changed`, queued events are dropped and late replies are ignored.
 - At most 16 `fetch`, `api.call` and `messages.send` requests in flight
   per plugin. The next
   one is rejected at once with `RangeError: too many requests in flight`.
@@ -259,7 +274,8 @@ One runtime and context per plugin, on the main thread.
 ## Plugin-facing API (`lux` global), version 1
 
 ```js
-lux.plugin            // {id, version, apiVersion, clientVersion}
+lux.plugin            // {id, version, apiVersion, clientVersion, granted, lang}
+//   granted: the permission ids the user approved; lang: the UI language id
 lux.log(...args)      // also console.log/warn/error; shown in the manager
 lux.on(event, fn)     // returns unsubscribe function
 //   'message'      ({message})              messages.read
@@ -268,20 +284,32 @@ lux.on(event, fn)     // returns unsubscribe function
 //   'update'       ({update})               telegram.updates, raw TL JSON,
 //                                           at-least-once: may repeat
 //   'unload'       ()                       before disable/update/remove
+//   any other name throws TypeError
 lux.messages.send({peer, text, replyTo?, silent?})   -> Promise   messages.send
-lux.ui.toast(text)                                                 ui
+lux.ui.toast(text)                     at most one a second (RangeError)  ui
 lux.ui.alert({title, text}) / lux.ui.confirm({...}) -> Promise<bool>  ui
 lux.ui.prompt({title, placeholder?, value?}) -> Promise<string|null>  ui
 lux.ui.addCommand({name, description, handler({peer, args})})       ui
 lux.ui.addMessageMenuItem({title, handler({message})})              ui
 lux.ui.addHotkey({keys: 'Ctrl+Shift+K', handler()})                 ui
+//   Dialogs: one at a time per plugin, titled with the plugin name, closed
+//   when the plugin unloads; refused while the app is passcode-locked
 //   Ctrl+C/V/X/A/Z/Y, Ctrl+Enter, Enter and Esc are reserved: TypeError
-lux.http.fetch(url, {method, headers, body}) -> Promise<{status, headers, text(), json()}>  network
+lux.http.fetch(url, {method, headers, body, binary}) -> Promise<{status, headers, text(), json(), base64}>  network
 //   https only, to a manifest host, on port 443 unless that host entry
 //   names a port ("api.example.com:8443")
+//   binary: true returns the body as base64 instead of text
+//   Every address of the host must be public: loopback, private, link-local,
+//   CGNAT (100.64/10), ULA, multicast, 0.0.0.0, and IPv4-mapped/NAT64 forms
+//   of those are refused with PermissionError, for an IP literal and for
+//   each address the name resolves to (QHostInfo; its 60 s cache is what
+//   the connection uses). A Host header is dropped; a redirect to another
+//   origin drops Authorization, Cookie, Proxy-* and Host.
 lux.storage.get(key) / set(key, value) / remove(key) / keys()       storage
 lux.settings.get(key) / onChange(fn)          values from manifest settings, always allowed
 lux.clipboard.read() / write(text)                                  clipboard
+//   within 1 s after a command, menu item or hotkey of the plugin ran,
+//   otherwise NotAllowedError
 lux.api.call(method, params) -> Promise<result>                     telegram.api
 setTimeout / clearTimeout / setInterval / clearInterval              always
 ```

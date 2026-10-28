@@ -21,7 +21,7 @@ constexpr auto kPermissions = std::array<PermissionInfo, kPermissionCount>{{
 	{ Permission::Ui, "ui", false },
 	{ Permission::Network, "network", false },
 	{ Permission::Storage, "storage", false },
-	{ Permission::Clipboard, "clipboard", false },
+	{ Permission::Clipboard, "clipboard", true },
 	{ Permission::TelegramApi, "telegram.api", true },
 	{ Permission::TelegramUpdates, "telegram.updates", true },
 }};
