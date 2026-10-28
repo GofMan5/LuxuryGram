@@ -18,6 +18,7 @@
 #include <set>
 #include <vector>
 
+class PeerData;
 class QNetworkAccessManager;
 class QTimer;
 
@@ -38,6 +39,18 @@ class Schema;
 [[nodiscard]] std::optional<std::string> Gunzip(std::string_view packed);
 // The embedded api.tl, parsed once; null with error when it is broken.
 [[nodiscard]] const Tl::Schema *ApiSchema(std::string &error);
+
+// Plugins see the active account only: null before launch and login.
+[[nodiscard]] Main::Session *ActiveSession();
+// A dialog id as a plugin passes it: a number or a decimal string.
+[[nodiscard]] std::optional<std::int64_t> DialogId(const nlohmann::json &value);
+// A dialog id of the active account only, never another account's peer
+// and never the service chat. An id above 48 bits would be masked into
+// another peer's bare id (2^48 + 777000 into 777000), so it resolves to
+// nothing.
+[[nodiscard]] PeerData *ResolvePeer(
+	not_null<Main::Session*> session,
+	std::int64_t dialogId);
 
 // What a running plugin reports back to the manager.
 class InstanceDelegate {
@@ -166,6 +179,12 @@ private:
 	// The active account changed: its requests and events are void.
 	void accountChanged();
 	[[nodiscard]] Result apiCall(
+		const nlohmann::json &args,
+		std::uint64_t promiseId);
+	// lux.chats, lux.messages beyond send, lux.account, settings.set and
+	// ui.notify, see plugin_host_ext_data.cpp.
+	[[nodiscard]] Result data(
+		std::string_view function,
 		const nlohmann::json &args,
 		std::uint64_t promiseId);
 

@@ -5,19 +5,28 @@
 #include "luxury/plugins/plugin_host_api.h"
 #include "luxury/plugins/plugin_host_logic.h"
 #include "luxury/plugins/plugin_manager.h"
+#include "luxury/plugins/plugin_payloads.h"
 #include "luxury/plugins/core/tl_codec.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "api/api_common.h"
 #include "core/application.h"
+#include "data/data_document.h"
+#include "data/data_media_types.h"
 #include "data/data_peer.h"
+#include "data/data_photo.h"
 #include "data/data_session.h"
+#include "data/data_user.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "history/history_item_components.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
+#include "ui/text/text_entity.h"
 #include "ui/widgets/popup_menu.h"
+#include "window/window_controller.h"
+#include "window/window_session_controller.h"
 #include "styles/style_menu_icons.h"
 
 #include <QApplication>
@@ -35,6 +44,12 @@ static_assert(kKeyEnter == Qt::Key_Enter);
 static_assert(kShiftModifier == int(Qt::ShiftModifier));
 static_assert(kControlModifier == int(Qt::ControlModifier));
 static_assert(kModifierMask == unsigned(Qt::KeyboardModifierMask));
+static_assert(int(std::size(kEntityNames))
+	== int(EntityType::FormattedDate) + 1);
+static_assert(kEntityTextUrl == int(EntityType::CustomUrl));
+static_assert(kEntityMentionName == int(EntityType::MentionName));
+static_assert(kEntityCustomEmoji == int(EntityType::CustomEmoji));
+static_assert(kEntityPre == int(EntityType::Pre));
 
 // Running plugins, or nothing: the one check every hook starts with.
 [[nodiscard]] Manager *Active() {
@@ -57,30 +72,138 @@ static_assert(kModifierMask == unsigned(Qt::KeyboardModifierMask));
 	return nullptr;
 }
 
-[[nodiscard]] json PeerJson(not_null<PeerData*> peer) {
+// A mentionName carries "userId.accessHash:selfId": a plugin sees the
+// user id only, and a mention of 777000 not at all (EntityJson).
+[[nodiscard]] json EntitiesJson(const EntitiesInText &entities) {
+	auto result = json::array();
+	for (const auto &entity : entities) {
+		auto data = entity.data();
+		if (entity.type() == EntityType::MentionName) {
+			const auto userId = TextUtilities::MentionNameDataToFields(
+				data).userId;
+			data = userId ? QString::number(userId) : QString();
+		}
+		auto item = EntityJson({
+			.type = int(entity.type()),
+			.offset = entity.offset(),
+			.length = entity.length(),
+			.data = data.toStdString(),
+		});
+		if (!item.is_null()) {
+			result.push_back(std::move(item));
+		}
+	}
+	return result;
+}
+
+// What a plugin returned from beforeSend, for the message field's tags.
+// A mention needs the user's access hash: one of an unknown user is
+// dropped.
+[[nodiscard]] EntitiesInText PluginEntities(
+		not_null<Main::Session*> session,
+		const json &list,
+		int textLength) {
+	auto result = EntitiesInText();
+	for (const auto &entity : ParseEntities(list, textLength)) {
+		auto data = QString::fromStdString(entity.data);
+		if (entity.type == kEntityMentionName) {
+			const auto userId = data.toULongLong();
+			const auto user = session->data().userLoaded(UserId(userId));
+			if (!user) {
+				continue;
+			}
+			data = TextUtilities::MentionNameDataFromFields({
+				.selfId = session->userId().bare,
+				.userId = userId,
+				.accessHash = user->accessHash(),
+			});
+		}
+		result.push_back(EntityInText(
+			EntityType(entity.type),
+			entity.offset,
+			entity.length,
+			data));
+	}
+	return result;
+}
+
+// A plugin's replyTo: a message of the same chat, or null for none. The
+// topic stays, as the message field would keep it.
+[[nodiscard]] FullReplyTo PluginReply(
+		not_null<PeerData*> peer,
+		const json &replyTo,
+		const FullReplyTo &was) {
+	auto result = FullReplyTo();
+	result.topicRootId = was.topicRootId;
+	result.monoforumPeerId = was.monoforumPeerId;
+	if (const auto id = MessageIdArg(replyTo)) {
+		result.messageId = FullMsgId(peer->id, MsgId(*id));
+	}
+	return result;
+}
+
+[[nodiscard]] json MediaJson(Data::Media *media) {
+	if (!media) {
+		return nullptr;
+	} else if (const auto photo = media->photo()) {
+		return {
+			{ "type", "photo" },
+			{ "size", photo->imageByteSize(Data::PhotoSize::Large) },
+		};
+	} else if (const auto document = media->document()) {
+		return {
+			{ "type", document->sticker()
+				? "sticker"
+				: document->isVoiceMessage()
+				? "voice"
+				: document->isVideoMessage()
+				? "round"
+				: document->isAnimation()
+				? "animation"
+				: document->isVideoFile()
+				? "video"
+				: document->isAudioFile()
+				? "audio"
+				: "file" },
+			{ "size", document->size },
+		};
+	}
+	return { { "type", "other" }, { "size", 0 } };
+}
+
+[[nodiscard]] json ForwardJson(not_null<HistoryItem*> item) {
+	const auto forwarded = item->Get<HistoryMessageForwarded>();
+	if (!forwarded) {
+		return nullptr;
+	}
+	const auto sender = forwarded->originalSender;
+	const auto hidden = forwarded->originalHiddenSenderInfo.get();
+	const auto id = forwarded->originalId;
 	return {
-		{ "id", std::to_string(getDialogIdFromPeer(peer)) },
-		{ "type", peer->isUser()
-			? "user"
-			: peer->isChannel()
-			? "channel"
-			: "chat" },
-		{ "title", peer->name().toStdString() },
+		{ "from", (sender
+			&& sender->id != PeerData::kServiceNotificationsId)
+			? PeerJson(sender)
+			: json() },
+		{ "name", (!sender && hidden)
+			? json(hidden->name.toStdString())
+			: json() },
+		{ "date", forwarded->originalDate },
+		{ "id", id ? json(std::to_string(id.bare)) : json() },
 	};
 }
 
-[[nodiscard]] json MessageJson(not_null<HistoryItem*> item) {
-	const auto reply = item->replyToId();
-	return {
-		{ "id", std::to_string(item->id.bare) },
-		{ "peer", PeerJson(item->history()->peer) },
-		{ "from", PeerJson(item->from()) },
-		{ "date", item->date() },
-		{ "text", item->originalText().text.toStdString() },
-		{ "out", item->out() },
-		{ "replyTo", reply ? json(std::to_string(reply.bare)) : json() },
-		{ "hasMedia", item->media() != nullptr },
-	};
+// The chat open in the active window, null for none or the service chat.
+[[nodiscard]] json ActiveChatJson() {
+	const auto window = Core::App().activeWindow();
+	const auto controller = window ? window->sessionController() : nullptr;
+	const auto peer = controller
+		? controller->activeChatCurrent().peer()
+		: nullptr;
+	return (peer
+		&& peer->id != PeerData::kServiceNotificationsId
+		&& IsActive(&peer->session()))
+		? PeerJson(peer)
+		: json();
 }
 
 void EmitMessage(not_null<HistoryItem*> item, const std::string &event) {
@@ -106,6 +229,59 @@ void EmitMessage(not_null<HistoryItem*> item, const std::string &event) {
 
 } // namespace
 
+[[nodiscard]] json PeerJson(not_null<PeerData*> peer) {
+	return {
+		{ "id", std::to_string(getDialogIdFromPeer(peer)) },
+		{ "type", peer->isUser()
+			? "user"
+			: peer->isChannel()
+			? "channel"
+			: "chat" },
+		{ "title", peer->name().toStdString() },
+	};
+}
+
+[[nodiscard]] json MessageJson(not_null<HistoryItem*> item) {
+	const auto peer = item->history()->peer;
+	const auto from = item->from();
+	const auto &text = item->originalText();
+	const auto reply = item->replyToId();
+	const auto edited = item->Get<HistoryMessageEdited>();
+	const auto group = item->groupId();
+	return {
+		{ "id", std::to_string(item->id.bare) },
+		{ "peer", PeerJson(peer) },
+		{ "from", (from->id == PeerData::kServiceNotificationsId)
+			? json()
+			: PeerJson(from) },
+		{ "date", item->date() },
+		{ "text", text.text.toStdString() },
+		{ "entities", EntitiesJson(text.entities) },
+		{ "out", item->out() },
+		{ "replyTo", reply ? json(std::to_string(reply.bare)) : json() },
+		{ "hasMedia", item->media() != nullptr },
+		{ "media", MediaJson(item->media()) },
+		{ "forward", ForwardJson(item) },
+		{ "topicId", peer->isForum()
+			? json(std::to_string(item->topicRootId().bare))
+			: json() },
+		{ "editDate", edited ? json(edited->date) : json() },
+		{ "groupedId", group ? json(std::to_string(group.raw())) : json() },
+	};
+}
+
+TextWithEntities PluginText(
+		not_null<Main::Session*> session,
+		const std::string &text,
+		const json &entities) {
+	auto result = TextWithEntities{ QString::fromStdString(text) };
+	result.entities = PluginEntities(
+		session,
+		entities,
+		int(result.text.size()));
+	return result;
+}
+
 bool BeforeSend(Api::MessageToSend &message) {
 	const auto manager = Active();
 	if (!manager || message.textWithTags.text.isEmpty()) {
@@ -115,22 +291,44 @@ bool BeforeSend(Api::MessageToSend &message) {
 	if (!IsActive(&peer->session())) {
 		return true;
 	}
-	auto fold = SendFold{ message.textWithTags.text.toStdString() };
+	auto fold = SendFold{
+		.text = message.textWithTags.text.toStdString(),
+		.entities = EntitiesJson(TextUtilities::ConvertTextTagsToEntities(
+			message.textWithTags.tags)),
+	};
+	const auto reply = message.action.replyTo.messageId;
+	if (reply && reply.peer == peer->id) {
+		fold.replyTo = std::to_string(reply.msg.bare);
+	}
+	const auto replyWas = fold.replyTo;
 	for (const auto &instance : manager->instances()) {
 		if (instance->plugin().granted.has(Permission::MessagesModify)) {
 			FoldBeforeSend(fold, instance->beforeSend({
 				{ "peer", PeerJson(peer) },
 				{ "text", fold.text },
+				{ "entities", fold.entities },
+				{ "replyTo", fold.replyTo },
 			}));
 		}
 	}
 	if (fold.cancelled) {
 		return false;
-	} else if (fold.changed) {
-		// The entities belong to the old text; a plugin returns plain text.
+	} else if (fold.entitiesChanged) {
+		// The old tags belong to the old text: only the plugin's stay.
 		message.textWithTags = TextWithTags{
 			QString::fromStdString(fold.text),
 		};
+		message.textWithTags.tags = TextUtilities::ConvertEntitiesToTextTags(
+			PluginEntities(
+				&peer->session(),
+				fold.entities,
+				int(message.textWithTags.text.size())));
+	}
+	if (fold.replyChanged && fold.replyTo != replyWas) {
+		message.action.replyTo = PluginReply(
+			peer,
+			fold.replyTo,
+			message.action.replyTo);
 	}
 	return true;
 }
@@ -172,6 +370,44 @@ void IncomingMessage(not_null<HistoryItem*> item) {
 
 void MessageSent(not_null<HistoryItem*> item) {
 	EmitMessage(item, "messageOut");
+}
+
+void MessageEdited(not_null<HistoryItem*> item) {
+	EmitMessage(item, "messageEdited");
+}
+
+void MessagesDeleted(const std::vector<not_null<HistoryItem*>> &items) {
+	const auto manager = Active();
+	if (!manager) {
+		return;
+	}
+	for (const auto &item : items) {
+		EmitMessage(item, "messageDeleted");
+	}
+}
+
+void ChatRead(not_null<History*> history, int64 tillId) {
+	const auto manager = Active();
+	const auto peer = history->peer;
+	if (!manager
+		|| (peer->id == PeerData::kServiceNotificationsId)
+		|| !IsActive(&history->session())) {
+		return;
+	}
+	auto payload = std::optional<json>();
+	for (const auto &instance : manager->instances()) {
+		// subscribe() refuses chatRead without messages.read.
+		if (instance->wants("chatRead")) {
+			if (!payload) {
+				payload = json{
+					{ "peer", PeerJson(peer) },
+					{ "maxId", std::to_string(tillId) },
+					{ "unread", history->unreadCount() },
+				};
+			}
+			instance->emitLater("chatRead", *payload);
+		}
+	}
 }
 
 namespace {
@@ -272,7 +508,9 @@ void FillMessageMenu(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 			// The whole message only with messages.read.
 			const auto full = instance->plugin().granted.has(
 				Permission::MessagesRead);
-			instance->callLater(handler, { { "message", full
+			instance->callLater(handler, {
+				{ "peer", PeerJson(message->history()->peer) },
+				{ "message", full
 				? MessageJson(message)
 				: json{
 					{ "id", std::to_string(message->id.bare) },
@@ -320,7 +558,8 @@ bool HandleHotkey(not_null<QObject*> object, not_null<QKeyEvent*> event) {
 		for (const auto &hotkey : instance->hotkeys()) {
 			if (hotkey.keys == keys) {
 				if (!event->isAutoRepeat()) {
-					instance->callLater(hotkey.fn, nullptr, true);
+					const auto payload = json{ { "peer", ActiveChatJson() } };
+					instance->callLater(hotkey.fn, payload, true);
 				}
 				return true;
 			}

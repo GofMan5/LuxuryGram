@@ -1,0 +1,41 @@
+{
+  "id": "dev.example.automoderate",
+  "name": "Auto moderate",
+  "version": "1.0.0",
+  "description": "Translates your edited messages and deletes incoming messages that match a pattern",
+  "author": "example",
+  "api": 1,
+  "runtime": "js",
+  "main": "main.js",
+  "files": ["main.js"],
+  "permissions": ["messages.read", "messages.manage", "network", "ui"],
+  "network": ["translate.googleapis.com"],
+  "settings": [
+    {
+      "key": "language",
+      "type": "string",
+      "title": "Translate edits to",
+      "description": "A language code such as en or de; empty turns translation off",
+      "placeholder": "en",
+      "default": "en"
+    },
+    {
+      "key": "pattern",
+      "type": "string",
+      "title": "Delete messages matching",
+      "description": "A JavaScript regular expression, case-insensitive; empty turns deletion off",
+      "placeholder": "casino|crypto giveaway",
+      "default": ""
+    },
+    {
+      "key": "revoke",
+      "type": "bool",
+      "title": "Delete for everyone",
+      "default": true
+    }
+  ],
+  "locales": {
+    "ru": {"name": "Автомодерация", "description": "Переводит ваши отредактированные сообщения и удаляет входящие по шаблону"}
+  },
+  "homepage": "https://github.com/GofMan5/LuxuryGram/tree/dev/docs/plugins/examples/auto-moderate"
+}

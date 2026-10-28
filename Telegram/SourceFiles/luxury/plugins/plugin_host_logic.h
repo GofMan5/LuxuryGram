@@ -232,6 +232,10 @@ struct EventQueue {
 		|| event == "messageOut"
 		|| event == "beforeSend"
 		|| event == "update"
+		|| event == "messageEdited"
+		|| event == "messageDeleted"
+		|| event == "chatRead"
+		|| event == "accountChanged"
 		|| event == "unload";
 }
 
@@ -289,11 +293,17 @@ inline constexpr auto kModifierMask = 0xFE000000u;
 }
 
 // One plugin's beforeSend answer folded into the chain: false cancels,
-// a string replaces the text, anything else leaves it.
+// a string replaces the text, an object { text, entities, replyTo }
+// replaces what it names, anything else leaves it. A new text drops the
+// entities of the old one unless the same answer brings its own.
 struct SendFold {
 	std::string text;
+	nlohmann::json entities = nlohmann::json::array();
+	nlohmann::json replyTo = nullptr;
 	bool changed = false;
 	bool cancelled = false;
+	bool entitiesChanged = false;
+	bool replyChanged = false;
 };
 
 inline void FoldBeforeSend(SendFold &fold, const nlohmann::json &answer) {
@@ -301,12 +311,31 @@ inline void FoldBeforeSend(SendFold &fold, const nlohmann::json &answer) {
 		return;
 	} else if (answer.is_boolean() && !answer.get<bool>()) {
 		fold.cancelled = true;
-	} else if (answer.is_string()) {
-		auto text = answer.get<std::string>();
-		if (text != fold.text) {
-			fold.text = std::move(text);
-			fold.changed = true;
-		}
+		return;
+	}
+	const auto object = answer.is_object();
+	const auto text = object ? answer.find("text") : answer.end();
+	const auto replaced = answer.is_string()
+		? &answer
+		: (object && text != answer.end() && text->is_string())
+		? &*text
+		: nullptr;
+	if (replaced && replaced->get_ref<const std::string&>() != fold.text) {
+		fold.text = replaced->get<std::string>();
+		fold.entities = nlohmann::json::array();
+		fold.changed = fold.entitiesChanged = true;
+	}
+	if (!object) {
+		return;
+	} else if (const auto entities = answer.find("entities")
+		; entities != answer.end() && entities->is_array()) {
+		fold.entities = *entities;
+		fold.changed = fold.entitiesChanged = true;
+	}
+	if (const auto replyTo = answer.find("replyTo")
+		; replyTo != answer.end()) {
+		fold.replyTo = *replyTo;
+		fold.changed = fold.replyChanged = true;
 	}
 }
 

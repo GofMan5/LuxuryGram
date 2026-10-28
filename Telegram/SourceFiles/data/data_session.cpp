@@ -3223,6 +3223,7 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 	}, [&](const auto &data) {
 		existing->applyEdition(HistoryMessageEdition(_session, data));
 	});
+	Luxury::Plugins::MessageEdited(existing);
 }
 
 void Session::processMessages(
@@ -3501,6 +3502,7 @@ void Session::processMessagesDeleted(
 			affected->unknownMessageDeleted(messageId.v);
 		}
 	}
+	Luxury::Plugins::MessagesDeleted(found);
 	saveOrDestroyMessages(found);
 	for (const auto &history : historiesToCheck) {
 		if (!history->chatListMessageKnown()) {
@@ -3518,6 +3520,7 @@ void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
 			historiesToCheck.emplace(item->history());
 		}
 	}
+	Luxury::Plugins::MessagesDeleted(found);
 	saveOrDestroyMessages(found);
 	for (const auto &history : historiesToCheck) {
 		if (!history->chatListMessageKnown()) {

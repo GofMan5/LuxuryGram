@@ -9837,6 +9837,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_luxury_plugins_ui_perm_telegram_api_about" = "Make Telegram requests with your account.";
 "lng_luxury_plugins_ui_perm_telegram_updates" = "Telegram updates";
 "lng_luxury_plugins_ui_perm_telegram_updates_about" = "Receive every update your account gets from Telegram.";
+"lng_luxury_plugins_ui_perm_messages_manage" = "Manage messages";
+"lng_luxury_plugins_ui_perm_messages_manage_about" = "Edit, delete and forward messages and mark chats as read on your behalf.";
 "lng_luxury_plugins_ui_state_stopped" = "Enabled, not running";
 "lng_luxury_plugins_ui_consent_new_hosts" = "The new version reaches more websites:";
 "lng_luxury_plugins_quarantined" = "Disabled: the client closed unexpectedly while this plugin was starting.";

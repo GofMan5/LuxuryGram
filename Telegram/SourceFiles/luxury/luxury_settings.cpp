@@ -2326,6 +2326,8 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "lng_luxury_plugins_ui_perm_telegram_api_about", "Выполняет запросы Telegram от вашего аккаунта." },
 	{ "lng_luxury_plugins_ui_perm_telegram_updates", "Обновления Telegram" },
 	{ "lng_luxury_plugins_ui_perm_telegram_updates_about", "Получает все обновления, которые ваш аккаунт получает от Telegram." },
+	{ "lng_luxury_plugins_ui_perm_messages_manage", "Управление сообщениями" },
+	{ "lng_luxury_plugins_ui_perm_messages_manage_about", "Редактирует, удаляет и пересылает сообщения и отмечает чаты прочитанными от вашего имени." },
 	{ "lng_luxury_plugins_ui_state_stopped", "Включён, не запущен" },
 	{ "lng_luxury_plugins_ui_consent_new_hosts", "Новая версия обращается к новым сайтам:" },
 	{ "lng_luxury_plugins_quarantined", "Отключён: клиент неожиданно закрылся при запуске этого плагина." },

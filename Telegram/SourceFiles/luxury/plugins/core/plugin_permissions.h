@@ -20,8 +20,10 @@ enum class Permission : std::uint8_t {
 	Clipboard,
 	TelegramApi,
 	TelegramUpdates,
+	// Appended: the bits are persisted.
+	MessagesManage,
 };
-inline constexpr auto kPermissionCount = 9;
+inline constexpr auto kPermissionCount = 10;
 
 [[nodiscard]] std::string_view PermissionId(Permission permission);
 [[nodiscard]] std::optional<Permission> PermissionFromId(std::string_view id);

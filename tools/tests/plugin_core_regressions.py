@@ -101,17 +101,18 @@ void Versions() {
 
 void Permissions() {
 	const char *ids[] = { "messages.read", "messages.send", "messages.modify", "ui", "network",
-		"storage", "clipboard", "telegram.api", "telegram.updates" };
+		"storage", "clipboard", "telegram.api", "telegram.updates", "messages.manage" };
 	auto all = PermissionSet();
 	for (const auto id : ids) {
 		const auto permission = PermissionFromId(id);
 		EXPECT(permission && PermissionId(*permission) == id);
 		all.add(*permission);
 	}
-	EXPECT(all.ids().size() == 9);
+	EXPECT(all.ids().size() == 10);
 	EXPECT(!PermissionFromId("Messages.read") && !PermissionFromId("") && !PermissionFromId("admin"));
 	EXPECT(IsDangerous(Permission::MessagesSend) && IsDangerous(Permission::MessagesModify));
 	EXPECT(IsDangerous(Permission::TelegramApi) && IsDangerous(Permission::TelegramUpdates));
+	EXPECT(IsDangerous(Permission::MessagesManage));
 	// Copied passwords and login codes pass through the clipboard.
 	EXPECT(IsDangerous(Permission::Clipboard));
 	EXPECT(!IsDangerous(Permission::MessagesRead) && !IsDangerous(Permission::Ui)

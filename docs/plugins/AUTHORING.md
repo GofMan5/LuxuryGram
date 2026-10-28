@@ -189,10 +189,11 @@ install fails with "The plugin changed, review it again".
 
 | Id | Grants | Dangerous |
 | --- | --- | --- |
-| `messages.read` | `message` and `messageOut` events; full messages in menu handlers | |
-| `messages.send` | `lux.messages.send` | yes |
-| `messages.modify` | the `beforeSend` event: rewrite or cancel outgoing text | yes |
-| `ui` | `lux.ui`: toasts, dialogs, commands, message menu items, hotkeys | |
+| `messages.read` | `message`, `messageOut`, `messageEdited`, `messageDeleted`, `chatRead` and `accountChanged` events; full messages in menu handlers; `lux.messages.get`, `history` and `downloadMedia`; `lux.chats`; `lux.account.me` | |
+| `messages.send` | `lux.messages.send` and `sendFile` | yes |
+| `messages.modify` | the `beforeSend` event: rewrite the text, entities or reply of an outgoing message, or cancel it | yes |
+| `messages.manage` | `lux.messages.edit`, `remove`, `forward` and `markRead` | yes |
+| `ui` | `lux.ui`: toasts, notices, dialogs, commands, message menu items, hotkeys | |
 | `network` | `lux.http.fetch` to the `network` hosts | |
 | `storage` | `lux.storage` | |
 | `clipboard` | `lux.clipboard`, only within 1 s after the user runs a command, menu item or hotkey of the plugin; otherwise `NotAllowedError` | |
@@ -207,6 +208,10 @@ what you use. Calling an API without its permission throws
 | --- | --- |
 | `message` | `messages.read` |
 | `messageOut` | `messages.read` |
+| `messageEdited` | `messages.read` |
+| `messageDeleted` | `messages.read` |
+| `chatRead` | `messages.read` |
+| `accountChanged` | `messages.read` |
 | `beforeSend` | `messages.modify` |
 | `update` | `telegram.updates` |
 | `unload` | none |
@@ -214,14 +219,55 @@ what you use. Calling an API without its permission throws
 What is never available, whatever is granted:
 
 - The Telegram service chat (user 777000), which carries login codes: it is
-  skipped in events and menus, refused in `api.call` params and removed
-  from results and updates.
-- The account's own phone number: removed from the `self` user and from
-  `updateUserPhone`.
+  skipped in events and menus, left out of `chats.list`, refused as a peer
+  in `lux.messages` and `lux.chats` and in `api.call` params, and removed
+  from results and updates. A message or forward from it has `from: null`.
+- The account's own phone number: removed from the `self` user, from
+  `updateUserPhone` and from `lux.account.me()`.
 - MTProto methods for login, sessions, password, Passport, payments and
   Stars, web app logins and bot grants (`auth.*`, `payments.*` writes,
   `account.getAuthorizations`, ...), and any call whose params spend Stars.
   The full list is in [ARCHITECTURE.md](ARCHITECTURE.md#permissions).
+
+## Messages and chats
+
+Peers are ids as `LuxPeer.id` gives them, a decimal string or a number.
+Message ids are decimal strings. A message carries its `entities` (bold,
+links, mentions, ... with offsets in UTF-16 units, as `String.length`
+counts), `media` as `{type, size}`, `forward`, `topicId`, `editDate` and
+`groupedId`.
+
+```js
+lux.on('messageEdited', async ({ message }) => {
+	if (message.out) {
+		return;
+	}
+	const fresh = await lux.messages.get(message.peer.id, message.id);
+	lux.log('edited:', fresh && fresh.text);
+});
+
+lux.on('message', ({ message }) => {
+	if (/spam/i.test(message.text)) {
+		lux.messages.remove(message.peer.id, message.id, { revoke: true });
+	}
+});
+```
+
+`beforeSend` handlers run synchronously, before the message leaves. Return
+a string to replace the text, `{text, entities, replyTo}` (any subset) to
+replace those, `false` to cancel, anything else to keep the message. A new
+`text` without `entities` drops the old formatting. An `async` handler, or
+one that returns a promise, is ignored and the log warns
+"beforeSend handlers run synchronously: the returned promise is ignored".
+
+Files cross into JavaScript as `ArrayBuffer`. `messages.sendFile` takes an
+`ArrayBuffer`, a typed array or a path relative to the plugin's `data`
+folder; `messages.downloadMedia` resolves with an `ArrayBuffer` and throws
+an `Error` in chats that restrict saving.
+
+`lux.settings.set(key, value)` changes a setting the manifest declares and
+fires `onChange`. Menu handlers get `{peer, message}`, hotkey handlers get
+`{peer}`: the chat open in the active window, or null.
 
 ## Limits
 
@@ -232,8 +278,12 @@ What is never available, whatever is granted:
 | One entry into JS (load, event, timer, callback) | 250 ms |
 | CPU over any 5 s | 500 ms; or 3 overruns of the 250 ms slice within 10 s. Either stops and disables the plugin: "The plugin used too much CPU time" |
 | Timers | 64 per plugin; an interval at least 50 ms, a timeout at least 4 ms |
-| `ui.toast` | one a second; the next one throws `RangeError` |
-| Requests in flight (`fetch`, `api.call`, `messages.send`) | 16; the next one rejects with `RangeError` |
+| `ui.toast`, `ui.notify` | one a second together; the next one throws `RangeError` |
+| Requests in flight (`fetch`, `api.call`, `messages.send`, `get`, `history`, `edit`, `downloadMedia`) | 16; the next one rejects with `RangeError` |
+| `messages.history` | 100 messages a call |
+| `messages.remove`, `forward` | 100 ids a call |
+| `chats.list` | 500 chats |
+| `messages.sendFile`, `downloadMedia` | 10 MiB; more throws `RangeError`; a download times out after 60 s |
 | Commands, message menu items, hotkeys | 100 each; the same name, title or keys replaces the handler |
 | `settings.onChange` handlers | 64 |
 | Log line, `lastError` | 4 KiB |

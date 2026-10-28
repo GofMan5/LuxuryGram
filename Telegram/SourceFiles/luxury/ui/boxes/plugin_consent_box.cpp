@@ -214,6 +214,8 @@ QString PermissionTitle(Permission permission) {
 		return tr::lng_luxury_plugins_ui_perm_telegram_api(tr::now);
 	case Permission::TelegramUpdates:
 		return tr::lng_luxury_plugins_ui_perm_telegram_updates(tr::now);
+	case Permission::MessagesManage:
+		return tr::lng_luxury_plugins_ui_perm_messages_manage(tr::now);
 	}
 	return QString();
 }
@@ -238,6 +240,8 @@ QString PermissionDescription(Permission permission) {
 		return tr::lng_luxury_plugins_ui_perm_telegram_api_about(tr::now);
 	case Permission::TelegramUpdates:
 		return tr::lng_luxury_plugins_ui_perm_telegram_updates_about(tr::now);
+	case Permission::MessagesManage:
+		return tr::lng_luxury_plugins_ui_perm_messages_manage_about(tr::now);
 	}
 	return QString();
 }
