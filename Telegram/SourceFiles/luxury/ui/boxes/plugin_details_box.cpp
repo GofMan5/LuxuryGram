@@ -3,9 +3,11 @@
 #include "luxury/ui/boxes/plugin_details_box.h"
 
 #include "base/weak_ptr.h"
+#include "lang/lang_keys.h"
 #include "lang_auto.h"
 #include "luxury/plugins/plugin_manager.h"
 #include "luxury/ui/boxes/plugin_consent_box.h"
+#include "luxury/ui/boxes/plugin_consent_logic.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
@@ -13,13 +15,16 @@
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/checkbox.h"
 #include "ui/widgets/fields/input_field.h"
+#include "ui/widgets/fields/password_input.h"
 #include "ui/widgets/labels.h"
+#include "ui/wrap/padding_wrap.h"
 
 #include "styles/style_boxes.h"
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
 
 #include <QtCore/QDateTime>
+#include <QtCore/QRegularExpression>
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 
@@ -28,19 +33,18 @@
 namespace Luxury::Plugins {
 namespace {
 
-constexpr auto kLogLines = 50;
-
-[[nodiscard]] QString LogsText(const QString &id) {
+// Every line the manager keeps, at minLevel (Js::LogLevel as int) and up.
+[[nodiscard]] QString LogsText(const QString &id, int minLevel) {
 	const auto manager = Manager::Maybe();
 	if (!manager) {
 		return QString();
 	}
-	const auto lines = manager->logs(id);
 	auto result = QStringList();
-	const auto from = std::max(int(lines.size()) - kLogLines, 0);
-	for (auto i = from; i < int(lines.size()); ++i) {
-		result.push_back(QDateTime::fromMSecsSinceEpoch(
-			lines[i].time).toString(u"HH:mm:ss "_q) + lines[i].text);
+	for (const auto &line : manager->logs(id)) {
+		if (line.level >= minLevel) {
+			result.push_back(QDateTime::fromMSecsSinceEpoch(
+				line.time).toString(u"HH:mm:ss "_q) + line.text);
+		}
 	}
 	return result.join('\n');
 }
@@ -202,6 +206,40 @@ void AddTextSetting(
 	}, field->lifetime());
 }
 
+// A masked field, saved like AddTextSetting.
+void AddSecretSetting(
+		not_null<Ui::GenericBox*> box,
+		const QString &id,
+		const QString &key,
+		const QString &title,
+		const QString &initial) {
+	// MaskedInputField is not an RpWidget, so it lives in a wrap row.
+	const auto wrap = box->addRow(object_ptr<Ui::FixedHeightWidget>(
+		box,
+		st::defaultInputField.heightMin));
+	const auto field = Ui::CreateChild<Ui::PasswordInput>(
+		wrap,
+		st::defaultInputField,
+		rpl::single(title),
+		initial);
+	wrap->widthValue() | rpl::on_next([=](int width) {
+		field->move(0, 0);
+		field->resize(width, field->height());
+		wrap->resize(width, field->height());
+	}, wrap->lifetime());
+	const auto last = std::make_shared<QString>(initial);
+	const auto commit = [=] {
+		const auto text = field->getLastText();
+		if (text != *last) {
+			*last = text;
+			Save(id, key, text.toStdString());
+		}
+	};
+	QObject::connect(field, &Ui::MaskedInputField::submitted, field, commit);
+	QObject::connect(field, &Ui::MaskedInputField::blurred, field, commit);
+	box->boxClosing() | rpl::on_next(commit, field->lifetime());
+}
+
 void AddSetting(
 		not_null<Ui::GenericBox*> box,
 		const QString &id,
@@ -211,9 +249,21 @@ void AddSetting(
 		return;
 	}
 	const auto key = QString::fromStdString(setting.key);
-	const auto title = QString::fromStdString(setting.title.empty()
+	const auto locale = FindLocale(
+		setting.locales,
+		Lang::LanguageIdOrDefault(Lang::Id()).toStdString());
+	const auto title = QString::fromStdString((locale && !locale->name.empty())
+		? locale->name
+		: setting.title.empty()
 		? setting.key
 		: setting.title);
+	const auto description = QString::fromStdString(
+		(locale && !locale->description.empty())
+			? locale->description
+			: setting.description);
+	// A placeholder takes the field label, the title moves above it.
+	const auto placeholder = QString::fromStdString(setting.placeholder);
+	const auto field = placeholder.isEmpty() ? title : placeholder;
 	const auto value = manager->settingValue(id, key);
 	const auto string = value.is_string()
 		? value.get<std::string>()
@@ -230,37 +280,40 @@ void AddSetting(
 		break;
 	case SettingType::String:
 	case SettingType::Color:
-	case SettingType::Secret:
-		AddTextSetting(
-			box,
-			id,
-			key,
-			title,
-			setting,
-			QString::fromStdString(string));
-		break;
 	case SettingType::Int:
-		AddTextSetting(
-			box,
-			id,
-			key,
-			title,
-			setting,
-			QString::number(value.is_number_integer()
-				? value.get<std::int64_t>()
-				: setting.defaultInt));
-		break;
 	case SettingType::Number:
-		AddTextSetting(
-			box,
-			id,
-			key,
-			title,
-			setting,
-			QString::number(value.is_number()
-				? value.get<double>()
-				: setting.defaultNumber));
+	case SettingType::Secret:
+		if (!placeholder.isEmpty()) {
+			AddText(box, { title }, st::boxLabel);
+		}
+		if (setting.type == SettingType::Secret) {
+			AddSecretSetting(
+				box,
+				id,
+				key,
+				field,
+				QString::fromStdString(string));
+		} else {
+			AddTextSetting(
+				box,
+				id,
+				key,
+				field,
+				setting,
+				(setting.type == SettingType::Int)
+				? QString::number(value.is_number_integer()
+					? value.get<std::int64_t>()
+					: setting.defaultInt)
+				: (setting.type == SettingType::Number)
+				? QString::number(value.is_number()
+					? value.get<double>()
+					: setting.defaultNumber)
+				: QString::fromStdString(string));
+		}
 		break;
+	}
+	if (!description.isEmpty()) {
+		AddText(box, { description });
 	}
 }
 
@@ -285,7 +338,11 @@ void FillPluginDetailsBox(
 	const auto name = plugin.name;
 	box->setTitle(name);
 
-	AddText(box, { plugin.version + u" · "_q + plugin.sourceLabel });
+	// "owner/repo@v1" or "owner/repo#main (abc1234)": the repo links GitHub.
+	const auto repo = plugin.sourceLabel.left(
+		plugin.sourceLabel.indexOf(QRegularExpression(u"[@#]"_q)));
+	AddText(box, TextWithEntities{ plugin.version + u" · "_q }.append(
+		Ui::Text::Link(plugin.sourceLabel, u"https://github.com/"_q + repo)));
 	if (!plugin.author.isEmpty()) {
 		AddText(box, { plugin.author });
 	}
@@ -299,7 +356,10 @@ void FillPluginDetailsBox(
 	}
 	if (!plugin.lastError.isEmpty()) {
 		box->addSkip(st::boxLittleSkip);
-		AddText(box, { plugin.lastError }, st::boxAttentionDividerLabel);
+		AddText(
+			box,
+			{ LastErrorText(plugin.lastError) },
+			st::boxAttentionDividerLabel);
 	}
 
 	AddTitle(box, tr::lng_luxury_plugins_ui_granted_title());
@@ -317,6 +377,16 @@ void FillPluginDetailsBox(
 					: st::boxDividerLabel);
 		}
 	}
+	if (plugin.granted.has(Permission::Network)) {
+		AddTitle(box, tr::lng_luxury_plugins_ui_consent_hosts());
+		auto hosts = QStringList();
+		for (const auto &host : plugin.network) {
+			hosts.push_back((host == u"*"_q)
+				? tr::lng_luxury_plugins_ui_any_website(tr::now)
+				: host);
+		}
+		AddText(box, { hosts.join(u", "_q) });
+	}
 
 	if (!plugin.settings.empty()) {
 		AddTitle(box, tr::lng_luxury_plugins_ui_settings_title());
@@ -327,17 +397,50 @@ void FillPluginDetailsBox(
 	}
 
 	AddTitle(box, tr::lng_luxury_plugins_ui_logs_title());
+	// The minimum Js::LogLevel shown: all, warnings and up, errors.
+	const auto level = std::make_shared<Ui::RadiobuttonGroup>(0);
+	const auto levels = {
+		tr::lng_luxury_plugins_ui_logs_all(tr::now),
+		tr::lng_luxury_plugins_ui_logs_warnings(tr::now),
+		tr::lng_luxury_plugins_ui_logs_errors(tr::now),
+	};
+	auto index = 0;
+	for (const auto &text : levels) {
+		box->addRow(object_ptr<Ui::Radiobutton>(
+			box,
+			level,
+			index++,
+			text,
+			st::defaultBoxCheckbox));
+	}
+	box->addSkip(st::boxLittleSkip);
 	const auto logs = AddText(box, {});
 	logs->setSelectable(true);
 	const auto refreshLogs = [=] {
-		const auto text = LogsText(id);
+		const auto text = LogsText(id, level->current());
 		logs->setMarkedText(text.isEmpty()
 			? TextWithEntities{ tr::lng_luxury_plugins_ui_logs_empty(tr::now) }
 			: Ui::Text::Code(text));
 	};
 	refreshLogs();
+	level->setChangedCallback([=](int) { refreshLogs(); });
+	// Lines come in bursts: one refresh per event loop turn.
+	const auto scheduled = std::make_shared<bool>(false);
+	if (manager) {
+		manager->logAdded() | rpl::filter(
+			rpl::mappers::_1 == id
+		) | rpl::on_next([=] {
+			if (!*scheduled) {
+				*scheduled = true;
+				crl::on_main(box, [=] {
+					*scheduled = false;
+					refreshLogs();
+				});
+			}
+		}, logs->lifetime());
+	}
 	AddButton(box, tr::lng_luxury_plugins_ui_logs_copy(), [=] {
-		QGuiApplication::clipboard()->setText(LogsText(id));
+		QGuiApplication::clipboard()->setText(LogsText(id, level->current()));
 		show->showToast(tr::lng_text_copied(tr::now));
 	});
 	AddButton(box, tr::lng_luxury_plugins_ui_logs_clear(), [=] {
@@ -349,34 +452,46 @@ void FillPluginDetailsBox(
 
 	box->addSkip(st::boxLittleSkip);
 	const auto updating = std::make_shared<bool>(false);
-	AddButton(box, tr::lng_luxury_plugins_ui_update(), [=] {
-		const auto manager = Manager::Maybe();
-		if (!manager || *updating) {
-			return;
-		}
-		*updating = true;
-		box->showLoading(true);
-		manager->prepareUpdate(id, crl::guard(box, [=](
-				InstallPlan plan,
-				QString error) {
-			*updating = false;
-			box->showLoading(false);
-			if (!error.isEmpty()) {
-				show->showToast(error);
+	if (plugin.updateAvailable) {
+		AddButton(box, tr::lng_luxury_plugins_ui_update(), [=] {
+			const auto manager = Manager::Maybe();
+			if (!manager || *updating) {
 				return;
 			}
-			box->closeBox();
-			RequestInstall(show, std::move(plan));
-		}));
-	});
+			*updating = true;
+			box->showLoading(true);
+			manager->prepareUpdate(id, crl::guard(box, [=](
+					InstallPlan plan,
+					QString error) {
+				*updating = false;
+				box->showLoading(false);
+				if (!error.isEmpty()) {
+					show->showToast(ErrorText(plan.errorCode, error));
+					return;
+				}
+				box->closeBox();
+				RequestInstall(show, std::move(plan));
+			}));
+		});
+	}
 	AddButton(box, tr::lng_luxury_plugins_ui_reload(), [=] {
-		if (const auto manager = Manager::Maybe()) {
-			manager->reload(id);
-			show->showToast(tr::lng_luxury_plugins_ui_reloaded(
-				tr::now,
-				lt_name,
-				name));
+		const auto manager = Manager::Maybe();
+		const auto enabled = manager
+			? manager->plugin(id)
+			: std::optional<PluginView>();
+		if (!enabled || !enabled->enabled) {
+			show->showToast(tr::lng_luxury_plugins_ui_reload_disabled(tr::now));
+			return;
 		}
+		// reload() starts the plugin synchronously, lastError is final.
+		manager->reload(id);
+		const auto reloaded = manager->plugin(id);
+		show->showToast((reloaded && !reloaded->lastError.isEmpty())
+			? tr::lng_luxury_plugins_ui_reload_failed(
+				tr::now,
+				lt_error,
+				LastErrorText(reloaded->lastError))
+			: tr::lng_luxury_plugins_ui_reloaded(tr::now, lt_name, name));
 		refreshLogs();
 	});
 	const auto weak = base::make_weak(box);
@@ -389,6 +504,13 @@ void FillPluginDetailsBox(
 			.confirmed = [=](Fn<void()> &&close) {
 				if (const auto manager = Manager::Maybe()) {
 					manager->remove(id);
+					// remove() refuses while an install of it runs.
+					show->showToast(manager->plugin(id)
+						? ErrorText(ErrorCode::Busy)
+						: tr::lng_luxury_plugins_ui_removed(
+							tr::now,
+							lt_name,
+							name));
 				}
 				close();
 				if (const auto strong = weak.get()) {

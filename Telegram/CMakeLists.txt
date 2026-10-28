@@ -272,6 +272,7 @@ set(luxurygram_files
         luxury/ui/boxes/plugin_install_box.h
         luxury/ui/boxes/plugin_consent_box.cpp
         luxury/ui/boxes/plugin_consent_box.h
+        luxury/ui/boxes/plugin_consent_logic.h
         luxury/ui/boxes/plugin_details_box.cpp
         luxury/ui/boxes/plugin_details_box.h
         luxury/features/streamer_mode/platform/linux/streamer_mode_linux.cpp

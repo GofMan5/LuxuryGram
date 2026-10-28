@@ -64,7 +64,7 @@ void FillPluginInstallBox(
 			*loading = false;
 			box->showLoading(false);
 			if (!text.isEmpty()) {
-				error->entity()->setText(text);
+				error->entity()->setText(ErrorText(plan.errorCode, text));
 				error->show(anim::type::normal);
 				field->showError();
 				return;

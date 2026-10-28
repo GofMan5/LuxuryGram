@@ -8,6 +8,7 @@
 
 #include "settings/sections/settings_main.h"
 #include "lang_auto.h"
+#include "luxury/plugins/plugin_manager.h"
 #include "luxury/ui/luxury_logo.h"
 #include "luxury/ui/settings/settings_appearance.h"
 #include "luxury/ui/settings/settings_luxury.h"
@@ -144,11 +145,28 @@ void BuildCategories(SectionBuilder &builder) {
 		.targetSection = LuxuryOther::Id(),
 		.icon = { &st::menuIconFave },
 	});
-	builder.addSectionButton({
+	const auto plugins = builder.addSectionButton({
 		.title = tr::lng_luxury_plugins_ui_title(),
 		.targetSection = LuxuryPlugins::Id(),
 		.icon = { &st::menuIconCustomize },
 	});
+	// The badge: how many plugins have an update, nothing for none.
+	const auto manager = Luxury::Plugins::Manager::Maybe();
+	if (plugins && manager) {
+		CreateRightLabel(
+			plugins,
+			rpl::single(rpl::empty) | rpl::then(
+				manager->changes()
+			) | rpl::map([=] {
+				const auto list = manager->plugins();
+				const auto count = ranges::count_if(list, [](const auto &p) {
+					return p.updateAvailable;
+				});
+				return count ? QString::number(count) : QString();
+			}),
+			st::settingsButton,
+			tr::lng_luxury_plugins_ui_title());
+	}
 }
 
 void BuildLinks(SectionBuilder &builder) {

@@ -86,8 +86,8 @@ value is read with `lux.settings.get(key)`. Settings need no permission.
 | `key` | Required, unique, 1-64 of `[A-Za-z0-9_.-]`. |
 | `type` | Required: one of the types below. |
 | `title` | Required, the row label. |
-| `description` | Optional string, validated; not shown yet. |
-| `placeholder` | Optional string, validated; not shown yet (the field shows `title`). |
+| `description` | Optional string, shown under the field. |
+| `placeholder` | Optional string, shown inside an empty text field (`title` moves above it). |
 | `default` | Optional, must match the type. |
 | `locales` | Optional, see [Locales](#locales). |
 
@@ -108,10 +108,9 @@ A `default` must fit: inside `min`..`max`, one of `options`, a valid color.
 it, otherwise the default. So when an update narrows a range or drops an
 option, old values fall back to the default instead of reaching your code.
 
-The settings box does not mask `secret` yet; treat it as "kept out of the
-log", not as hidden on screen. Likewise `description`, `placeholder` and
-`locales` are accepted and validated now and shown by the settings box in
-a later release: today a row shows `title` only.
+The settings box masks `secret` like a password field. A `select` is a
+list of radio buttons, `number` and `color` are text fields checked against
+their type before they are saved.
 
 ### New setting types
 
@@ -130,9 +129,9 @@ lux.settings.onChange(({ key, value }) => { /* at most 64 handlers */ });
 
 `locales` maps a language code to translated texts, at the top level
 (`name`, `description` of the plugin) and per setting (`name` for `title`,
-plus `description`). They are accepted and validated now; the client shows
-them in a later release, until then every text appears as written in the
-manifest:
+plus `description`). The settings box picks the client's language, then
+its base language (`pt` for `pt-br`), and otherwise shows the text as
+written in the manifest:
 
 ```json
 "locales": {"ru": {"name": "Токен API", "description": "Со страницы настроек"}}

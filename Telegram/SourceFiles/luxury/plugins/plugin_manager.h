@@ -103,6 +103,8 @@ public:
 	[[nodiscard]] std::optional<PluginView> plugin(const QString &id) const;
 	[[nodiscard]] std::vector<LogLine> logs(const QString &id) const;
 	void clearLogs(const QString &id);
+	// Fires the plugin id after each new log line.
+	[[nodiscard]] rpl::producer<QString> logAdded() const;
 
 	void setEnabled(const QString &id, bool enabled);
 	void remove(const QString &id);
@@ -139,6 +141,10 @@ public:
 		Fn<void(QString error, ErrorCode code)> done);
 	// The same, for a caller that shows the text only.
 	void commitInstall(InstallPlan plan, Fn<void(QString error)> done);
+	// Marks a running commitInstall of the plugin: when its current fetch
+	// ends, before the files are written, done gets Busy. Requests in flight
+	// are not aborted; nothing happens once the swap started.
+	void cancelInstall(const QString &id);
 	// Puts back the version code.prev holds, see PluginView::previousVersion.
 	// Busy while an install of it runs, Files when the swap failed.
 	void rollback(
