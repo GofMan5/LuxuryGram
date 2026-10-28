@@ -974,9 +974,6 @@ void TopBarWidget::setActiveChat(
 		_titleNameVersion = 0;
 		_emojiInteractionSeen = nullptr;
 		_activeChatLifetime.destroy();
-		if (peerChanged) {
-			Luxury::Plugins::ChatOpened(_activeChat.key.peer());
-		}
 		if (const auto peer = _activeChat.key.peer()) {
 			session().changes().peerFlagsValue(
 				peer,

@@ -101,7 +101,10 @@ interface LuxEvents {
 	 * id/pts. Needs `telegram.updates`.
 	 */
 	update: (event: { update: { _: string; [key: string]: LuxJson } }) => void | Promise<void>;
-	/** The chat open in the active window changed. Needs `ui`. */
+	/**
+	 * Another chat was opened in the main window (not repeated for its
+	 * topics, sections or other windows). Needs `ui`.
+	 */
 	chatOpened: (event: { peer: LuxPeer }) => void | Promise<void>;
 	/** Before the plugin is disabled, updated or removed. */
 	unload: () => void;
@@ -252,11 +255,17 @@ declare namespace lux {
 		/** Opens the chat in the active window. */
 		function openChat(peer: string | number): void;
 		/**
-		 * http(s) only, at most one a second. The client asks the user
-		 * before it opens the link.
+		 * http(s) only, at most one a second, and only within 1 s after the
+		 * user runs a command, menu item or hotkey of the plugin
+		 * (NotAllowedError otherwise). Telegram links (t.me and the like)
+		 * throw TypeError: use openChat. The client's link confirmation
+		 * applies, unless the user turned it off for web links.
 		 */
 		function openUrl(url: string): void;
-		/** A label in the badge after the sender name, kept until unload. */
+		/**
+		 * A label in the badge after the sender name, kept until unload.
+		 * Shown only on incoming messages that show a sender name.
+		 */
 		function decorateMessage(options: LuxDecorateOptions): void;
 		/** Lays the message out again. */
 		function refreshMessage(options: { peer: string | number; id: string | number }): void;

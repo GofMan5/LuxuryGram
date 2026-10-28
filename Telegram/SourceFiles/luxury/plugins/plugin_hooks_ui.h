@@ -26,10 +26,11 @@ void FillHeaderMenu(not_null<Ui::PopupMenu*> menu, not_null<PeerData*> peer);
 // Fires when a plugin adds or drops a header button, or unloads.
 [[nodiscard]] rpl::producer<> HeaderButtonsChanges();
 void NotifyHeaderButtons();
-// The message field's context menu: the "Plugins" submenu for the chat of
-// the active window.
-void FillComposeMenu(not_null<Ui::PopupMenu*> menu);
-// TopBarWidget::setActiveChat: the 'chatOpened' event, null when no chat.
+// The message field's context menu: the "Plugins" submenu for the chat
+// the field writes to.
+void FillComposeMenu(not_null<Ui::PopupMenu*> menu, not_null<PeerData*> peer);
+// SessionController of a main window, its active chat's peer changed: the
+// 'chatOpened' event, nothing when no chat.
 void ChatOpened(PeerData *peer);
 // FieldAutocomplete: /commands of running plugins, as (name, description).
 [[nodiscard]] std::vector<std::pair<QString, QString>> PluginCommands(

@@ -8,7 +8,6 @@
 #include "core/application.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
-#include "dialogs/dialogs_key.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "lang/lang_keys.h"
@@ -16,8 +15,6 @@
 #include "main/main_domain.h"
 #include "main/main_session.h"
 #include "ui/widgets/popup_menu.h"
-#include "window/window_controller.h"
-#include "window/window_session_controller.h"
 #include "styles/style_menu_icons.h"
 
 #include <algorithm>
@@ -164,12 +161,7 @@ void NotifyHeaderButtons() {
 	HeaderStream().fire({});
 }
 
-void FillComposeMenu(not_null<Ui::PopupMenu*> menu) {
-	const auto window = Core::App().activeWindow();
-	const auto controller = window ? window->sessionController() : nullptr;
-	const auto peer = controller
-		? controller->activeChatCurrent().peer()
-		: nullptr;
+void FillComposeMenu(not_null<Ui::PopupMenu*> menu, not_null<PeerData*> peer) {
 	if (!HasItems(peer, &Instance::composeMenuItems)) {
 		return;
 	}

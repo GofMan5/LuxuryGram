@@ -12,13 +12,16 @@ The Qt side is not built here, so it is checked statically, each check
 against a mutant it must reject:
 - message layout and paint read the label cache and never enter an engine;
 - ui.openUrl goes through HiddenUrlClickHandler (the confirmation box),
-  never QDesktopServices or the plain UrlClickHandler;
+  never QDesktopServices or the plain UrlClickHandler, refuses a link the
+  client would turn into a tg:// one (https://t.me/x?start=y), and opens
+  only right after a user gesture, since the box can be turned off;
 - unload removes every menu item, header button and label, and an open
   form settles null when its box closes;
 - the dispatch reaches uiExt before the generic ui. branch, forms are
   refused while passcode-locked, the service chat is never shown, and menu
   clicks reach the plugin asynchronously;
-- the client hooks are wired at their call sites.
+- the client hooks are wired at their call sites: the compose menu for the
+  field's own chat, chatOpened once per chat of the main window.
 
 Bounded source check; not a native acceptance.
 """
@@ -40,7 +43,8 @@ MESSAGE = SRC + 'history/view/history_view_message.cpp'
 PEER_MENU = SRC + 'window/window_peer_menu.cpp'
 TOP_BAR = SRC + 'history/view/history_view_top_bar_widget.cpp'
 AUTOCOMPLETE = SRC + 'chat_helpers/field_autocomplete.cpp'
-FILES = (EXT, HOOKS, HOST, MESSAGE, PEER_MENU, TOP_BAR, AUTOCOMPLETE)
+SESSION = SRC + 'window/window_session_controller.cpp'
+FILES = (EXT, HOOKS, HOST, MESSAGE, PEER_MENU, TOP_BAR, AUTOCOMPLETE, SESSION)
 
 MAIN = r'''
 #include "luxury/plugins/plugin_ui_logic.h"
@@ -227,6 +231,15 @@ def check_open_url(files):
     assert 'HiddenUrlClickHandler::Open(' in branch, 'ui.openUrl bypasses HiddenUrlClickHandler'
     assert '.forceExternalUrlConfirmation = true' in branch, 'ui.openUrl skips the confirmation'
     assert 'ToastAllowed(now, _lastOpenUrl)' in branch, 'ui.openUrl is not rate limited'
+    opened = branch.index('HiddenUrlClickHandler::Open(')
+    # https://t.me/x?start=y becomes tg://resolve?...&start=y, which the
+    # handler runs with no box: a bot /start sent on the plugin's behalf.
+    local = branch.find('if (Core::TryConvertUrlToLocal(url) != url) {')
+    assert 0 <= local < opened, 'ui.openUrl opens t.me links as tg:// ones'
+    assert 'Telegram links are not allowed' in branch[local:opened], 'ui.openUrl lets t.me links through'
+    gesture = branch.find('if (!GestureActive(now, _gestureUntil)) {')
+    assert 0 <= gesture < opened, 'ui.openUrl opens links without a user gesture'
+    assert '"NotAllowedError"' in branch[gesture:opened], 'ui.openUrl outside a gesture is not refused'
     for path in (EXT, HOOKS):
         code = re.sub(r'//[^\n]*', '', files[path])
         for banned in ('QDesktopServices', 'File::OpenUrl', 'openUrl('):
@@ -293,11 +306,22 @@ def check_clicks(files):
 def check_wiring(files):
     assert files[PEER_MENU].count('Luxury::Plugins::FillChatMenu(_peer, _addAction);') == 2, 'chat menu items are not wired'
     top = files[TOP_BAR]
-    for call in ('FillHeaderMenu(', 'HasHeaderButtons(', 'HeaderButtonsChanges(', 'ChatOpened('):
+    for call in ('FillHeaderMenu(', 'HasHeaderButtons(', 'HeaderButtonsChanges('):
         assert 'Luxury::Plugins::' + call in top, f'the top bar misses {call}'
-    assert 'if (peerChanged) {\n\t\t\tLuxury::Plugins::ChatOpened(' in top, 'chatOpened fires on every refresh'
+    # Every TopBarWidget (sections, topics, other windows) sets a chat.
+    assert 'ChatOpened(' not in top, 'chatOpened fires from every top bar'
+    session = files[SESSION]
+    assert session.count('Luxury::Plugins::ChatOpened(') == 1, 'chatOpened is not wired'
+    start = session.index('\tif (_isPrimary) {\n\t\tactiveChatChanges(')
+    block = session[start:session.index('}, lifetime());', start)]
+    assert 'Luxury::Plugins::ChatOpened(peer);' in block, 'chatOpened fires outside the main window'
+    assert 'rpl::distinct_until_changed(' in block, 'chatOpened repeats for the same chat'
     field = files[AUTOCOMPLETE]
-    assert 'Luxury::Plugins::FillComposeMenu(menu);' in field, 'compose menu items are not wired'
+    assert 'Luxury::Plugins::FillComposeMenu(menu, peer);' in field, 'compose menu items are not wired'
+    assert 'field->property("luxuryPluginsPeer")' in field, 'the compose menu ignores the field chat'
+    compose = function(files[HOOKS], 'void FillComposeMenu(')
+    for other in ('activeWindow', 'activeChatCurrent', 'sessionController'):
+        assert other not in compose, f'the compose menu reads the chat from {other}'
     assert '!field->property("luxuryPluginsMenu").toBool()' in field, 'the compose hook stacks up per chat'
     assert 'Luxury::Plugins::PluginCommands(peer)' in field, 'plugin commands are not listed'
 
@@ -321,6 +345,9 @@ STATIC_MUTANTS = (
     (check_open_url, EXT, '''		HiddenUrlClickHandler::Open(''', '''		UrlClickHandler::Open('''),
     (check_open_url, EXT, '''				.forceExternalUrlConfirmation = true,''', '''				.forceExternalUrlConfirmation = false,'''),
     (check_open_url, EXT, '''			|| !IsPluginOpenableUrl(options.get_ref<const std::string&>())) {''', '''			) {'''),
+    # openUrl lets https://t.me/x?start=y through, or opens without a gesture.
+    (check_open_url, EXT, '''		if (Core::TryConvertUrlToLocal(url) != url) {''', '''		if (false) {'''),
+    (check_open_url, EXT, '''		if (!GestureActive(now, _gestureUntil)) {''', '''		if (false) {'''),
     # Menu items are not removed on unload.
     (check_unload, HOST, '''	clearUiExt();
 ''', ''),
@@ -346,9 +373,16 @@ STATIC_MUTANTS = (
     (check_clicks, HOOKS, '''						return (handler.fn == fn);''', '''						return true;'''),
     (check_wiring, PEER_MENU, '''	Luxury::Plugins::FillChatMenu(_peer, _addAction);
 	addDeleteChat();''', '''	addDeleteChat();'''),
-    (check_wiring, TOP_BAR, '''		if (peerChanged) {
-			Luxury::Plugins::ChatOpened(''', '''		{
-			Luxury::Plugins::ChatOpened('''),
+    (check_wiring, SESSION, '''	if (_isPrimary) {
+		activeChatChanges(''', '''	if (true) {
+		activeChatChanges('''),
+    (check_wiring, SESSION, '''		}) | rpl::distinct_until_changed(
+		) | rpl::on_next([](PeerData *peer) {''', '''		}) | rpl::on_next([](PeerData *peer) {'''),
+    (check_wiring, TOP_BAR, '''	const auto peerChanged = ''', '''	Luxury::Plugins::ChatOpened(nullptr);
+	const auto peerChanged = '''),
+    (check_wiring, HOOKS, '''	auto submenu = std::make_unique<Ui::PopupMenu>(menu, menu->st());''',
+        '''	const auto window = Core::App().activeWindow();
+	auto submenu = std::make_unique<Ui::PopupMenu>(menu, menu->st());'''),
 )
 
 
@@ -382,7 +416,9 @@ def check(root):
     print('Plugin UI ext PASS: strict form schema, http(s)-only links through '
           'HiddenUrlClickHandler, labels read from a cache outside the engine, '
           'items, labels and forms dropped on unload, uiExt dispatch, passcode '
-          'and service chat guards, async menu clicks and wired client hooks')
+          'and service chat guards, async menu clicks and wired client hooks; '
+          'no t.me links, links only on a user gesture, compose menu for the '
+          'field chat, chatOpened from the main window once per chat')
 
 
 if __name__ == '__main__':

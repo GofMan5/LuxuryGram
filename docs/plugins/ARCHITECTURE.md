@@ -396,7 +396,7 @@ lux.on(event, fn)     // returns unsubscribe function
 //   'beforeSend'   ({peer, text}) -> string|false|undefined   messages.modify
 //   'update'       ({update})               telegram.updates, raw TL JSON,
 //                                           at-least-once: may repeat
-//   'chatOpened'   ({peer})                 ui, the active window's chat
+//   'chatOpened'   ({peer})                 ui, the main window's chat
 //   'unload'       ()                       before disable/update/remove
 //   any other name throws TypeError
 lux.messages.send({peer, text, replyTo?, silent?})   -> Promise   messages.send
@@ -415,11 +415,15 @@ lux.ui.showForm({title?, fields}) -> Promise<{key: value}|null>    ui
 //   default?, placeholder? (text), options (select)}; an unknown type or
 //   member throws TypeError; a dialog, see below
 lux.ui.currentChat() -> peer|null / lux.ui.openChat(peer)           ui
-lux.ui.openUrl(url)              http(s), one a second, the client's link
+lux.ui.openUrl(url)              http(s), one a second, within 1 s of a
+//                               user gesture (NotAllowedError); a link
+//                               TryConvertUrlToLocal changes (t.me, tg:,
+//                               .ton) is a TypeError; the client's link
 //                               confirmation box (HiddenUrlClickHandler)
 lux.ui.decorateMessage({peer, id, text?}) / refreshMessage({peer, id})  ui
-//   a label of at most 32 characters in the message badge; at most 1000
-//   messages; dropped on unload and on an account switch
+//   a label of at most 32 characters in the message badge, so shown only
+//   on incoming messages with a sender name; at most 1000 messages;
+//   dropped on unload and on an account switch
 //   Dialogs: one at a time per plugin, titled with the plugin name, closed
 //   when the plugin unloads; refused while the app is passcode-locked
 //   Ctrl+C/V/X/A/Z/Y, Ctrl+Enter, Enter and Esc are reserved: TypeError
@@ -463,8 +467,8 @@ Calling an API without its permission throws
 | hotkey | app event filter | plugin hotkeys after built-in ones; never while a text field has focus, never a reserved shortcut |
 | chat menu | `Window::FillDialogsEntryMenu` (chat list and the header's three-dot menu) | one submenu "Plugins" with `addChatMenuItem` items |
 | header button | `HistoryView::TopBarWidget` | one button, shown while a plugin has `addHeaderButton` items, opens their menu |
-| compose menu | message field context menu (`FieldAutocomplete` installs it once per field) | one submenu "Plugins" with `addComposeMenuItem` items |
-| chat opened | `TopBarWidget::setActiveChat`, peer changed | `chatOpened` event on the next event loop turn |
+| compose menu | message field context menu (`FieldAutocomplete` installs it once per field, for the field's own chat) | one submenu "Plugins" with `addComposeMenuItem` items |
+| chat opened | `SessionController::activeChatChanges` of the main window, peer changed | `chatOpened` event on the next event loop turn |
 | command list | `FieldAutocomplete`, `/` in a field | plugin commands listed with bot commands; choosing one puts it in the field, sending runs it |
 | message label | `HistoryView::Message::refreshRightBadge` | reads the plugin's label cache; `decorateMessage` fills it and asks for a relayout |
 

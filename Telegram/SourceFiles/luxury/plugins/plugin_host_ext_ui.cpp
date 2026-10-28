@@ -12,6 +12,7 @@
 #include "luxury/utils/telegram_helpers.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
+#include "core/local_url_handlers.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_session.h"
@@ -272,15 +273,29 @@ Js::HostResult Instance::uiExt(
 			|| !IsPluginOpenableUrl(options.get_ref<const std::string&>())) {
 			return TypeError("ui.openUrl: url must be an http(s) link");
 		}
+		// t.me and the like become tg:// links that act inside the client
+		// (a bot /start, a draft, settings) without the link box.
+		const auto url = QString::fromStdString(options.get<std::string>());
+		if (Core::TryConvertUrlToLocal(url) != url) {
+			return TypeError(
+				"ui.openUrl: Telegram links are not allowed; use ui.openChat");
+		}
+		// The link box can be turned off for web links, so a link opens
+		// only on the user's action, as the clipboard does.
 		const auto now = crl::now();
-		if (!ToastAllowed(now, _lastOpenUrl)) {
+		if (!GestureActive(now, _gestureUntil)) {
+			return Result::Error(
+				"NotAllowedError",
+				"ui.openUrl only works right after the user runs a command,"
+					" menu item or hotkey of the plugin");
+		} else if (!ToastAllowed(now, _lastOpenUrl)) {
 			return Result::Error("RangeError", "at most one link a second");
 		}
 		_lastOpenUrl = now;
 		// The client's link path: the box that shows where the link goes,
 		// never a direct QDesktopServices hand-off.
 		HiddenUrlClickHandler::Open(
-			QString::fromStdString(options.get<std::string>()),
+			url,
 			QVariant::fromValue(ClickHandlerContext{
 				.sessionWindow = base::make_weak(controller),
 				.ignoreIv = true,

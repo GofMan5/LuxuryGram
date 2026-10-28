@@ -2050,13 +2050,28 @@ void InitFieldAutocomplete(
 	const auto sendCommand = descriptor.sendBotCommand;
 	const auto setText = descriptor.setText;
 
-	// LuxuryGram: the "Plugins" submenu of a message field. The field
-	// outlives its autocomplete across chats, so the hook goes in once.
+	// LuxuryGram: the "Plugins" submenu of a message field, for the field's
+	// own chat. The field outlives its autocomplete across chats, so the
+	// hook goes in once and reads the chat of the latest init.
+	if (sendCommand) {
+		field->setProperty(
+			"luxuryPluginsPeer",
+			qulonglong(descriptor.peer->id.value));
+	}
 	if (sendCommand && !field->property("luxuryPluginsMenu").toBool()) {
 		field->setProperty("luxuryPluginsMenu", true);
-		field->addContextMenuHook([](Ui::InputField::ContextMenuRequest r) {
-			r.customizePopupMenu([](not_null<Ui::PopupMenu*> menu) {
-				Luxury::Plugins::FillComposeMenu(menu);
+		const auto session = base::make_weak(&descriptor.peer->session());
+		field->addContextMenuHook([=](Ui::InputField::ContextMenuRequest r) {
+			const auto strong = session.get();
+			const auto peer = strong
+				? strong->data().peerLoaded(PeerId(PeerIdHelper(
+					field->property("luxuryPluginsPeer").toULongLong())))
+				: nullptr;
+			if (!peer) {
+				return;
+			}
+			r.customizePopupMenu([=](not_null<Ui::PopupMenu*> menu) {
+				Luxury::Plugins::FillComposeMenu(menu, peer);
 			});
 		});
 	}
