@@ -195,7 +195,7 @@ install fails with "The plugin changed, review it again".
 | `ui` | `lux.ui`: toasts, dialogs, commands, message menu items, hotkeys | |
 | `network` | `lux.http.fetch` to the `network` hosts | |
 | `storage` | `lux.storage` | |
-| `clipboard` | `lux.clipboard` | |
+| `clipboard` | `lux.clipboard`, only within 1 s after the user runs a command, menu item or hotkey of the plugin; otherwise `NotAllowedError` | |
 | `telegram.api` | `lux.api.call`, raw MTProto methods | yes |
 | `telegram.updates` | the `update` event, the raw update stream | yes |
 
@@ -231,13 +231,14 @@ What is never available, whatever is granted:
 | Stack | 256 KiB |
 | One entry into JS (load, event, timer, callback) | 250 ms |
 | CPU over any 5 s | 500 ms; or 3 overruns of the 250 ms slice within 10 s. Either stops and disables the plugin: "The plugin used too much CPU time" |
-| Timers | 1000 per plugin; an interval at least 10 ms, a timeout at least 4 ms |
+| Timers | 64 per plugin; an interval at least 50 ms, a timeout at least 4 ms |
+| `ui.toast` | one a second; the next one throws `RangeError` |
 | Requests in flight (`fetch`, `api.call`, `messages.send`) | 16; the next one rejects with `RangeError` |
 | Commands, message menu items, hotkeys | 100 each; the same name, title or keys replaces the handler |
 | `settings.onChange` handlers | 64 |
 | Log line, `lastError` | 4 KiB |
 | Storage | 5 MiB of JSON per plugin, written to disk 1 s after the last change |
-| `fetch` | HTTPS only, 30 s timeout, 10 MiB response, 5 redirects (each checked against `network`), 32 MiB after decompression |
+| `fetch` | HTTPS only, 30 s timeout, 10 MiB response, 5 redirects (each checked against `network`), 32 MiB after decompression. Private, loopback and link-local addresses are refused with `PermissionError`; a redirect to another origin drops `Authorization` and `Cookie` |
 | Install | 200 files, 20 MiB, `plugin.json` 256 KiB |
 
 Keep handlers short and move slow work to `async` calls: the 250 ms slice
@@ -250,8 +251,9 @@ Host calls throw, or reject their Promise, with an `Error` whose `name` is:
 | Name | When |
 | --- | --- |
 | `PermissionError` | the permission is not granted, or the call is never allowed |
-| `TypeError` | a wrong argument (bad key, empty text, reserved hotkey) |
-| `RangeError` | a limit: handlers, timers, requests in flight, response size |
+| `TypeError` | a wrong argument (bad key, empty text, reserved hotkey, unknown event in `lux.on`) |
+| `RangeError` | a limit: handlers, timers, requests in flight, response size, toasts |
+| `NotAllowedError` | `clipboard` outside a user gesture |
 | `QuotaExceededError` | storage over 5 MiB |
 | `NetworkError` | a failed request or too many redirects |
 | `Error` | no active account or window, or the plugin is stopping |

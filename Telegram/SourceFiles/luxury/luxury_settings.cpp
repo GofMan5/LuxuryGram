@@ -2279,7 +2279,7 @@ const std::pair<const char *, const char *> kRussianSettingsStrings[] = {
 	{ "lng_luxury_plugins_ui_state_update", "Доступно обновление: {version}" },
 	{ "lng_luxury_plugins_ui_details", "Подробнее" },
 	{ "lng_luxury_plugins_ui_install_title", "Установка плагина" },
-	{ "lng_luxury_plugins_ui_install_about", "Вставьте ссылку GitHub вида owner/repo, owner/repo@tag или адрес репозитория." },
+	{ "lng_luxury_plugins_ui_install_about", "Вставьте ссылку GitHub: owner/repo, ссылку на релиз (…/releases/tag/…) или адрес репозитория." },
 	{ "lng_luxury_plugins_ui_install_placeholder", "Ссылка GitHub" },
 	{ "lng_luxury_plugins_ui_install", "Продолжить" },
 	{ "lng_luxury_plugins_ui_install_failed", "Не удалось установить плагин: {error}" },

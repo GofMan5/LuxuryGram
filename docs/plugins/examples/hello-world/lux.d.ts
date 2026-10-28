@@ -192,6 +192,7 @@ declare namespace lux {
 
 	/** Every member needs `ui`. */
 	namespace ui {
+		/** At most one a second, otherwise throws RangeError. */
 		function toast(text: string): void;
 		/** Resolves to true when closed. */
 		function alert(options: LuxDialogOptions): Promise<boolean>;
@@ -240,7 +241,11 @@ declare namespace lux {
 		function onChange(fn: (event: { key: string; value: LuxJson }) => void): void;
 	}
 
-	/** Every member needs `clipboard`. */
+	/**
+	 * Every member needs `clipboard`, and works only within 1 s after the
+	 * user runs a command, menu item or hotkey of the plugin; otherwise it
+	 * throws NotAllowedError.
+	 */
 	namespace clipboard {
 		function read(): string;
 		function write(text: string): void;
@@ -267,9 +272,9 @@ declare const console: {
 	error(...args: any[]): void;
 };
 
-/** At most 1000 timers per plugin; a timeout waits at least 4 ms. */
+/** At most 64 timers per plugin; a timeout waits at least 4 ms. */
 declare function setTimeout<A extends any[]>(fn: (...args: A) => void, delay?: number, ...args: A): number;
-/** An interval fires at most every 10 ms. */
+/** An interval fires at most every 50 ms. */
 declare function setInterval<A extends any[]>(fn: (...args: A) => void, delay?: number, ...args: A): number;
 declare function clearTimeout(id: number): void;
 declare function clearInterval(id: number): void;

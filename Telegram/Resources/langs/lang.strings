@@ -9790,7 +9790,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_luxury_plugins_ui_state_update" = "Update available: {version}";
 "lng_luxury_plugins_ui_details" = "Details";
 "lng_luxury_plugins_ui_install_title" = "Install plugin";
-"lng_luxury_plugins_ui_install_about" = "Paste a GitHub link like owner/repo, owner/repo@tag or a repository URL.";
+"lng_luxury_plugins_ui_install_about" = "Paste a GitHub link: owner/repo, a release link (…/releases/tag/…) or a repository URL.";
 "lng_luxury_plugins_ui_install_placeholder" = "GitHub link";
 "lng_luxury_plugins_ui_install" = "Continue";
 "lng_luxury_plugins_ui_install_failed" = "Could not install the plugin: {error}";

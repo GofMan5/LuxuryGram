@@ -439,9 +439,18 @@ void Manager::Private::instanceError(
 }
 
 void Manager::Private::instanceStop(const QString &id, const QString &text) {
-	// Called from inside the engine: destroy it on the next turn.
+	// Called from inside the engine: destroy it on the next turn. Only this
+	// instance: an unload handler over budget is already being stopped, and
+	// reload, update or rollback may start a new one before the next turn.
+	const auto i = running.find(id);
+	if (i == running.end()) {
+		return;
+	}
+	const auto weak = base::make_weak(i->second.get());
 	crl::on_main(this, [=] {
-		if (const auto plugin = find(id)) {
+		if (!weak.get()) {
+			return;
+		} else if (const auto plugin = find(id)) {
 			stop(id);
 			plugin->enabled = false;
 			plugin->lastError = TruncateText(text.toStdString());

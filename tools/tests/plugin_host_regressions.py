@@ -964,6 +964,9 @@ def check_commit(files):
     assert 'if (changesQueued) {\n\t\treturn;' in later and 'base::call_delayed(kChangesDelay' in later, 'changes() must be throttled'
     assert 'plugin->lastError = TruncateText(text.toStdString());' in body(manager, 'void Manager::Private::instanceStop('), \
         'the stop reason must be truncated'
+    stop = body(manager, 'void Manager::Private::instanceStop(')
+    assert 'const auto weak = base::make_weak(i->second.get());' in stop and 'if (!weak.get()) {' in stop, \
+        'a queued CPU stop must not hit the instance a reload or update started in its place'
     commit = body(manager, 'void Manager::commitInstall(')
     consent = commit.index('if (NeedsConsent(plan.update, newPermissions, widened, plan.consented)) {')
     assert consent < commit.index('committing.emplace(id);'), 'consent must be checked before anything starts'
@@ -1148,6 +1151,8 @@ MUTANTS = (
     (check_commit, MANAGER, 'return Root() + u"plugins/"_q + id;', 'return Root() + id;'),
     (check_commit, MANAGER, 'std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));', 'std::filesystem::path(utf8);'),
     (check_commit, MANAGER, '.text = Text(TruncateText(text.toStdString())),', '.text = text,'),
+    (check_commit, MANAGER, 'if (!weak.get()) {\n\t\t\treturn;\n\t\t} else if (const auto plugin = find(id)) {',
+     'if (false) {\n\t\t\treturn;\n\t\t} else if (const auto plugin = find(id)) {'),
     (check_commit, MANAGER, '\t\tplugin->lastError = error;\n\t\tfireChangesLater();', '\t\tplugin->lastError = error;\n\t\tsave();'),
     (check_commit, MANAGER, '\tif (changesQueued) {\n\t\treturn;\n\t}\n', ''),
     (check_commit, MANAGER, 'if (NeedsConsent(plan.update, newPermissions, widened, plan.consented)) {',
