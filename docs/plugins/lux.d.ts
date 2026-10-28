@@ -14,7 +14,7 @@
 //                       allowed (forbidden method, service chat, Stars)
 //   TypeError           a wrong argument
 //   RangeError          a limit: handlers, timers, requests in flight,
-//                       a response over 10 MiB
+//                       a response or a file over 10 MiB
 //   QuotaExceededError  storage over 5 MiB
 //   NetworkError        a failed request or too many redirects
 //   Error               no active account or window, the plugin is stopping
@@ -25,6 +25,7 @@ type LuxPermission =
 	| 'messages.read'
 	| 'messages.send'
 	| 'messages.modify'
+	| 'messages.manage'
 	| 'ui'
 	| 'network'
 	| 'storage'
@@ -67,18 +68,91 @@ interface LuxPeer {
 	title: string;
 }
 
+/**
+ * A formatting span in UTF-16 units, as String.prototype.length counts.
+ * `url` comes with textUrl, `userId` (a decimal string) with mentionName,
+ * `emojiId` with customEmoji, `language` with pre.
+ */
+interface LuxEntity {
+	type:
+		| 'url' | 'textUrl' | 'email' | 'hashtag' | 'cashtag' | 'mention'
+		| 'mentionName' | 'customEmoji' | 'botCommand' | 'mediaTimestamp'
+		| 'colorized' | 'phone' | 'bankCard' | 'tonAddress' | 'bold'
+		| 'semibold' | 'italic' | 'underline' | 'strikethrough' | 'code'
+		| 'pre' | 'blockquote' | 'spoiler' | 'subscript' | 'superscript'
+		| 'marked' | 'formattedDate';
+	offset: number;
+	length: number;
+	url?: string;
+	userId?: string;
+	emojiId?: string;
+	language?: string;
+}
+
+interface LuxMedia {
+	type:
+		| 'photo' | 'sticker' | 'voice' | 'round' | 'animation' | 'video'
+		| 'audio' | 'file' | 'other';
+	/** Bytes, 0 when unknown. */
+	size: number;
+}
+
+interface LuxForward {
+	/** The original sender, null when hidden. */
+	from: LuxPeer | null;
+	/** The name a hidden sender shows, else null. */
+	name: string | null;
+	/** Unix time of the original message. */
+	date: number;
+	/** Id of the original message in its chat, or null. */
+	id: string | null;
+}
+
 interface LuxMessage {
 	/** Message id in its chat, a decimal string. */
 	id: string;
 	peer: LuxPeer;
-	from: LuxPeer;
+	/** null for a message from the Telegram service account. */
+	from: LuxPeer | null;
 	/** Unix time, seconds. */
 	date: number;
 	text: string;
+	entities: LuxEntity[];
 	out: boolean;
 	/** Id of the replied message, a decimal string, or null. */
 	replyTo: string | null;
 	hasMedia: boolean;
+	media: LuxMedia | null;
+	forward: LuxForward | null;
+	/** Topic root id in a forum, a decimal string, else null. */
+	topicId: string | null;
+	/** Unix time of the last edit, or null. */
+	editDate: number | null;
+	/** Album id, a decimal string, or null. */
+	groupedId: string | null;
+}
+
+interface LuxChat extends LuxPeer {
+	username: string | null;
+	/** 0 until the chat is loaded. */
+	unreadCount: number;
+}
+
+interface LuxAccount {
+	id: string;
+	firstName: string;
+	lastName: string;
+	username: string | null;
+	premium: boolean;
+}
+
+/** What beforeSend may return besides a string or false. */
+interface LuxSendChange {
+	/** A new text drops the old entities unless `entities` is given. */
+	text?: string;
+	entities?: LuxEntity[];
+	/** A message id in the same chat, or null for no reply. */
+	replyTo?: string | number | null;
 }
 
 /** A menu item handler without `messages.read` gets only id and peer. */
@@ -89,13 +163,27 @@ interface LuxEvents {
 	message: (event: { message: LuxMessage }) => void | Promise<void>;
 	/** A message this account sent. Needs `messages.read`. */
 	messageOut: (event: { message: LuxMessage }) => void | Promise<void>;
+	/** A message was edited. Needs `messages.read`. */
+	messageEdited: (event: { message: LuxMessage }) => void | Promise<void>;
+	/** A loaded message was deleted. Needs `messages.read`. */
+	messageDeleted: (event: { message: LuxMessage }) => void | Promise<void>;
+	/** A chat was read up to maxId, here or elsewhere. Needs `messages.read`. */
+	chatRead: (event: { peer: LuxPeer; maxId: string; unread: number }) => void | Promise<void>;
+	/** The active Telegram account changed. Needs `messages.read`. */
+	accountChanged: (event: {}) => void | Promise<void>;
 	/**
-	 * Text about to be sent, synchronous. Return a string to replace it,
-	 * `false` to cancel the send, anything else to keep it. Handlers run in
-	 * subscription order, each sees the text the previous one returned.
-	 * Needs `messages.modify`.
+	 * A message about to be sent, synchronous. Return a string to replace
+	 * the text, a LuxSendChange to replace what it names, `false` to cancel
+	 * the send, anything else to keep it. Handlers run in subscription
+	 * order, each sees what the previous one returned. A returned promise
+	 * is ignored with a warning in the log. Needs `messages.modify`.
 	 */
-	beforeSend: (event: { peer: LuxPeer; text: string }) => string | false | void;
+	beforeSend: (event: {
+		peer: LuxPeer;
+		text: string;
+		entities: LuxEntity[];
+		replyTo: string | null;
+	}) => string | LuxSendChange | false | void;
 	/**
 	 * One raw update in the JSON form of TL, at least once: dedupe by
 	 * id/pts. Needs `telegram.updates`.
@@ -138,7 +226,7 @@ interface LuxCommandOptions {
 interface LuxMenuItemOptions {
 	/** Not empty. Shown in the message context menu under "Plugins". */
 	title: string;
-	handler: (event: { message: LuxMessageRef }) => void | Promise<void>;
+	handler: (event: { peer: LuxPeer; message: LuxMessageRef }) => void | Promise<void>;
 }
 
 interface LuxHotkeyOptions {
@@ -148,7 +236,8 @@ interface LuxHotkeyOptions {
 	 * field has focus.
 	 */
 	keys: string;
-	handler: () => void | Promise<void>;
+	/** peer: the chat open in the active window, or null. */
+	handler: (event: { peer: LuxPeer | null }) => void | Promise<void>;
 }
 
 interface LuxFetchOptions {
@@ -188,12 +277,82 @@ declare namespace lux {
 		 * cancelled it. Needs `messages.send`.
 		 */
 		function send(options: LuxSendOptions): Promise<null>;
+		/**
+		 * A message by id, loading it when needed; null when there is none
+		 * or it is a service message. Needs `messages.read`.
+		 */
+		function get(peer: string | number, id: string | number): LuxMessage | null | Promise<LuxMessage | null>;
+		/**
+		 * Newest first, older than offsetId when given. limit 1..100,
+		 * default 20. Needs `messages.read`.
+		 */
+		function history(
+			peer: string | number,
+			options?: { limit?: number; offsetId?: string | number }): Promise<LuxMessage[]>;
+		/**
+		 * Replaces the text (or caption) of a message this account may
+		 * edit. Needs `messages.manage`.
+		 */
+		function edit(
+			peer: string | number,
+			id: string | number,
+			options: { text: string; entities?: LuxEntity[] }): Promise<null>;
+		/**
+		 * Deletes up to 100 messages, skipping those this account cannot
+		 * delete; revoke deletes them for everyone. Returns how many were
+		 * deleted. Needs `messages.manage`.
+		 */
+		function remove(
+			peer: string | number,
+			ids: string | number | (string | number)[],
+			options?: { revoke?: boolean }): number;
+		/**
+		 * Forwards up to 100 messages to another chat; returns how many
+		 * could be forwarded. Needs `messages.manage`.
+		 */
+		function forward(
+			peer: string | number,
+			ids: string | number | (string | number)[],
+			to: string | number): number;
+		/** Marks the chat read, up to maxId when given. Needs `messages.manage`. */
+		function markRead(peer: string | number, maxId?: string | number): null;
+		/**
+		 * Sends a file of at most 10 MiB: bytes, or a path relative to the
+		 * plugin's data folder. Needs `messages.send`.
+		 */
+		function sendFile(
+			peer: string | number,
+			file: ArrayBuffer | ArrayBufferView | string,
+			options?: { silent?: boolean }): null;
+		/**
+		 * The photo or file of a message, at most 10 MiB; rejects when
+		 * saving is restricted in the chat. 60 s timeout.
+		 * Needs `messages.read`.
+		 */
+		function downloadMedia(peer: string | number, id: string | number): Promise<ArrayBuffer>;
+	}
+
+	/** Never the Telegram service chat. Every member needs `messages.read`. */
+	namespace chats {
+		function get(peer: string | number): LuxChat;
+		/** The main chat list, top first. limit 1..500, default 500. */
+		function list(options?: { limit?: number }): LuxChat[];
+	}
+
+	namespace account {
+		/** The active account, never its phone. Needs `messages.read`. */
+		function me(): LuxAccount;
 	}
 
 	/** Every member needs `ui`. */
 	namespace ui {
 		/** At most one a second, otherwise throws RangeError. */
 		function toast(text: string): void;
+		/**
+		 * A toast titled with the plugin name; shares toast's limit and
+		 * throws while the app is locked.
+		 */
+		function notify(text: string): void;
 		/** Resolves to true when closed. */
 		function alert(options: LuxDialogOptions): Promise<boolean>;
 		/** Resolves to true on OK, false when closed. */
@@ -237,6 +396,11 @@ declare namespace lux {
 		 * color ("#RRGGBB") and secret.
 		 */
 		function get(key: string): LuxJson;
+		/**
+		 * Sets a declared setting; throws TypeError for an unknown key or a
+		 * value the setting cannot hold. Fires onChange.
+		 */
+		function set(key: string, value: LuxJson): void;
 		/** At most 64 handlers. */
 		function onChange(fn: (event: { key: string; value: LuxJson }) => void): void;
 	}

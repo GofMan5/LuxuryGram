@@ -1388,6 +1388,7 @@ void Updates::applyUpdateNoPtsCheck(const MTPUpdate &update) {
 				folderId,
 				d.vmax_id().v,
 				d.vstill_unread_count().v);
+			Luxury::Plugins::ChatRead(history, d.vmax_id().v);
 		}
 	} break;
 
@@ -1891,6 +1892,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 				d.vmax_id().v,
 				d.vstill_unread_count().v,
 				d.vpts().v);
+			Luxury::Plugins::ChatRead(history, d.vmax_id().v);
 		}
 	} break;
 

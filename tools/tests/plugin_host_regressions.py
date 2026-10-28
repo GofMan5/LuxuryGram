@@ -878,7 +878,7 @@ def check_sandbox(files):
     # Clipboard: only right after a command, menu item or hotkey.
     later = body(host, 'void Instance::callLater(std::int64_t fn, json args, bool gesture) {')
     assert 'if (gesture) {\n\t\t\t\t_gestureUntil = crl::now() + kGestureMs;' in later, 'callLater must open the gesture window'
-    for site in ('\t\t\t\t}, true);\n\t\t\t\treturn true;', '} } }, true);', 'instance->callLater(hotkey.fn, nullptr, true);'):
+    for site in ('\t\t\t\t}, true);\n\t\t\t\treturn true;', '} } }, true);', 'instance->callLater(hotkey.fn, payload, true);'):
         assert site in hooks, f'a user action does not pass the gesture: {site}'
     assert hooks.count('callLater(') == 3, 'every callLater site must decide the gesture'
     calls = body(host, 'Js::HostResult Instance::call(')
@@ -1203,7 +1203,7 @@ MUTANTS = (
      'if (_stopping) {\n\t\treturn;\n\t}\n\tif (false) {'),
     (check_sandbox, HOST, 'const auto events = _queue.take();', 'const auto events = std::deque<std::pair<std::string, json>>{ _queue.events.front() };'),
     (check_sandbox, HOST, '\t\t\tif (gesture) {\n\t\t\t\t_gestureUntil = crl::now() + kGestureMs;', '\t\t\tif (true) {\n\t\t\t\t_gestureUntil = crl::now() + kGestureMs;'),
-    (check_sandbox, HOOKS, 'instance->callLater(hotkey.fn, nullptr, true);', 'instance->callLater(hotkey.fn, nullptr);'),
+    (check_sandbox, HOOKS, 'instance->callLater(hotkey.fn, payload, true);', 'instance->callLater(hotkey.fn, payload);'),
     (check_sandbox, HOOKS, '} } }, true);', '} } });'),
     (check_sandbox, HOOKS, '\t\t\t\t}, true);\n\t\t\t\treturn true;', '\t\t\t\t});\n\t\t\t\treturn true;'),
     (check_sandbox, HOST, '&& !GestureActive(crl::now(), _gestureUntil)) {', '&& false) {'),

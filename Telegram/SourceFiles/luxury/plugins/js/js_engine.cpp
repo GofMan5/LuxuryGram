@@ -32,8 +32,20 @@ const register = (fn) => {
 	fns.set(id, fn);
 	return id;
 };
-const encode = (value) => JSON.stringify(value, (key, item) =>
-	(typeof item === 'function') ? { $fn: register(item) } : item);
+// Binary data crosses the JSON bridge as { $bin: base64 }.
+const bytesOf = (item) => (item instanceof ArrayBuffer)
+	? new Uint8Array(item)
+	: ArrayBuffer.isView(item)
+	? new Uint8Array(item.buffer, item.byteOffset, item.byteLength)
+	: null;
+const encode = (value) => JSON.stringify(value, (key, item) => {
+	if (typeof item === 'function') {
+		return { $fn: register(item) };
+	}
+	const bytes = bytesOf(item);
+	return bytes ? { $bin: bytes.toBase64() } : item;
+});
+const decodeBin = (r) => Uint8Array.fromBase64(r.$bin).buffer;
 const call = (name, ...args) => host(name, encode(args));
 const errorText = (error) => {
 	const stack = (typeof error.stack === 'string')
@@ -106,9 +118,27 @@ const lux = {
 	},
 	messages: {
 		send: (options) => call('messages.send', options),
+		get: (peer, id) => call('messages.get', peer, id),
+		history: (peer, options) => call('messages.history', peer, options),
+		edit: (peer, id, options) => call('messages.edit', peer, id, options),
+		remove: (peer, ids, options) => call('messages.delete', peer, ids, options),
+		forward: (peer, ids, to) => call('messages.forward', peer, ids, to),
+		markRead: (peer, maxId) => call('messages.markRead', peer, maxId),
+		sendFile: (peer, file, options) => call('messages.sendFile', peer, file, options),
+		downloadMedia(peer, id) {
+			return Promise.resolve(call('messages.downloadMedia', peer, id)).then(decodeBin);
+		},
+	},
+	chats: {
+		get: (peer) => call('chats.get', peer),
+		list: (options) => call('chats.list', options),
+	},
+	account: {
+		me: () => call('account.me'),
 	},
 	ui: {
 		toast: (text) => call('ui.toast', text),
+		notify: (text) => call('ui.notify', text),
 		alert: (options) => call('ui.alert', options),
 		confirm: (options) => call('ui.confirm', options),
 		prompt: (options) => call('ui.prompt', options),
@@ -136,6 +166,7 @@ const lux = {
 	},
 	settings: {
 		get: (key) => call('settings.get', key),
+		set: (key, value) => call('settings.set', key, value),
 		onChange: (fn) => call('settings.onChange', fn),
 	},
 	clipboard: {
@@ -166,24 +197,45 @@ return {
 		}
 		const entries = list.slice();
 		if (event === 'beforeSend') {
-			let text = payload.text;
+			// Each handler sees what the previous ones made of the message.
+			// A plain text change stays a string, entities or replyTo make
+			// the answer an object.
+			let { text, entities, replyTo } = payload;
 			let changed = false;
+			let rich = false;
 			for (const { fn } of entries) {
 				let result;
 				try {
-					result = fn({ ...payload, text });
+					result = fn({ ...payload, text, entities, replyTo });
 				} catch (e) {
 					report(e);
 					continue;
 				}
 				if (result === false) {
 					return false;
-				} else if (typeof result === 'string') {
-					text = result;
+				} else if (result && typeof result.then === 'function') {
+					log(1, 'beforeSend handlers run synchronously:'
+						+ ' the returned promise is ignored');
+					result.then(undefined, report);
+					continue;
+				}
+				const object = (result !== null && typeof result === 'object');
+				const next = object ? result.text : result;
+				if (typeof next === 'string' && next !== text) {
+					text = next;
+					entities = [];
 					changed = true;
 				}
+				if (object && Array.isArray(result.entities)) {
+					entities = result.entities;
+					changed = rich = true;
+				}
+				if (object && ('replyTo' in result)) {
+					replyTo = (result.replyTo === undefined) ? null : result.replyTo;
+					changed = rich = true;
+				}
 			}
-			return changed ? text : null;
+			return !changed ? null : rich ? { text, entities, replyTo } : text;
 		}
 		for (const { fn } of entries) {
 			try {

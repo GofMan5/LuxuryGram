@@ -24,6 +24,7 @@ constexpr auto kPermissions = std::array<PermissionInfo, kPermissionCount>{{
 	{ Permission::Clipboard, "clipboard", true },
 	{ Permission::TelegramApi, "telegram.api", true },
 	{ Permission::TelegramUpdates, "telegram.updates", true },
+	{ Permission::MessagesManage, "messages.manage", true },
 }};
 
 // Whole namespaces: login, the TON wallet, paid SMS jobs, and every

@@ -260,6 +260,8 @@ set(luxurygram_files
         luxury/plugins/plugin_install_logic.h
         luxury/plugins/plugin_hooks.cpp
         luxury/plugins/plugin_hooks.h
+        luxury/plugins/plugin_host_ext_data.cpp
+        luxury/plugins/plugin_payloads.h
         luxury/ui/settings/settings_plugins.cpp
         luxury/ui/settings/settings_plugins.h
         luxury/ui/boxes/plugin_install_box.cpp

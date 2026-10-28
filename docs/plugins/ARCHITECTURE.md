@@ -186,10 +186,11 @@ Rules:
 
 | Id | Grants | Dangerous |
 | --- | --- | --- |
-| `messages.read` | every incoming message of the account, in every chat, plus the message passed to menu actions | |
-| `messages.send` | `lux.messages.send` | yes |
-| `messages.modify` | rewrite or cancel outgoing text | yes |
-| `ui` | commands, menu items, hotkeys, toasts, dialogs | |
+| `messages.read` | every incoming message of the account, in every chat, plus the message passed to menu actions; edits, deletions and reads; `lux.chats`, `lux.account.me`, `messages.get`, `history`, `downloadMedia` | |
+| `messages.send` | `lux.messages.send`, `sendFile` | yes |
+| `messages.modify` | rewrite or cancel outgoing text, its entities and reply | yes |
+| `messages.manage` | `lux.messages.edit`, `remove`, `forward`, `markRead` | yes |
+| `ui` | commands, menu items, hotkeys, toasts, notices, dialogs | |
 | `network` | `lux.http.fetch` to manifest hosts only | |
 | `storage` | `lux.storage` | |
 | `clipboard` | read and write the clipboard, within 1 s after the user runs a command, menu item or hotkey of the plugin | yes |
@@ -244,8 +245,13 @@ Stars spent outside `payments.*` are refused by parameter name instead
 server refuses it in a chat that charges for messages.
 
 The Telegram service chat (user 777000) carries the login codes, so it is
-never available to a plugin. `message`, `messageOut` and the message menu
-skip it. `api.call` refuses params that name it (`MentionsServiceUser`), and
+never available to a plugin. `message`, `messageOut`, `messageEdited`,
+`messageDeleted`, `chatRead` and the message menu skip it, `lux.chats.list`
+leaves it out (`ChatVisible`), every `lux.messages` and `lux.chats` peer
+argument resolves through `ResolvePeer`, which refuses it, and a message
+from it carries `from: null`, as does a forward from it. A `mentionName`
+entity of it is dropped both ways (`EntityJson`, `ParseEntities`).
+`lux.account.me` never carries the phone. `api.call` refuses params that name it (`MentionsServiceUser`), and
 results and `update` payloads drop every array element that mentions it,
 including `updateServiceNotification` (`StripServiceUser`). A value that
 still mentions it is refused whole, or not delivered at all. The account's
@@ -393,18 +399,44 @@ lux.log(...args)      // also console.log/warn/error; shown in the manager
 lux.on(event, fn)     // returns unsubscribe function
 //   'message'      ({message})              messages.read
 //   'messageOut'   ({message})              messages.read, after send
-//   'beforeSend'   ({peer, text}) -> string|false|undefined   messages.modify
+//   'messageEdited'  ({message})            messages.read
+//   'messageDeleted' ({message})            messages.read, loaded messages
+//   'chatRead'     ({peer, maxId, unread})  messages.read, inbox read
+//   'accountChanged' ({})                   messages.read
+//   'beforeSend'   ({peer, text, entities, replyTo})
+//                  -> string|{text?, entities?, replyTo?}|false|undefined
+//                  messages.modify; synchronous, a returned promise is
+//                  ignored with a warning in the log
 //   'update'       ({update})               telegram.updates, raw TL JSON,
 //                                           at-least-once: may repeat
 //   'unload'       ()                       before disable/update/remove
 //   any other name throws TypeError
 lux.messages.send({peer, text, replyTo?, silent?})   -> Promise   messages.send
+lux.messages.get(peer, id) -> message|null, or a Promise when not loaded  messages.read
+lux.messages.history(peer, {limit?, offsetId?}) -> Promise<message[]>  messages.read
+//   limit 1..100 (default 20), newest first
+lux.messages.edit(peer, id, {text, entities?}) -> Promise          messages.manage
+lux.messages.remove(peer, ids, {revoke?}) -> count                 messages.manage
+//   the host function is messages.delete; ids: one id or 1..100
+lux.messages.forward(peer, ids, to) -> count                       messages.manage
+lux.messages.markRead(peer, maxId?)                                messages.manage
+lux.messages.sendFile(peer, ArrayBuffer|view|path, {silent?})      messages.send
+//   path: relative to the plugin's data folder (IsSafeRelativePath)
+lux.messages.downloadMedia(peer, id) -> Promise<ArrayBuffer>       messages.read
+//   photo or file, refused in chats that restrict saving, 60 s timeout
+//   Files cross the JSON bridge as {$bin: base64}: at most 10 MiB
+//   (kMaxMediaBytes, the client's in-memory download limit)
+lux.chats.get(peer) -> {id, type, title, username, unreadCount}     messages.read
+lux.chats.list({limit?}) -> chat[]   main list, 1..500, never 777000  messages.read
+lux.account.me() -> {id, firstName, lastName, username, premium}    messages.read
 lux.ui.toast(text)                     at most one a second (RangeError)  ui
+lux.ui.notify(text)                    a toast titled with the plugin name  ui
 lux.ui.alert({title, text}) / lux.ui.confirm({...}) -> Promise<bool>  ui
 lux.ui.prompt({title, placeholder?, value?}) -> Promise<string|null>  ui
 lux.ui.addCommand({name, description, handler({peer, args})})       ui
-lux.ui.addMessageMenuItem({title, handler({message})})              ui
-lux.ui.addHotkey({keys: 'Ctrl+Shift+K', handler()})                 ui
+lux.ui.addMessageMenuItem({title, handler({peer, message})})        ui
+lux.ui.addHotkey({keys: 'Ctrl+Shift+K', handler({peer})})           ui
+//   hotkey peer: the chat open in the active window, or null
 //   Dialogs: one at a time per plugin, titled with the plugin name, closed
 //   when the plugin unloads; refused while the app is passcode-locked
 //   Ctrl+C/V/X/A/Z/Y, Ctrl+Enter, Enter and Esc are reserved: TypeError
@@ -422,7 +454,8 @@ lux.http.fetch(url, {method, headers, body, binary}) -> Promise<{status, headers
 //   only an IP literal is checked. A Host header is dropped; a redirect to
 //   another origin drops Authorization, Cookie, Proxy-* and Host.
 lux.storage.get(key) / set(key, value) / remove(key) / keys()       storage
-lux.settings.get(key) / onChange(fn)          values from manifest settings, always allowed
+lux.settings.get(key) / set(key, value) / onChange(fn)   manifest settings, always allowed
+//   set: a declared key and a value SettingAccepts, otherwise TypeError
 lux.clipboard.read() / write(text)                                  clipboard
 //   within 1 s after a command, menu item or hotkey of the plugin ran,
 //   otherwise NotAllowedError
@@ -430,8 +463,16 @@ lux.api.call(method, params) -> Promise<result>                     telegram.api
 setTimeout / clearTimeout / setInterval / clearInterval              always
 ```
 
-A `message` object: `{id, peer, from, date, text, out, replyTo, hasMedia}`
-where `peer`/`from` are `{id: "<decimal>", type: "user"|"chat"|"channel", title}`.
+A `message` object: `{id, peer, from, date, text, entities, out, replyTo,
+hasMedia, media, forward, topicId, editDate, groupedId}` where `peer`/`from`
+are `{id: "<decimal>", type: "user"|"chat"|"channel", title}`, `entities`
+are `{type, offset, length, url?|userId?|emojiId?|language?}` in UTF-16
+units, `media` is `{type, size}` or null and `forward` is
+`{from, name, date, id}` or null. Ids are decimal strings.
+
+`lux.messages.*` and `lux.chats.*` run in `Instance::data`
+(`plugin_host_ext_data.cpp`); the permission table and argument parsing
+are Qt-free in `plugin_payloads.h`.
 
 Calling an API without its permission throws
 `PermissionError: "<perm>" was not granted`.
@@ -446,6 +487,10 @@ Calling an API without its permission throws
 | local command | `HistoryWidget::send` and `ChatWidget::send` (topics, replies) before `sendTextWithTags` | `/name args` consumed only when an enabled plugin registered `name`; a plugin command wins over a bot command of the same name |
 | message menu | luxury context menu builder | one submenu "Plugins" with items |
 | hotkey | app event filter | plugin hotkeys after built-in ones; never while a text field has focus, never a reserved shortcut |
+| message edited | `Data::Session::updateEditedMessage` | `messageEdited` |
+| message deleted | `Data::Session::processMessagesDeleted` and `processNonChannelMessagesDeleted`, loaded messages only | `messageDeleted` |
+| chat read | `Api::Updates` on `updateReadHistoryInbox` and `updateReadChannelInbox` | `chatRead` |
+| account switch | `Main::Domain::activeSessionChanges` | `accountChanged` |
 
 `beforeSend` sees text sent through `ApiWrap::sendMessage` only: files,
 albums, stickers, GIFs, inline results and forwards bypass it. Local

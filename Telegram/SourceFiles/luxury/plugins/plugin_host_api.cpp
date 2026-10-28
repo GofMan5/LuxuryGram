@@ -3,6 +3,7 @@
 #include "luxury/plugins/plugin_host_api.h"
 
 #include "luxury/plugins/plugin_host_logic.h"
+#include "luxury/plugins/plugin_payloads.h"
 #include "luxury/plugins/core/tl_codec.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "api/api_common.h"
@@ -80,7 +81,9 @@ constexpr auto kMaxHandlers = 100;
 	const auto starts = [&](std::string_view prefix) {
 		return function.substr(0, prefix.size()) == prefix;
 	};
-	if (function == "messages.send") {
+	if (const auto data = DataPermission(function)) {
+		return data;
+	} else if (function == "messages.send") {
 		return Permission::MessagesSend;
 	} else if (starts("ui.")) {
 		return Permission::Ui;
@@ -98,7 +101,9 @@ constexpr auto kMaxHandlers = 100;
 
 [[nodiscard]] std::optional<Permission> EventPermission(
 		std::string_view event) {
-	if (event == "message" || event == "messageOut") {
+	if (const auto data = DataEventPermission(event)) {
+		return data;
+	} else if (event == "message" || event == "messageOut") {
 		return Permission::MessagesRead;
 	} else if (event == "beforeSend") {
 		return Permission::MessagesModify;
@@ -150,6 +155,8 @@ constexpr auto kMaxHandlers = 100;
 		&& (port(a) == port(b));
 }
 
+} // namespace
+
 [[nodiscard]] Main::Session *ActiveSession() {
 	return Core::IsAppLaunched()
 		? Core::App().domain().active().maybeSession()
@@ -192,8 +199,6 @@ constexpr auto kMaxHandlers = 100;
 		? nullptr
 		: peer;
 }
-
-} // namespace
 
 std::optional<std::string> Gunzip(std::string_view packed) {
 	auto stream = z_stream();
@@ -409,6 +414,9 @@ void Instance::accountChanged() {
 			"Error",
 			"the active account changed");
 	}
+	if (wants("accountChanged")) {
+		emitLater("accountChanged", json::object());
+	}
 }
 
 void Instance::settingChanged(const QString &key, const json &value) {
@@ -527,6 +535,8 @@ Js::HostResult Instance::call(
 		QGuiApplication::clipboard()->setText(
 			QString::fromStdString(first.get<std::string>()));
 		return Result::Value(nullptr);
+	} else if (IsDataFunction(function)) {
+		return data(function, args, context.promiseId);
 	} else if (function.substr(0, 8) == "storage.") {
 		return storage(function, args);
 	} else if (function.substr(0, 3) == "ui.") {
