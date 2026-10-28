@@ -113,6 +113,8 @@ FrameGenerator::Impl::Impl(const QByteArray &bytes)
 		.stream = info,
 		.hwAllowed = false,
 		.videoMaxArea = kMaxArea,
+		// Stickers and emoji run many generators at once.
+		.threads = 1,
 	});
 }
 

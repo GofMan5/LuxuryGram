@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "ffmpeg/ffmpeg_bytes_io_wrap.h"
 #include "ffmpeg/ffmpeg_utility.h"
+#include "core/core_threads.h"
 
 namespace Media::Video {
 namespace {
@@ -86,6 +87,7 @@ struct Source {
 		source.codec = MakeCodecPointer({
 			.stream = source.videoStream,
 			.videoMaxArea = kMaxDecodeArea,
+			.threads = Core::Threads::Get().transcodeDecode,
 		});
 		if (!source.codec) {
 			return false;

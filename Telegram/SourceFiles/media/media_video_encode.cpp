@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ffmpeg/ffmpeg_bytes_io_wrap.h"
 #include "ffmpeg/ffmpeg_frame_generator.h"
 #include "ffmpeg/ffmpeg_utility.h"
+#include "core/core_threads.h"
 #include "lottie/lottie_frame_generator.h"
 #include "ui/rect.h"
 
@@ -182,6 +183,7 @@ struct ColorDescription {
 	encoder->color_primaries = color.primaries;
 	encoder->color_trc = color.transfer;
 	encoder->colorspace = color.space;
+	encoder->thread_count = Core::Threads::Get().encoderThreads;
 	if (setup && !setup(encoder.get())) {
 		return {};
 	}
@@ -255,6 +257,28 @@ struct ColorDescription {
 		0));
 	if (error) {
 		LogError(u"av_opt_set_int"_q, error, u"auto-alt-ref"_q);
+		return false;
+	}
+	error = AvErrorWrap(av_opt_set_int(encoder->priv_data, "row-mt", 1, 0));
+	if (error) {
+		LogError(u"av_opt_set_int"_q, error, u"row-mt"_q);
+		return false;
+	}
+	// tile-columns is a log2 count: the largest k with 2^k <= threads,
+	// up to 4, and only for frames wide enough to split.
+	auto tiles = 0;
+	if (encoder->width >= 1024) {
+		while (tiles < 4 && (2 << tiles) <= encoder->thread_count) {
+			++tiles;
+		}
+	}
+	error = AvErrorWrap(av_opt_set_int(
+		encoder->priv_data,
+		"tile-columns",
+		tiles,
+		0));
+	if (error) {
+		LogError(u"av_opt_set_int"_q, error, u"tile-columns"_q);
 		return false;
 	}
 	return true;
@@ -557,7 +581,7 @@ bool MusicMixer::init(
 		return false;
 	}
 	const auto stream = _input->streams[_streamIndex];
-	_decoder = MakeCodecPointer({ .stream = stream });
+	_decoder = MakeCodecPointer({ .stream = stream, .threads = 1 });
 	if (!_decoder) {
 		return false;
 	}
@@ -943,7 +967,7 @@ void AudioTranscoder::addMusic(const MusicTrack &track) {
 bool AudioTranscoder::init(
 		not_null<AVFormatContext*> output,
 		not_null<AVStream*> inStream) {
-	_decoder = MakeCodecPointer({ .stream = inStream });
+	_decoder = MakeCodecPointer({ .stream = inStream, .threads = 1 });
 	if (!_decoder) {
 		return false;
 	}
@@ -2097,6 +2121,7 @@ struct TranscodeAttempt {
 		decoder = MakeCodecPointer({
 			.stream = inVideoStream,
 			.videoMaxArea = kMaxTranscodeArea,
+			.threads = Core::Threads::Get().transcodeDecode,
 		});
 		if (!decoder) {
 			return {};

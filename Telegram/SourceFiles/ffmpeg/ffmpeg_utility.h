@@ -173,6 +173,7 @@ struct CodecDescriptor {
 	not_null<AVStream*> stream;
 	bool hwAllowed = false;
 	int64_t videoMaxArea = 0;
+	int threads = 0; // 0 = auto (capped for libvpx)
 };
 [[nodiscard]] CodecPointer MakeCodecPointer(CodecDescriptor descriptor);
 
