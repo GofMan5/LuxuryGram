@@ -152,7 +152,9 @@ WsHandshakeResult WsParseUpgradeResponse(
 	const auto space = result.statusLine.find(' ');
 	const auto code = (space == std::string::npos)
 		? std::string()
-		: result.statusLine.substr(space, 4);
+		: result.statusLine.substr(
+			space,
+			result.statusLine.find(' ', space + 1) - space);
 	if (result.statusLine.rfind("HTTP/1.", 0) != 0 || code != " 101") {
 		result.status = WsHandshake::Refused;
 		return result;
@@ -446,7 +448,10 @@ WsRoute WsRouteTable::failed(WsKey key, bool refused, int64_t nowMs) {
 	return was;
 }
 
-WsRoute WsRouteTable::stalled(WsKey key, bool websocket, int64_t nowMs) {
+WsRoute WsRouteTable::stalled(
+		WsKey key,
+		bool websocket,
+		[[maybe_unused]] int64_t nowMs) {
 	auto lock = std::lock_guard(_mutex);
 	auto &state = _states[key];
 	const auto was = state.route;

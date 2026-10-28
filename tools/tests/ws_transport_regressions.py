@@ -174,6 +174,10 @@ void Upgrade() {
 		"HTTP/1.1 101 OK\r\nSec-WebSocket-Accept: "
 		"s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
 		accept).status == WsHandshake::BadAccept);
+	EXPECT(WsParseUpgradeResponse(
+		"HTTP/1.1 101 OK\r\nSec-WebSocket-Accept: "
+		"s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\nSec-WebSocket-Protocol: chat\r\n\r\n",
+		accept).status == WsHandshake::BadAccept);
 	EXPECT(WsParseUpgradeResponse(std::string(9000, 'a'), accept).status
 		== WsHandshake::TooLarge);
 }
@@ -242,7 +246,7 @@ void Decode() {
 	EXPECT(closing.closed() && !closing.failed());
 
 	auto masked = WsFrameDecoder();
-	masked.feed({ 0x82, 0x81, 1, 2, 3, 4, 5 });
+	masked.feed(std::vector<uint8_t>{ 0x82, 0x81, 1, 2, 3, 4, 5 });
 	EXPECT(masked.failed() && masked.available() == 0);
 
 	auto text = WsFrameDecoder();
@@ -250,7 +254,7 @@ void Decode() {
 	EXPECT(text.failed());
 
 	auto huge = WsFrameDecoder();
-	huge.feed({ 0x82, 127, 0, 0, 0, 0, 0x01, 0, 0, 1 });
+	huge.feed(std::vector<uint8_t>{ 0x82, 127, 0, 0, 0, 0, 0x01, 0, 0, 1 });
 	EXPECT(huge.failed());
 
 	auto stray = WsFrameDecoder();
@@ -487,7 +491,7 @@ def crlf(text):
 	return text.replace('\r\n', '\n')
 
 
-def build(root, name, files):
+def build(root, name, files, strict=True):
 	tree = root / name
 	for path, text in files.items():
 		target = tree / path
@@ -496,7 +500,9 @@ def build(root, name, files):
 	main = tree / 'main.cpp'
 	main.write_text(MAIN, encoding='utf-8', newline='\n')
 	exe = tree / 'main.exe'
-	run([CXX, '-std=c++20', '-O0', '-Wall', '-Wextra', '-Werror', '-I', str(tree), str(main), *STATIC, '-o', str(exe)], tree)
+	# Mutants may leave a variable unused; only the real source must be warning-free.
+	warnings = ('-Wall', '-Wextra', '-Werror') if strict else ()
+	run([CXX, '-std=c++20', '-O0', *warnings, '-I', str(tree), str(main), *STATIC, '-o', str(exe)], tree)
 	standalone(exe)
 	return exe
 
@@ -509,7 +515,7 @@ def check_logic(root, read):
 		mutated = dict(files)
 		mutated[path] = files[path].replace(before, after)
 		try:
-			exe = build(root, f'ws_mutant_{index}', mutated)
+			exe = build(root, f'ws_mutant_{index}', mutated, strict=False)
 		except AssertionError as error:
 			raise AssertionError(f'mutant does not compile: {after!r}\n{error}')
 		try:
