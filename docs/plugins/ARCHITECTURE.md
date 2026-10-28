@@ -99,10 +99,14 @@ needs `InstallPlan::allowDowngrade`; an update never downgrades, and
 `Busy` while an install of the plugin runs, `Consent` when the plan needs
 the consent box again, `Conflict` when the plugin list or repository
 changed, `Files` when the swap failed, `None` on success.
+`cancelInstall(id)` stops a `commitInstall` still fetching: it finishes
+with `Busy` before anything is swapped; once the swap starts it runs to the
+end.
 
 Plugin log lines are mirrored into the client `log.txt` as
 `Plugin <id> [level]: text`, one line each (line breaks become spaces), at
-most 100 lines a minute per plugin.
+most 100 lines a minute per plugin. `logAdded()` fires the plugin id for
+every new line, so an open details box follows the log live.
 
 ## Manifest: `plugin.json` at the repository root (or the linked subdir)
 

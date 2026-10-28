@@ -100,12 +100,14 @@ struct Manager::Private final
 	std::map<QString, json> settings;
 	std::map<QString, QString> updates; // id -> availableLabel.
 	std::set<QString> committing;
+	std::set<QString> cancelled; // cancelInstall before the files are written.
 	std::map<QString, LogBudget> logBudgets;
 	StartFence fence;
 	// Callers of a check that is running already wait for its result.
 	std::vector<Fn<void(UpdateCheck)>> checkWaiters;
 	Installer installer;
 	rpl::event_stream<> changes;
+	rpl::event_stream<QString> logAdded;
 	bool changesQueued = false;
 
 	[[nodiscard]] InstalledPlugin *find(const QString &id);
@@ -323,6 +325,7 @@ void Manager::Private::append(
 		LOG(("Plugin %1: too many log lines, the rest of this minute "
 			"stays in the plugin log.").arg(id));
 	}
+	logAdded.fire_copy(id);
 }
 
 // A plugin may throw on every timer tick: lastError is not written to disk
@@ -588,6 +591,10 @@ std::vector<LogLine> Manager::logs(const QString &id) const {
 
 void Manager::clearLogs(const QString &id) {
 	_private->logs.erase(id);
+}
+
+rpl::producer<QString> Manager::logAdded() const {
+	return _private->logAdded.events();
 }
 
 void Manager::setEnabled(const QString &id, bool enabled) {
@@ -971,6 +978,7 @@ void Manager::commitInstall(
 		QDir(staging).removeRecursively();
 		if (const auto d = weak.get()) {
 			d->committing.erase(id);
+			d->cancelled.erase(id);
 		}
 		done(error, code);
 	};
@@ -995,6 +1003,9 @@ void Manager::commitInstall(
 			finish(u"plugin.json changed since it was reviewed, "
 				"try again."_q, ErrorCode::Conflict);
 			return;
+		} else if (d->cancelled.contains(id)) {
+			finish(u"The install was cancelled."_q, ErrorCode::Busy);
+			return;
 		}
 		d->installer.download(source, manifest.files, staging + u"/code"_q, [=](
 				QString error) {
@@ -1003,6 +1014,9 @@ void Manager::commitInstall(
 				return;
 			} else if (!error.isEmpty()) {
 				finish(error, ErrorCode::Network);
+				return;
+			} else if (d->cancelled.contains(id)) {
+				finish(u"The install was cancelled."_q, ErrorCode::Busy);
 				return;
 			}
 			// files may not list plugin.json: keep the reviewed bytes.
@@ -1105,6 +1119,12 @@ void Manager::commitInstall(
 	commitInstall(std::move(plan), [=](QString error, ErrorCode) {
 		done(error);
 	});
+}
+
+void Manager::cancelInstall(const QString &id) {
+	if (_private->committing.contains(id)) {
+		_private->cancelled.emplace(id);
+	}
 }
 
 void Manager::rollback(

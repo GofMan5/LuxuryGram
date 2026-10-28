@@ -4,6 +4,7 @@
 
 #include "lang_auto.h"
 #include "luxury/plugins/plugin_manager.h"
+#include "luxury/ui/boxes/plugin_consent_box.h"
 #include "luxury/ui/boxes/plugin_details_box.h"
 #include "luxury/ui/boxes/plugin_install_box.h"
 #include "luxury/ui/settings/settings_main.h"
@@ -36,13 +37,9 @@ namespace {
 	return parts.join(u" · "_q);
 }
 
-void AddStateLabel(
-		not_null<Ui::VerticalLayout*> list,
-		const Plugins::PluginView &plugin) {
-	const auto &padding = st::settingsButtonNoIcon.padding;
-	const auto margin = style::margins(padding.left(), 0, padding.right(), 0);
-	const auto text = !plugin.lastError.isEmpty()
-		? plugin.lastError
+[[nodiscard]] QString StateText(const Plugins::PluginView &plugin) {
+	return !plugin.lastError.isEmpty()
+		? Plugins::LastErrorText(plugin.lastError)
 		: plugin.updateAvailable
 		? tr::lng_luxury_plugins_ui_state_update(
 			tr::now,
@@ -53,13 +50,82 @@ void AddStateLabel(
 		: plugin.running
 		? tr::lng_luxury_plugins_ui_state_running(tr::now)
 		: tr::lng_luxury_plugins_ui_state_stopped(tr::now);
+}
+
+// The plugin as the manager has it now and after every change; the row
+// updates in place while it exists.
+[[nodiscard]] rpl::producer<Plugins::PluginView> PluginValue(
+		not_null<Plugins::Manager*> manager,
+		const QString &id) {
+	return rpl::single(rpl::empty) | rpl::then(
+		manager->changes()
+	) | rpl::map([=] {
+		return manager->plugin(id);
+	}) | rpl::filter([](const std::optional<Plugins::PluginView> &plugin) {
+		return plugin.has_value();
+	}) | rpl::map([](const std::optional<Plugins::PluginView> &plugin) {
+		return *plugin;
+	});
+}
+
+void AddStateLabel(
+		not_null<Ui::VerticalLayout*> list,
+		not_null<Ui::SettingsButton*> toggle,
+		rpl::producer<Plugins::PluginView> plugin) {
+	const auto &padding = st::settingsButtonNoIcon.padding;
+	const auto margin = style::margins(padding.left(), 0, padding.right(), 0);
+	// A long error is elided to three lines, the details box has it all.
+	const auto labelSt = list->lifetime().make_state<style::FlatLabel>(
+		st::boxDividerLabel);
+	labelSt->maxHeight = st::boxDividerLabel.style.font->height * 3;
 	const auto label = list->add(
-		object_ptr<Ui::FlatLabel>(list, text, st::boxDividerLabel),
+		object_ptr<Ui::FlatLabel>(list, QString(), *labelSt),
 		margin);
-	if (!plugin.lastError.isEmpty()) {
-		label->setTextColorOverride(st::boxTextFgError->c);
-	} else if (plugin.updateAvailable) {
-		label->setTextColorOverride(st::windowActiveTextFg->c);
+	std::move(plugin) | rpl::on_next([=](const Plugins::PluginView &view) {
+		const auto text = StateText(view);
+		label->setText(text);
+		label->setTextColorOverride(!view.lastError.isEmpty()
+			? std::make_optional(st::boxTextFgError->c)
+			: view.updateAvailable
+			? std::make_optional(st::windowActiveTextFg->c)
+			: std::nullopt);
+		toggle->setAccessibleDescription(text);
+		toggle->accessibilityDescriptionChanged();
+	}, label->lifetime());
+}
+
+// "Installing {name}…" with Cancel for every commitInstall in flight.
+void FillPending(not_null<Ui::VerticalLayout*> pending) {
+	const auto &padding = st::settingsButtonNoIcon.padding;
+	const auto margin = style::margins(padding.left(), 0, padding.right(), 0);
+	for (const auto &entry : Plugins::PendingInstalls()) {
+		const auto id = entry.id;
+		Ui::AddSkip(pending);
+		pending->add(
+			object_ptr<Ui::FlatLabel>(
+				pending,
+				(entry.cancelled
+					? tr::lng_luxury_plugins_ui_install_cancelling(
+						tr::now,
+						lt_name,
+						entry.name)
+					: tr::lng_luxury_plugins_ui_installing(
+						tr::now,
+						lt_name,
+						entry.name)),
+				st::boxLabel),
+			margin);
+		if (!entry.cancelled) {
+			pending->add(object_ptr<Ui::SettingsButton>(
+				pending,
+				tr::lng_luxury_plugins_ui_install_cancel(),
+				st::settingsAttentionButton
+			))->setClickedCallback([=] {
+				Plugins::CancelInstall(id);
+			});
+		}
+		Ui::AddSkip(pending);
+		Ui::AddDivider(pending);
 	}
 }
 
@@ -87,12 +153,13 @@ void FillList(
 	}
 	for (const auto &plugin : plugins) {
 		const auto id = plugin.id;
+		const auto value = [=] { return PluginValue(manager, id); };
 		Ui::AddSkip(list);
 		const auto toggle = list->add(object_ptr<Ui::SettingsButton>(
 			list,
-			rpl::single(plugin.name),
+			value() | rpl::map(&Plugins::PluginView::name),
 			st::settingsButtonNoIcon));
-		toggle->toggleOn(rpl::single(plugin.enabled));
+		toggle->toggleOn(value() | rpl::map(&Plugins::PluginView::enabled));
 		toggle->toggledChanges() | rpl::on_next([=](bool enabled) {
 			if (const auto manager = Plugins::Manager::Maybe()) {
 				manager->setEnabled(id, enabled);
@@ -101,15 +168,16 @@ void FillList(
 		list->add(
 			object_ptr<Ui::FlatLabel>(
 				list,
-				MetaText(plugin),
+				value() | rpl::map(MetaText),
 				st::boxDividerLabel),
 			margin);
-		AddStateLabel(list, plugin);
-		list->add(object_ptr<Ui::SettingsButton>(
+		AddStateLabel(list, toggle, value());
+		const auto details = list->add(object_ptr<Ui::SettingsButton>(
 			list,
 			tr::lng_luxury_plugins_ui_details(),
-			st::settingsButtonNoIcon
-		))->setClickedCallback([=] {
+			st::settingsButtonNoIcon));
+		details->setAccessibleDescription(plugin.name);
+		details->setClickedCallback([=] {
 			show->showBox(Box(Plugins::FillPluginDetailsBox, show, id));
 		});
 		Ui::AddSkip(list);
@@ -142,13 +210,26 @@ void BuildActions(SectionBuilder &builder) {
 				return;
 			}
 			show->showToast(tr::lng_luxury_plugins_ui_checking(tr::now));
-			manager->checkUpdates([=](int available) {
-				show->showToast(available
+			manager->checkUpdatesDetailed([=](
+					Plugins::Manager::UpdateCheck result) {
+				auto text = result.available
 					? tr::lng_luxury_plugins_ui_updates_found(
 						tr::now,
 						lt_number,
-						QString::number(available))
-					: tr::lng_luxury_plugins_ui_updates_none(tr::now));
+						QString::number(result.available))
+					: result.failed
+					? QString()
+					: tr::lng_luxury_plugins_ui_updates_none(tr::now);
+				if (result.failed) {
+					const auto failed = tr::lng_luxury_plugins_ui_check_failed(
+						tr::now,
+						lt_number,
+						QString::number(result.failed),
+						lt_error,
+						Plugins::ErrorText(result.firstCode));
+					text = text.isEmpty() ? failed : (text + '\n' + failed);
+				}
+				show->showToast(text);
 			});
 		},
 	});
@@ -161,23 +242,49 @@ void BuildList(SectionBuilder &builder) {
 	builder.addSubsectionTitle(tr::lng_luxury_plugins_ui_installed_title());
 	builder.add([](const WidgetContext &ctx) -> SectionBuilder::WidgetToAdd {
 		auto owned = object_ptr<Ui::VerticalLayout>(ctx.container);
-		const auto list = owned.data();
+		const auto result = owned.data();
+		const auto pending = result->add(
+			object_ptr<Ui::VerticalLayout>(result));
+		const auto list = result->add(object_ptr<Ui::VerticalLayout>(result));
 		const auto show = std::shared_ptr<Ui::Show>(ctx.controller->uiShow());
+		const auto ids = [] {
+			auto found = std::vector<QString>();
+			if (const auto manager = Plugins::Manager::Maybe()) {
+				for (const auto &plugin : manager->plugins()) {
+					found.push_back(plugin.id);
+				}
+			}
+			return found;
+		};
+		const auto shown = std::make_shared<std::vector<QString>>(ids());
 		const auto rebuild = [=] {
 			list->clear();
 			FillList(list, show);
 			list->resizeToWidth(list->width());
 		};
 		rebuild();
+		const auto refillPending = [=] {
+			pending->clear();
+			FillPending(pending);
+			pending->resizeToWidth(pending->width());
+		};
+		refillPending();
+		Plugins::PendingInstallsChanges(
+		) | rpl::on_next(refillPending, pending->lifetime());
 		if (const auto manager = Plugins::Manager::Maybe()) {
-			// A toggle fires changes() from its own click, so the rows it
-			// lives in are rebuilt on the next event loop turn.
+			// Rows follow their plugin in place; the list is rebuilt only
+			// when plugins come or go, on the next event loop turn as a
+			// click in a row may have fired the change.
 			const auto scheduled = std::make_shared<bool>(false);
 			manager->changes() | rpl::on_next([=] {
 				if (!std::exchange(*scheduled, true)) {
 					crl::on_main(list, [=] {
 						*scheduled = false;
-						rebuild();
+						auto now = ids();
+						if (now != *shown) {
+							*shown = std::move(now);
+							rebuild();
+						}
 					});
 				}
 			}, list->lifetime());

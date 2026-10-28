@@ -4,6 +4,8 @@
 
 #include "lang_auto.h"
 #include "luxury/plugins/plugin_manager.h"
+#include "luxury/ui/boxes/plugin_consent_logic.h"
+#include "rpl/event_stream.h"
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
 #include "ui/text/text_utilities.h"
@@ -15,20 +17,56 @@
 namespace Luxury::Plugins {
 namespace {
 
+struct PendingState {
+	std::vector<PendingInstall> list;
+	rpl::event_stream<> changes;
+};
+
+[[nodiscard]] PendingState &Pending() {
+	static auto result = PendingState();
+	return result;
+}
+
+// The last entry of the id: a commit refused as Busy right away is the one
+// added last. Returns whether it was cancelled.
+bool RemovePending(const QString &id) {
+	auto &state = Pending();
+	const auto i = std::find_if(
+		state.list.rbegin(),
+		state.list.rend(),
+		[&](const PendingInstall &entry) { return entry.id == id; });
+	if (i == state.list.rend()) {
+		return false;
+	}
+	const auto cancelled = i->cancelled;
+	state.list.erase(std::next(i).base());
+	state.changes.fire({});
+	return cancelled;
+}
+
 void CommitInstall(std::shared_ptr<Ui::Show> show, InstallPlan plan) {
 	const auto manager = Manager::Maybe();
 	if (!manager) {
 		show->showToast(tr::lng_luxury_plugins_ui_unavailable(tr::now));
 		return;
 	}
+	const auto id = QString::fromStdString(plan.manifest.id);
 	const auto name = QString::fromStdString(plan.manifest.name);
 	const auto update = plan.update;
-	manager->commitInstall(std::move(plan), [=](QString error) {
+	Pending().list.push_back({ .id = id, .name = name });
+	Pending().changes.fire({});
+	manager->commitInstall(std::move(plan), [=](QString error, ErrorCode code) {
+		const auto cancelled = RemovePending(id);
 		show->showToast(!error.isEmpty()
-			? tr::lng_luxury_plugins_ui_install_failed(
-				tr::now,
-				lt_error,
-				error)
+			? (cancelled
+				? tr::lng_luxury_plugins_ui_install_cancelled(
+					tr::now,
+					lt_name,
+					name)
+				: tr::lng_luxury_plugins_ui_install_failed(
+					tr::now,
+					lt_error,
+					ErrorText(code)))
 			: update
 			? tr::lng_luxury_plugins_ui_updated(tr::now, lt_name, name)
 			: tr::lng_luxury_plugins_ui_installed(tr::now, lt_name, name));
@@ -102,15 +140,28 @@ void FillConsentBox(
 		? tr::lng_luxury_plugins_ui_consent_update_title()
 		: tr::lng_luxury_plugins_ui_consent_title());
 
+	const auto manager = Manager::Maybe();
+	const auto installed = (plan.update && manager)
+		? manager->plugin(QString::fromStdString(manifest.id))
+		: std::optional<PluginView>();
+	const auto version = QString::fromStdString(manifest.version);
 	AddLabel(
 		box,
 		Ui::Text::Bold(QString::fromStdString(manifest.name)).append(
-			u" "_q + QString::fromStdString(manifest.version)),
+			u" "_q + (installed
+				? (installed->version + QString::fromUtf8(" \xe2\x86\x92 "))
+				: QString()) + version),
 		st::boxLabel);
 	if (!manifest.author.empty()) {
 		AddLabel(
 			box,
 			{ QString::fromStdString(manifest.author) },
+			st::boxDividerLabel);
+	}
+	if (!manifest.description.empty()) {
+		AddLabel(
+			box,
+			{ QString::fromStdString(manifest.description) },
 			st::boxDividerLabel);
 	}
 	AddLabel(
@@ -148,18 +199,47 @@ void FillConsentBox(
 			st::boxDividerLabel);
 	}
 	if (hostsShown) {
-		auto hosts = QStringList();
+		// On an update the hosts the installed version could not reach are
+		// bold; all of them are new without a Network grant.
+		auto old = std::vector<std::string>();
+		if (installed && installed->granted.has(Permission::Network)) {
+			for (const auto &host : installed->network) {
+				old.push_back(host.toStdString());
+			}
+		}
+		const auto fresh = installed
+			? NewHosts(old, manifest.network)
+			: std::vector<std::string>();
+		auto hosts = TextWithEntities();
 		for (const auto &host : manifest.network) {
-			hosts.push_back((host == "*")
+			if (!hosts.empty()) {
+				hosts.append(u", "_q);
+			}
+			const auto text = (host == "*")
 				? tr::lng_luxury_plugins_ui_any_website(tr::now)
-				: QString::fromStdString(host));
+				: QString::fromStdString(host);
+			if (ranges::contains(fresh, host)) {
+				hosts.append(Ui::Text::Bold(text));
+			} else {
+				hosts.append(text);
+			}
 		}
 		box->addSkip(st::boxLittleSkip);
 		AddLabel(
 			box,
 			{ tr::lng_luxury_plugins_ui_consent_hosts(tr::now) },
 			st::boxLabel);
-		AddLabel(box, { hosts.join(u", "_q) }, st::boxDividerLabel);
+		AddLabel(box, std::move(hosts), st::boxDividerLabel);
+	}
+	for (const auto combined : CombinedDangers(asked, manifest.permissions)) {
+		box->addSkip(st::boxLittleSkip);
+		AddLabel(box, { (combined == CombinedDanger::MessagesOut)
+			? tr::lng_luxury_plugins_ui_combined_messages(tr::now)
+			: (combined == CombinedDanger::AccountOut)
+			? tr::lng_luxury_plugins_ui_combined_account(tr::now)
+			: tr::lng_luxury_plugins_ui_combined_clipboard(tr::now) },
+			st::boxLabel,
+			attention);
 	}
 	const auto dangerous = asked.anyDangerous();
 	if (dangerous) {
@@ -171,7 +251,9 @@ void FillConsentBox(
 			attention);
 	}
 
-	box->addButton(tr::lng_luxury_plugins_ui_consent_allow(), [=] {
+	box->addButton(plan.update
+		? tr::lng_luxury_plugins_ui_consent_allow_update()
+		: tr::lng_luxury_plugins_ui_consent_allow(), [=] {
 		box->closeBox();
 		auto allowed = plan;
 		allowed.consented = true;
@@ -192,6 +274,78 @@ void RequestInstall(std::shared_ptr<Ui::Show> show, InstallPlan plan) {
 	} else {
 		show->showBox(Box(FillConsentBox, show, std::move(plan)));
 	}
+}
+
+const std::vector<PendingInstall> &PendingInstalls() {
+	return Pending().list;
+}
+
+rpl::producer<> PendingInstallsChanges() {
+	return Pending().changes.events();
+}
+
+void CancelInstall(const QString &id) {
+	auto &state = Pending();
+	auto changed = false;
+	for (auto &entry : state.list) {
+		if (entry.id == id && !entry.cancelled) {
+			entry.cancelled = changed = true;
+		}
+	}
+	if (!changed) {
+		return;
+	} else if (const auto manager = Manager::Maybe()) {
+		manager->cancelInstall(id);
+	}
+	state.changes.fire({});
+}
+
+QString ErrorText(ErrorCode code) {
+	switch (code) {
+	case ErrorCode::None:
+		return QString();
+	case ErrorCode::Link:
+		return tr::lng_luxury_plugins_ui_error_link(tr::now);
+	case ErrorCode::Network:
+		return tr::lng_luxury_plugins_ui_error_network(tr::now);
+	case ErrorCode::RateLimited:
+		return tr::lng_luxury_plugins_ui_error_rate_limited(tr::now);
+	case ErrorCode::NotFound:
+		return tr::lng_luxury_plugins_ui_error_not_found(tr::now);
+	case ErrorCode::Github:
+		return tr::lng_luxury_plugins_ui_error_github(tr::now);
+	case ErrorCode::TooLarge:
+		return tr::lng_luxury_plugins_ui_error_too_large(tr::now);
+	case ErrorCode::Manifest:
+		return tr::lng_luxury_plugins_ui_error_manifest(tr::now);
+	case ErrorCode::Incompatible:
+		return tr::lng_luxury_plugins_ui_error_incompatible(tr::now);
+	case ErrorCode::Conflict:
+		return tr::lng_luxury_plugins_ui_error_conflict(tr::now);
+	case ErrorCode::Downgrade:
+		return tr::lng_luxury_plugins_downgrade(tr::now);
+	case ErrorCode::Pinned:
+		return tr::lng_luxury_plugins_pinned(tr::now);
+	case ErrorCode::Busy:
+		return tr::lng_luxury_plugins_ui_error_busy(tr::now);
+	case ErrorCode::Files:
+		return tr::lng_luxury_plugins_ui_error_files(tr::now);
+	case ErrorCode::UpToDate:
+		return tr::lng_luxury_plugins_up_to_date(tr::now);
+	case ErrorCode::Consent:
+		return tr::lng_luxury_plugins_ui_error_consent(tr::now);
+	}
+	return QString();
+}
+
+QString LastErrorText(const QString &error) {
+	// The literals plugin_host_api.cpp and plugin_manager.cpp store.
+	if (error == u"The plugin used too much CPU time."_q) {
+		return tr::lng_luxury_plugins_ui_error_cpu(tr::now);
+	} else if (error == u"code/plugin.json is missing or broken."_q) {
+		return tr::lng_luxury_plugins_ui_error_missing_manifest(tr::now);
+	}
+	return error;
 }
 
 QString PermissionTitle(Permission permission) {
