@@ -49,7 +49,7 @@ static_assert(kModifierMask == unsigned(Qt::KeyboardModifierMask));
 }
 
 [[nodiscard]] Instance *Find(not_null<Manager*> manager, const QString &id) {
-	for (const auto instance : manager->instances()) {
+	for (const auto &instance : manager->instances()) {
 		if (QString::fromStdString(instance->plugin().id) == id) {
 			return instance;
 		}
@@ -93,7 +93,7 @@ void EmitMessage(not_null<HistoryItem*> item, const std::string &event) {
 		return;
 	}
 	auto payload = std::optional<json>();
-	for (const auto instance : manager->instances()) {
+	for (const auto &instance : manager->instances()) {
 		// subscribe() refuses these events without messages.read.
 		if (instance->wants(event)) {
 			if (!payload) {
@@ -116,7 +116,7 @@ bool BeforeSend(Api::MessageToSend &message) {
 		return true;
 	}
 	auto fold = SendFold{ message.textWithTags.text.toStdString() };
-	for (const auto instance : manager->instances()) {
+	for (const auto &instance : manager->instances()) {
 		if (instance->plugin().granted.has(Permission::MessagesModify)) {
 			FoldBeforeSend(fold, instance->beforeSend({
 				{ "peer", PeerJson(peer) },
@@ -150,7 +150,7 @@ bool LocalCommand(not_null<History*> history, const QString &text) {
 		return false;
 	}
 	const auto name = QString::fromStdString(parsed->name);
-	for (const auto instance : manager->instances()) {
+	for (const auto &instance : manager->instances()) {
 		for (const auto &command : instance->commands()) {
 			if (command.title == name) {
 				instance->callLater(command.fn, {
@@ -183,7 +183,7 @@ void EmitUpdate(not_null<Main::Session*> session, const Object &updates) {
 		return;
 	}
 	auto wanting = std::vector<not_null<Instance*>>();
-	for (const auto instance : manager->instances()) {
+	for (const auto &instance : manager->instances()) {
 		// subscribe() refuses 'update' without telegram.updates.
 		if (instance->wants("update")) {
 			wanting.push_back(instance);
@@ -215,7 +215,7 @@ void EmitUpdate(not_null<Main::Session*> session, const Object &updates) {
 	}
 	HideOwnPhone(update);
 	const auto payload = json{ { "update", std::move(update) } };
-	for (const auto instance : wanting) {
+	for (const auto &instance : wanting) {
 		instance->emitLater("update", payload);
 	}
 }
@@ -313,7 +313,7 @@ bool HandleHotkey(not_null<QObject*> object, not_null<QKeyEvent*> event) {
 	if (HotkeyReserved(keys)) {
 		return false;
 	}
-	for (const auto instance : manager->instances()) {
+	for (const auto &instance : manager->instances()) {
 		if (!instance->plugin().granted.has(Permission::Ui)) {
 			continue;
 		}
