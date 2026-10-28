@@ -14,6 +14,9 @@
 namespace Luxury::Plugins::Js {
 namespace {
 
+// Unhandled rejections logged one by one after an engine entry.
+constexpr auto kMaxRejectionReports = std::size_t(16);
+
 // Runs once per context. Receives the two natives and returns the entry
 // points the engine calls; nothing but lux, console and the timer
 // functions is left on the global object.
@@ -120,6 +123,8 @@ const lux = {
 				headers: r.headers,
 				text: () => r.body,
 				json: () => JSON.parse(r.body),
+				// Set instead of body with { binary: true }.
+				base64: r.base64,
 			}));
 		},
 	},
@@ -698,12 +703,22 @@ void Engine::State::forget(JSValueConst promise) {
 void Engine::State::reportRejections() {
 	auto list = std::move(rejections);
 	rejections.clear();
+	auto reported = std::size_t();
 	for (const auto &rejection : list) {
-		host.log(
-			LogLevel::Error,
-			"Unhandled promise rejection: " + describe(rejection.reason));
+		if (reported++ < kMaxRejectionReports) {
+			host.log(
+				LogLevel::Error,
+				"Unhandled promise rejection: " + describe(rejection.reason));
+		}
 		JS_FreeValue(ctx, rejection.promise);
 		JS_FreeValue(ctx, rejection.reason);
+	}
+	if (list.size() > kMaxRejectionReports) {
+		host.log(
+			LogLevel::Error,
+			"...and "
+				+ std::to_string(list.size() - kMaxRejectionReports)
+				+ " more unhandled promise rejections");
 	}
 }
 
