@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/audio/media_audio.h"
 #include "mtproto/facade.h"
 #include "mtproto/mtproto_config.h"
+#include "mtproto/details/mtproto_websocket_logic.h"
 #include "mainwidget.h"
 #include "api/api_updates.h"
 #include "ui/ui_utility.h"
@@ -103,16 +104,22 @@ void Account::watchProxyChanges() {
 				? std::make_pair(proxy.host, proxy.port)
 				: std::make_pair(QString(), uint32(0));
 		};
-		if (_mtp) {
-			_mtp->restart();
-			if (key(change.was) != key(change.now)) {
-				_mtp->reInitConnection(_mtp->mainDcId());
-			}
-		}
-		if (_mtpForKeysDestroy) {
-			_mtpForKeysDestroy->restart();
+		// Routes learned through or around the old proxy are stale.
+		MTP::details::WsRouteTable::Instance().reset();
+		restartMtp();
+		if (_mtp && key(change.was) != key(change.now)) {
+			_mtp->reInitConnection(_mtp->mainDcId());
 		}
 	}, _lifetime);
+}
+
+void Account::restartMtp() {
+	if (_mtp) {
+		_mtp->restart();
+	}
+	if (_mtpForKeysDestroy) {
+		_mtpForKeysDestroy->restart();
+	}
 }
 
 void Account::watchSessionChanges() {

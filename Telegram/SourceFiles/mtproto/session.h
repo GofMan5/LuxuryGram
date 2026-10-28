@@ -49,6 +49,8 @@ struct SessionOptions {
 	bool useIPv6 = true;
 	bool useHttp = true;
 	bool useTcp = true;
+	int webSocketMode = 1; // details::WsMode, see MTP::WebSocketMode().
+	bool systemProxy = false;
 
 };
 

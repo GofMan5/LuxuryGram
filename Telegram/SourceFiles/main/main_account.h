@@ -48,6 +48,9 @@ public:
 		std::shared_ptr<MTP::AuthKey> localKey);
 	void start(std::unique_ptr<MTP::Config> config);
 
+	// Reconnects every session with fresh options (proxy, WS mode).
+	void restartMtp();
+
 	[[nodiscard]] uint64 willHaveSessionUniqueId(MTP::Config *config) const;
 	void createSession(
 		const MTPUser &user,
