@@ -3,6 +3,7 @@
 #pragma once
 
 #include "luxury/plugins/core/plugin_manifest.h"
+#include "luxury/plugins/plugin_install_logic.h"
 
 #include <algorithm>
 #include <cctype>
@@ -64,6 +65,25 @@ enum class CombinedDanger {
 		}
 	}
 	return result;
+}
+
+// Codes whose error text is already localized or precise: the manifest
+// field, the rate limit reset time, the conflicting plugin, the needed
+// version. The others carry GitHub, Qt or file system text and are shown
+// by their generic localized sentence.
+[[nodiscard]] inline bool KeepsErrorDetail(ErrorCode code) {
+	switch (code) {
+	case ErrorCode::Manifest:
+	case ErrorCode::RateLimited:
+	case ErrorCode::Conflict:
+	case ErrorCode::Incompatible:
+	case ErrorCode::Downgrade:
+	case ErrorCode::Pinned:
+	case ErrorCode::UpToDate:
+		return true;
+	default:
+		return false;
+	}
 }
 
 // The entry for a language id like "pt-br": exact, then "pt"; null if none.

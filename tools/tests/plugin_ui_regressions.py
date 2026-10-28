@@ -10,12 +10,15 @@ checked statically because the client is not built here:
   asks for no new permission);
 - every Manager call in the UI names a method of plugin_manager.h;
 - every lifecycle ErrorCode has a translated text and no raw error text
-  reaches a toast or label;
+  reaches a toast or label; the codes whose text is localized or precise
+  (manifest field, rate limit time, conflict, version) keep it;
 - the consent box warns about combined permissions, marks new hosts and
   names the update; an install in progress has Cancel;
 - Update shows only with an update, reload and remove report back, the
-  details box follows the log and masks secret settings, rows update in
-  place and Settings > Plugins counts the updates;
+  details box follows the log and masks secret settings in a wrap row
+  (MaskedInputField is not an RpWidget), rows update in place, the pending
+  rows rebuild off the Cancel click and Settings > Plugins counts the
+  updates;
 - plugin_consent_logic.h is compiled with -Wall -Wextra -Werror and run.
 Each check is also run against a mutant it must reject.
 
@@ -164,7 +167,10 @@ def check_errors(files):
     enum = function(files[LOGIC], 'enum class ErrorCode {')
     codes = re.findall(r'^\t(\w+),', enum, re.M)
     assert 'None' in codes and 'Consent' in codes, 'ErrorCode enum not found'
-    texts = function(files[CONSENT], 'QString ErrorText(ErrorCode code) {')
+    texts = function(files[CONSENT], 'QString ErrorText(ErrorCode code, const QString &detail) {')
+    assert re.search(
+        r'^\tif \(!detail\.isEmpty\(\) && KeepsErrorDetail\(code\)\) \{\n\t\treturn detail;',
+        texts, re.M), 'ErrorText drops the localized or precise detail'
     for code in codes:
         if code == 'None':
             continue
@@ -189,12 +195,12 @@ def check_errors(files):
     for path in UI:
         raw = re.findall(r'(?:showToast|setText)\(error\)', files[path])
         assert not raw, f'{path}: raw error text shown'
-    assert 'error->entity()->setText(ErrorText(plan.errorCode));' in files[INSTALL], (
-        'the install box shows the raw prepareInstall error')
-    assert 'show->showToast(ErrorText(plan.errorCode));' in files[DETAILS], (
-        'Update shows the raw prepareUpdate error')
-    assert 'ErrorText(code)' in function(files[CONSENT], 'void CommitInstall('), (
-        'a failed install shows the raw commitInstall error')
+    assert 'error->entity()->setText(ErrorText(plan.errorCode, text));' in files[INSTALL], (
+        'the install box does not route the prepareInstall error through ErrorText')
+    assert 'show->showToast(ErrorText(plan.errorCode, error));' in files[DETAILS], (
+        'Update does not route the prepareUpdate error through ErrorText')
+    assert 'ErrorText(code, error)' in function(files[CONSENT], 'void CommitInstall('), (
+        'a failed install does not route the commitInstall error through ErrorText')
     assert 'Plugins::LastErrorText(plugin.lastError)' in function(
         files[SECTION], 'QString StateText('), 'a plugin row shows the raw lastError'
 
@@ -223,8 +229,12 @@ def check_progress(files):
     pending = function(files[SECTION], 'void FillPending(')
     assert 'tr::lng_luxury_plugins_ui_install_cancel()' in pending and (
         'Plugins::CancelInstall(id);' in pending), 'an install in progress has no Cancel'
-    assert 'Plugins::PendingInstallsChanges(' in function(files[SECTION], 'void BuildList('), (
-        'the pending rows do not follow PendingInstallsChanges')
+    build = function(files[SECTION], 'void BuildList(')
+    assert re.search(
+        r'Plugins::PendingInstallsChanges\(\s*\) \| rpl::on_next\(\[=\] \{\s*'
+        r'if \(!std::exchange\(\*pendingScheduled, true\)\) \{\s*'
+        r'crl::on_main\(pending, \[=\] \{\s*\*pendingScheduled = false;\s*refillPending\(\);',
+        build), 'the pending rows are rebuilt under the Cancel click'
     manager = function(
         files[MANAGER],
         'void Manager::commitInstall(\n\t\tInstallPlan plan,\n'
@@ -240,7 +250,9 @@ def check_progress(files):
     actions = function(files[SECTION], 'void BuildActions(')
     assert 'manager->checkUpdatesDetailed(' in actions and re.search(
         r'if \(result\.failed\) \{\s*const auto failed = tr::lng_luxury_plugins_ui_check_failed\(',
-        actions) and 'Plugins::ErrorText(result.firstCode)' in actions, (
+        actions) and re.search(
+            r'Plugins::ErrorText\(\s*result\.firstCode,\s*result\.firstError\)',
+            actions), (
         'a failed update check is not reported')
 
 
@@ -260,7 +272,14 @@ def check_details(files):
         'tr::lng_luxury_plugins_ui_reloaded(' in reload), 'reload does not report back'
     assert 'tr::lng_luxury_plugins_ui_removed(' in details, 'remove does not report back'
     secret = function(details, 'void AddSecretSetting(')
-    assert 'object_ptr<Ui::PasswordInput>(' in secret and (
+    # MaskedInputField is RpWidgetBase<QLineEdit>, not RpWidget: addRow
+    # does not take it, it lives in a FixedHeightWidget row.
+    assert 'object_ptr<Ui::PasswordInput>(' not in secret and re.search(
+        r'const auto wrap = box->addRow\(object_ptr<Ui::FixedHeightWidget>\(\s*box,',
+        secret) and 'Ui::CreateChild<Ui::PasswordInput>(\n\t\twrap,' in secret and re.search(
+        r'wrap->widthValue\(\) \| rpl::on_next\(\[=\]\(int width\) \{\s*'
+        r'field->move\(0, 0\);\s*field->resize\(width, field->height\(\)\);\s*'
+        r'wrap->resize\(width, field->height\(\)\);', secret) and (
         'Save(id, key, text.toStdString());' in secret), 'a secret setting is not a masked field'
     setting = function(details, 'void AddSetting(')
     assert re.search(r'if \(setting\.type == SettingType::Secret\) \{\s*AddSecretSetting\(', setting), (
@@ -304,8 +323,12 @@ MUTANTS = (
     (check_errors, CONSENT, '\tcase ErrorCode::Files:\n\t\treturn tr::lng_luxury_plugins_ui_error_files(tr::now);\n', ''),
     (check_errors, EN, '"lng_luxury_plugins_ui_error_files" = ', '"lng_luxury_plugins_ui_error_filez" = '),
     (check_errors, RU, '{ "lng_luxury_plugins_pinned", ', '{ "lng_luxury_plugins_pinnex", '),
-    (check_errors, INSTALL, 'error->entity()->setText(ErrorText(plan.errorCode));', 'error->entity()->setText(text);'),
-    (check_errors, DETAILS, 'show->showToast(ErrorText(plan.errorCode));', 'show->showToast(error);'),
+    (check_errors, INSTALL, 'error->entity()->setText(ErrorText(plan.errorCode, text));', 'error->entity()->setText(text);'),
+    (check_errors, INSTALL, 'error->entity()->setText(ErrorText(plan.errorCode, text));', 'error->entity()->setText(ErrorText(plan.errorCode));'),
+    (check_errors, DETAILS, 'show->showToast(ErrorText(plan.errorCode, error));', 'show->showToast(error);'),
+    (check_errors, DETAILS, 'show->showToast(ErrorText(plan.errorCode, error));', 'show->showToast(ErrorText(plan.errorCode));'),
+    (check_errors, CONSENT, 'ErrorText(code, error)', 'ErrorText(code)'),
+    (check_errors, CONSENT, '\tif (!detail.isEmpty() && KeepsErrorDetail(code)) {\n\t\treturn detail;', '\tif (false) {\n\t\treturn detail;'),
     (check_errors, CONSENT, 'return tr::lng_luxury_plugins_ui_error_cpu(tr::now);', 'return error;'),
     (check_consent_texts, CONSENT, 'for (const auto combined : CombinedDangers(asked, manifest.permissions)) {', 'for (const auto combined : std::vector<CombinedDanger>()) {'),
     (check_consent_texts, CONSENT, '? tr::lng_luxury_plugins_ui_consent_allow_update()', '? tr::lng_luxury_plugins_ui_consent_allow()'),
@@ -314,8 +337,12 @@ MUTANTS = (
     (check_progress, SECTION, 'tr::lng_luxury_plugins_ui_install_cancel(),', 'tr::lng_cancel(),'),
     (check_progress, MANAGER, '\t\t\t} else if (d->cancelled.contains(id)) {', '\t\t\t} else if (false) {'),
     (check_progress, SECTION, 'if (result.failed) {', 'if (false) {'),
+    (check_progress, SECTION, '\t\t\t\t\t\t\tresult.firstError));', '\t\t\t\t\t\t\tQString()));'),
+    (check_progress, SECTION, ') | rpl::on_next([=] {\n\t\t\tif (!std::exchange(*pendingScheduled, true)) {', ') | rpl::on_next(refillPending, pending->lifetime());\n\t\t(void)[=] {\n\t\t\tif (!std::exchange(*pendingScheduled, true)) {'),
     (check_details, DETAILS, 'if (plugin.updateAvailable) {', 'if (true) {'),
-    (check_details, DETAILS, 'object_ptr<Ui::PasswordInput>(', 'object_ptr<Ui::InputField>('),
+    (check_details, DETAILS, 'Ui::CreateChild<Ui::PasswordInput>(\n\t\twrap,', 'box->addRow(object_ptr<Ui::PasswordInput>(\n\t\tbox,'),
+    (check_details, DETAILS, 'Ui::CreateChild<Ui::PasswordInput>(', 'Ui::CreateChild<Ui::InputField>('),
+    (check_details, DETAILS, '\t\tfield->resize(width, field->height());\n\t\twrap->resize', '\t\twrap->resize'),
     (check_details, DETAILS, 'if (setting.type == SettingType::Secret) {', 'if (false) {'),
     (check_details, DETAILS, 'line.level >= minLevel', 'minLevel >= 0'),
     (check_details, DETAILS, 'manager->logAdded() | rpl::filter(', 'manager->changes() | rpl::filter('),
@@ -382,6 +409,19 @@ int main() {
 	EXPECT(FindLocale(locales, "pt-BR") && FindLocale(locales, "pt-BR")->name == "Nome");
 	EXPECT(FindLocale(locales, "pt") == nullptr);
 	EXPECT(FindLocale(locales, "en") == nullptr);
+
+	// Localized or field-precise texts are kept, transport noise is not.
+	for (const auto code : { ErrorCode::Manifest, ErrorCode::RateLimited,
+			ErrorCode::Conflict, ErrorCode::Incompatible, ErrorCode::Downgrade,
+			ErrorCode::Pinned, ErrorCode::UpToDate }) {
+		EXPECT(KeepsErrorDetail(code));
+	}
+	for (const auto code : { ErrorCode::None, ErrorCode::Link,
+			ErrorCode::Network, ErrorCode::NotFound, ErrorCode::Github,
+			ErrorCode::TooLarge, ErrorCode::Busy, ErrorCode::Files,
+			ErrorCode::Consent }) {
+		EXPECT(!KeepsErrorDetail(code));
+	}
 	std::cout << "plugin consent logic ok\n";
 	return 0;
 }
@@ -395,6 +435,9 @@ LOGIC_MUTANTS = (
     ('if (std::find(old.begin(), old.end(), "*") != old.end()) {', 'if (false) {'),
     ('return char(std::tolower(static_cast<unsigned char>(c)));', 'return c;'),
     ('\tif (dash == std::string::npos) {\n\t\treturn nullptr;', '\tif (true) {\n\t\treturn nullptr;'),
+    ('\tcase ErrorCode::RateLimited:\n\tcase ErrorCode::Conflict:', '\tcase ErrorCode::Conflict:'),
+    ('\tcase ErrorCode::Manifest:\n', ''),
+    ('\tdefault:\n\t\treturn false;', '\tdefault:\n\t\treturn true;'),
 )
 
 

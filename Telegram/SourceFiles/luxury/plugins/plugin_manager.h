@@ -141,8 +141,9 @@ public:
 		Fn<void(QString error, ErrorCode code)> done);
 	// The same, for a caller that shows the text only.
 	void commitInstall(InstallPlan plan, Fn<void(QString error)> done);
-	// Stops a running commitInstall of the plugin before its files are
-	// written; done gets Busy. Nothing happens once the swap started.
+	// Marks a running commitInstall of the plugin: when its current fetch
+	// ends, before the files are written, done gets Busy. Requests in flight
+	// are not aborted; nothing happens once the swap started.
 	void cancelInstall(const QString &id);
 	// Puts back the version code.prev holds, see PluginView::previousVersion.
 	// Busy while an install of it runs, Files when the swap failed.

@@ -17,6 +17,7 @@
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/fields/password_input.h"
 #include "ui/widgets/labels.h"
+#include "ui/wrap/padding_wrap.h"
 
 #include "styles/style_boxes.h"
 #include "styles/style_layers.h"
@@ -212,11 +213,20 @@ void AddSecretSetting(
 		const QString &key,
 		const QString &title,
 		const QString &initial) {
-	const auto field = box->addRow(object_ptr<Ui::PasswordInput>(
+	// MaskedInputField is not an RpWidget, so it lives in a wrap row.
+	const auto wrap = box->addRow(object_ptr<Ui::FixedHeightWidget>(
 		box,
+		st::defaultInputField.heightMin));
+	const auto field = Ui::CreateChild<Ui::PasswordInput>(
+		wrap,
 		st::defaultInputField,
 		rpl::single(title),
-		initial));
+		initial);
+	wrap->widthValue() | rpl::on_next([=](int width) {
+		field->move(0, 0);
+		field->resize(width, field->height());
+		wrap->resize(width, field->height());
+	}, wrap->lifetime());
 	const auto last = std::make_shared<QString>(initial);
 	const auto commit = [=] {
 		const auto text = field->getLastText();
@@ -456,7 +466,7 @@ void FillPluginDetailsBox(
 				*updating = false;
 				box->showLoading(false);
 				if (!error.isEmpty()) {
-					show->showToast(ErrorText(plan.errorCode));
+					show->showToast(ErrorText(plan.errorCode, error));
 					return;
 				}
 				box->closeBox();

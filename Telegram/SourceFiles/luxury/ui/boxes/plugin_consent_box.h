@@ -18,8 +18,11 @@ namespace Luxury::Plugins {
 struct InstallPlan;
 enum class ErrorCode;
 
-// The localized text of a lifecycle error, empty for None.
-[[nodiscard]] QString ErrorText(ErrorCode code);
+// The text of a lifecycle error, empty for None: detail, the manager's own
+// text, when KeepsErrorDetail(code), otherwise the localized sentence.
+[[nodiscard]] QString ErrorText(
+	ErrorCode code,
+	const QString &detail = QString());
 // PluginView::lastError with the client's own reasons localized; what the
 // plugin threw is shown as is.
 [[nodiscard]] QString LastErrorText(const QString &error);

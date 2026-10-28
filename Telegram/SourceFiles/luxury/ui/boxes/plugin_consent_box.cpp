@@ -66,7 +66,7 @@ void CommitInstall(std::shared_ptr<Ui::Show> show, InstallPlan plan) {
 				: tr::lng_luxury_plugins_ui_install_failed(
 					tr::now,
 					lt_error,
-					ErrorText(code)))
+					ErrorText(code, error)))
 			: update
 			? tr::lng_luxury_plugins_ui_updated(tr::now, lt_name, name)
 			: tr::lng_luxury_plugins_ui_installed(tr::now, lt_name, name));
@@ -300,7 +300,10 @@ void CancelInstall(const QString &id) {
 	state.changes.fire({});
 }
 
-QString ErrorText(ErrorCode code) {
+QString ErrorText(ErrorCode code, const QString &detail) {
+	if (!detail.isEmpty() && KeepsErrorDetail(code)) {
+		return detail;
+	}
 	switch (code) {
 	case ErrorCode::None:
 		return QString();

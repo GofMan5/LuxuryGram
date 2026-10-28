@@ -226,7 +226,9 @@ void BuildActions(SectionBuilder &builder) {
 						lt_number,
 						QString::number(result.failed),
 						lt_error,
-						Plugins::ErrorText(result.firstCode));
+						Plugins::ErrorText(
+							result.firstCode,
+							result.firstError));
 					text = text.isEmpty() ? failed : (text + '\n' + failed);
 				}
 				show->showToast(text);
@@ -269,8 +271,18 @@ void BuildList(SectionBuilder &builder) {
 			pending->resizeToWidth(pending->width());
 		};
 		refillPending();
+		// Cancel fires the change from its own click: rebuild on the next
+		// event loop turn, not under the pressed button.
+		const auto pendingScheduled = std::make_shared<bool>(false);
 		Plugins::PendingInstallsChanges(
-		) | rpl::on_next(refillPending, pending->lifetime());
+		) | rpl::on_next([=] {
+			if (!std::exchange(*pendingScheduled, true)) {
+				crl::on_main(pending, [=] {
+					*pendingScheduled = false;
+					refillPending();
+				});
+			}
+		}, pending->lifetime());
 		if (const auto manager = Plugins::Manager::Maybe()) {
 			// Rows follow their plugin in place; the list is rebuilt only
 			// when plugins come or go, on the next event loop turn as a
