@@ -108,7 +108,8 @@ Rules:
   `*.suffix` wildcards. `"*"` means any host and is shown to the user as such.
 - `settings[]`: `key` (1-64 of `[A-Za-z0-9_.-]`, unique), `title` and
   `type` are required; `description`, `placeholder` and `locales` are
-  optional strings. Types and their `default`:
+  optional, accepted and validated; the settings box shows only `title`
+  for now and renders them in a later release. Types and their `default`:
   - `string`, `secret`: a string, default `""`. A secret is never logged;
     the settings box does not mask it yet.
   - `bool`: a boolean, default `false`.
@@ -124,11 +125,15 @@ Rules:
 - `locales`, top level and per setting: `{"<lang>": {"name", "description"}}`.
   A language code is 2-16 of `[a-z0-9-]`, starts with a letter and does not
   end with `-` (`ru`, `pt-br`). A setting's `name` translates its `title`.
+  Parsed and validated only: nothing displays them yet.
 - Errors name the field path and, for the id and colors, echo the value:
   `settings[2].default: must be one of options`,
   `settings[0].locales.RU: must be a language code like "ru" or "pt-br"`,
   `id: must match ^[a-z0-9][a-z0-9._-]{1,62}[a-z0-9]$ without ".." or a device name, got "My_Plugin"`.
-- Unknown keys are ignored (forward compatible). Wrong types are errors.
+- Unknown keys are ignored (forward compatible). Wrong types are errors,
+  and so is an unknown setting `type`: settings are parsed before
+  `minClient` is compared, so a client older than a setting type refuses
+  the manifest with `settings[i].type: unknown type`.
 
 ## Permissions
 

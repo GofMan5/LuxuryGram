@@ -30,7 +30,7 @@ enum class SettingType {
 	Select, // Choice under its documented name.
 	Number,
 	Color,
-	Secret, // A string the client never logs and masks in the UI.
+	Secret, // A string the client never logs; the UI does not mask it yet.
 };
 
 // "locales": { "ru": { "name": "...", "description": "..." } }.
@@ -46,7 +46,7 @@ struct SettingDescriptor {
 	std::string title;
 	std::string description;
 	std::string placeholder;
-	Locales locales; // "name" translates the title.
+	Locales locales; // "name" translates the title. Not shown yet.
 	std::string defaultString; // String, Choice, Select, Color, Secret.
 	bool defaultBool = false;
 	std::int64_t defaultInt = 0;

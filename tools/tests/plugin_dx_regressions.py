@@ -9,7 +9,9 @@ docs/plugins/AUTHORING.md. The client is not built here, so:
 - docs/plugins/lux.d.ts declares exactly the lux members of the prelude
   in js_engine.cpp, no more and no less;
 - docs/plugins/examples/hello-world parses with the real ParseManifest,
-  lists every module it ships and has defaults its settings accept.
+  lists every module it ships and has defaults its settings accept; it
+  carries an exact copy of lux.d.ts that main.js references as
+  ./lux.d.ts, so completion still works after the folder is copied out.
 Every check is also run against a mutant it must reject.
 
 Bounded source check; not a native acceptance.
@@ -380,14 +382,23 @@ DRIFT_MUTANTS = (
 
 # --- The example installs from a GitHub link as it is.
 
+EXAMPLE_MUTANTS = (
+    (EXAMPLE + '/main.js', '<reference path="./lux.d.ts" />', '<reference path="../../lux.d.ts" />'),
+    (EXAMPLE + '/lux.d.ts', '\t\tfunction remove(key: string): void;\n', ''),
+)
+
+
 def check_example(read):
     manifest = json.loads(read(EXAMPLE + '/plugin.json'))
+    main = read(EXAMPLE + '/' + manifest['main'])
+    assert main.startswith('/// <reference path="./lux.d.ts" />'), 'the example must reference its own lux.d.ts'
+    assert crlf(read(EXAMPLE + '/lux.d.ts')) == crlf(read(DTS)), f'{EXAMPLE}/lux.d.ts differs from {DTS}'
     folder = ROOT / EXAMPLE
     shipped = sorted(p.relative_to(folder).as_posix() for p in folder.rglob('*.js'))
     assert sorted(manifest['files']) == shipped, f'files {manifest["files"]} != modules {shipped}'
     assert manifest['main'] in manifest['files']
     members = prelude_members(crlf(read(ENGINE)))
-    for member in re.findall(r"(?<![\w/.])lux\.(\w+(?:\.\w+)?)", read(EXAMPLE + '/' + manifest['main'])):
+    for member in re.findall(r"(?<![\w/.])lux\.(\w+(?:\.\w+)?)", main):
         assert member in members or member.startswith('plugin.'), f'the example calls a missing lux.{member}'
 
 
@@ -405,6 +416,14 @@ def check(root, read=source):
             continue
         raise AssertionError(f'the drift check accepts the mutant: {after!r}')
     check_example(read)
+    for path, before, after in EXAMPLE_MUTANTS:
+        mutated = lambda p: read(p).replace(before, after) if p == path else read(p)
+        assert read(path).count(before) == 1, f'example mutant anchor moved: {before!r}'
+        try:
+            check_example(mutated)
+        except AssertionError:
+            continue
+        raise AssertionError(f'the example check accepts the mutant: {after!r}')
 
     tree, objects = build_core(root, read)
     logic = crlf(read(LOGIC))

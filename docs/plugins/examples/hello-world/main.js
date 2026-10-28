@@ -1,4 +1,4 @@
-/// <reference path="../../lux.d.ts" />
+/// <reference path="./lux.d.ts" />
 // Hello world: a /hello command and a Ctrl+Shift+H hotkey that greet you.
 // Needs only the "ui" permission; settings are always readable.
 

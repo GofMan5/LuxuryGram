@@ -10,11 +10,16 @@ is the full contract.
 
 ## Quick start
 
-1. Copy [examples/hello-world](examples/hello-world/) into a repository.
+1. Copy [examples/hello-world](examples/hello-world/) into a repository; it
+   carries its own copy of [lux.d.ts](lux.d.ts).
 2. Change `id` to something you own (`com.yourname.hello`).
 3. Push, then in LuxuryGram open Settings → Plugins → Install from GitHub and paste
    `yourname/repo` (or the `tree/<branch>/<folder>` link of the folder).
 4. Type `/hello` in any chat or press Ctrl+Shift+H.
+
+The example uses the `select` and `number` setting types, so it installs on
+the first LuxuryGram release after 1.0.21 and later ones; see
+[New setting types](#new-setting-types).
 
 For editor completion put this line at the top of each module and keep
 [lux.d.ts](lux.d.ts) next to it:
@@ -61,7 +66,8 @@ For editor completion put this line at the top of each module and keep
 | `settings`, `locales` | See below. |
 
 `plugin.json` itself must stay under 256 KiB. Unknown keys are ignored, so
-a newer field does not break an older client. A wrong type is an error.
+a newer optional field does not break an older client. A wrong type is an
+error, and so is a setting `type` the client does not know.
 
 ### Modules and builds
 
@@ -80,8 +86,8 @@ value is read with `lux.settings.get(key)`. Settings need no permission.
 | `key` | Required, unique, 1-64 of `[A-Za-z0-9_.-]`. |
 | `type` | Required: one of the types below. |
 | `title` | Required, the row label. |
-| `description` | Optional text under the row. |
-| `placeholder` | Optional hint in an empty text field. |
+| `description` | Optional string, validated; not shown yet. |
+| `placeholder` | Optional string, validated; not shown yet (the field shows `title`). |
 | `default` | Optional, must match the type. |
 | `locales` | Optional, see [Locales](#locales). |
 
@@ -103,7 +109,18 @@ it, otherwise the default. So when an update narrows a range or drops an
 option, old values fall back to the default instead of reaching your code.
 
 The settings box does not mask `secret` yet; treat it as "kept out of the
-log", not as hidden on screen.
+log", not as hidden on screen. Likewise `description`, `placeholder` and
+`locales` are accepted and validated now and shown by the settings box in
+a later release: today a row shows `title` only.
+
+### New setting types
+
+`select`, `number`, `color` and `secret` are new in the first release after
+LuxuryGram 1.0.21. An older client refuses a manifest that uses them with
+`settings[i].type: unknown type "select"`: settings are parsed before
+`minClient` is compared, so `minClient` does not turn this into "update
+LuxuryGram". Use `int`, `string` and `choice` if your plugin must install
+on 1.0.21.
 
 ```js
 lux.settings.onChange(({ key, value }) => { /* at most 64 handlers */ });
@@ -112,8 +129,10 @@ lux.settings.onChange(({ key, value }) => { /* at most 64 handlers */ });
 ## Locales
 
 `locales` maps a language code to translated texts, at the top level
-(`name`, `description` of the plugin) and per setting (`name` translates
-`title`, plus `description`):
+(`name`, `description` of the plugin) and per setting (`name` for `title`,
+plus `description`). They are accepted and validated now; the client shows
+them in a later release, until then every text appears as written in the
+manifest:
 
 ```json
 "locales": {"ru": {"name": "Токен API", "description": "Со страницы настроек"}}
