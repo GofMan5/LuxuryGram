@@ -160,10 +160,12 @@ Rules:
   `*.suffix` wildcards. `"*"` means any host and is shown to the user as such.
 - `settings[]`: `key` (1-64 of `[A-Za-z0-9_.-]`, unique), `title` and
   `type` are required; `description`, `placeholder` and `locales` are
-  optional, accepted and validated; the settings box shows only `title`
-  for now and renders them in a later release. Types and their `default`:
-  - `string`, `secret`: a string, default `""`. A secret is never logged;
-    the settings box does not mask it yet.
+  optional. The settings box shows `description` under the field,
+  `placeholder` inside an empty text field (`title` then sits above it) and
+  the setting's `locales` entry for the client's language. Types and their
+  `default`:
+  - `string`, `secret`: a string, default `""`. A secret is never logged
+    and the settings box masks it like a password field.
   - `bool`: a boolean, default `false`.
   - `int`: an integer within optional `min`/`max`, default `min` or `0`.
   - `number`: a finite number within optional `min`/`max`, default `min`
@@ -177,7 +179,9 @@ Rules:
 - `locales`, top level and per setting: `{"<lang>": {"name", "description"}}`.
   A language code is 2-16 of `[a-z0-9-]`, starts with a letter and does not
   end with `-` (`ru`, `pt-br`). A setting's `name` translates its `title`.
-  Parsed and validated only: nothing displays them yet.
+  The settings box picks the client's language id, then its base language
+  (`pt` for `pt-br`; `FindLocale`), else the manifest text. The top-level
+  entry is parsed and validated only: nothing displays it yet.
 - Errors name the field path and, for the id and colors, echo the value:
   `settings[2].default: must be one of options`,
   `settings[0].locales.RU: must be a language code like "ru" or "pt-br"`,
