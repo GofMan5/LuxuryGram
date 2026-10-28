@@ -36,6 +36,21 @@ namespace {
 
 constexpr auto kIntSize = static_cast<int>(sizeof(mtpPrime));
 
+constexpr auto kWaitForBetterTimeout = crl::time(2000);
+constexpr auto kMinConnectedTimeout = crl::time(1000);
+constexpr auto kMaxConnectedTimeout = crl::time(8000);
+constexpr auto kMinReceiveTimeout = crl::time(4000);
+constexpr auto kMaxReceiveTimeout = crl::time(64000);
+constexpr auto kMarkConnectionOldTimeout = crl::time(192000);
+constexpr auto kPingDelayDisconnect = 60;
+constexpr auto kPingSendAfter = 30 * crl::time(1000);
+constexpr auto kPingSendAfterForce = 45 * crl::time(1000);
+constexpr auto kTemporaryExpiresIn = TimeId(86400);
+constexpr auto kBindKeyAdditionalExpiresTimeout = TimeId(30);
+constexpr auto kKeyOldEnoughForDestroy = 60 * crl::time(1000);
+constexpr auto kSentContainerLives = 600 * crl::time(1000);
+constexpr auto kFastRequestDuration = crl::time(500);
+
 // "Use system proxy" is also the no-proxy default, so ask the OS whether a
 // proxy would carry a socket to the WS fronts. The lookup can block (WPAD),
 // as it does for every TCP racer here, so it runs on the session thread.
@@ -53,20 +68,6 @@ constexpr auto kIntSize = static_cast<int>(sizeof(mtpPrime));
 	return (type != QNetworkProxy::NoProxy)
 		&& (type != QNetworkProxy::DefaultProxy);
 }
-constexpr auto kWaitForBetterTimeout = crl::time(2000);
-constexpr auto kMinConnectedTimeout = crl::time(1000);
-constexpr auto kMaxConnectedTimeout = crl::time(8000);
-constexpr auto kMinReceiveTimeout = crl::time(4000);
-constexpr auto kMaxReceiveTimeout = crl::time(64000);
-constexpr auto kMarkConnectionOldTimeout = crl::time(192000);
-constexpr auto kPingDelayDisconnect = 60;
-constexpr auto kPingSendAfter = 30 * crl::time(1000);
-constexpr auto kPingSendAfterForce = 45 * crl::time(1000);
-constexpr auto kTemporaryExpiresIn = TimeId(86400);
-constexpr auto kBindKeyAdditionalExpiresTimeout = TimeId(30);
-constexpr auto kKeyOldEnoughForDestroy = 60 * crl::time(1000);
-constexpr auto kSentContainerLives = 600 * crl::time(1000);
-constexpr auto kFastRequestDuration = crl::time(500);
 
 // If we can't connect for this time we will ask _instance to update config.
 constexpr auto kRequestConfigTimeout = 8 * crl::time(1000);
@@ -1183,17 +1184,15 @@ void SessionPrivate::connectToServer(bool afterConfig) {
 		const auto useTcp = special ? true : _options->useTcp;
 		const auto useHttp = special ? false : _options->useHttp;
 		const auto wsMode = WsMode(_options->webSocketMode);
-		const auto systemProxy = _options->systemProxy
-			&& (wsMode != WsMode::Off)
-			&& SystemProxyPresent();
 		const auto wsAllowed = WsAllowed(
 			wsMode,
 			bareDc,
 			_instance->isTestMode(),
 			_options->proxy.type != ProxyData::Type::None,
-			systemProxy,
+			false, // System proxy last: its OS lookup can block (WPAD).
 			special || (_currentDcType == DcType::Cdn),
-			_instance->isKeysDestroyer());
+			_instance->isKeysDestroyer())
+			&& !(_options->systemProxy && SystemProxyPresent());
 		_wsAllowed = wsAllowed;
 		wsDecision = wsAllowed
 			? WsRouteTable::Instance().decide(

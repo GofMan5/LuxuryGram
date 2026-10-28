@@ -37,7 +37,7 @@ public:
 	int32 debugState() override;
 	QString debugPostfix() const override;
 
-	// What this racer contributes to its round, None once it got bytes.
+	// What this racer contributes to its round, Worked once it got bytes.
 	[[nodiscard]] WsFailure failure() const;
 
 private:

@@ -43,7 +43,7 @@ TCP connection is up, when Qt has a socket engine to take them.
 No WS candidates are added when any of these holds: the mode is Off; any
 proxy is set in the app (MTProto, SOCKS5, HTTP); "use system proxy" is set
 and the OS reports a real proxy for `kws2.web.telegram.org:443`, asked on
-the session thread at each connect (with no system proxy configured WS
+the session thread at each connect, only after every other gate passed (with no system proxy configured WS
 stays available); the DC is a temporary (special) or CDN one; the session belongs to the keys
 destroyer; the DC has no kws front (production 1..5 and 203, test 1..3 have
 one). The status line then says why. Connections made in such a round never
