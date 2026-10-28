@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
@@ -613,13 +614,18 @@ inline void HideOwnPhone(nlohmann::json &value) {
 	switch (setting.type) {
 	case SettingType::Bool: return setting.defaultBool;
 	case SettingType::Int: return setting.defaultInt;
+	case SettingType::Number: return setting.defaultNumber;
 	case SettingType::String:
-	case SettingType::Choice: return setting.defaultString;
+	case SettingType::Choice:
+	case SettingType::Select:
+	case SettingType::Color:
+	case SettingType::Secret: return setting.defaultString;
 	}
 	return nullptr;
 }
 
-// A value the setting can hold: its type, within min/max, a listed option.
+// A value the setting can hold: its type, within min/max, a listed option,
+// a #RRGGBB color. A number's step is a UI hint, not a constraint.
 [[nodiscard]] inline bool SettingAccepts(
 		const SettingDescriptor &setting,
 		const nlohmann::json &value) {
@@ -633,8 +639,21 @@ inline void HideOwnPhone(nlohmann::json &value) {
 		return (!setting.min || v >= *setting.min)
 			&& (!setting.max || v <= *setting.max);
 	}
-	case SettingType::String: return value.is_string();
+	case SettingType::Number: {
+		if (!value.is_number()) {
+			return false;
+		}
+		const auto v = value.get<double>();
+		return std::isfinite(v)
+			&& (!setting.minNumber || v >= *setting.minNumber)
+			&& (!setting.maxNumber || v <= *setting.maxNumber);
+	}
+	case SettingType::Color:
+		return value.is_string() && IsValidColor(value.get<std::string>());
+	case SettingType::String:
+	case SettingType::Secret: return value.is_string();
 	case SettingType::Choice:
+	case SettingType::Select:
 		return value.is_string()
 			&& std::find(
 				setting.options.begin(),

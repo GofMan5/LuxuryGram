@@ -23,6 +23,8 @@
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 
+#include <cmath>
+
 namespace Luxury::Plugins {
 namespace {
 
@@ -119,8 +121,9 @@ void AddChoiceSetting(
 	});
 }
 
-// String and Int: saved on submit, focus loss and box close; an Int out
-// of [min, max] is refused with the field error state.
+// Text, Int and Number: saved on submit, focus loss and box close; a
+// number out of [min, max] or a malformed color is refused with the field
+// error state.
 void AddTextSetting(
 		not_null<Ui::GenericBox*> box,
 		const QString &id,
@@ -128,44 +131,63 @@ void AddTextSetting(
 		const QString &title,
 		const SettingDescriptor &setting,
 		const QString &initial) {
-	const auto isInt = (setting.type == SettingType::Int);
+	const auto type = setting.type;
 	const auto min = setting.min;
 	const auto max = setting.max;
+	const auto minNumber = setting.minNumber;
+	const auto maxNumber = setting.maxNumber;
 	const auto field = box->addRow(object_ptr<Ui::InputField>(
 		box,
 		st::defaultInputField,
 		rpl::single(title),
 		initial));
-	if (isInt && (min || max)) {
+	const auto shown = [](const auto &limit) {
+		return limit ? QString::number(*limit) : u"-"_q;
+	};
+	if ((type == SettingType::Int && (min || max))
+		|| (type == SettingType::Number && (minNumber || maxNumber))) {
+		const auto isInt = (type == SettingType::Int);
 		AddText(box, { tr::lng_luxury_plugins_ui_setting_range(
 			tr::now,
 			lt_from,
-			min ? QString::number(*min) : u"-"_q,
+			isInt ? shown(min) : shown(minNumber),
 			lt_to,
-			max ? QString::number(*max) : u"-"_q) });
+			isInt ? shown(max) : shown(maxNumber)) });
 	}
 	const auto last = std::make_shared<QString>(initial);
 	const auto commit = [=](bool focus) {
 		const auto text = field->getLastText().trimmed();
-		if (text == *last) {
-			return;
-		} else if (!isInt) {
-			*last = text;
-			Save(id, key, text.toStdString());
-			return;
-		}
-		auto ok = false;
-		const auto number = text.toLongLong(&ok);
-		if (!ok || (min && number < *min) || (max && number > *max)) {
+		const auto refuse = [&] {
 			if (focus) {
 				field->showError();
 			} else {
 				field->showErrorNoFocus();
 			}
+		};
+		auto ok = true;
+		auto value = nlohmann::json(text.toStdString());
+		if (text == *last) {
+			return;
+		} else if (type == SettingType::Int) {
+			const auto number = text.toLongLong(&ok);
+			ok = ok && (!min || number >= *min) && (!max || number <= *max);
+			value = std::int64_t(number);
+		} else if (type == SettingType::Number) {
+			const auto number = text.toDouble(&ok);
+			ok = ok
+				&& std::isfinite(number)
+				&& (!minNumber || number >= *minNumber)
+				&& (!maxNumber || number <= *maxNumber);
+			value = number;
+		} else if (type == SettingType::Color) {
+			ok = IsValidColor(text.toStdString());
+		}
+		if (!ok) {
+			refuse();
 			return;
 		}
 		*last = text;
-		Save(id, key, std::int64_t(number));
+		Save(id, key, std::move(value));
 	};
 	field->submits() | rpl::on_next([=] {
 		commit(true);
@@ -203,9 +225,12 @@ void AddSetting(
 			: setting.defaultBool);
 		break;
 	case SettingType::Choice:
+	case SettingType::Select:
 		AddChoiceSetting(box, id, key, title, setting.options, string);
 		break;
 	case SettingType::String:
+	case SettingType::Color:
+	case SettingType::Secret:
 		AddTextSetting(
 			box,
 			id,
@@ -224,6 +249,17 @@ void AddSetting(
 			QString::number(value.is_number_integer()
 				? value.get<std::int64_t>()
 				: setting.defaultInt));
+		break;
+	case SettingType::Number:
+		AddTextSetting(
+			box,
+			id,
+			key,
+			title,
+			setting,
+			QString::number(value.is_number()
+				? value.get<double>()
+				: setting.defaultNumber));
 		break;
 	}
 }
