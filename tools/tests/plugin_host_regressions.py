@@ -562,7 +562,7 @@ def check_hooks(files):
     # No plugin key while a text field has focus, and never a reserved one.
     assert 'if (typing) {\n\t\treturn false;\n\t}' in hotkey, 'hotkeys must not fire while typing'
     assert 'if (HotkeyReserved(keys)) {\n\t\treturn false;' in hotkey, 'hotkeys must skip reserved keys'
-    assert hotkey.index('if (typing)') < hotkey.index('for (const auto instance'), 'typing must be checked first'
+    assert hotkey.index('if (typing)') < hotkey.index('for (const auto &instance'), 'typing must be checked first'
     assert 'granted.has(Permission::Ui)' in hotkey, 'hotkeys without ui'
     # The Qt-free key constants of plugin_host_logic.h are Qt's.
     for line in ('kKeyEscape == Qt::Key_Escape', 'kKeyReturn == Qt::Key_Return', 'kKeyEnter == Qt::Key_Enter',
