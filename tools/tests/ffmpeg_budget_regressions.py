@@ -1,15 +1,16 @@
 """FFmpeg thread budget: every decoder and encoder gets a per-role count.
 
 The client is not built here, so:
-- ResolveThreads and the VP9 tile-columns loop are extracted from the real
-  sources and compiled with -Wall -Wextra -Werror against stubs: the user
-  override wins, then the caller's role count, libvpx-vp9 "auto" is capped
-  to 1..8 instead of min(cpus, 64) threads per decoder, native codecs keep
-  FFmpeg's auto (0); tiles are floor(log2(threads)) up to 4, only at 1024+;
+- ResolveThreads is extracted from the real source and compiled with
+  -Wall -Wextra -Werror against stubs: the user override wins, then the
+  caller's role count, libvpx-vp9 "auto" is capped to 1..8 instead of
+  min(cpus, 64) threads per decoder, native codecs keep FFmpeg's auto (0);
 - the Qt half is checked statically: every MakeCodecPointer call site
   passes its role's `.threads =`, lib_ffmpeg includes no Telegram core
   header, CreateVideoEncoder sets thread_count before setup() and
-  avcodec_open2, the VP9 setup asks for row-mt and tile columns, and
+  avcodec_open2, the VP9 setup asks for row-mt and leaves tile-columns to
+  libvpx's width-clamped default, the H.264 setup asks for up to 4 slices
+  (libopenh264 threads only across slices), and
   MakeCodecPointer resolves threads only under the multi-thread option.
 Every check is also run against a mutant it must reject.
 
@@ -40,8 +41,6 @@ ROLES = {
 }
 
 RESOLVE = '[[nodiscard]] int ResolveThreads(const AVCodec *codec, int requested) {'
-TILES_FROM = '\tauto tiles = 0;\n'
-TILES_TILL = '\terror = AvErrorWrap(av_opt_set_int(\n\t\tencoder->priv_data,\n\t\t"tile-columns",'
 
 MAIN = r'''
 #include <algorithm>
@@ -68,19 +67,9 @@ struct {
 	}
 } OptionFFmpegThreadCount;
 
-struct Encoder {
-	int width = 0;
-	int thread_count = 0;
-};
-
 namespace {
 
 @RESOLVE@
-
-int Tiles(const Encoder *encoder) {
-@TILES@
-	return tiles;
-}
 
 } // namespace
 
@@ -115,17 +104,6 @@ int main() {
 	OptionFFmpegThreadCount.user = -1;
 	EXPECT(ResolveThreads(&h264, 5) == 5);
 	OptionFFmpegThreadCount.user = 0;
-
-	const int expected[][2] = {
-		{ 0, 0 }, { 1, 0 }, { 2, 1 }, { 3, 1 }, { 4, 2 }, { 7, 2 },
-		{ 8, 3 }, { 15, 3 }, { 16, 4 }, { 32, 4 }, { 64, 4 },
-	};
-	for (const auto &[threads, tiles] : expected) {
-		const auto wide = Encoder{ 1024, threads };
-		EXPECT(Tiles(&wide) == tiles);
-		const auto sticker = Encoder{ 512, threads };
-		EXPECT(Tiles(&sticker) == 0);
-	}
 	std::cout << "ffmpeg budget fixture ok\n";
 	return 0;
 }
@@ -139,9 +117,6 @@ LOGIC_MUTANTS = (
     (UTILITY, 'user > 0) {\n\t\treturn user;\n\t} else if (requested > 0) {\n\t\treturn requested;',
      'user > 0 && requested <= 0) {\n\t\treturn user;\n\t} else if (requested > 0) {\n\t\treturn requested;'),
     (UTILITY, 'user > 0) {', 'user != 0) {'),
-    (ENCODE, '(2 << tiles) <= encoder->thread_count', '(1 << tiles) <= encoder->thread_count'),
-    (ENCODE, 'tiles < 4 &&', 'tiles < 6 &&'),
-    (ENCODE, 'encoder->width >= 1024', 'encoder->width >= 0'),
 )
 
 
@@ -154,11 +129,7 @@ def body(text, signature):
 
 
 def fixture(root, files, name):
-    tiles = files[ENCODE]
-    start = tiles.index(TILES_FROM)
-    text = (MAIN
-            .replace('@RESOLVE@', body(files[UTILITY], RESOLVE))
-            .replace('@TILES@', tiles[start:tiles.index(TILES_TILL, start)]))
+    text = MAIN.replace('@RESOLVE@', body(files[UTILITY], RESOLVE))
     main = root / (name + '.cpp')
     main.write_text(text, encoding='utf-8')
     exe = root / (name + ('.exe' if os.name == 'nt' else ''))
@@ -226,8 +197,14 @@ def check_encoder(files):
         'thread_count must be set before setup() can override it and before avcodec_open2'
     vp9 = body(files[ENCODE], '[[nodiscard]] bool SetupVp9StickerOptions(')
     assert 'av_opt_set_int(encoder->priv_data, "row-mt", 1, 0)' in vp9, 'VP9 must enable row-mt'
-    assert '"tile-columns",\n\t\ttiles,' in vp9, 'VP9 must set tile-columns'
-    assert 'log2(' not in vp9 and 'double' not in vp9, 'tile columns use an int loop'
+    # Stickers are 512px at most: libvpx's own width-clamped default keeps
+    # their 2 tile columns, an explicit count would only lose them.
+    assert 'tile-columns' not in vp9, 'VP9 must keep the libvpx tile-columns default'
+    h264 = body(files[ENCODE], '[[nodiscard]] VideoEncoder CreateH264Encoder(')
+    assert '\t\tnullptr);' not in h264, 'H.264 must pass a setup for slices'
+    slices = body(h264, 'if (encoder->thread_count > 1) {')
+    assert slices == 'if (encoder->thread_count > 1) {\n\t\t\t\tencoder->slices = std::min(encoder->thread_count, 4);\n\t\t\t}', \
+        'H.264 must ask for min(thread_count, 4) slices when threaded'
 
 
 # thread_count moved after avcodec_open2, where the encoder ignores it.
@@ -267,7 +244,13 @@ MUTANTS = (
      '\tif (setup && !setup(encoder.get())) {'),
     (check_encoder, ENCODE, MOVE_BEFORE, MOVE_AFTER),
     (check_encoder, ENCODE, 'av_opt_set_int(encoder->priv_data, "row-mt", 1, 0)', 'av_opt_set_int(encoder->priv_data, "row-mt", 0, 0)'),
-    (check_encoder, ENCODE, '"tile-columns",\n\t\ttiles,', '"tile-columns",\n\t\t0,'),
+    (check_encoder, ENCODE, '\t\treturn false;\n\t}\n\treturn true;\n}\n\n[[nodiscard]] VideoEncoder CreateVp9WebmEncoder(',
+     '\t\treturn false;\n\t}\n\tav_opt_set_int(encoder->priv_data, "tile-columns", 0, 0);\n\treturn true;\n}\n\n[[nodiscard]] VideoEncoder CreateVp9WebmEncoder('),
+    (check_encoder, ENCODE, 'encoder->slices = std::min(encoder->thread_count, 4);', 'encoder->slices = encoder->thread_count;'),
+    (check_encoder, ENCODE, 'encoder->slices = std::min(encoder->thread_count, 4);', 'encoder->slices = std::min(encoder->thread_count, 1);'),
+    (check_encoder, ENCODE, 'if (encoder->thread_count > 1) {', 'if (encoder->thread_count > 4) {'),
+    (check_encoder, ENCODE, '\t\t0.,\n\t\t[](not_null<AVCodecContext*> encoder) {\n\t\t\t// libopenh264',
+     '\t\t0.,\n\t\tnullptr);\n\t[](not_null<AVCodecContext*> encoder) {\n\t\t\t// libopenh264'),
 )
 
 
@@ -298,7 +281,7 @@ def check(root, read=source):
         if code == 0:
             raise AssertionError(f'the budget fixture accepts the mutant: {after}')
     print('FFmpeg budget PASS: user override, role counts, libvpx cap 1..8, native auto, '
-          'slice threading for one thread, VP9 row-mt and tile columns; every call site '
+          'slice threading for one thread, VP9 row-mt with libvpx tiles, H.264 slices; every call site '
           'passes its role, lib_ffmpeg stays free of core, encoders get thread_count before setup')
 
 

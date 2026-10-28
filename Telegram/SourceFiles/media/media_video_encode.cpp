@@ -235,7 +235,13 @@ struct ColorDescription {
 		color,
 		AV_PIX_FMT_YUV420P,
 		0.,
-		nullptr);
+		[](not_null<AVCodecContext*> encoder) {
+			// libopenh264 threads only across slices, at most 4 of them.
+			if (encoder->thread_count > 1) {
+				encoder->slices = std::min(encoder->thread_count, 4);
+			}
+			return true;
+		});
 }
 
 [[nodiscard]] bool SetupVp9StickerOptions(
@@ -262,23 +268,6 @@ struct ColorDescription {
 	error = AvErrorWrap(av_opt_set_int(encoder->priv_data, "row-mt", 1, 0));
 	if (error) {
 		LogError(u"av_opt_set_int"_q, error, u"row-mt"_q);
-		return false;
-	}
-	// tile-columns is a log2 count: the largest k with 2^k <= threads,
-	// up to 4, and only for frames wide enough to split.
-	auto tiles = 0;
-	if (encoder->width >= 1024) {
-		while (tiles < 4 && (2 << tiles) <= encoder->thread_count) {
-			++tiles;
-		}
-	}
-	error = AvErrorWrap(av_opt_set_int(
-		encoder->priv_data,
-		"tile-columns",
-		tiles,
-		0));
-	if (error) {
-		LogError(u"av_opt_set_int"_q, error, u"tile-columns"_q);
 		return false;
 	}
 	return true;
