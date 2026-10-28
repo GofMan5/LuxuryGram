@@ -79,6 +79,9 @@ struct FakeHost final : Host {
 			pendingIds.push_back(context.promiseId);
 			return HostResult::Pending();
 		} else if (name == "http.fetch") {
+			if (args.at(1).value("binary", false)) {
+				return HostResult::Value({ { "status", 200 }, { "headers", json::object() }, { "base64", "AAE=" } });
+			}
 			return HostResult::Value({ { "status", 200 }, { "headers", json::object() }, { "body", "{\"a\":7}" } });
 		} else if (name == "storage.get") {
 			return HostResult::Value(args.at(0).get<std::string>() + "!");
@@ -246,6 +249,7 @@ lux.ui.confirm({ title: 't' }).then(() => lux.log('never'), (e) => lux.log('deni
 lux.log('sync', lux.storage.get('k'));
 try { lux.messages.send({ peer: 1, text: 'x' }); } catch (e) { lux.log('perm', e.name, e instanceof Error, e.message); }
 try { lux.clipboard.read(); } catch (e) { lux.log('host', e.name, e.message); }
+lux.http.fetch('https://example.com', { binary: true }).then((r) => lux.log('bytes', r.base64));
 lux.http.fetch('https://example.com', { method: 'GET' }).then((r) => lux.log('http', r.status, r.json().a, r.text()));
 lux.storage.keys();
 )js";
@@ -256,6 +260,7 @@ lux.storage.keys();
 	CHECK(host.logged("0:perm PermissionError true \"messages.send\" was not granted"));
 	CHECK(host.logged("0:host InternalError host broke"));
 	CHECK(host.logged("0:http 200 7 {\"a\":7}"));
+	CHECK(host.logged("0:bytes AAE="));
 	CHECK(host.last("http.fetch") == json::parse(R"(["https://example.com",{"method":"GET"}])"));
 	CHECK(host.reentered == "the plugin engine is already running");
 	CHECK(host.pendingIds.size() == 2);
@@ -274,6 +279,19 @@ lux.storage.keys();
 	const auto out = strict.loadMain("main.js");
 	CHECK(out.error.rfind("PermissionError: \"messages.send\" was not granted", 0) == 0);
 	CHECK(Has(out.error, "main.js:2"));
+
+	// A top-level await that rejects later fails the entry that settles it,
+	// once, and is not also logged as an unhandled rejection.
+	FakeHost late;
+	late.files["main.js"] = "await lux.api.call('x', {});\nthrow new RangeError('late main');\n";
+	Engine lateEngine({}, late);
+	CHECK(lateEngine.loadMain("main.js").ok());
+	CHECK(late.pendingIds.size() == 1);
+	const auto settled = lateEngine.resolve(late.pendingIds[0], nullptr);
+	CHECK(settled.error.rfind("RangeError: late main", 0) == 0);
+	CHECK(Has(settled.error, "main.js:2"));
+	CHECK(!late.logged("Unhandled promise rejection"));
+	CHECK(lateEngine.runJobs().ok());
 }
 
 void Interrupt() {
@@ -488,6 +506,18 @@ await new Promise(() => {});
 		CHECK(!host.logged("Error: handled"));
 		CHECK(host.pendingIds.size() == 1);
 	}
+	// A flood of rejections logs 16 and one summary line.
+	FakeHost flood;
+	flood.files["main.js"] = "for (let i = 0; i < 40; ++i) Promise.reject(new Error('r' + i));\n";
+	{
+		Engine engine({}, flood);
+		CHECK(engine.loadMain("main.js").ok());
+		CHECK(std::count_if(flood.logs.begin(), flood.logs.end(), [](const std::string &line) {
+			return line.find("2:Unhandled promise rejection") == 0;
+		}) == 16);
+		CHECK(flood.logged("Error: r15") && !flood.logged("Error: r16"));
+		CHECK(flood.logged("2:...and 24 more unhandled promise rejections"));
+	}
 	FakeHost interrupted;
 	interrupted.files["main.js"] = "lux.api.call('x', {}).then(() => {});\nwhile (true) {}\n";
 	{
@@ -581,6 +611,12 @@ def check(root, read=source):
 
     assert not mutant_survives(root, engine, '\tif (state.depth == 0) {\n\t\treturn 0;', '\tif (true) {\n\t\treturn 0;', 'interrupt'), 'interrupt mutant survived'
     assert not mutant_survives(root, engine, 'for (const auto &[id, funcs] : pending) {', 'for (const auto &[id, funcs] : decltype(pending)()) {', 'teardown'), 'leak mutant survived'
+    assert not mutant_survives(root, engine, 'if (reported++ < kMaxRejectionReports) {', 'if (reported++ < 1000) {', 'teardown'), 'rejection cap mutant survived'
+    assert not mutant_survives(root, engine, 'if (list.size() > kMaxRejectionReports) {', 'if (false) {', 'teardown'), 'rejection summary mutant survived'
+    assert not mutant_survives(root, engine, '\t\t\t\tbase64: r.base64,\n', '', 'async'), 'fetch base64 mutant survived'
+    assert not mutant_survives(root, engine, '\tif (!overrun) {\n\t\tsettleMain(out);\n\t}\n', '', 'async'), 'late main rejection mutant survived'
+    assert not mutant_survives(root, engine, '\t\tforget(main);\n', '', 'async'), 'late main double report mutant survived'
+    assert not mutant_survives(root, engine, '\t\tJS_FreeValue(ctx, main);\n\t\tfor (const auto &value : internals) {', '\t\tfor (const auto &value : internals) {', 'teardown'), 'main promise leak mutant survived'
     print('Plugin JS PASS: ES modules confined to the plugin dir; beforeSend rewrite/cancel; async host calls settle later; PermissionError surfaces; CPU slice interrupts loops, regexps and job floods; memory limit without a crash; timers; $fn callbacks; file:line traces; leak-free teardown; interrupt and leak mutants caught')
 
 

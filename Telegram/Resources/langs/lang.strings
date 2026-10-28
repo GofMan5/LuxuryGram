@@ -9832,7 +9832,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_luxury_plugins_ui_perm_storage" = "Storage";
 "lng_luxury_plugins_ui_perm_storage_about" = "Keep its own data on this computer.";
 "lng_luxury_plugins_ui_perm_clipboard" = "Clipboard";
-"lng_luxury_plugins_ui_perm_clipboard_about" = "Read and change the clipboard.";
+"lng_luxury_plugins_ui_perm_clipboard_about" = "Read and change the clipboard right after you run a command, menu item or hotkey of the plugin. Copied passwords and login codes can be read.";
 "lng_luxury_plugins_ui_perm_telegram_api" = "Telegram API";
 "lng_luxury_plugins_ui_perm_telegram_api_about" = "Make Telegram requests with your account.";
 "lng_luxury_plugins_ui_perm_telegram_updates" = "Telegram updates";

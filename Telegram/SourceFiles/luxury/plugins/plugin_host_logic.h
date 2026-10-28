@@ -13,7 +13,10 @@
 #include "luxury/libs/json.hpp"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -28,17 +31,27 @@ inline constexpr auto kStorageQuota = std::size_t(5) * 1024 * 1024;
 inline constexpr auto kFetchLimit = std::int64_t(10) * 1024 * 1024;
 inline constexpr auto kInflateLimit = std::size_t(32) * 1024 * 1024;
 inline constexpr auto kMaxRedirects = 5;
-inline constexpr auto kMaxTimers = 1000;
+inline constexpr auto kMaxTimers = 64;
 inline constexpr auto kMaxOverruns = 3;
-inline constexpr auto kOverrunSpanMs = std::int64_t(10'000);
-inline constexpr auto kCpuSpanMs = std::int64_t(5'000);
-inline constexpr auto kCpuSpanBudgetMs = std::int64_t(500);
-inline constexpr auto kMinInterval = 10.;
+inline constexpr auto kOverrunSpanUs = std::int64_t(10'000'000);
+inline constexpr auto kCpuSpanUs = std::int64_t(5'000'000);
+inline constexpr auto kCpuSpanBudgetUs = std::int64_t(500'000);
+// Every engine entry costs at least this much: the engine call, the
+// json round trip and the event loop turn around it are never free. A
+// drain of queued host events pays it once, not once per event.
+inline constexpr auto kMinChargeUs = std::int64_t(100);
+inline constexpr auto kMinInterval = 50.;
 inline constexpr auto kMinTimeout = 4.;
 inline constexpr auto kMaxInFlight = 16;
 inline constexpr auto kMaxSettingWatchers = 64;
 inline constexpr auto kLogLimit = 500;
 inline constexpr auto kMaxLogText = std::size_t(4096);
+// clipboard.* works only this long after a command, menu item or hotkey.
+inline constexpr auto kGestureMs = std::int64_t(1000);
+// ui.toast: at most one per second.
+inline constexpr auto kToastIntervalMs = std::int64_t(1000);
+// Events waiting for the next event loop turn, per plugin.
+inline constexpr auto kMaxQueuedEvents = std::size_t(256);
 
 // http.fetch: HTTPS only. port is the URL's, -1 when it names none. Port
 // 443 (or none) needs a "host" entry, any other port a "host:port" one.
@@ -65,7 +78,68 @@ inline constexpr auto kMaxLogText = std::size_t(4096);
 		|| HostMatches(ported, host);
 }
 
-// timer.set: a repeating timer fires at most every 10 ms, a single one
+// http.fetch connects only to public unicast addresses, whatever the
+// manifest host resolves to: no loopback, private, CGNAT, link-local,
+// unique local, multicast or reserved ones. ipv6 is the address in
+// network order; an IPv4 one comes as ::ffff:a.b.c.d (QHostAddress::
+// toIPv6Address), 0.0.0.0 as all zeros.
+[[nodiscard]] inline bool IsPublicIPv4(std::uint8_t a, std::uint8_t b) {
+	return (a != 0) // "This network", 0.0.0.0 included.
+		&& (a != 10) // RFC 1918.
+		&& !(a == 100 && (b & 0xC0) == 64) // CGNAT 100.64/10.
+		&& (a != 127) // Loopback.
+		&& !(a == 169 && b == 254) // Link-local.
+		&& !(a == 172 && (b & 0xF0) == 16) // RFC 1918.
+		&& !(a == 192 && b == 168) // RFC 1918.
+		&& (a < 224); // Multicast, reserved, broadcast.
+}
+
+[[nodiscard]] inline bool IsPublicAddress(
+		const std::array<std::uint8_t, 16> &ipv6) {
+	const auto zeros = [&](int from, int till) {
+		return std::all_of(
+			ipv6.begin() + from,
+			ipv6.begin() + till,
+			[](std::uint8_t byte) { return byte == 0; });
+	};
+	const auto embedded = [&] {
+		return IsPublicIPv4(ipv6[12], ipv6[13]);
+	};
+	if (zeros(0, 10) && ipv6[10] == 0xFF && ipv6[11] == 0xFF) {
+		return embedded(); // IPv4-mapped.
+	} else if (zeros(0, 12)) {
+		// IPv4-compatible ::a.b.c.d; :: and ::1 fail as 0.0.0.0/8.
+		return embedded();
+	} else if (ipv6[0] == 0x00 && ipv6[1] == 0x64
+		&& ipv6[2] == 0xFF && ipv6[3] == 0x9B && zeros(4, 12)) {
+		return embedded(); // NAT64 64:ff9b::/96.
+	} else if (ipv6[0] == 0x00 && ipv6[1] == 0x64
+		&& ipv6[2] == 0xFF && ipv6[3] == 0x9B
+		&& ipv6[4] == 0x00 && ipv6[5] == 0x01) {
+		// Local-use NAT64 64:ff9b:1::/48 (RFC 8215) embeds the IPv4 at
+		// an offset the network picks: refused as a whole.
+		return false;
+	}
+	return ((ipv6[0] & 0xFE) != 0xFC) // Unique local fc00::/7.
+		&& !(ipv6[0] == 0xFE && (ipv6[1] & 0xC0) == 0x80) // fe80::/10.
+		&& !(ipv6[0] == 0xFE && (ipv6[1] & 0xC0) == 0xC0) // fec0::/10.
+		&& (ipv6[0] != 0xFF); // Multicast.
+}
+
+// http.fetch redirects to another origin drop the credentials a plugin
+// set for the first one. Names compare case-insensitively.
+[[nodiscard]] inline bool StripOnCrossOrigin(std::string_view header) {
+	auto lower = std::string(header);
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](char c) {
+		return (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c;
+	});
+	return (lower == "authorization")
+		|| (lower == "cookie")
+		|| (lower == "host")
+		|| lower.starts_with("proxy-");
+}
+
+// timer.set: a repeating timer fires at most every 50 ms, a single one
 // waits at least 4 ms, like browsers clamp them.
 [[nodiscard]] inline int TimerDelay(const nlohmann::json &delay, bool repeat) {
 	const auto low = repeat ? kMinInterval : kMinTimeout;
@@ -78,35 +152,87 @@ inline constexpr auto kMaxLogText = std::size_t(4096);
 // JS time a plugin spends on the main thread. It is stopped after more
 // than 500 ms within any 5 s, or after 3 slice overruns within 10 s.
 struct CpuBudget {
-	// Engine entries of the last kCpuSpanMs: { ended at, took }.
-	std::vector<std::pair<std::int64_t, std::int64_t>> slices;
-	std::vector<std::int64_t> overruns;
+	// Engine entries of the last kCpuSpanUs: { ended at, charged }.
+	std::deque<std::pair<std::int64_t, std::int64_t>> slices;
+	std::deque<std::int64_t> overruns;
+	std::int64_t used = 0; // Sum of the charges in slices.
 
-	// One engine entry that ended at now (ms) and took elapsed (ms).
-	// True when the plugin must be stopped: a rolling sum, so no idle
-	// pause lets a busy plugin start over.
+	// One engine entry that ended at now (µs, monotonic) and took elapsed
+	// (µs), charged at least kMinChargeUs unless minimum is false (the later
+	// events of one drain). True when the plugin must be stopped: a
+	// rolling sum, so no idle pause lets a busy plugin start over.
+	// Amortised O(1).
 	[[nodiscard]] bool record(
 			std::int64_t now,
 			std::int64_t elapsed,
-			bool overrun) {
-		slices.emplace_back(now, std::max(elapsed, std::int64_t(0)));
-		std::erase_if(slices, [&](const auto &slice) {
-			return now - slice.first >= kCpuSpanMs;
-		});
+			bool overrun,
+			bool minimum = true) {
+		const auto charge = std::max(
+			elapsed,
+			minimum ? kMinChargeUs : std::int64_t(0));
+		slices.emplace_back(now, charge);
+		used += charge;
+		while (now - slices.front().first >= kCpuSpanUs) {
+			used -= slices.front().second;
+			slices.pop_front();
+		}
 		if (overrun) {
 			overruns.push_back(now);
 		}
-		std::erase_if(overruns, [&](std::int64_t at) {
-			return now - at >= kOverrunSpanMs;
-		});
-		auto used = std::int64_t(0);
-		for (const auto &[at, took] : slices) {
-			used += took;
+		while (!overruns.empty() && now - overruns.front() >= kOverrunSpanUs) {
+			overruns.pop_front();
 		}
 		return (overruns.size() >= std::size_t(kMaxOverruns))
-			|| (used > kCpuSpanBudgetMs);
+			|| (used > kCpuSpanBudgetUs);
 	}
 };
+
+// clipboard.*: inside the window a command, menu item or hotkey handler
+// opened at until (ms).
+[[nodiscard]] inline bool GestureActive(std::int64_t now, std::int64_t until) {
+	return now < until;
+}
+
+// ui.toast: last is when the previous one was shown, 0 when none was.
+[[nodiscard]] inline bool ToastAllowed(std::int64_t now, std::int64_t last) {
+	return !last || now - last >= kToastIntervalMs;
+}
+
+// Events of one plugin waiting for the next event loop turn. A plugin
+// that cannot keep up loses its oldest events, never the client memory.
+struct EventQueue {
+	std::deque<std::pair<std::string, nlohmann::json>> events;
+	std::size_t dropped = 0; // Since the last drain.
+
+	// True when the queue was empty, so a drain must be scheduled.
+	[[nodiscard]] bool push(std::string event, nlohmann::json payload) {
+		const auto first = events.empty();
+		if (events.size() >= kMaxQueuedEvents) {
+			events.pop_front();
+			++dropped;
+		}
+		events.emplace_back(std::move(event), std::move(payload));
+		return first;
+	}
+	// Everything queued, in order, in one pass.
+	[[nodiscard]] std::deque<std::pair<std::string, nlohmann::json>> take() {
+		dropped = 0;
+		return std::exchange(events, {});
+	}
+	void clear() {
+		events.clear();
+		dropped = 0;
+	}
+};
+
+// events.subscribe: the names the host ever emits.
+[[nodiscard]] inline bool KnownEvent(std::string_view event) {
+	return event == "message"
+		|| event == "messageOut"
+		|| event == "beforeSend"
+		|| event == "update"
+		|| event == "unload";
+}
 
 // Qt::Key and Qt::KeyboardModifier values, checked against Qt in
 // plugin_hooks.cpp; this header stays Qt-free.
@@ -279,26 +405,76 @@ inline constexpr std::string_view kPaidParams[] = {
 
 // Telegram's service notifications (user 777000) carry the login codes of
 // the account: a plugin never sees that chat, or it could sign in elsewhere.
-inline constexpr std::string_view kServiceUserId = "777000";
+inline constexpr auto kServiceUserId = std::int64_t(777000);
 
-// True if any object at any depth has user_id 777000: the decoder writes
-// a long as a decimal string, and plugins may pass it as a number. An
-// updateServiceNotification has no user_id, but the client files it in
-// that same chat.
+// A scalar the encoder could turn into the long 777000: a number, or a
+// decimal string with ASCII whitespace, one '+' or leading zeros. The
+// encoder reads no fraction or exponent in a string.
+[[nodiscard]] inline bool IsServiceUserId(const nlohmann::json &value) {
+	if (value.is_number_unsigned()) {
+		return value.get<std::uint64_t>() == std::uint64_t(kServiceUserId);
+	} else if (value.is_number_integer()) {
+		return value.get<std::int64_t>() == kServiceUserId;
+	} else if (value.is_number_float()) {
+		return value.get<double>() == double(kServiceUserId);
+	} else if (!value.is_string()) {
+		return false;
+	}
+	auto text = std::string_view(value.get_ref<const std::string&>());
+	const auto space = std::string_view(" \t\n\v\f\r");
+	const auto first = text.find_first_not_of(space);
+	if (first == std::string_view::npos) {
+		return false;
+	}
+	text = text.substr(first, text.find_last_not_of(space) - first + 1);
+	if (text.front() == '+') {
+		text.remove_prefix(1);
+	}
+	const auto begin = text.data();
+	const auto end = begin + text.size();
+	auto number = std::int64_t();
+	const auto integer = std::from_chars(begin, end, number);
+	return integer.ec == std::errc()
+		&& integer.ptr == end
+		&& number == kServiceUserId;
+}
+
+// A dialog id names one peer only when its magnitude fits the 48 bits of
+// a bare id (PeerId::kChatTypeMask): the higher bits, masked off on the
+// lookup, would alias another peer, 2^48 + 777000 the service chat.
+inline constexpr auto kBareIdMask = std::uint64_t(0xFFFFFFFFFFFFULL);
+
+[[nodiscard]] inline bool IsBareDialogId(std::int64_t dialogId) {
+	const auto magnitude = (dialogId < 0)
+		? (std::uint64_t(0) - std::uint64_t(dialogId))
+		: std::uint64_t(dialogId);
+	return magnitude && (magnitude <= kBareIdMask);
+}
+
+// True if any object at any depth names the user 777000: in user_id,
+// peer, from_id or peer_id (a bare id or a nested peer object), or as
+// the id of a user object. The decoder writes a long as a decimal
+// string, a plugin may pass any form of it. An updateServiceNotification
+// has no user_id, but the client files it in that same chat.
 [[nodiscard]] inline bool MentionsServiceUser(const nlohmann::json &value) {
 	if (value.is_object()) {
+		const auto type = value.find("_");
+		const auto typeName = (type != value.end() && type->is_string())
+			? std::string_view(type->get_ref<const std::string&>())
+			: std::string_view();
+		if (typeName == "updateServiceNotification") {
+			return true;
+		}
+		const auto user = (typeName == "user")
+			|| (typeName == "userEmpty")
+			|| (typeName == "userFull");
 		for (const auto &[key, inner] : value.items()) {
-			if (key == "_"
-				&& inner.is_string()
-				&& inner.get<std::string>() == "updateServiceNotification") {
-				return true;
-			} else if (key == "user_id"
-				&& ((inner.is_string()
-					&& inner.get<std::string>() == kServiceUserId)
-					|| (inner.is_number_integer()
-						&& inner.get<std::int64_t>() == 777000)
-					|| (inner.is_number_float()
-						&& inner.get<double>() == 777000.))) {
+			const auto names = (key == "user_id")
+				|| (key == "peer")
+				|| (key == "from_id")
+				|| (key == "peer_id")
+				|| (user && key == "id");
+			if (names && IsServiceUserId(inner)) {
 				return true;
 			} else if (MentionsServiceUser(inner)) {
 				return true;

@@ -36,13 +36,18 @@
 #include <QSaveFile>
 #include <QTimer>
 #include <QUrl>
+#include <QtNetwork/QHostAddress>
+#include <QtNetwork/QHostInfo>
 #include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkProxy>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
 
 #include <zlib.h>
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 
 namespace Luxury::Plugins {
 namespace {
@@ -128,6 +133,23 @@ constexpr auto kMaxHandlers = 100;
 		: QString();
 }
 
+// Every address of a fetch host must pass, see IsPublicAddress.
+[[nodiscard]] bool IsPublic(const QHostAddress &address) {
+	const auto ipv6 = address.toIPv6Address();
+	auto bytes = std::array<std::uint8_t, 16>();
+	std::copy(std::begin(ipv6.c), std::end(ipv6.c), bytes.begin());
+	return IsPublicAddress(bytes);
+}
+
+[[nodiscard]] bool SameOrigin(const QUrl &a, const QUrl &b) {
+	const auto port = [](const QUrl &url) {
+		return url.port((url.scheme().toLower() == u"https"_q) ? 443 : 80);
+	};
+	return (a.scheme().toLower() == b.scheme().toLower())
+		&& (a.host().toLower() == b.host().toLower())
+		&& (port(a) == port(b));
+}
+
 [[nodiscard]] Main::Session *ActiveSession() {
 	return Core::IsAppLaunched()
 		? Core::App().domain().active().maybeSession()
@@ -146,21 +168,29 @@ constexpr auto kMaxHandlers = 100;
 	return ok ? std::make_optional<std::int64_t>(result) : std::nullopt;
 }
 
-// A dialog id of the active account only, never another account's peer.
+// A dialog id of the active account only, never another account's peer
+// and never the service chat. An id above 48 bits would be masked into
+// another peer's bare id (2^48 + 777000 into 777000), so it resolves to
+// nothing.
 [[nodiscard]] PeerData *ResolvePeer(
 		not_null<Main::Session*> session,
 		std::int64_t dialogId) {
-	const auto bare = getBareDialogId(dialogId);
-	if (!bare) {
+	if (!IsBareDialogId(dialogId)) {
 		return nullptr;
 	}
+	const auto bare = getBareDialogId(dialogId);
 	auto &data = session->data();
+	PeerData *peer = nullptr;
 	if (dialogId > 0) {
-		return data.userLoaded(UserId(bare));
+		peer = data.userLoaded(UserId(bare));
 	} else if (const auto channel = data.channelLoaded(ChannelId(bare))) {
-		return channel;
+		peer = channel;
+	} else {
+		peer = data.chatLoaded(ChatId(bare));
 	}
-	return data.chatLoaded(ChatId(bare));
+	return (peer && peer->id == PeerData::kServiceNotificationsId)
+		? nullptr
+		: peer;
 }
 
 } // namespace
@@ -231,6 +261,9 @@ Instance::~Instance() {
 	// _network is destroyed must already see this instance as gone.
 	invalidate_weak_ptrs(this);
 	_stopping = true;
+	if (const auto dialog = _dialog.get()) {
+		dialog->closeBox();
+	}
 	if (_storageTimer && _storageTimer->isActive()) {
 		writeStorage();
 	}
@@ -242,6 +275,12 @@ bool Instance::start() {
 	auto limits = Js::Limits();
 	limits.stack = kStack;
 	_engine = std::make_unique<Js::Engine>(limits, *this);
+	if (Core::IsAppLaunched()) {
+		Core::App().domain().activeSessionChanges(
+		) | rpl::on_next([=](Main::Session *) {
+			accountChanged();
+		}, _lifetime);
+	}
 	return run([&] { return _engine->loadMain(_manifest.main); }).ok();
 }
 
@@ -255,6 +294,10 @@ void Instance::unload() {
 		});
 	}
 	_stopping = true;
+	_queue.clear();
+	if (const auto dialog = _dialog.get()) {
+		dialog->closeBox();
+	}
 	for (const auto fn : base::take(_settingWatchers)) {
 		_engine->releaseFunction(fn);
 	}
@@ -272,16 +315,24 @@ bool Instance::wants(const std::string &event) const {
 
 // Every entry into the engine goes through here, so CpuBudget sees all
 // the JS time the plugin takes on the main thread.
-Js::Outcome Instance::run(Fn<Js::Outcome()> entry) {
-	const auto started = crl::now();
+Js::Outcome Instance::run(Fn<Js::Outcome()> entry, bool minimum) {
+	const auto clock = [] {
+		return std::int64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count());
+	};
+	const auto started = clock();
 	auto outcome = entry();
-	const auto finished = crl::now();
+	const auto finished = clock();
 	const auto id = QString::fromStdString(_plugin.id);
 	if (!outcome.ok()) {
 		_delegate->instanceError(id, QString::fromStdString(outcome.error));
 	}
 	if (!_stopping
-		&& _budget.record(finished, finished - started, outcome.overrun)) {
+		&& _budget.record(
+			finished,
+			finished - started,
+			outcome.overrun,
+			minimum)) {
 		_stopping = true;
 		_delegate->instanceStop(id, u"The plugin used too much CPU time."_q);
 	}
@@ -289,18 +340,37 @@ Js::Outcome Instance::run(Fn<Js::Outcome()> entry) {
 }
 
 void Instance::emitLater(std::string event, json payload) {
-	crl::on_main(this, [=, event = std::move(event)] {
-		if (!_stopping) {
+	if (_stopping || !_queue.push(std::move(event), std::move(payload))) {
+		return; // A drain is scheduled already.
+	}
+	crl::on_main(this, [=] {
+		const auto dropped = _queue.dropped;
+		const auto events = _queue.take();
+		if (dropped) {
+			log(
+				Js::LogLevel::Warn,
+				std::to_string(dropped)
+					+ " events were dropped, the plugin is too slow");
+		}
+		// One drain pays the minimum charge once, on its first event.
+		auto first = true;
+		for (const auto &entry : events) {
+			if (_stopping) {
+				break;
+			}
 			[[maybe_unused]] const auto out = run([&] {
-				return _engine->emit(event, payload);
-			});
+				return _engine->emit(entry.first, entry.second);
+			}, std::exchange(first, false));
 		}
 	});
 }
 
-void Instance::callLater(std::int64_t fn, json args) {
+void Instance::callLater(std::int64_t fn, json args, bool gesture) {
 	crl::on_main(this, [=] {
 		if (!_stopping) {
+			if (gesture) {
+				_gestureUntil = crl::now() + kGestureMs;
+			}
 			[[maybe_unused]] const auto out = run([&] {
 				return _engine->callFunction(fn, args);
 			});
@@ -325,6 +395,20 @@ void Instance::settleLater(
 				: _engine->reject(promiseId, name, message);
 		});
 	});
+}
+
+void Instance::accountChanged() {
+	// Replies of the old account are dropped: every reply callback checks
+	// that its promise is still in _requests.
+	_queue.clear();
+	for (const auto promiseId : base::take(_requests)) {
+		settleLater(
+			promiseId,
+			false,
+			nullptr,
+			"Error",
+			"the active account changed");
+	}
 }
 
 void Instance::settingChanged(const QString &key, const json &value) {
@@ -402,6 +486,8 @@ Js::HostResult Instance::call(
 			{ "version", _plugin.version },
 			{ "apiVersion", kPluginApiVersion },
 			{ "clientVersion", LuxuryVersionStr },
+			{ "granted", _plugin.granted.ids() },
+			{ "lang", Lang::LanguageIdOrDefault(Lang::Id()).toStdString() },
 		});
 	} else if (function == "settings.get") {
 		if (!first.is_string()) {
@@ -423,6 +509,12 @@ Js::HostResult Instance::call(
 		}
 		_settingWatchers.push_back(*fn);
 		return Result::Value(nullptr);
+	} else if (function.substr(0, 10) == "clipboard."
+		&& !GestureActive(crl::now(), _gestureUntil)) {
+		return Result::Error(
+			"NotAllowedError",
+			"the clipboard is only available right after the user runs"
+				" a command, menu item or hotkey of the plugin");
 	} else if (function == "clipboard.read") {
 		return Result::Value(
 			QGuiApplication::clipboard()->text().toStdString());
@@ -489,6 +581,9 @@ Js::HostResult Instance::subscribe(const json &name, int delta) {
 		return TypeError("event name must be a string");
 	}
 	const auto event = name.get<std::string>();
+	if (delta > 0 && !KnownEvent(event)) {
+		return TypeError("unknown event \"" + event + '"');
+	}
 	if (const auto needed = EventPermission(event)) {
 		if (delta > 0 && !_plugin.granted.has(*needed)) {
 			return PermissionError(*needed);
@@ -505,20 +600,34 @@ Js::HostResult Instance::ui(
 		const json &args,
 		std::uint64_t promiseId) {
 	const auto &options = Arg(args, 0);
-	if (function == "ui.toast") {
+	if (function.substr(0, 6) == "ui.add") {
+		return addHandler(function, options);
+	} else if (Core::IsAppLaunched() && Core::App().passcodeLocked()) {
+		return Result::Error("Error", "the app is locked with a passcode");
+	} else if (function == "ui.toast") {
 		if (!options.is_string()) {
 			return TypeError("ui.toast: text must be a string");
 		}
+		const auto now = crl::now();
+		if (!ToastAllowed(now, _lastToast)) {
+			return Result::Error("RangeError", "at most one toast a second");
+		}
+		_lastToast = now;
 		Ui::Toast::Show(QString::fromStdString(options.get<std::string>()));
 		return Result::Value(nullptr);
-	} else if (function.substr(0, 6) == "ui.add") {
-		return addHandler(function, options);
+	} else if (_dialog) {
+		return Result::Error("Error", "a dialog of the plugin is open");
 	}
 	const auto window = ActiveWindow();
 	if (!window) {
 		return Result::Error("Error", "no window to show the dialog in");
 	}
-	const auto title = OptionText(options, "title");
+	// The title names the plugin: a dialog must not pass for the app's.
+	const auto name = QString::fromStdString(_plugin.name.empty()
+		? _plugin.id
+		: _plugin.name);
+	const auto custom = OptionText(options, "title");
+	const auto title = custom.isEmpty() ? name : (name + u": "_q + custom);
 	const auto text = OptionText(options, "text");
 	const auto weak = base::make_weak(this);
 	const auto settled = std::make_shared<bool>(false);
@@ -526,6 +635,7 @@ Js::HostResult Instance::ui(
 		if (!*settled) {
 			*settled = true;
 			if (const auto strong = weak.get()) {
+				strong->_dialog = nullptr;
 				strong->settleLater(promiseId, true, std::move(value));
 			}
 		}
@@ -539,23 +649,20 @@ Js::HostResult Instance::ui(
 				close();
 			},
 			.confirmText = tr::lng_box_ok(),
-			.title = title.isEmpty()
-				? v::text::data(v::null)
-				: v::text::data(title),
+			.title = v::text::data(title),
 			.inform = !confirm,
 		});
 		box->boxClosing() | rpl::on_next([=] {
 			settle(!confirm);
 		}, box->lifetime());
+		_dialog = box.data();
 		window->uiShow()->showBox(std::move(box));
 		return Result::Pending();
 	} else if (function == "ui.prompt") {
 		const auto placeholder = OptionText(options, "placeholder");
 		const auto value = OptionText(options, "value");
-		window->uiShow()->showBox(Box([=](not_null<Ui::GenericBox*> box) {
-			if (!title.isEmpty()) {
-				box->setTitle(rpl::single(title));
-			}
+		auto box = Box([=](not_null<Ui::GenericBox*> box) {
+			box->setTitle(rpl::single(title));
 			const auto field = box->addRow(object_ptr<Ui::InputField>(
 				box,
 				st::defaultInputField,
@@ -572,7 +679,9 @@ Js::HostResult Instance::ui(
 			box->boxClosing() | rpl::on_next([=] {
 				settle(nullptr);
 			}, box->lifetime());
-		}));
+		});
+		_dialog = box.data();
+		window->uiShow()->showBox(std::move(box));
 		return Result::Pending();
 	}
 	return TypeError("unknown host function " + std::string(function));
@@ -738,7 +847,13 @@ Js::HostResult Instance::send(const json &options, std::uint64_t promiseId) {
 	const auto dialogId = DialogId(options.value("peer", json()));
 	const auto peer = dialogId ? ResolvePeer(session, *dialogId) : nullptr;
 	const auto text = OptionText(options, "text");
-	if (!peer) {
+	// ResolvePeer already turns the service chat and its 48-bit aliases
+	// into nothing; this names the refusal for the plain id.
+	if (IsServiceUserId(options.value("peer", json()))) {
+		return Result::Error(
+			"PermissionError",
+			"the Telegram service chat is never available to plugins");
+	} else if (!peer) {
 		return Result::Error("Error", "unknown peer");
 	} else if (text.trimmed().isEmpty()) {
 		return TypeError("messages.send: text is empty");
@@ -752,6 +867,10 @@ Js::HostResult Instance::send(const json &options, std::uint64_t promiseId) {
 	_requests.emplace(promiseId);
 	// Later: a send runs the beforeSend chain, this engine included.
 	crl::on_main(session, [=] {
+		const auto alive = weak.get();
+		if (!alive || alive->_stopping || !alive->_requests.contains(promiseId)) {
+			return; // Unloaded, stopped or the account changed meanwhile.
+		}
 		const auto history = session->data().history(peer);
 		auto action = Api::SendAction(history);
 		action.options.silent = silent;
@@ -802,6 +921,8 @@ Js::HostResult Instance::fetch(const json &args, std::uint64_t promiseId) {
 		for (const auto &[name, value] : list.items()) {
 			if (!value.is_string()) {
 				return TypeError("http.fetch: header values must be strings");
+			} else if (QByteArray::fromStdString(name).toLower() == "host") {
+				continue; // HTTP/1 would send it instead of the URL host.
 			}
 			headers.emplace_back(
 				QByteArray::fromStdString(name),
@@ -814,6 +935,8 @@ Js::HostResult Instance::fetch(const json &args, std::uint64_t promiseId) {
 		return TypeError("http.fetch: body must be a string");
 	}
 	const auto body = OptionText(options, "body").toUtf8();
+	const auto binary = options.is_object()
+		&& (options.value("binary", json()) == json(true));
 	// Before fetchStep: it may settle, and so erase, right away.
 	_requests.emplace(promiseId);
 	fetchStep(
@@ -822,7 +945,8 @@ Js::HostResult Instance::fetch(const json &args, std::uint64_t promiseId) {
 		QString::fromStdString(url.get<std::string>()),
 		std::move(headers),
 		body,
-		0);
+		0,
+		binary);
 	return Result::Pending();
 }
 
@@ -832,7 +956,8 @@ void Instance::fetchStep(
 		QString url,
 		std::vector<std::pair<QByteArray, QByteArray>> headers,
 		QByteArray body,
-		int redirects) {
+		int redirects,
+		bool binary) {
 	const auto parsed = QUrl(url, QUrl::StrictMode);
 	if (!parsed.isValid()
 		|| !FetchAllowed(
@@ -848,10 +973,83 @@ void Instance::fetchStep(
 			"\"" + url.toStdString() + "\" is not in the plugin's network list");
 		return;
 	}
+	const auto refuse = [=](Instance *that) {
+		that->settleLater(
+			promiseId,
+			false,
+			nullptr,
+			"PermissionError",
+			"\"" + url.toStdString() + "\" is a private address");
+	};
 	if (!_network) {
 		_network = std::make_unique<QNetworkAccessManager>();
 	}
-	auto request = QNetworkRequest(parsed);
+	auto literal = QHostAddress();
+	const auto isLiteral = literal.setAddress(parsed.host());
+	// Behind an application proxy the proxy resolves the name, and a local
+	// lookup would leak it past the proxy: only an IP literal is checked.
+	const auto proxied = (QNetworkProxy::applicationProxy().type()
+		!= QNetworkProxy::NoProxy);
+	if (isLiteral || proxied) {
+		if (isLiteral && !IsPublic(literal)) {
+			return refuse(this);
+		}
+		return fetchSend(
+			promiseId,
+			method,
+			parsed,
+			std::move(headers),
+			body,
+			redirects,
+			binary);
+	}
+	// ponytail: QHostInfo caches this answer for 60 s and the connection
+	// reads that cache, so it goes to a checked address; a host rebinding
+	// after the entry expires slips through. Pin the address if it matters.
+	const auto weak = base::make_weak(this);
+	QHostInfo::lookupHost(parsed.host(), _network.get(), [=](
+			const QHostInfo &info) {
+		const auto strong = weak.get();
+		if (!strong
+			|| strong->_stopping
+			|| !strong->_requests.contains(promiseId)) {
+			return;
+		}
+		const auto addresses = info.addresses();
+		if (info.error() != QHostInfo::NoError || addresses.isEmpty()) {
+			strong->settleLater(
+				promiseId,
+				false,
+				nullptr,
+				"NetworkError",
+				info.errorString().toStdString());
+			return;
+		}
+		for (const auto &address : addresses) {
+			if (!IsPublic(address)) {
+				return refuse(strong);
+			}
+		}
+		strong->fetchSend(
+			promiseId,
+			method,
+			parsed,
+			headers,
+			body,
+			redirects,
+			binary);
+	});
+}
+
+void Instance::fetchSend(
+		std::uint64_t promiseId,
+		QString method,
+		QUrl url,
+		std::vector<std::pair<QByteArray, QByteArray>> headers,
+		QByteArray body,
+		int redirects,
+		bool binary) {
+	auto request = QNetworkRequest(url);
 	request.setAttribute(
 		QNetworkRequest::RedirectPolicyAttribute,
 		QNetworkRequest::ManualRedirectPolicy);
@@ -877,7 +1075,9 @@ void Instance::fetchStep(
 	QObject::connect(reply, &QNetworkReply::finished, [=] {
 		reply->deleteLater();
 		const auto strong = weak.get();
-		if (!strong || strong->_stopping) {
+		if (!strong
+			|| strong->_stopping
+			|| !strong->_requests.contains(promiseId)) {
 			return;
 		}
 		const auto status = reply->attribute(
@@ -904,13 +1104,22 @@ void Instance::fetchStep(
 				QUrl::fromEncoded(location));
 			const auto get = (status == 303)
 				|| ((status == 301 || status == 302) && method == u"POST"_q);
+			auto kept = headers;
+			if (!SameOrigin(reply->url(), next)) {
+				// Credentials stay with the origin they were written for.
+				kept.erase(std::remove_if(kept.begin(), kept.end(), [](
+						const std::pair<QByteArray, QByteArray> &header) {
+					return StripOnCrossOrigin(header.first.toStdString());
+				}), kept.end());
+			}
 			strong->fetchStep(
 				promiseId,
 				get ? u"GET"_q : method,
 				next.toString(QUrl::FullyEncoded),
-				headers,
+				std::move(kept),
 				get ? QByteArray() : body,
-				redirects + 1);
+				redirects + 1,
+				binary);
 			return;
 		}
 		const auto bytes = reply->read(kFetchLimit + 1);
@@ -922,12 +1131,17 @@ void Instance::fetchStep(
 			names[QString::fromLatin1(name).toLower().toStdString()]
 				= QString::fromLatin1(value).toStdString();
 		}
-		strong->settleLater(promiseId, true, json{
+		auto result = json{
 			{ "status", status },
 			{ "headers", std::move(names) },
+		};
+		if (binary) {
+			result["base64"] = bytes.toBase64().toStdString();
+		} else {
 			// Invalid UTF-8 becomes U+FFFD, JSON needs valid text.
-			{ "body", QString::fromUtf8(bytes).toStdString() },
-		});
+			result["body"] = QString::fromUtf8(bytes).toStdString();
+		}
+		strong->settleLater(promiseId, true, std::move(result));
 	});
 }
 
@@ -989,7 +1203,7 @@ Js::HostResult Instance::apiCall(const json &args, std::uint64_t promiseId) {
 	const auto returnType = *type;
 	auto done = [=](const MTP::Response &response) {
 		const auto strong = weak.get();
-		if (!strong) {
+		if (!strong || !strong->_requests.contains(promiseId)) {
 			return true;
 		}
 		const auto decoded = Tl::DecodeResult(
@@ -1021,7 +1235,8 @@ Js::HostResult Instance::apiCall(const json &args, std::uint64_t promiseId) {
 		return true;
 	};
 	auto fail = [=](const MTP::Error &error, const MTP::Response &) {
-		if (const auto strong = weak.get()) {
+		const auto strong = weak.get();
+		if (strong && strong->_requests.contains(promiseId)) {
 			// The engine rejects with an Error: type is the name, the
 			// message carries both as {type, code} JSON.
 			strong->settleLater(
