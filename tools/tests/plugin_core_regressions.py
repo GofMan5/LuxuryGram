@@ -374,7 +374,7 @@ void Manifests() {
 	Refused(Manifest(R"(,"settings":[{"key":"a b","type":"bool","title":"T"}])"), "settings[0].key: must be");
 	Refused(Manifest(R"(,"settings":[{"key":"k","type":"bool"}])"), "settings[0].title: is required");
 	Refused(Manifest(R"(,"settings":[{"key":"k","title":"T"}])"), "settings[0].type: is required");
-	Refused(Manifest(R"(,"settings":[{"key":"k","type":"color","title":"T"}])"), "settings[0].type: unknown type \"color\"");
+	Refused(Manifest(R"(,"settings":[{"key":"k","type":"date","title":"T"}])"), "settings[0].type: unknown type \"date\"");
 	Refused(Manifest(R"(,"settings":[{"key":"k","type":"string","title":"T","default":1}])"), "settings[0].default: must be a string");
 	Refused(Manifest(R"(,"settings":[{"key":"k","type":"bool","title":"T","default":"yes"}])"), "settings[0].default: must be a boolean");
 	Refused(Manifest(R"(,"settings":[{"key":"k","type":"int","title":"T","default":"5"}])"), "settings[0].default: must be an integer");
