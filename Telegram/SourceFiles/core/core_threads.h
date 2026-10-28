@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #pragma once
 
 #include <algorithm>
+#include <span>
 
 // The one CPU budget of the app: every thread pool is sized from it.
 // Qt-free on purpose, so the formulas are tested without a client build.
@@ -20,6 +21,38 @@ struct Topology {
 	int efficiencyLogical = 0;
 	int groups = 1;
 };
+
+// One physical core: the logical CPUs of it the process may use.
+struct CoreRecord {
+	int logical = 0;
+	int efficiencyClass = 0;
+};
+
+// Classes are ranked over all cores, so a process pinned to efficiency
+// cores still counts them as efficiency cores; cores it may not use add
+// nothing. Leaves groups at 1.
+[[nodiscard]] constexpr Topology Summarize(std::span<const CoreRecord> cores) {
+	auto maxClass = 0;
+	auto minClass = 255;
+	for (const auto &core : cores) {
+		maxClass = std::max(maxClass, core.efficiencyClass);
+		minClass = std::min(minClass, core.efficiencyClass);
+	}
+	auto result = Topology{ .logical = 0, .physical = 0 };
+	for (const auto &core : cores) {
+		if (core.logical <= 0) {
+			continue;
+		}
+		++result.physical;
+		result.logical += core.logical;
+		if (maxClass == minClass || core.efficiencyClass == maxClass) {
+			result.performanceLogical += core.logical;
+		} else {
+			result.efficiencyLogical += core.logical;
+		}
+	}
+	return result;
+}
 
 struct Budget {
 	int workers = 1;
@@ -45,7 +78,8 @@ struct Budget {
 	const auto workers = std::max(1, effective - 1);
 	return {
 		.workers = workers,
-		.clipThreads = std::clamp(workers / 2, 2, 16),
+		// Never below the fixed 8 readers it had: they sleep between frames.
+		.clipThreads = std::clamp(workers / 2, 8, 16),
 		.lottieRenderers = std::clamp(workers / 4, 1, 8),
 		.streamingVideoDecode = std::clamp(workers / 2, 2, 16),
 		.transcodeDecode = std::clamp(workers / 2, 1, 8),

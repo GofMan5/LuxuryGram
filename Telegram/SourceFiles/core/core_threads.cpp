@@ -63,13 +63,21 @@ constexpr auto kMaxLogical = 256;
 			&size)) {
 		return Fallback();
 	}
-	struct Entry {
-		int logical = 0;
-		int efficiencyClass = 0;
-	};
-	auto cores = std::vector<Entry>();
-	auto maxClass = 0;
-	auto minClass = 255;
+	const auto groups = std::max(
+		1,
+		static_cast<int>(GetActiveProcessorGroupCount()));
+	// A process mask only describes one group; with one group it is
+	// exact and follows `start /affinity` and job object limits.
+	auto allowed = ~KAFFINITY(0);
+	if (groups == 1) {
+		auto process = DWORD_PTR(0);
+		auto system = DWORD_PTR(0);
+		if (GetProcessAffinityMask(GetCurrentProcess(), &process, &system)
+			&& process) {
+			allowed = static_cast<KAFFINITY>(process);
+		}
+	}
+	auto cores = std::vector<CoreRecord>();
 	for (auto offset = DWORD(0); offset < size;) {
 		const auto record = reinterpret_cast<
 			const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(
@@ -84,44 +92,19 @@ constexpr auto kMaxLogical = 256;
 		const auto &processor = record->Processor;
 		auto logical = 0;
 		for (auto i = 0; i != static_cast<int>(processor.GroupCount); ++i) {
-			logical += Popcount(processor.GroupMask[i].Mask);
+			logical += Popcount(processor.GroupMask[i].Mask & allowed);
 		}
-		const auto efficiencyClass = static_cast<int>(
-			processor.EfficiencyClass);
-		maxClass = std::max(maxClass, efficiencyClass);
-		minClass = std::min(minClass, efficiencyClass);
-		cores.push_back({ logical, efficiencyClass });
+		cores.push_back({
+			.logical = logical,
+			.efficiencyClass = static_cast<int>(processor.EfficiencyClass),
+		});
 	}
-	if (cores.empty()) {
+	auto result = Summarize(cores);
+	if (!result.logical) {
 		return Fallback();
 	}
-	auto result = Topology{
-		.logical = 0,
-		.physical = static_cast<int>(cores.size()),
-		.groups = std::max(
-			1,
-			static_cast<int>(GetActiveProcessorGroupCount())),
-	};
-	for (const auto &core : cores) {
-		result.logical += core.logical;
-		if (maxClass == minClass || core.efficiencyClass == maxClass) {
-			result.performanceLogical += core.logical;
-		} else {
-			result.efficiencyLogical += core.logical;
-		}
-	}
-	if (result.groups == 1) {
-		// A process mask only describes one group; with one group it is
-		// exact and follows `start /affinity` and job object limits.
-		auto process = DWORD_PTR(0);
-		auto system = DWORD_PTR(0);
-		if (GetProcessAffinityMask(GetCurrentProcess(), &process, &system)) {
-			const auto allowed = Popcount(process);
-			if (allowed > 0) {
-				result.logical = std::min(result.logical, allowed);
-			}
-		}
-	} else {
+	result.groups = groups;
+	if (groups > 1) {
 		const auto active = static_cast<int>(
 			GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
 		result.logical = std::max(result.logical, active);

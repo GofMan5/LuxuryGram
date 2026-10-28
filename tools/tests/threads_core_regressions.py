@@ -24,10 +24,12 @@ MTP = 'Telegram/SourceFiles/mtproto/mtp_instance.cpp'
 CLIP = 'Telegram/SourceFiles/media/clip/media_clip_reader.cpp'
 LOTTIE = 'Telegram/SourceFiles/chat_helpers/stickers_lottie.cpp'
 CMAKE = 'Telegram/CMakeLists.txt'
+SOURCE = 'Telegram/SourceFiles/core/core_threads.cpp'
 
 PROGRAM = r'''
 #include "core/core_threads.h"
 
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 
@@ -60,7 +62,7 @@ void Bounds(const Topology &t) {
 	const auto l = t.logical;
 	Expect(b.workers == std::max(1, Effective(t) - 1), "workers == max(1, E - 1)", l);
 	Expect(b.workers >= 1 && b.workers < std::max(l, 2), "workers leave the GUI CPU", l);
-	Expect(b.clipThreads >= 1 && b.clipThreads <= 16, "clip in 1..16", l);
+	Expect(b.clipThreads >= 8 && b.clipThreads <= 16, "clip in 8..16, never below the old 8", l);
 	Expect(b.lottieRenderers >= 1 && b.lottieRenderers <= 8, "lottie in 1..8", l);
 	Expect(b.streamingVideoDecode >= 1 && b.streamingVideoDecode <= 16, "streaming in 1..16", l);
 	Expect(b.transcodeDecode >= 1 && b.transcodeDecode <= 8, "transcode in 1..8", l);
@@ -122,6 +124,38 @@ int main() {
 	Bounds(big);
 	Bounds(mid);
 	Expect(ComputeBudget(big).workers == 23, "8P+16E has 23 workers", 32);
+	Expect(ComputeBudget({ .logical = 8 }).clipThreads == 8, "clip keeps 8 at 8 logical", 8);
+	Expect(ComputeBudget({ .logical = 2 }).clipThreads == 8, "clip keeps 8 at 2 logical", 2);
+
+	// Summarize: 8P (2 logical each, class 1) + 16E (1 logical, class 0),
+	// with masks intersected with the process affinity.
+	auto cores = std::array<CoreRecord, 24>();
+	const auto pin = [&](int pThreads, int eThreads) {
+		for (auto i = 0; i != 8; ++i) {
+			cores[i] = { .logical = std::clamp(pThreads - 2 * i, 0, 2), .efficiencyClass = 1 };
+		}
+		for (auto i = 0; i != 16; ++i) {
+			cores[8 + i] = { .logical = (i < eThreads) ? 1 : 0, .efficiencyClass = 0 };
+		}
+		return Summarize(cores);
+	};
+	const auto all = pin(16, 16);
+	Expect(all.logical == 32 && all.physical == 24, "8P+16E summary counts", 32);
+	Expect(all.performanceLogical == 16 && all.efficiencyLogical == 16, "8P+16E summary classes", 32);
+	Expect(ComputeBudget(all).workers == ComputeBudget(big).workers, "summary matches the hybrid budget", 32);
+	const auto eOnly = pin(0, 4);
+	Expect(eOnly.logical == 4 && eOnly.physical == 4, "pinned to 4 E threads: 4 logical", 4);
+	Expect(eOnly.performanceLogical == 0 && eOnly.efficiencyLogical == 4, "pinned E threads stay efficiency", 4);
+	Expect(ComputeBudget(eOnly).workers == 1, "4 E threads give 1 worker", 4);
+	const auto pOnly = pin(4, 0);
+	Expect(pOnly.logical == 4 && pOnly.physical == 2, "pinned to 2 P cores", 4);
+	Expect(pOnly.performanceLogical == 4 && pOnly.efficiencyLogical == 0, "pinned P threads stay performance", 4);
+	Expect(ComputeBudget(pOnly).workers == 3, "4 P threads give 3 workers", 4);
+	const auto flat = std::array<CoreRecord, 4>{ {
+		{ .logical = 2 }, { .logical = 2 }, { .logical = 0 }, { .logical = 2 } } };
+	const auto uniform = Summarize(flat);
+	Expect(uniform.logical == 6 && uniform.physical == 3, "uniform cores skip unusable ones", 6);
+	Expect(uniform.performanceLogical == 6 && uniform.efficiencyLogical == 0, "uniform cores are all performance", 6);
 	Expect(ComputeBudget(mid).workers == 15, "6P+8E has 15 workers", 20);
 	Expect(ComputeBudget(mid).workers <= ComputeBudget(big).workers, "hybrid monotonic", 20);
 	Expect(
@@ -132,7 +166,7 @@ int main() {
 	if (Failures) {
 		return EXIT_FAILURE;
 	}
-	std::puts("threads core PASS: 1..64 and 256 logical, 8P+16E and 6P+8E; caps, GUI reserve, monotonic, media sum bound, mtp 4 at 8 logical");
+	std::puts("threads core PASS: 1..64 and 256 logical, 8P+16E and 6P+8E; caps, GUI reserve, monotonic, media sum bound, mtp 4 at 8 logical, clip floor 8; affinity summary: all, 4 E, 4 P, uniform");
 	return EXIT_SUCCESS;
 }
 '''
@@ -176,6 +210,13 @@ def check_pools(files):
     assert 'Core::Threads::Get().clipThreads' in files[CLIP]
 
 
+def check_source(files):
+    source = files[SOURCE]
+    assert 'Popcount(processor.GroupMask[i].Mask & allowed)' in source,         'core masks must be intersected with the process affinity'
+    assert 'auto result = Summarize(cores);' in source, 'Windows topology must come from Summarize'
+    assert 'std::min(result.logical, allowed)' not in source, 'the separate affinity clamp is gone'
+
+
 def check_cmake(files, raw_cmake):
     # The checkout picks CRLF or LF (autocrlf); an edit must not mix them.
     assert raw_cmake.count(b'\r\n') in (0, raw_cmake.count(b'\n')), 'CMakeLists.txt has mixed line endings'
@@ -193,7 +234,7 @@ def check_lottie(files):
     assert shard in thumbnail and 'std::move(renderer)' in thumbnail, 'LottieThumbnail must pass its renderer on'
 
 
-CHECKS = (check_main, check_header, check_pools, check_lottie)
+CHECKS = (check_main, check_header, check_pools, check_lottie, check_source)
 
 MUTANTS = (
     (check_main, MAIN, '\tCore::Threads::ApplyProcessPolicy();\n', ''),
@@ -201,20 +242,27 @@ MUTANTS = (
     (check_pools, CLIP, 'Core::Threads::Get().clipThreads', 'kClipThreadsCount'),
     (check_lottie, LOTTIE, '\tif (!renderer) {\n\t\trenderer = LottieRenderer();\n\t}\n', ''),
     (check_header, HEADER, '#include <algorithm>', '#include <QtCore/QThread>'),
+    (check_source, SOURCE, 'GroupMask[i].Mask & allowed', 'GroupMask[i].Mask'),
+    (check_source, SOURCE, 'auto result = Summarize(cores);', 'auto result = Topology();'),
 )
 
 HEADER_MUTANTS = (
-    ('std::clamp(workers / 2, 2, 16)', 'std::clamp(workers / 2, 2, 160)'),
+    ('std::clamp(workers / 2, 8, 16)', 'std::clamp(workers / 2, 8, 160)'),
+    ('std::clamp(workers / 2, 8, 16)', 'std::clamp(workers / 2, 2, 16)'),
     ('std::max(1, effective - 1)', 'std::max(1, effective)'),
     ('std::clamp((workers + 1) / 2, 1, 4)', 'std::clamp((workers + 1) / 3, 1, 4)'),
     ('std::clamp(workers / 4, 1, 8)', 'std::clamp(workers / 4, 0, 8)'),
     ('t.efficiencyLogical / 2', 't.efficiencyLogical'),
     ('(logical < 4) ? 4 : 0', '(logical < 4) ? 4 : -1'),
+    # Ranking classes only over usable cores makes pinned E cores performance.
+    ('maxClass = std::max(maxClass, core.efficiencyClass);',
+     'maxClass = std::max(maxClass, core.logical ? core.efficiencyClass : 0);'),
+    ('if (core.logical <= 0) {', 'if (core.logical < 0) {'),
 )
 
 
 def check(root):
-    files = {path: crlf(source(path)) for path in (HEADER, MAIN, MTP, CLIP, LOTTIE, CMAKE)}
+    files = {path: crlf(source(path)) for path in (HEADER, MAIN, MTP, CLIP, LOTTIE, CMAKE, SOURCE)}
     raw_cmake = (ROOT / CMAKE).read_bytes()
     for test in CHECKS:
         test(files)
