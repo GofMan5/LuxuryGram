@@ -84,6 +84,7 @@ DeclareSetting(bool, TestAgent);
 DeclareReadSetting(bool, ManyInstance);
 DeclareSetting(bool, Quit);
 DeclareSetting(bool, Ghost);
+DeclareSetting(bool, NoPlugins);
 
 DeclareSetting(QByteArray, LocalSalt);
 DeclareSetting(int, ScreenScale);

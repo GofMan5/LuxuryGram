@@ -607,6 +607,7 @@ void Launcher::processArguments() {
 		{ "-startintray"    , KeyFormat::NoValues },
 		{ "-quit"           , KeyFormat::NoValues },
 		{ "-ghost"          , KeyFormat::NoValues },
+		{ "-noplugins"      , KeyFormat::NoValues },
 		{ "-workdir"        , KeyFormat::OneValue },
 		{ "--"              , KeyFormat::AllLeftValues },
 		{ "-scale"          , KeyFormat::OneValue },
@@ -657,6 +658,7 @@ void Launcher::processArguments() {
 	gStartInTray = parseResult.contains("-startintray");
 	gQuit = parseResult.contains("-quit");
 	gGhost = parseResult.contains("-ghost");
+	gNoPlugins = parseResult.contains("-noplugins");
 	_customWorkingDir = parseResult.value("-workdir", {}).join(QString());
 	if (!_customWorkingDir.isEmpty()) {
 		_customWorkingDir = QDir(_customWorkingDir).absolutePath() + '/';

@@ -51,7 +51,9 @@ using Json = nlohmann::json;
 		&& (source.repo.empty() || IsValidGithubName(source.repo))
 		&& (source.subdir.empty() || IsSafeRelativePath(source.subdir))
 		&& (source.ref.empty() || IsValidGitRef(source.ref))
-		&& (source.label.empty() || IsValidGitRef(source.label));
+		&& (source.label.empty() || IsValidGitRef(source.label))
+		&& (source.commit.empty() || IsCommitSha(source.commit))
+		&& (source.repoId >= 0);
 }
 
 [[nodiscard]] PluginSource ParseSource(const Json &object) {
@@ -68,6 +70,11 @@ using Json = nlohmann::json;
 		: Channel::Release;
 	result.ref = String(*i, "ref");
 	result.label = String(*i, "label");
+	result.commit = String(*i, "commit");
+	const auto repoId = i->find("repoId");
+	if (repoId != i->end() && repoId->is_number_integer()) {
+		result.repoId = repoId->get<std::int64_t>();
+	}
 	return result;
 }
 
@@ -79,6 +86,8 @@ using Json = nlohmann::json;
 		{ "channel", source.channel == Channel::Branch ? "branch" : "release" },
 		{ "ref", source.ref },
 		{ "label", source.label },
+		{ "commit", source.commit },
+		{ "repoId", source.repoId },
 	};
 }
 
@@ -139,6 +148,20 @@ Result<Registry> ParseRegistry(std::string_view json) {
 		if (installedAt != entry.end() && installedAt->is_number_integer()) {
 			plugin.installedAt = installedAt->get<std::int64_t>();
 		}
+		const auto pinned = entry.find("pinned");
+		plugin.pinned = pinned != entry.end()
+			&& pinned->is_boolean()
+			&& pinned->get<bool>();
+		// A damaged rollback entry only loses the rollback.
+		const auto previous = entry.find("previous");
+		if (previous != entry.end() && previous->is_object()) {
+			auto version = String(*previous, "version");
+			auto source = ParseSource(*previous);
+			if (!version.empty() && IsValidSource(source)) {
+				plugin.previousVersion = std::move(version);
+				plugin.previousSource = std::move(source);
+			}
+		}
 		result.plugins.push_back(std::move(plugin));
 	}
 	return result;
@@ -149,6 +172,13 @@ std::string SerializeRegistry(const Registry &registry) {
 	for (const auto &plugin : registry.plugins) {
 		if (!IsValidPluginId(plugin.id)) {
 			continue;
+		}
+		auto previous = Json();
+		if (!plugin.previousVersion.empty()) {
+			previous = {
+				{ "version", plugin.previousVersion },
+				{ "source", SerializeSource(plugin.previousSource) },
+			};
 		}
 		plugins.push_back({
 			{ "id", plugin.id },
@@ -164,6 +194,8 @@ std::string SerializeRegistry(const Registry &registry) {
 			{ "enabled", plugin.enabled },
 			{ "installedAt", plugin.installedAt },
 			{ "lastError", plugin.lastError },
+			{ "pinned", plugin.pinned },
+			{ "previous", std::move(previous) },
 		});
 	}
 	const auto document = Json{

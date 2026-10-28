@@ -675,7 +675,7 @@ def check_commit(files):
     assert '? plan.shownPermissions\n\t\t: PermissionSet();' in commit and 'const auto shownHosts = plan.shownHosts;' in commit, \
         'the grant must rest on what the consent box showed'
     grant = commit.index('const auto grant = CommitGrant(')
-    assert grant < commit.index('if (!grant) {') < commit.index('SwapDirectory('), 'the swap must follow the grant check'
+    assert grant < commit.index('if (!grant) {') < commit.index('SwapWithJournal('), 'the swap must follow the grant check'
     assert 'manifest.permissions,\n\t\t\t\tpreviously,\n\t\t\t\tshown,' in commit[grant:grant + 200], \
         'CommitGrant must get the plugin.json being installed'
     assert 'entry.granted = *grant;' in commit, 'the stored grant must be the checked one'
@@ -692,7 +692,8 @@ def check_commit(files):
 # The UI calls these: every one the header declares must be defined.
 MANAGER_API = ('Manager', '~Manager', 'Instance', 'Maybe', 'changes', 'plugins', 'plugin', 'logs',
                'clearLogs', 'setEnabled', 'remove', 'reload', 'settingValue', 'setSettingValue',
-               'prepareInstall', 'prepareUpdate', 'commitInstall', 'checkUpdates', 'active',
+               'prepareInstall', 'prepareUpdate', 'commitInstall', 'checkUpdates', 'checkUpdatesDetailed',
+               'rollback', 'setPinned', 'startAll', 'active',
                'messageMenuItems', 'commands', 'instances')
 
 

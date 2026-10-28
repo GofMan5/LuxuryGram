@@ -9839,3 +9839,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_luxury_plugins_ui_perm_telegram_updates_about" = "Receive every update your account gets from Telegram.";
 "lng_luxury_plugins_ui_state_stopped" = "Enabled, not running";
 "lng_luxury_plugins_ui_consent_new_hosts" = "The new version reaches more websites:";
+"lng_luxury_plugins_quarantined" = "Disabled: the client closed unexpectedly while this plugin was starting.";
+"lng_luxury_plugins_rate_limited" = "GitHub request limit reached, try again after {time}.";
+"lng_luxury_plugins_downgrade" = "This is an older version than the installed one.";
+"lng_luxury_plugins_repo_installed" = "This repository is installed already as {name}.";
+"lng_luxury_plugins_repo_replaced" = "The repository was deleted and created again, this is not an update of the installed plugin.";
+"lng_luxury_plugins_pinned" = "The plugin is pinned to its installed version.";
+"lng_luxury_plugins_no_previous" = "There is no previous version to roll back to.";
+"lng_luxury_plugins_release_fallback" = "Release {tag} has no plugin.json, installing from the {name} branch instead.";

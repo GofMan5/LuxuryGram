@@ -553,3 +553,5 @@ inline void HideOwnPhone(nlohmann::json &value) {
 }
 
 } // namespace Luxury::Plugins
+
+#include "luxury/plugins/plugin_install_logic.h"

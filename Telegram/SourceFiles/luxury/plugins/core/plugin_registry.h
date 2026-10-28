@@ -22,6 +22,8 @@ struct PluginSource {
 	Channel channel = Channel::Release;
 	std::string ref; // Release tag or commit SHA that is installed.
 	std::string label; // Branch name for the branch channel.
+	std::string commit; // Commit SHA of ref, empty when unknown.
+	std::int64_t repoId = 0; // GitHub repository id, 0 when unknown.
 };
 
 struct InstalledPlugin {
@@ -38,6 +40,14 @@ struct InstalledPlugin {
 	bool enabled = false;
 	std::int64_t installedAt = 0; // Unix seconds.
 	std::string lastError;
+	bool pinned = false; // Update checks skip it.
+	// The version code.prev holds, empty when there is nothing to roll
+	// back to.
+	std::string previousVersion;
+	PluginSource previousSource;
+	// Why the plugin was last started: "startup", "enable", "install",
+	// "update", "rollback" or "reload". Not stored.
+	std::string loadReason;
 };
 
 struct Registry {

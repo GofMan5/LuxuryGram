@@ -400,6 +400,8 @@ Js::HostResult Instance::call(
 		return Result::Value({
 			{ "id", _plugin.id },
 			{ "version", _plugin.version },
+			{ "previousVersion", _plugin.previousVersion },
+			{ "reason", _plugin.loadReason },
 			{ "apiVersion", kPluginApiVersion },
 			{ "clientVersion", LuxuryVersionStr },
 		});
