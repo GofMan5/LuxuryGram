@@ -81,6 +81,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/data/messages_storage.h"
 #include "luxury/luxury_settings.h"
 #include "luxury/luxury_worker.h"
+#include "luxury/plugins/plugin_hooks.h"
 
 
 namespace Api {
@@ -401,6 +402,7 @@ void Updates::channelDifferenceDone(
 		not_null<ChannelData*> channel,
 		const MTPupdates_ChannelDifference &difference) {
 	_channelFailDifferenceTimeout.remove(channel);
+	Luxury::Plugins::UpdatesReceived(_session, difference);
 
 	const auto timeout = difference.match([&](const auto &data) {
 		return data.vtimeout().value_or_empty();
@@ -495,6 +497,7 @@ void Updates::stateDone(const MTPupdates_State &state) {
 
 void Updates::differenceDone(const MTPupdates_Difference &result) {
 	_failDifferenceTimeout = 1;
+	Luxury::Plugins::UpdatesReceived(_session, result);
 
 	switch (result.type()) {
 	case mtpc_updates_differenceEmpty: {
@@ -1517,6 +1520,19 @@ void Updates::applyUpdates(
 		uint64 sentMessageRandomId) {
 	const auto randomId = sentMessageRandomId;
 
+	// Plugins see a seq batch once, when it is applied: a gap queues it
+	// and a repeat is dropped below.
+	const auto seq = updates.match([](const MTPDupdates &data) {
+		return data.vseq().v;
+	}, [](const MTPDupdatesCombined &data) {
+		return data.vseq_start().v;
+	}, [](const auto &) {
+		return 0;
+	});
+	if (!seq || seq == _updatesSeq + 1) {
+		Luxury::Plugins::UpdatesReceived(_session, updates);
+	}
+
 	switch (updates.type()) {
 	case mtpc_updates: {
 		const auto &d = updates.c_updates();
@@ -1732,6 +1748,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 								local->date());
 						}
 						local->setRealId(newId);
+						Luxury::Plugins::MessageSent(local);
 						if (const auto topic = local->topic()) {
 							topic->applyMaybeLast(local);
 						}

@@ -138,6 +138,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
 #include "luxury/features/message_shot/message_shot.h"
+#include "luxury/plugins/plugin_hooks.h"
 #include "base/unixtime.h"
 
 
@@ -2386,6 +2387,13 @@ void ChatWidget::send(Api::SendOptions options) {
 	if (const auto page = _composeControls->shownRichMessage()) {
 		sendRichDraft(page, options);
 		return;
+	} else if (Luxury::Plugins::HasCommands()
+		&& Luxury::Plugins::LocalCommand(
+			_history,
+			_composeControls->getTextWithAppliedMarkdown().text)) {
+		// A plugin's /command runs locally and is never sent.
+		_composeControls->clear();
+		return;
 	}
 	if (!options.scheduled) {
 		auto message = Api::MessageToSend(prepareSendAction(options));
@@ -2624,10 +2632,24 @@ void ChatWidget::sendTextWithTags(
 	const auto nextLocalMessageId = session().data().nextLocalMessageId();
 	const auto hasText = !message.textWithTags.text.trimmed().isEmpty();
 
-	if (const auto field = _composeControls->fieldForMention(); field
+	const auto field = _composeControls->fieldForMention();
+	const auto animate = field
 		&& hasText
 		&& message.webPage.url.isEmpty()
-		&& (field->document()->size().height() <= field->height())) {
+		&& (field->document()->size().height() <= field->height());
+
+	const auto justMarkingAsRead = !hasText
+		&& message.webPage.url.isEmpty();
+	_justMarkingAsRead = justMarkingAsRead;
+	const auto sent = session().api().sendMessage(
+		std::move(message),
+		nextLocalMessageId);
+	_justMarkingAsRead = false;
+	if (!sent) {
+		// A plugin cancelled it: the text stays in the field.
+		return;
+	} else if (animate) {
+		// Only now: a cancelled send would leave the entry pending.
 		controller()->sendingAnimation().appendSending({
 			.type = Ui::MessageSendingAnimationFrom::Type::Text,
 			.localId = nextLocalMessageId,
@@ -2635,12 +2657,6 @@ void ChatWidget::sendTextWithTags(
 				Rect(field->size())),
 		});
 	}
-
-	const auto justMarkingAsRead = !hasText
-		&& message.webPage.url.isEmpty();
-	_justMarkingAsRead = justMarkingAsRead;
-	session().api().sendMessage(std::move(message), nextLocalMessageId);
-	_justMarkingAsRead = false;
 
 	_composeControls->clear(justMarkingAsRead);
 	session().sendProgressManager().update(

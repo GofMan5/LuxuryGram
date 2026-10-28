@@ -25,6 +25,9 @@ add_subdirectory(codegen)
 add_subdirectory(lib_icu)
 # LuxuryGram filters
 
+# LuxuryGram plugins
+add_subdirectory(lib_quickjs)
+
 get_filename_component(src_loc SourceFiles REALPATH)
 get_filename_component(res_loc Resources REALPATH)
 
@@ -116,6 +119,7 @@ PRIVATE
 
     # LuxuryGram filters
     luxurygram::lib_icu
+    luxurygram::lib_quickjs
 )
 
 set(luxurygram_files
@@ -230,6 +234,39 @@ set(luxurygram_files
         luxury/libs/sqlite/sqlite3.c
         luxury/libs/sqlite/sqlite3.h
         luxury/libs/sqlite/sqlite_orm.h
+        luxury/plugins/core/plugin_manifest.cpp
+        luxury/plugins/core/plugin_manifest.h
+        luxury/plugins/core/plugin_permissions.cpp
+        luxury/plugins/core/plugin_permissions.h
+        luxury/plugins/core/plugin_registry.cpp
+        luxury/plugins/core/plugin_registry.h
+        luxury/plugins/core/plugin_source.cpp
+        luxury/plugins/core/plugin_source.h
+        luxury/plugins/core/plugin_version.cpp
+        luxury/plugins/core/plugin_version.h
+        luxury/plugins/core/tl_codec.cpp
+        luxury/plugins/core/tl_codec.h
+        luxury/plugins/core/tl_schema.cpp
+        luxury/plugins/core/tl_schema.h
+        luxury/plugins/js/js_engine.cpp
+        luxury/plugins/js/js_engine.h
+        luxury/plugins/plugin_manager.cpp
+        luxury/plugins/plugin_manager.h
+        luxury/plugins/plugin_installer.cpp
+        luxury/plugins/plugin_installer.h
+        luxury/plugins/plugin_host_api.cpp
+        luxury/plugins/plugin_host_api.h
+        luxury/plugins/plugin_host_logic.h
+        luxury/plugins/plugin_hooks.cpp
+        luxury/plugins/plugin_hooks.h
+        luxury/ui/settings/settings_plugins.cpp
+        luxury/ui/settings/settings_plugins.h
+        luxury/ui/boxes/plugin_install_box.cpp
+        luxury/ui/boxes/plugin_install_box.h
+        luxury/ui/boxes/plugin_consent_box.cpp
+        luxury/ui/boxes/plugin_consent_box.h
+        luxury/ui/boxes/plugin_details_box.cpp
+        luxury/ui/boxes/plugin_details_box.h
         luxury/features/streamer_mode/platform/linux/streamer_mode_linux.cpp
         luxury/features/streamer_mode/platform/linux/streamer_mode_linux.h
         luxury/features/streamer_mode/platform/mac/streamer_mode_mac.mm

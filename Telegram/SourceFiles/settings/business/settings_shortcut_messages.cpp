@@ -1218,7 +1218,10 @@ void ShortcutMessages::send(Api::SendOptions options) {
 	message.textWithTags = _composeControls->getTextWithAppliedMarkdown();
 	message.webPage = _composeControls->webPageDraft();
 
-	_session->api().sendMessage(std::move(message));
+	if (!_session->api().sendMessage(std::move(message))) {
+		// A plugin cancelled it: the text stays in the field.
+		return;
+	}
 
 	_composeControls->clear();
 

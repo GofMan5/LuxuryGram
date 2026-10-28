@@ -141,6 +141,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
 #include "luxury/features/filters/filters_cache_controller.h"
+#include "luxury/plugins/plugin_hooks.h"
 #include "luxury/ui/context_menu/context_menu.h"
 #include "luxury/ui/settings/filters/edit_filter.h"
 #include "luxury/utils/telegram_helpers.h"
@@ -3396,6 +3397,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 
 		LuxuryUi::AddReadUntilAction(_menu, item);
 		LuxuryUi::AddBurnAction(_menu, item);
+		Luxury::Plugins::FillMessageMenu(_menu, item);
 	};
 
 	const auto addReplyAction = [&](HistoryItem *item) {

@@ -313,7 +313,10 @@ bool ReplyArea::send(
 		}
 	}
 
-	session().api().sendMessage(std::move(message));
+	if (!session().api().sendMessage(std::move(message))) {
+		// A plugin cancelled it: the text stays in the field.
+		return false;
+	}
 
 	finishSending(skipToast);
 	_controls->clear();

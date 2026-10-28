@@ -120,6 +120,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/luxury_settings.h"
 #include "luxury/features/streamer_mode/streamer_mode.h"
 #include "luxury/ui/startup_splash.h"
+#include "luxury/plugins/plugin_hooks.h"
+#include "luxury/plugins/plugin_manager.h"
 
 
 namespace Core {
@@ -212,6 +214,7 @@ struct Application::Private {
 	UiIntegration uiIntegration;
 	Settings settings;
 	std::unique_ptr<ProxyRotationManager> proxyRotation;
+	std::unique_ptr<Luxury::Plugins::Manager> plugins;
 };
 
 Application::Application()
@@ -312,6 +315,9 @@ void Application::closeAdditionalWindows() {
 
 Application::~Application() {
 	LuxurySettings::saveIfScheduled();
+
+	// Plugins get 'unload' while windows and sessions are still alive.
+	_private->plugins = nullptr;
 
 	if (_savedWindows) {
 		_savedWindows->writeNow();
@@ -509,6 +515,7 @@ void Application::run() {
 	stage(tr::luxury_StartupAccounts, 0.65);
 
 	startDomain();
+	_private->plugins = std::make_unique<Luxury::Plugins::Manager>();
 	startTray();
 
 	stage(tr::luxury_StartupShowing, 0.85);
@@ -812,6 +819,8 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 		} else if (HandleKeysLegendHotkey(this, object, event)) {
 			return true;
 		} else if (HandleSpacePlayPause(this, object, event)) {
+			return true;
+		} else if (Luxury::Plugins::HandleHotkey(object, event)) {
 			return true;
 		}
 	} break;

@@ -1,0 +1,154 @@
+// This is the source code of LuxuryGram for Desktop.
+// See LEGAL for license and copyright information.
+#pragma once
+
+#include "luxury/plugins/core/plugin_manifest.h"
+#include "luxury/plugins/core/plugin_permissions.h"
+#include "luxury/plugins/core/plugin_source.h"
+#include "luxury/libs/json.hpp"
+
+#include <QString>
+#include <QStringList>
+
+#include <memory>
+#include <vector>
+
+namespace Main {
+class Session;
+} // namespace Main
+
+namespace Luxury::Plugins {
+
+class Instance;
+
+// What the plugin manager UI shows for one installed plugin.
+struct PluginView {
+	QString id;
+	QString name;
+	QString version;
+	QString description;
+	QString author;
+	QString homepage;
+	QString sourceLabel; // "owner/repo@v1.2.0" or "owner/repo#main (abc1234)".
+	PermissionSet requested;
+	PermissionSet granted;
+	std::vector<QString> network;
+	std::vector<SettingDescriptor> settings;
+	bool enabled = false;
+	bool running = false; // Enabled and loaded without error.
+	QString lastError;
+	bool updateAvailable = false;
+	QString availableLabel; // Tag or short SHA offered by checkUpdates.
+};
+
+// A resolved install or update, shown to the user before anything is
+// written. manifest is the downloaded plugin.json of the new version.
+struct InstallPlan {
+	GithubInput input;
+	ResolvedRef resolved;
+	Manifest manifest;
+	bool update = false; // Replaces an installed plugin with this id.
+	PermissionSet previouslyGranted; // Empty for a fresh install.
+	// Requested permissions the user has not granted yet. A fresh install
+	// lists all requested; an update with nothing new needs no consent.
+	PermissionSet newPermissions;
+	// The exact plugin.json bytes the plan was built from; commitInstall
+	// installs only these bytes.
+	std::string manifestBytes;
+	// Set by the consent box when the user allowed this plan: what the box
+	// listed. commitInstall refuses a fresh install, new permissions or
+	// wider hosts without it, and grants only what was shown.
+	bool consented = false;
+	PermissionSet shownPermissions;
+	std::vector<std::string> shownHosts;
+};
+
+struct LogLine {
+	qint64 time = 0; // Unix milliseconds.
+	int level = 0; // Js::LogLevel as int.
+	QString text;
+};
+
+// Owns every plugin: registry, engines, installs and the client hooks.
+// Lives in Core::Application, main thread only. Every callback runs on the
+// main thread; a callback is not called after the manager is destroyed.
+class Manager final {
+public:
+	Manager();
+	~Manager();
+
+	[[nodiscard]] static Manager &Instance();
+	// Null before Core::App creates it and after shutdown.
+	[[nodiscard]] static Manager *Maybe();
+
+	// Fired after any change of the list, state, errors or update flags.
+	[[nodiscard]] rpl::producer<> changes() const;
+
+	[[nodiscard]] std::vector<PluginView> plugins() const;
+	[[nodiscard]] std::optional<PluginView> plugin(const QString &id) const;
+	[[nodiscard]] std::vector<LogLine> logs(const QString &id) const;
+	void clearLogs(const QString &id);
+
+	void setEnabled(const QString &id, bool enabled);
+	void remove(const QString &id);
+	// Restarts an enabled plugin, e.g. after its last error.
+	void reload(const QString &id);
+
+	// Manifest settings, JSON values of the declared type.
+	[[nodiscard]] nlohmann::json settingValue(
+		const QString &id,
+		const QString &key) const;
+	void setSettingValue(
+		const QString &id,
+		const QString &key,
+		nlohmann::json value);
+
+	// Parses the link, resolves the ref and downloads plugin.json only.
+	// done gets the plan or a human readable error.
+	void prepareInstall(
+		const QString &link,
+		Fn<void(InstallPlan plan, QString error)> done);
+	// Same for the installed plugin's stored source.
+	void prepareUpdate(
+		const QString &id,
+		Fn<void(InstallPlan plan, QString error)> done);
+	// Downloads every file into staging, swaps it in, grants the previous
+	// grant plus what the consent box showed and starts the plugin when it
+	// was enabled (a fresh install is enabled). Anything the user was not
+	// shown fails with "review it again"; done gets an empty error on
+	// success.
+	void commitInstall(InstallPlan plan, Fn<void(QString error)> done);
+	// Refreshes updateAvailable of every plugin; done gets how many have
+	// an update.
+	void checkUpdates(Fn<void(int available)> done);
+
+	// --- Client hooks, see docs/plugins/ARCHITECTURE.md "Client hooks".
+
+	// Single bool check for the hook call sites.
+	[[nodiscard]] bool active() const;
+
+	struct MenuItem {
+		QString pluginId;
+		QString title;
+		std::int64_t handler = 0;
+	};
+	struct Command {
+		QString pluginId;
+		QString name;
+		QString description;
+	};
+	[[nodiscard]] std::vector<MenuItem> messageMenuItems() const;
+	[[nodiscard]] std::vector<Command> commands() const;
+	// Running plugins for plugin_hooks.cpp, valid until the next change.
+	[[nodiscard]] std::vector<not_null<Plugins::Instance*>> instances() const;
+
+private:
+	struct Private;
+	std::unique_ptr<Private> _private;
+
+};
+
+[[nodiscard]] QString PermissionTitle(Permission permission);
+[[nodiscard]] QString PermissionDescription(Permission permission);
+
+} // namespace Luxury::Plugins

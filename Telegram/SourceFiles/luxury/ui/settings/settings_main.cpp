@@ -15,6 +15,7 @@
 #include "luxury/ui/settings/settings_filters.h"
 #include "luxury/ui/settings/settings_general.h"
 #include "luxury/ui/settings/settings_other.h"
+#include "luxury/ui/settings/settings_plugins.h"
 #include "core/version.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common.h"
@@ -142,6 +143,11 @@ void BuildCategories(SectionBuilder &builder) {
 		.title = tr::luxury_CategoryOther(),
 		.targetSection = LuxuryOther::Id(),
 		.icon = { &st::menuIconFave },
+	});
+	builder.addSectionButton({
+		.title = tr::lng_luxury_plugins_ui_title(),
+		.targetSection = LuxuryPlugins::Id(),
+		.icon = { &st::menuIconCustomize },
 	});
 }
 

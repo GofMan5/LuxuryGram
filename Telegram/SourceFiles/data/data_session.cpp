@@ -100,6 +100,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/data/messages_storage.h"
 #include "luxury/features/filters/filters_controller.h"
 #include "luxury/features/watch/watched_media.h"
+#include "luxury/plugins/plugin_hooks.h"
 #include "luxury/utils/telegram_helpers.h"
 
 
@@ -3759,6 +3760,7 @@ HistoryItem *Session::addNewMessage(
 		type);
 	if (type == NewMessageType::Unread) {
 		CheckForSwitchInlineButton(result);
+		Luxury::Plugins::IncomingMessage(result);
 	}
 	return result;
 }

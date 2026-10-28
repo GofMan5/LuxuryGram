@@ -676,8 +676,8 @@ bool sendMessageSync(
 
 		message.action.options.localIdAllocated = allocated;
 		message.action.options.localSendFinished = finished;
-		strong->api().sendMessage(std::move(message));
-		return true;
+		// false: a plugin cancelled it, no local id will ever come.
+		return strong->api().sendMessage(std::move(message));
 	});
 }
 

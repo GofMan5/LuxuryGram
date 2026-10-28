@@ -776,7 +776,10 @@ void ScheduledWidget::send(Api::SendOptions options) {
 	message.textWithTags = _composeControls->getTextWithAppliedMarkdown();
 	message.webPage = webPageDraft;
 
-	session().api().sendMessage(std::move(message));
+	if (!session().api().sendMessage(std::move(message))) {
+		// A plugin cancelled it: the text stays in the field.
+		return;
+	}
 
 	_composeControls->cancelForward();
 	_composeControls->clear();

@@ -13,6 +13,20 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 CXX = os.environ.get('CXX', r'C:\Strawberry\c\bin\g++.exe')
+# A fixture links its runtime in: an older libstdc++-6.dll earlier in PATH
+# (Git's mingw64) would otherwise fail it with 0xC0000139.
+STATIC = ('-static',)
+RUNTIME_DLLS = ('libstdc++', 'libgcc', 'libwinpthread')
+
+
+def standalone(exe):
+    # Fails a fixture that would load the compiler runtime from PATH.
+    if os.name != 'nt':
+        return
+    objdump = Path(CXX).with_name('objdump.exe')
+    imports = run([str(objdump), '-p', str(exe)], Path(exe).parent).lower()
+    loaded = [dll for dll in RUNTIME_DLLS if 'dll name: ' + dll in imports]
+    assert not loaded, f'{exe} imports {loaded}: link it with STATIC'
 
 
 def source(path):
@@ -44,7 +58,8 @@ def cpp(root, name, text, extra=()):
     path = root / (name + '.cpp')
     path.write_text(text, encoding='utf-8')
     exe = root / (name + ('.exe' if os.name == 'nt' else ''))
-    run([CXX, '-std=c++20', '-O0', '-g', '-D_DEBUG', str(path), *extra, '-o', str(exe)], root)
+    run([CXX, '-std=c++20', '-O0', '-g', '-D_DEBUG', str(path), *extra, *STATIC, '-o', str(exe)], root)
+    standalone(exe)
     print(run([str(exe)], root).strip())
 
 

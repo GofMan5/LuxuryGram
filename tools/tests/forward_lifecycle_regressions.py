@@ -86,7 +86,7 @@ def source_contracts(sync, rich):
     sending = read("api/api_sending.cpp")
     wrap = read("apiwrap.cpp")
     hooks = (
-        (wrap, "&& !(*action.options.localIdAllocated)(newId)) return;", "registerMessageRandomId("),
+        (wrap, "&& !(*action.options.localIdAllocated)(newId)) return true;", "registerMessageRandomId("),
         (sending, "&& !(*message.action.options.localIdAllocated)(newId)) return;", "auto flags = NewMessageFlags("),
         (sending, "&& !(*action.options.localIdAllocated)(newId)) return true;", "auto &histories ="),
         (sending, "&& !(*file->to.options.localIdAllocated)(local.newId)) return true;", "locals.push_back("),
@@ -116,7 +116,7 @@ def source_contracts(sync, rich):
     # These native callbacks cannot be linked without the app; bind their routing explicitly.
     for text, marker, terminal in (
             (wrap, "void ApiWrap::forwardMessages(", "(*action.options.localSendFinished)(FullMsgId(), false);"),
-            (wrap, "void ApiWrap::sendMessage(", "(*action.options.localSendFinished)(newId, false);"),
+            (wrap, "bool ApiWrap::sendMessage(", "(*action.options.localSendFinished)(newId, false);"),
             (sending, "void SendExistingMedia(", "(*action.options.localSendFinished)(newId, false);"),
             (sending, "bool SendDice(", "(*action.options.localSendFinished)(newId, false);"),
             (sending, "void SendMusicSelectionBatch(", "(*action.options.localSendFinished)(item.localId, false);"),
@@ -303,10 +303,13 @@ struct ApiDouble {
  void forwardMessages(Data::ResolvedForwardDraft, Api::SendAction action, Fn<void()> done) {
   Test::ui.send(); finished = action.options.localSendFinished; forwardDone = std::move(done);
  }
- void sendMessage(Api::MessageToSend message) {
+ bool pluginCancel = false;
+ bool sendMessage(Api::MessageToSend message) {
+  if (pluginCancel) return false; // A plugin beforeSend veto: no local id ever comes.
   gate = message.action.options.localIdAllocated;
   finished = message.action.options.localSendFinished;
-  for (auto id : outgoing) { if (gate && !(*gate)(id)) return; Test::ui.send(); if (onAllocated) onAllocated(id); }
+  for (auto id : outgoing) { if (gate && !(*gate)(id)) return true; Test::ui.send(); if (onAllocated) onAllocated(id); }
+  return true;
  }
  bool late(FullMsgId id) { if (gate && !(*gate)(id)) return false; Test::ui.send(); return true; }
  struct Builder {
@@ -439,6 +442,11 @@ int main() {
   };
   assert(sendMessageSync(&s, Api::MessageToSend{action}, noCancel));
   assert(!(*s.api().gate)({7, -2})); cleanup(s);
+ }
+ Test::scheduler.reset();
+ { // A plugin veto fails the forward at once instead of waiting five minutes for an id.
+  Main::Session s; s.api().pluginCancel = true;
+  assert(!sendMessageSync(&s, Api::MessageToSend{action}, noCancel)); cleanup(s);
  }
  Test::scheduler.reset();
  { // A split message allocates more than expected: every pending ID must finish.

@@ -227,6 +227,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luxury/utils/telegram_helpers.h"
 #include "luxury/features/message_shot/message_shot.h"
 #include "luxury/features/forward/luxury_forward.h"
+#include "luxury/plugins/plugin_hooks.h"
 #include "boxes/abstract_box.h"
 
 
@@ -5992,6 +5993,14 @@ void HistoryWidget::send(Api::SendOptions options) {
 	} else if (const auto page = shownRichMessage()) {
 		sendRichDraft(page, options);
 		return;
+	} else if (!_voiceRecordBar->isListenState()
+		&& Luxury::Plugins::HasCommands()
+		&& Luxury::Plugins::LocalCommand(
+			_history,
+			_field->getTextWithTags().text)) {
+		// A plugin's /command runs locally and is never sent.
+		clearFieldText();
+		return;
 	}
 	if (!options.scheduled) {
 		auto action = Api::SendAction(_history, options);
@@ -6171,21 +6180,28 @@ void HistoryWidget::sendTextWithTags(
 	const auto nextLocalMessageId = session().data().nextLocalMessageId();
 	const auto hasText = !message.textWithTags.text.trimmed().isEmpty();
 
-	if (hasText
+	const auto animate = hasText
 		&& message.webPage.url.isEmpty()
-		&& (_field->document()->size().height() <= _field->height())) {
+		&& (_field->document()->size().height() <= _field->height());
+
+	// Just a flag not to drop reply info if we're not sending anything.
+	_justMarkingAsRead = !hasText
+		&& message.webPage.url.isEmpty();
+	const auto sent = session().api().sendMessage(
+		std::move(message),
+		nextLocalMessageId);
+	_justMarkingAsRead = false;
+	if (!sent) {
+		// A plugin cancelled it: the text stays in the field.
+		return;
+	} else if (animate) {
+		// Only now: a cancelled send would leave the entry pending.
 		controller()->sendingAnimation().appendSending({
 			.type = Ui::MessageSendingAnimationFrom::Type::Text,
 			.localId = nextLocalMessageId,
 			.globalStartGeometry = _field->mapToGlobal(Rect(_field->size())),
 		});
 	}
-
-	// Just a flag not to drop reply info if we're not sending anything.
-	_justMarkingAsRead = !hasText
-		&& message.webPage.url.isEmpty();
-	session().api().sendMessage(std::move(message), nextLocalMessageId);
-	_justMarkingAsRead = false;
 
 	clearFieldText();
 	if (_preview) {

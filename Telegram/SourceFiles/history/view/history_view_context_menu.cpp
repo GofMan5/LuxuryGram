@@ -124,6 +124,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
 #include "luxury/features/forward/luxury_forward.h"
+#include "luxury/plugins/plugin_hooks.h"
 #include "luxury/ui/context_menu/context_menu.h"
 
 
@@ -1464,6 +1465,7 @@ void AddMessageActions(
 	if (request.item) {
 		LuxuryUi::AddReadUntilAction(menu, request.item);
 		LuxuryUi::AddBurnAction(menu, request.item);
+		Luxury::Plugins::FillMessageMenu(menu, request.item);
 	}
 }
 

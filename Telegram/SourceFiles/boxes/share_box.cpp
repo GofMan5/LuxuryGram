@@ -2325,14 +2325,18 @@ void FastShareLink(
 			comment.text = url;
 		}
 		auto &api = show->session().api();
+		auto sent = false;
 		for (const auto &thread : result) {
 			auto message = Api::MessageToSend(
 				Api::SendAction(thread, options));
 			message.textWithTags = comment;
 			message.action.clearDraft = false;
-			api.sendMessage(std::move(message));
+			sent |= api.sendMessage(std::move(message));
 		}
-		if (*box) {
+		if (!sent) {
+			// Plugins cancelled every copy: keep the box, claim nothing.
+			return;
+		} else if (*box) {
 			(*box)->closeBox();
 		}
 		show->showToast(tr::lng_share_done(tr::now));

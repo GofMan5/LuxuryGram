@@ -25,5 +25,6 @@
         <file alias="art/luxury/yaplus/app.svg">../../art/luxury/yaplus/app.svg</file>
         <file alias="art/luxury/yaplus/app_icon.ico">../../art/luxury/yaplus/app_icon.ico</file>
         <file alias="icons/luxury/nocover.svg">../../icons/luxury/nocover.svg</file>
+        <file alias="luxury/plugins/api.tl">../../../SourceFiles/mtproto/scheme/api.tl</file>
     </qresource>
 </RCC>

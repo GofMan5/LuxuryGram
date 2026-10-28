@@ -113,6 +113,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // LuxuryGram includes
 #include "luxury/luxury_settings.h"
 #include "luxury/luxury_worker.h"
+#include "luxury/plugins/plugin_hooks.h"
 #include "luxury/utils/telegram_helpers.h"
 #include "luxury/features/forward/luxury_forward.h"
 
@@ -4939,9 +4940,13 @@ void ApiWrap::sendRichMessage(
 	finishForwarding(action);
 }
 
-void ApiWrap::sendMessage(
+bool ApiWrap::sendMessage(
 		MessageToSend &&message,
 		std::optional<MsgId> localMessageId) {
+	// Plugins see the text first: one may rewrite it or cancel the send.
+	if (!Luxury::Plugins::BeforeSend(message)) {
+		return false;
+	}
 	const auto clearReplyTo = prependPseudoReply(message);
 	// Ghost mode turns a plain send into a scheduled one, and trySend() below
 	// drops scheduled ephemeral sends outright -- the field is already cleared by
@@ -4988,15 +4993,15 @@ void ApiWrap::sendMessage(
 	if (!ephemeral
 		&& !canSendTexts
 		&& !LuxuryForward::isForwarding(peer->id, *_session)) {
-		return;
+		return true;
 	} else if (_session->ephemeralMessages().trySend(message)) {
 		if (clearCloudDraft) {
 			history->clearCloudDraft(draftTopicRootId, draftMonoforumPeerId);
 		}
-		return;
+		return true;
 	}
 	if (Api::SendDice(message)) {
-		return;
+		return true;
 	}
 	local().saveRecentSentHashtags(textWithTags.text);
 
@@ -5031,7 +5036,7 @@ void ApiWrap::sendMessage(
 				? std::exchange(localMessageId, std::nullopt).value()
 				: _session->data().nextLocalMessageId());
 		if (action.options.localIdAllocated
-			&& !(*action.options.localIdAllocated)(newId)) return;
+			&& !(*action.options.localIdAllocated)(newId)) return true;
 		auto randomId = base::RandomValue<uint64>();
 
 		TextUtilities::Trim(sending);
@@ -5276,6 +5281,7 @@ void ApiWrap::sendMessage(
 	}
 
 	finishForwarding(action);
+	return true;
 }
 
 void ApiWrap::sendBotStart(

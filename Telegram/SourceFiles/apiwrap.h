@@ -411,7 +411,8 @@ public:
 		std::shared_ptr<const Iv::RichPage> page,
 		const MTPInputRichMessage &richMessage,
 		SendAction action);
-	void sendMessage(
+	// False when a plugin's beforeSend cancelled it: nothing was sent.
+	bool sendMessage(
 		MessageToSend &&message,
 		std::optional<MsgId> localMessageId = std::nullopt);
 	void sendBotStart(
