@@ -6,6 +6,7 @@
 #include "luxury/plugins/core/plugin_version.h"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,18 +27,36 @@ enum class SettingType {
 	Bool,
 	Int,
 	Choice,
+	Select, // Choice under its documented name.
+	Number,
+	Color,
+	Secret, // A string the client never logs and masks in the UI.
 };
+
+// "locales": { "ru": { "name": "...", "description": "..." } }.
+struct LocalizedText {
+	std::string name;
+	std::string description;
+};
+using Locales = std::map<std::string, LocalizedText, std::less<>>;
 
 struct SettingDescriptor {
 	std::string key;
 	SettingType type = SettingType::String;
 	std::string title;
-	std::string defaultString; // String and Choice.
+	std::string description;
+	std::string placeholder;
+	Locales locales; // "name" translates the title.
+	std::string defaultString; // String, Choice, Select, Color, Secret.
 	bool defaultBool = false;
 	std::int64_t defaultInt = 0;
-	std::optional<std::int64_t> min;
+	std::optional<std::int64_t> min; // Int.
 	std::optional<std::int64_t> max;
-	std::vector<std::string> options; // Choice.
+	double defaultNumber = 0.;
+	std::optional<double> minNumber; // Number.
+	std::optional<double> maxNumber;
+	std::optional<double> step; // Number, positive; a UI hint.
+	std::vector<std::string> options; // Choice and Select.
 };
 
 struct Manifest {
@@ -55,9 +74,13 @@ struct Manifest {
 	std::vector<SettingDescriptor> settings;
 	std::string minClient;
 	std::string homepage;
+	Locales locales;
 };
 
 [[nodiscard]] bool IsValidPluginId(std::string_view id);
+
+// "#RRGGBB", hex digits in either case.
+[[nodiscard]] bool IsValidColor(std::string_view color);
 
 // Rejects empty paths and segments, "." and "..", absolute paths, '\',
 // ':' (drive letters, streams), NUL and control characters, characters

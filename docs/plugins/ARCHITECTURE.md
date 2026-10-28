@@ -2,6 +2,10 @@
 
 Status: phase 1 (JavaScript). Phase 2 adds Python on the same host API.
 
+Writing a plugin: [AUTHORING.md](AUTHORING.md), typings in
+[lux.d.ts](lux.d.ts), a working example in
+[examples/hello-world](examples/hello-world/).
+
 ## Goals
 
 - Install a plugin by pasting a GitHub link. Update it from the same source.
@@ -72,8 +76,14 @@ the old version running.
     {"key": "text", "type": "string", "title": "Reply text", "default": "Away"},
     {"key": "onlyPrivate", "type": "bool", "title": "Private chats only", "default": true},
     {"key": "delay", "type": "int", "title": "Delay, s", "default": 5, "min": 0, "max": 600},
-    {"key": "mode", "type": "choice", "title": "Mode", "default": "all", "options": ["all", "contacts"]}
+    {"key": "mode", "type": "select", "title": "Mode", "default": "all", "options": ["all", "contacts"]},
+    {"key": "ratio", "type": "number", "title": "Ratio", "default": 0.5, "min": 0, "max": 1, "step": 0.1},
+    {"key": "accent", "type": "color", "title": "Accent", "default": "#3390EC"},
+    {"key": "token", "type": "secret", "title": "API token", "placeholder": "Paste the token",
+     "description": "From example.com/settings",
+     "locales": {"ru": {"name": "Токен API", "description": "Со страницы example.com/settings"}}}
   ],
+  "locales": {"ru": {"name": "Автоответ", "description": "Отвечает, пока вас нет"}},
   "minClient": "1.0.22",
   "homepage": "https://github.com/alice/autoreply"
 }
@@ -96,6 +106,28 @@ Rules:
   paths, backslashes, drive letters, empty segments and NUL.
 - `network`: required when `network` permission is requested. Hosts or
   `*.suffix` wildcards. `"*"` means any host and is shown to the user as such.
+- `settings[]`: `key` (1-64 of `[A-Za-z0-9_.-]`, unique), `title` and
+  `type` are required; `description`, `placeholder` and `locales` are
+  optional strings. Types and their `default`:
+  - `string`, `secret`: a string, default `""`. A secret is never logged;
+    the settings box does not mask it yet.
+  - `bool`: a boolean, default `false`.
+  - `int`: an integer within optional `min`/`max`, default `min` or `0`.
+  - `number`: a finite number within optional `min`/`max`, default `min`
+    or `0`; `step` must be positive and is an input hint, not a
+    constraint.
+  - `select` (alias `choice`): `options` is a non-empty array of distinct
+    strings; the default must be one of them, else the first option.
+  - `color`: `#RRGGBB` in either case, default `#000000`.
+  `lux.settings.get` returns the stored value when the setting still
+  accepts it (`SettingAccepts`), otherwise the default.
+- `locales`, top level and per setting: `{"<lang>": {"name", "description"}}`.
+  A language code is 2-16 of `[a-z0-9-]`, starts with a letter and does not
+  end with `-` (`ru`, `pt-br`). A setting's `name` translates its `title`.
+- Errors name the field path and, for the id and colors, echo the value:
+  `settings[2].default: must be one of options`,
+  `settings[0].locales.RU: must be a language code like "ru" or "pt-br"`,
+  `id: must match ^[a-z0-9][a-z0-9._-]{1,62}[a-z0-9]$ without ".." or a device name, got "My_Plugin"`.
 - Unknown keys are ignored (forward compatible). Wrong types are errors.
 
 ## Permissions

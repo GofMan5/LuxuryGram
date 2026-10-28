@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 
 namespace Luxury::Plugins {
@@ -15,6 +16,8 @@ using Json = nlohmann::json;
 
 constexpr auto kMaxSettingKeyLength = std::size_t(64);
 constexpr auto kMaxHostLength = std::size_t(253);
+constexpr auto kMaxLocaleLength = std::size_t(16);
+constexpr auto kMaxShownValue = std::size_t(64);
 
 [[nodiscard]] Error Fail(std::string_view field, std::string_view problem) {
 	return Error{ std::string(field) + ": " + std::string(problem) };
@@ -26,6 +29,17 @@ constexpr auto kMaxHostLength = std::size_t(253);
 
 [[nodiscard]] std::string Quoted(std::string_view text) {
 	return '"' + std::string(text) + '"';
+}
+
+// JSON-escaped and cut, for echoing a value the author got wrong.
+[[nodiscard]] std::string Shown(std::string_view text) {
+	const auto cut = (text.size() > kMaxShownValue);
+	auto result = Json(std::string(text.substr(0, kMaxShownValue))).dump(
+		-1,
+		' ',
+		false,
+		Json::error_handler_t::replace);
+	return cut ? (result + "...") : result;
 }
 
 [[nodiscard]] char Lower(char c) {
@@ -117,6 +131,18 @@ constexpr auto kMaxHostLength = std::size_t(253);
 		});
 }
 
+// "ru", "pt-br", "zh-hans": a lowercase letter, then [a-z0-9-].
+[[nodiscard]] bool IsValidLocale(std::string_view locale) {
+	return locale.size() >= 2
+		&& locale.size() <= kMaxLocaleLength
+		&& locale.front() >= 'a'
+		&& locale.front() <= 'z'
+		&& locale.back() != '-'
+		&& std::all_of(locale.begin(), locale.end(), [](char c) {
+			return IsLowerAlnum(c) || c == '-';
+		});
+}
+
 // Readers return an error naming the field, or nullopt on success.
 class Reader {
 public:
@@ -170,6 +196,20 @@ public:
 		return std::nullopt;
 	}
 
+	[[nodiscard]] std::optional<Error> number(
+			std::string_view key,
+			std::optional<double> &to) const {
+		const auto value = find(key);
+		if (!value) {
+			return std::nullopt;
+		} else if (!value->is_number()
+			|| !std::isfinite(value->get<double>())) {
+			return Fail(field(key), "must be a number");
+		}
+		to = value->get<double>();
+		return std::nullopt;
+	}
+
 	[[nodiscard]] std::optional<Error> strings(
 			std::string_view key,
 			std::vector<std::string> &to) const {
@@ -213,6 +253,75 @@ private:
 	if ((to.min && to.defaultInt < *to.min)
 		|| (to.max && to.defaultInt > *to.max)) {
 		return Fail(reader.field("default"), "must be within min and max");
+	}
+	return std::nullopt;
+}
+
+[[nodiscard]] std::optional<Error> ParseNumberSetting(
+		const Reader &reader,
+		SettingDescriptor &to) {
+	auto value = std::optional<double>();
+	if (auto error = reader.number("default", value)) {
+		return error;
+	} else if (auto error = reader.number("min", to.minNumber)) {
+		return error;
+	} else if (auto error = reader.number("max", to.maxNumber)) {
+		return error;
+	} else if (auto error = reader.number("step", to.step)) {
+		return error;
+	} else if (to.minNumber && to.maxNumber && *to.minNumber > *to.maxNumber) {
+		return Fail(reader.field("min"), "must not exceed max");
+	} else if (to.step && *to.step <= 0.) {
+		return Fail(reader.field("step"), "must be positive");
+	}
+	to.defaultNumber = value.value_or(to.minNumber.value_or(0.));
+	if ((to.minNumber && to.defaultNumber < *to.minNumber)
+		|| (to.maxNumber && to.defaultNumber > *to.maxNumber)) {
+		return Fail(reader.field("default"), "must be within min and max");
+	}
+	return std::nullopt;
+}
+
+[[nodiscard]] std::optional<Error> ParseColorSetting(
+		const Reader &reader,
+		SettingDescriptor &to) {
+	to.defaultString = "#000000";
+	if (auto error = reader.string("default", to.defaultString, false)) {
+		return error;
+	} else if (!IsValidColor(to.defaultString)) {
+		return Fail(
+			reader.field("default"),
+			"must be a #RRGGBB color, got " + Shown(to.defaultString));
+	}
+	return std::nullopt;
+}
+
+[[nodiscard]] std::optional<Error> ParseLocales(
+		const Reader &reader,
+		Locales &to) {
+	const auto value = reader.find("locales");
+	if (!value) {
+		return std::nullopt;
+	} else if (!value->is_object()) {
+		return Fail(reader.field("locales"), "must be an object");
+	}
+	for (const auto &[locale, texts] : value->items()) {
+		const auto prefix = reader.field("locales") + '.' + locale;
+		if (!IsValidLocale(locale)) {
+			return Fail(prefix, "must be a language code like \"ru\" or \"pt-br\"");
+		} else if (!texts.is_object()) {
+			return Fail(prefix, "must be an object");
+		}
+		const auto inner = Reader(texts, prefix + '.');
+		auto &localized = to[locale];
+		if (auto error = inner.string("name", localized.name, false)) {
+			return error;
+		} else if (auto error = inner.string(
+				"description",
+				localized.description,
+				false)) {
+			return error;
+		}
 	}
 	return std::nullopt;
 }
@@ -265,6 +374,18 @@ private:
 		return error;
 	} else if (auto error = reader.string("type", type, true)) {
 		return error;
+	} else if (auto error = reader.string(
+			"description",
+			to.description,
+			false)) {
+		return error;
+	} else if (auto error = reader.string(
+			"placeholder",
+			to.placeholder,
+			false)) {
+		return error;
+	} else if (auto error = ParseLocales(reader, to.locales)) {
+		return error;
 	}
 	if (type == "string") {
 		to.type = SettingType::String;
@@ -280,9 +401,18 @@ private:
 	} else if (type == "int") {
 		to.type = SettingType::Int;
 		return ParseIntSetting(reader, to);
-	} else if (type == "choice") {
-		to.type = SettingType::Choice;
+	} else if (type == "choice" || type == "select") {
+		to.type = (type == "choice") ? SettingType::Choice : SettingType::Select;
 		return ParseChoiceSetting(reader, to);
+	} else if (type == "number") {
+		to.type = SettingType::Number;
+		return ParseNumberSetting(reader, to);
+	} else if (type == "color") {
+		to.type = SettingType::Color;
+		return ParseColorSetting(reader, to);
+	} else if (type == "secret") {
+		to.type = SettingType::Secret;
+		return reader.string("default", to.defaultString, false);
 	}
 	return Fail(reader.field("type"), "unknown type " + Quoted(type));
 }
@@ -446,7 +576,7 @@ private:
 		&& !to.homepage.starts_with("http://")) {
 		return Fail("homepage", "must be an http(s) link");
 	}
-	return std::nullopt;
+	return ParseLocales(reader, to.locales);
 }
 
 } // namespace
@@ -463,6 +593,17 @@ bool IsValidPluginId(std::string_view id) {
 		})
 		&& (id.find("..") == std::string_view::npos)
 		&& !IsWindowsDevice(id);
+}
+
+bool IsValidColor(std::string_view color) {
+	const auto hex = [](char c) {
+		return (c >= '0' && c <= '9')
+			|| (c >= 'a' && c <= 'f')
+			|| (c >= 'A' && c <= 'F');
+	};
+	return color.size() == 7
+		&& color.front() == '#'
+		&& std::all_of(color.begin() + 1, color.end(), hex);
 }
 
 bool IsSafeRelativePath(std::string_view path) {
@@ -501,7 +642,11 @@ Result<Manifest> ParseManifest(std::string_view json) {
 	auto result = Manifest();
 	auto error = reader.string("id", result.id, true);
 	if (!error && !IsValidPluginId(result.id)) {
-		error = Fail("id", "must match ^[a-z0-9][a-z0-9._-]{2,63}$");
+		error = Fail(
+			"id",
+			"must match ^[a-z0-9][a-z0-9._-]{1,62}[a-z0-9]$"
+				" without \"..\" or a device name, got "
+				+ Shown(result.id));
 	}
 	// API and runtime first: a newer plugin gets "update LuxuryGram"
 	// instead of an error about a field this client does not know yet.
