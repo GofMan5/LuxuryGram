@@ -17,6 +17,7 @@
 //                       a response or a file over 10 MiB
 //   QuotaExceededError  storage over 5 MiB
 //   NetworkError        a failed request or too many redirects
+//   NotAllowedError     clipboard or openUrl outside 1 s of a user gesture
 //   Error               no active account or window, the plugin is stopping
 // A Telegram API error rejects with name = the error type
 // ("FLOOD_WAIT_X", ...) and message = '{"type":"...","code":420}'.

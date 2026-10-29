@@ -2,6 +2,7 @@
 // See LEGAL for license and copyright information.
 #include "luxury/plugins/plugin_hooks_ui.h"
 
+#include "luxury/plugins/plugin_hooks.h"
 #include "luxury/plugins/plugin_host_api.h"
 #include "luxury/plugins/plugin_manager.h"
 #include "luxury/utils/telegram_helpers.h"
@@ -38,18 +39,6 @@ using Items = const std::vector<Instance::Handler> &(Instance::*)() const;
 		}
 	}
 	return nullptr;
-}
-
-[[nodiscard]] json PeerJson(not_null<PeerData*> peer) {
-	return {
-		{ "id", std::to_string(getDialogIdFromPeer(peer)) },
-		{ "type", peer->isUser()
-			? "user"
-			: peer->isChannel()
-			? "channel"
-			: "chat" },
-		{ "title", peer->name().toStdString() },
-	};
 }
 
 // A chat plugins may see: of the active account, never the service chat.

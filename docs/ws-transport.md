@@ -46,7 +46,8 @@ and the OS reports a real proxy for `kws2.web.telegram.org:443`, asked on
 the session thread at each connect, only after every other gate passed (with no system proxy configured WS
 stays available); the DC is a temporary (special) or CDN one; the session belongs to the keys
 destroyer; the DC has no kws front (production 1..5 and 203, test 1..3 have
-one). The status line then says why. Connections made in such a round never
+one). The status line names Off and an in-app proxy; the other cases show
+the direct transport. Connections made in such a round never
 update the route memory, whichever racer wins or stalls.
 
 ## Candidates
@@ -69,7 +70,7 @@ are the constants in the logic header.
 |---|---|
 | Unknown | TCP and WS race at once |
 | Direct | TCP first, WS starts 2 s later |
-| WebSocket, WS cooling down | TCP only |
+| WebSocket, WS cooling down | TCP first, WS starts 2 s later |
 | TCP stall window open (WS not cooling down) | WS only |
 | WebSocket, direct re-probe due | TCP and WS race at once |
 | WebSocket, otherwise | WS only |
@@ -106,7 +107,7 @@ These come from the field log of the tg-ws-proxy reference implementation.
 - **F2, "no fallback available".** There is no shared per-IP connecting lock.
   Every candidate is an independent racer; one failing never closes the
   connection while another candidate (TCP, WS, another address) is still
-  racing. A route marked bad only delays or drops WS candidates for a while,
+  racing. A route marked bad only delays WS candidates for a while,
   and the decision can never leave zero candidates.
 - **F3, reset right after the first packets on idle pooled sockets.** No
   socket is kept idle for later: a WS connection is opened right before the

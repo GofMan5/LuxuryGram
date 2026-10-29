@@ -285,7 +285,7 @@ def check_hidden(files):
     shown = function(files[HOOKS], 'bool Shown(PeerData *peer) {')
     assert 'peer->id != PeerData::kServiceNotificationsId' in shown, 'plugins see the service chat'
     assert 'domain().active().maybeSession()' in shown, 'plugins see another account'
-    resolve = function(files[EXT], 'PeerData *ResolvePeer(')
+    resolve = function(files[HOST], 'PeerData *ResolvePeer(')
     assert 'peer->id == PeerData::kServiceNotificationsId' in resolve, 'ResolvePeer returns the service chat'
     ui = function(files[EXT], 'Js::HostResult Instance::uiExt(')
     current = ui[ui.index('if (function == "ui.currentChat") {'):ui.index('} else if (!controller) {')]

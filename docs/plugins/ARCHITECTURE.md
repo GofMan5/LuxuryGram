@@ -199,7 +199,7 @@ Rules:
 | `messages.send` | `lux.messages.send`, `sendFile` | yes |
 | `messages.modify` | rewrite or cancel outgoing text, its entities and reply | yes |
 | `messages.manage` | `lux.messages.edit`, `remove`, `forward`, `markRead` | yes |
-| `ui` | commands, menu items, hotkeys, toasts, notices, dialogs | |
+| `ui` | `lux.ui`: toasts, notices, dialogs and forms, commands, message, chat, header and compose menu items, hotkeys, message labels, opening chats and links; the `chatOpened` event | |
 | `network` | `lux.http.fetch` to manifest hosts only | |
 | `storage` | `lux.storage` | |
 | `clipboard` | read and write the clipboard, within 1 s after the user runs a command, menu item or hotkey of the plugin | yes |

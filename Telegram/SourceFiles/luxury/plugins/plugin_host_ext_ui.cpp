@@ -6,6 +6,7 @@
 // Instance::call through IsUiExtFunction.
 #include "luxury/plugins/plugin_host_api.h"
 
+#include "luxury/plugins/plugin_hooks.h"
 #include "luxury/plugins/plugin_hooks_ui.h"
 #include "luxury/plugins/plugin_host_logic.h"
 #include "luxury/plugins/plugin_ui_logic.h"
@@ -68,12 +69,6 @@ using json = nlohmann::json;
 		: QString();
 }
 
-[[nodiscard]] Main::Session *ActiveSession() {
-	return Core::IsAppLaunched()
-		? Core::App().domain().active().maybeSession()
-		: nullptr;
-}
-
 [[nodiscard]] Window::Controller *ActiveWindow() {
 	return Core::IsAppLaunched() ? Core::App().activeWindow() : nullptr;
 }
@@ -86,53 +81,6 @@ using json = nlohmann::json;
 	return (controller && &controller->session() == session)
 		? controller
 		: nullptr;
-}
-
-[[nodiscard]] std::optional<std::int64_t> DialogId(const json &value) {
-	if (value.is_number_integer()) {
-		return value.get<std::int64_t>();
-	} else if (!value.is_string()) {
-		return std::nullopt;
-	}
-	auto ok = false;
-	const auto result = QString::fromStdString(
-		value.get<std::string>()).toLongLong(&ok);
-	return ok ? std::make_optional<std::int64_t>(result) : std::nullopt;
-}
-
-// As in plugin_host_api.cpp: the active account only, never the service
-// chat.
-[[nodiscard]] PeerData *ResolvePeer(
-		not_null<Main::Session*> session,
-		std::int64_t dialogId) {
-	if (!IsBareDialogId(dialogId)) {
-		return nullptr;
-	}
-	const auto bare = getBareDialogId(dialogId);
-	auto &data = session->data();
-	PeerData *peer = nullptr;
-	if (dialogId > 0) {
-		peer = data.userLoaded(UserId(bare));
-	} else if (const auto channel = data.channelLoaded(ChannelId(bare))) {
-		peer = channel;
-	} else {
-		peer = data.chatLoaded(ChatId(bare));
-	}
-	return (peer && peer->id == PeerData::kServiceNotificationsId)
-		? nullptr
-		: peer;
-}
-
-[[nodiscard]] json PeerJson(not_null<PeerData*> peer) {
-	return {
-		{ "id", std::to_string(getDialogIdFromPeer(peer)) },
-		{ "type", peer->isUser()
-			? "user"
-			: peer->isChannel()
-			? "channel"
-			: "chat" },
-		{ "title", peer->name().toStdString() },
-	};
 }
 
 // Relayout of a loaded message, so its label is read again.

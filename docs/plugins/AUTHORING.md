@@ -266,8 +266,9 @@ folder; `messages.downloadMedia` resolves with an `ArrayBuffer` and throws
 an `Error` in chats that restrict saving.
 
 `lux.settings.set(key, value)` changes a setting the manifest declares and
-fires `onChange`. Menu handlers get `{peer, message}`, hotkey handlers get
-`{peer}`: the chat open in the active window, or null.
+fires `onChange`. Message menu handlers get `{peer, message}`; chat, header
+and compose menu handlers get `{peer}`; hotkey handlers get `{peer}`: the
+chat open in the active window, or null.
 
 ## Limits
 
