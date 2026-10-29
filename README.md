@@ -39,10 +39,10 @@
 
 <div align="center">
   <a href=".github/assets/showcase/luxurygram-tour.mp4">
-    <img src=".github/assets/showcase/tour-preview.gif" width="100%" alt="LuxuryGram tour: click to play the video">
+    <img src=".github/assets/showcase/tour-preview.gif" width="100%" alt="LuxuryGram tour: click to open the video">
   </a>
   <br>
-  <sub>Click the preview to play the full tour (MP4).</sub>
+  <sub>Click the preview to open the full tour video (MP4, 11 MB).</sub>
 </div>
 
 ## Why LuxuryGram
@@ -51,7 +51,7 @@
   <tr>
     <td width="50%" valign="top">
       <h3>Privacy on your terms</h3>
-      Read chats and stories without read receipts, type without the typing indicator, and come online only when you choose. Streamer Mode hides the window from screen capture.
+      Read chats and stories without read receipts, type without the typing indicator, and come online only when you choose. Streamer Mode hides the window from screen capture on Windows and macOS.
     </td>
     <td width="50%" valign="top">
       <h3>Nothing quietly disappears</h3>
@@ -77,7 +77,7 @@
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/01-hero.png" width="100%" alt="LuxuryGram main window with chats and folders">
       <p><strong>Telegram, refined for desktop</strong><br>
-      Your chats, folders and groups in the familiar Telegram Desktop layout, dressed in LuxuryGram's navy-and-gold look.</p>
+      Your chats, folders and groups in the familiar Telegram Desktop layout, with LuxuryGram's controls built in.</p>
     </td>
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/02-ghost.png" width="100%" alt="Ghost Mode settings">
@@ -101,7 +101,7 @@
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/05-watcher.png" width="100%" alt="Watcher with online sessions and message events">
       <p><strong>See who's online, when</strong><br>
-      Watcher logs each contact's online sessions with durations and keeps edited and deleted messages, so nothing quietly disappears.</p>
+      Watcher logs each contact's online sessions with durations and keeps edited and deleted messages. Online session logging is off until you turn it on.</p>
     </td>
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/06-plugins.png" width="100%" alt="Plugins page with installed plugins">
@@ -125,7 +125,7 @@
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/09-translate.png" width="100%" alt="Messages translated in place">
       <p><strong>Translate with any provider</strong><br>
-      Read French and Spanish messages in place, translated by the provider you pick: Telegram, Google, Yandex or Windows.</p>
+      Read French messages in place, translated by the provider you pick: Telegram, Google or Yandex, plus the system translator on macOS and on Linux with Crow Translate installed.</p>
     </td>
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/10-shot.png" width="100%" alt="Message Shot turning messages into an image">
@@ -142,7 +142,7 @@
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/12-icons.png" width="100%" alt="App icon picker and avatar shape settings">
       <p><strong>Make it look yours</strong><br>
-      Pick from 12 app icons, shape your avatars and hide the taskbar badge right from Appearance.</p>
+      Pick from 12 app icons, shape your avatars and, on Windows and macOS, hide the taskbar badge right from Appearance.</p>
     </td>
   </tr>
 </table>
@@ -152,16 +152,16 @@
 ### Also inside
 
 - **Filters and Shadow Ban.** Hide spam and unwanted senders with regex filters, shadow-ban people without blocking them, and share filter sets through import and export.
-- **Power-user message menu.** Inspect a message's full details from one right-click. Repeat Message and forwarding without the sender or caption, or straight to Saved Messages, arrive in the next release.
+- **Power-user message menu.** Inspect a message's full details or repeat it from one right-click, and forward without the sender or caption, or straight to Saved Messages.
 - **Expanded music player.** Cover art, seekable progress and controls, with a button to save the cover.
 - **Cleaner Telegram.** Turn off stories, ads, similar-channel suggestions and link warnings, lift selection and sticker limits, and filter Zalgo text.
-- **Processor-aware performance** (next release). Background work sizes itself to your CPU, keeps a core free for the interface and moves media decoding off the UI thread.
+- **Processor-aware performance.** Background work sizes itself to your CPU, keeps a core free for the interface, and decodes first video frames, cached custom emoji and animated sticker files off the interface thread.
 
 Everything is under **Settings › LuxuryGram Preferences**, also reachable from the side menu. Some features work only on your device and cannot change how Telegram's servers behave.
 
 ## Plugins
 
-Plugins are GitHub repositories with a `plugin.json` and JavaScript modules. LuxuryGram downloads the listed files, shows you every permission they ask for, and runs the code in a QuickJS sandbox with no file or process access. Methods that touch login, sessions, passwords or payments are never available to a plugin, and neither are the login-code service chat or your phone number. Plugins ship with the first release after 1.0.21 and are on the [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) branch today.
+Plugins are GitHub repositories with a `plugin.json` and JavaScript modules. LuxuryGram downloads the listed files, shows you every permission they ask for, and runs the code in a QuickJS sandbox with no file or process access. Methods that touch login, sessions or passwords, or spend Stars or money, are never available to a plugin, and neither are the login-code service chat or your phone number. Plugins are available from LuxuryGram 1.0.22.
 
 A complete plugin that adds a `/hello` command needs one permission:
 
@@ -223,12 +223,12 @@ No. Deleted messages, edit history and Watcher data are stored locally by your c
 
 | Surface | Status |
 | --- | --- |
-| Product version | [`1.0.21`](VERSIONING.md); bumps are manual or tied to substantial updates |
+| Product version | [`1.0.22`](VERSIONING.md); bumps are manual or tied to substantial updates |
 | Source code | Public on the [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) branch |
 | Windows | Portable `x64` archive published |
 | Linux | Portable `x64` archive published |
 | macOS | Build guide available; no published package |
-| Official package managers | Not published |
+| Package managers | AUR: [`luxurygram-bin`](packaging/aur/luxurygram-bin) |
 
 The application identity is LuxuryGram on every supported platform. A small set of inherited AyuGram paths, service endpoints and attribution references stays on purpose where changing it would break profile, protocol or source-line compatibility.
 
@@ -244,7 +244,7 @@ Download only from [Releases](https://github.com/GofMan5/LuxuryGram/releases). D
 Check the download against `SHA256SUMS.txt` from the same release:
 
 ```bash
-sha256sum -c SHA256SUMS.txt
+sha256sum -c --ignore-missing SHA256SUMS.txt
 ```
 
 ```powershell
