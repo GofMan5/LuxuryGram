@@ -363,7 +363,7 @@ STATIC_MUTANTS = (
     (check_dispatch, EXT, '''	} else if (Core::IsAppLaunched() && Core::App().passcodeLocked()) {''', '''	} else if (Core::IsAppLaunched() && false) {'''),
     (check_hidden, HOOKS, '''		&& (peer->id != PeerData::kServiceNotificationsId)
 ''', ''),
-    (check_hidden, EXT, '''	return (peer && peer->id == PeerData::kServiceNotificationsId)''', '''	return (peer && false)'''),
+    (check_hidden, HOST, '''	return (peer && peer->id == PeerData::kServiceNotificationsId)''', '''	return (peer && false)'''),
     (check_hidden, EXT, '''		return Result::Value((peer
 				&& peer->id != PeerData::kServiceNotificationsId)''', '''		return Result::Value((peer)'''),
     (check_hidden, HOOKS, '''	if (!manager || !Shown(peer)) {
