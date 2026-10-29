@@ -83,7 +83,8 @@ decision with neither TCP nor WS is impossible: TCP is forced on.
 | TCP wins | route Direct |
 | WS wins | route WebSocket, next direct re-probe in 5 min; each re-probe TCP loses doubles the interval up to 60 min |
 | WS refused (HTTP status other than 101) | WS cooldown 30 min; a WebSocket route becomes Unknown |
-| WS network failure before the first MTProto byte, or a WS connection that stalls | WS cooldown 30 s, 60 s, 120 s … up to 15 min; the second failure in a row turns a WebSocket route into Unknown |
+| WS network failure before the first MTProto byte | WS cooldown 30 s, 60 s, 120 s … up to 15 min; the second failure in a row turns a WebSocket route into Unknown |
+| WS connected but stalled | a WebSocket route becomes Unknown and TCP races again at once; no WS cooldown |
 | TCP connected but stalled | a Direct route becomes Unknown; TCP sits out the next rounds for 2 min, then 4, 8, 16 and at most 30 min on repeated stalls (the ladder restarts after a quiet 30 min). A WS failure or a WS stall inside the window brings TCP back at once |
 | mode change, proxy turned on or off, network reachability change | everything is forgotten (switching from one proxy to another keeps the memory: no route is learned through a proxy) |
 
