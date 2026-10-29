@@ -422,8 +422,11 @@ lux.messages.forward(peer, ids, to) -> count                       messages.mana
 lux.messages.markRead(peer, maxId?)                                messages.manage
 lux.messages.sendFile(peer, ArrayBuffer|view|path, {silent?})      messages.send
 //   path: relative to the plugin's data folder (IsSafeRelativePath)
+//   sendFile and forward return before the upload or forward is done, so
+//   kMaxInFlight cannot hold them: one of the two a second (RangeError)
 lux.messages.downloadMedia(peer, id) -> Promise<ArrayBuffer>       messages.read
-//   photo or file, refused in chats that restrict saving, 60 s timeout
+//   photo or file, refused in chats that restrict saving, 60 s timeout;
+//   a failed or cancelled load and an account switch settle it at once
 //   Files cross the JSON bridge as {$bin: base64}: at most 10 MiB
 //   (kMaxMediaBytes, the client's in-memory download limit)
 lux.chats.get(peer) -> {id, type, title, username, unreadCount}     messages.read

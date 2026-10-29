@@ -308,7 +308,8 @@ declare namespace lux {
 			options?: { revoke?: boolean }): number;
 		/**
 		 * Forwards up to 100 messages to another chat; returns how many
-		 * could be forwarded. Needs `messages.manage`.
+		 * could be forwarded. One `sendFile` or `forward` a second, the
+		 * next one throws `RangeError`. Needs `messages.manage`.
 		 */
 		function forward(
 			peer: string | number,
@@ -318,7 +319,8 @@ declare namespace lux {
 		function markRead(peer: string | number, maxId?: string | number): null;
 		/**
 		 * Sends a file of at most 10 MiB: bytes, or a path relative to the
-		 * plugin's data folder. Needs `messages.send`.
+		 * plugin's data folder. One `sendFile` or `forward` a second, the
+		 * next one throws `RangeError`. Needs `messages.send`.
 		 */
 		function sendFile(
 			peer: string | number,
@@ -326,7 +328,8 @@ declare namespace lux {
 			options?: { silent?: boolean }): null;
 		/**
 		 * The photo or file of a message, at most 10 MiB; rejects when
-		 * saving is restricted in the chat. 60 s timeout.
+		 * saving is restricted in the chat, the load fails or is cancelled,
+		 * or the account switches. 60 s timeout.
 		 * Needs `messages.read`.
 		 */
 		function downloadMedia(peer: string | number, id: string | number): Promise<ArrayBuffer>;

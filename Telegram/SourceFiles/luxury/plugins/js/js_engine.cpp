@@ -198,11 +198,13 @@ return {
 		const entries = list.slice();
 		if (event === 'beforeSend') {
 			// Each handler sees what the previous ones made of the message.
-			// A plain text change stays a string, entities or replyTo make
-			// the answer an object.
+			// A plain text change stays a string; the answer becomes an
+			// object only to carry what a handler changed, so a reply-only
+			// handler does not round-trip the entities through C++.
 			let { text, entities, replyTo } = payload;
 			let changed = false;
-			let rich = false;
+			let retagged = false;
+			let replied = false;
 			for (const { fn } of entries) {
 				let result;
 				try {
@@ -228,14 +230,26 @@ return {
 				}
 				if (object && Array.isArray(result.entities)) {
 					entities = result.entities;
-					changed = rich = true;
+					changed = retagged = true;
 				}
 				if (object && ('replyTo' in result)) {
 					replyTo = (result.replyTo === undefined) ? null : result.replyTo;
-					changed = rich = true;
+					changed = replied = true;
 				}
 			}
-			return !changed ? null : rich ? { text, entities, replyTo } : text;
+			if (!changed) {
+				return null;
+			} else if (!retagged && !replied) {
+				return text;
+			}
+			const answer = { text };
+			if (retagged) {
+				answer.entities = entities;
+			}
+			if (replied) {
+				answer.replyTo = replyTo;
+			}
+			return answer;
 		}
 		for (const { fn } of entries) {
 			try {

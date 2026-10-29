@@ -240,6 +240,20 @@ try { lux.on('x', 5); } catch (e) { lux.log('on', e.name); }
 	CHECK(std::count(host.logs.begin(), host.logs.end(), "0:ping") == 1);
 	CHECK(host.count("events.unsubscribe") == 1);
 	CHECK(host.last("events.unsubscribe") == json::array({ "ping" }));
+
+	// A reply-only answer carries no entities, so C++ keeps them as sent.
+	FakeHost rich;
+	rich.files["main.js"] = R"js(lux.on('beforeSend', ({ text }) => text === 'tag' ? { entities: [{ type: 'bold', offset: 0, length: 3 }] } : { replyTo: '5' });
+)js";
+	Engine folds({}, rich);
+	CHECK(folds.loadMain("main.js").ok());
+	const auto sent = json{ { "text", "hi" }, { "entities", json::array({ { { "type", "italic" } } }) }, { "replyTo", nullptr } };
+	out = folds.emit("beforeSend", sent);
+	CHECK(out.ok() && out.value == json({ { "text", "hi" }, { "replyTo", "5" } }));
+	auto tagged = sent;
+	tagged["text"] = "tag";
+	out = folds.emit("beforeSend", tagged);
+	CHECK(out.ok() && out.value.contains("entities") && !out.value.contains("replyTo"));
 }
 
 void Async() {
@@ -616,6 +630,8 @@ def check(root, read=source):
     assert not mutant_survives(root, engine, '\t\t\t\tbase64: r.base64,\n', '', 'async'), 'fetch base64 mutant survived'
     assert not mutant_survives(root, engine, '\tif (!overrun) {\n\t\tsettleMain(out);\n\t}\n', '', 'async'), 'late main rejection mutant survived'
     assert not mutant_survives(root, engine, '\t\tforget(main);\n', '', 'async'), 'late main double report mutant survived'
+    assert not mutant_survives(root, engine, '\t\t\tif (retagged) {\n\t\t\t\tanswer.entities', '\t\t\tif (true) {\n\t\t\t\tanswer.entities', 'events'), 'reply-only entities mutant survived'
+    assert not mutant_survives(root, engine, '\t\t\tif (replied) {\n\t\t\t\tanswer.replyTo', '\t\t\tif (true) {\n\t\t\t\tanswer.replyTo', 'events'), 'entities-only replyTo mutant survived'
     assert not mutant_survives(root, engine, '\t\tJS_FreeValue(ctx, main);\n\t\tfor (const auto &value : internals) {', '\t\tfor (const auto &value : internals) {', 'teardown'), 'main promise leak mutant survived'
     print('Plugin JS PASS: ES modules confined to the plugin dir; beforeSend rewrite/cancel; async host calls settle later; PermissionError surfaces; CPU slice interrupts loops, regexps and job floods; memory limit without a crash; timers; $fn callbacks; file:line traces; leak-free teardown; interrupt and leak mutants caught')
 

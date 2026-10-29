@@ -217,6 +217,7 @@ private:
 	EventQueue _queue;
 	std::int64_t _gestureUntil = 0; // crl::now() ms.
 	std::int64_t _lastToast = 0;
+	std::int64_t _lastMediaSend = 0; // messages.sendFile and forward.
 	// One ui.alert/confirm/prompt at a time, closed on unload.
 	base::weak_qptr<Ui::BoxContent> _dialog;
 	rpl::lifetime _lifetime;
