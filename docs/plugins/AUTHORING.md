@@ -17,10 +17,6 @@ is the full contract.
    `yourname/repo` (or the `tree/<branch>/<folder>` link of the folder).
 4. Type `/hello` in any chat or press Ctrl+Shift+H.
 
-The example uses the `select` and `number` setting types, so it installs on
-LuxuryGram 1.0.22 and later; see
-[New setting types](#new-setting-types).
-
 For editor completion put this line at the top of each module and keep
 [lux.d.ts](lux.d.ts) next to it:
 
@@ -110,15 +106,8 @@ option, old values fall back to the default instead of reaching your code.
 
 The settings box masks `secret` like a password field. A `select` is a
 list of radio buttons, `number` and `color` are text fields checked against
-their type before they are saved.
-
-### New setting types
-
-`select`, `number`, `color` and `secret` are new in LuxuryGram 1.0.22. An older client refuses a manifest that uses them with
-`settings[i].type: unknown type "select"`: settings are parsed before
-`minClient` is compared, so `minClient` does not turn this into "update
-LuxuryGram". Use `int`, `string` and `choice` if your plugin must install
-on 1.0.21.
+their type before they are saved. A plugin hears about changes through
+`lux.settings.onChange`:
 
 ```js
 lux.settings.onChange(({ key, value }) => { /* at most 64 handlers */ });
