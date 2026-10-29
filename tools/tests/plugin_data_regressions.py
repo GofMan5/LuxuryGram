@@ -79,6 +79,17 @@ int main() {
 	CHECK(!MessageIdArg(json("12x")));
 	CHECK(!MessageIdArg(json(0)));
 	CHECK(!MessageIdArg(json(-3)));
+	CHECK(MessageIdArg(json(2147483647)) == 2147483647);
+	CHECK(MessageIdArg(json("2147483647")) == 2147483647);
+	CHECK(!MessageIdArg(json(std::int64_t(2147483648))));
+	CHECK(!MessageIdArg(json("2147483648")));
+	CHECK(!MessageIdArg(json(std::int64_t(1) << 56)));
+	CHECK(!MessageIdsArg(json::array({ 1, std::int64_t(1) << 40 })));
+
+	// sendFile and forward: one a second, the first one always.
+	CHECK(MediaSendAllowed(500, 0));
+	CHECK(!MediaSendAllowed(1999, 1000));
+	CHECK(MediaSendAllowed(2000, 1000));
 	CHECK(MessageIdsArg(json("7"))->size() == 1);
 	CHECK(MessageIdsArg(json::array({ 1, "2" }))->size() == 2);
 	CHECK(!MessageIdsArg(json::array()));
@@ -168,7 +179,11 @@ LOGIC_MUTANTS = (
     (PAYLOADS, 'value.size() > std::size_t(kMaxHistoryLimit)', 'value.size() > std::size_t(kMaxHistoryLimit + 1)'),
     (PAYLOADS, 'return a.offset < b.offset;', 'return a.offset > b.offset;'),
     (PAYLOADS, "result += ((byte & 0xF8) == 0xF0) ? 2 : 1;", 'result += 1;'),
-    (PAYLOADS, '(result > 0) ? std::make_optional(result)', '(result >= 0) ? std::make_optional(result)'),
+    (PAYLOADS, 'return (result > 0 && result <= kMaxMessageId)', 'return (result >= 0 && result <= kMaxMessageId)'),
+    (PAYLOADS, 'return (result > 0 && result <= kMaxMessageId)', 'return (result > 0)'),
+    (PAYLOADS, 'std::numeric_limits<std::int32_t>::max());', 'std::numeric_limits<std::int64_t>::max());'),
+    (PAYLOADS, 'return !last || now - last >= kMediaSendIntervalMs;', 'return now >= 0 || last >= 0;'),
+    (PAYLOADS, 'return !last || now - last >= kMediaSendIntervalMs;', 'return now - last >= kMediaSendIntervalMs;'),
     (LOGIC, 'fold.changed = fold.replyChanged = true;', 'fold.changed = true;'),
     (LOGIC, 'fold.entities = nlohmann::json::array();\n\t\tfold.changed = fold.entitiesChanged = true;',
      'fold.changed = true;'),
@@ -235,6 +250,21 @@ def check_sources(files):
     assert 'IsSafeRelativePath(path)' in branch(data, 'messages.sendFile'), 'sendFile reads any path'
     assert 'item->forbidsSaving()' in branch(data, 'messages.downloadMedia'), \
         'downloadMedia ignores chats that restrict saving'
+    # Neither waits for the upload or the forward, so the in-flight cap
+    # cannot hold them: both share one rate limit, checked before sending.
+    for name, call in (('messages.sendFile', 'session->api().sendFile('),
+                       ('messages.forward', 'session->api().forwardMessages(')):
+        body = branch(data, name)
+        assert body.index('if (!MediaSendAllowed(now, _lastMediaSend)) {') \
+            < body.index('_lastMediaSend = now;') < body.index(call), f'{name} is not rate limited'
+    # A cancelled or failed load and an account switch settle at once.
+    download = branch(data, 'messages.downloadMedia')
+    assert 'session->data().documentLoadProgress(\n' in download \
+        and 'session->data().photoLoadProgress(\n' in download, 'downloadMedia waits out a failed load'
+    assert '|| photo->cancelled()) {' in download, 'downloadMedia waits out a cancelled photo'
+    assert 'session->data().sessionDataAboutToBeCleared(),' in download \
+        and 'Core::App().domain().activeSessionChanges() | rpl::to_empty' in download, \
+        'downloadMedia outlives the account'
     me = branch(data, 'account.me')
     assert '"phone"' not in me and 'phone()' not in me, 'account.me leaks the phone'
 
@@ -262,6 +292,13 @@ SOURCE_MUTANTS = (
     (DATA, '{ "premium", user->isPremium() },', '{ "premium", user->isPremium() }, { "phone", user->phone() },'),
     (ENGINE, "} else if (result && typeof result.then === 'function') {", '} else if (false) {'),
     (ENGINE, "if (object && ('replyTo' in result)) {", 'if (false) {'),
+    (DATA, '\t\t\tif (!MediaSendAllowed(now, _lastMediaSend)) {\n\t\t\t\treturn RateLimited("messages.forward");\n\t\t\t}\n', ''),
+    (DATA, '\t\tif (!MediaSendAllowed(now, _lastMediaSend)) {\n\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n', ''),
+    (DATA, '\t\t_lastMediaSend = now;\n\t\tauto action', '\t\tauto action'),
+    (DATA, '\t\t\tsession->data().documentLoadProgress(\n', '\t\t\trpl::never<not_null<DocumentData*>>(\n'),
+    (DATA, '\t\t\tsession->data().photoLoadProgress(\n', '\t\t\trpl::never<not_null<PhotoData*>>(\n'),
+    (DATA, 'Large)\n\t\t\t\t\t|| photo->cancelled()) {', 'Large)) {'),
+    (DATA, '\t\t\tsession->data().sessionDataAboutToBeCleared(),\n', ''),
 )
 
 

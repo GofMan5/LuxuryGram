@@ -283,8 +283,10 @@ chat open in the active window, or null.
 | Requests in flight (`fetch`, `api.call`, `messages.send`, `get`, `history`, `edit`, `downloadMedia`) | 16; the next one rejects with `RangeError` |
 | `messages.history` | 100 messages a call |
 | `messages.remove`, `forward` | 100 ids a call |
+| `messages.sendFile`, `forward` | one a second together; the next one throws `RangeError` |
 | `chats.list` | 500 chats |
-| `messages.sendFile`, `downloadMedia` | 10 MiB; more throws `RangeError`; a download times out after 60 s |
+| `messages.sendFile`, `downloadMedia` | 10 MiB; more throws `RangeError`; a download times out after 60 s and fails at once when the load fails, is cancelled or the account switches |
+| `settings.set` | applied and `onChange` fired at once; `data/settings.json` is written 1 s after the first unsaved change |
 | Commands, message menu items, hotkeys | 100 each; the same name, title or keys replaces the handler |
 | Chat menu items, header buttons, compose menu items | 100 each; the same title replaces the handler |
 | `ui.showForm` | 20 fields, 50 options a select, 256 bytes a text; one dialog or form open at a time |

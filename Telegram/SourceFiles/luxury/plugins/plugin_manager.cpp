@@ -32,6 +32,8 @@ namespace {
 using json = nlohmann::json;
 
 constexpr auto kChangesDelay = crl::time(250);
+// A settings slider fires setSettingValue per step: write once it settles.
+constexpr auto kSettingsWriteDelay = crl::time(1000);
 
 Manager *Current = nullptr;
 
@@ -109,6 +111,7 @@ struct Manager::Private final
 	rpl::event_stream<> changes;
 	rpl::event_stream<QString> logAdded;
 	bool changesQueued = false;
+	std::set<QString> settingsDirty; // settings.json not written yet.
 
 	[[nodiscard]] InstalledPlugin *find(const QString &id);
 	// The plugin installed from owner/repo/subdir, names compared as GitHub
@@ -141,6 +144,8 @@ struct Manager::Private final
 	void startNext(std::deque<QString> queue);
 	void stop(const QString &id);
 	[[nodiscard]] json &settingsOf(const QString &id);
+	void saveSettingsLater(const QString &id);
+	void saveSettings(); // Writes every dirty settings.json now.
 
 	void instanceLog(
 		const QString &id,
@@ -428,6 +433,29 @@ json &Manager::Private::settingsOf(const QString &id) {
 	).first->second;
 }
 
+void Manager::Private::saveSettingsLater(const QString &id) {
+	if (!settingsDirty.emplace(id).second || settingsDirty.size() > 1) {
+		return;
+	}
+	base::call_delayed(kSettingsWriteDelay, this, [=] {
+		saveSettings();
+	});
+}
+
+void Manager::Private::saveSettings() {
+	for (const auto &id : base::take(settingsDirty)) {
+		const auto i = settings.find(id);
+		if (i != settings.end() && !WriteFile(
+				PluginRoot(id) + u"/data/settings.json"_q,
+				QByteArray::fromStdString(i->second.dump()))) {
+			append(
+				id,
+				Js::LogLevel::Error,
+				u"Could not write data/settings.json."_q);
+		}
+	}
+}
+
 void Manager::Private::instanceLog(
 		const QString &id,
 		Js::LogLevel level,
@@ -510,6 +538,7 @@ void Manager::startAll() {
 }
 
 Manager::~Manager() {
+	_private->saveSettings();
 	while (!_private->running.empty()) {
 		_private->stop(_private->running.begin()->first);
 	}
@@ -620,6 +649,8 @@ void Manager::remove(const QString &id) {
 		return;
 	}
 	_private->stop(id);
+	// Not written back into the folder about to be removed.
+	_private->settingsDirty.erase(id);
 	auto &list = _private->registry.plugins;
 	const auto key = id.toStdString();
 	list.erase(
@@ -671,14 +702,7 @@ void Manager::setSettingValue(
 	}
 	auto &values = _private->settingsOf(id);
 	values[name] = value;
-	if (!WriteFile(
-			PluginRoot(id) + u"/data/settings.json"_q,
-			QByteArray::fromStdString(values.dump()))) {
-		_private->append(
-			id,
-			Js::LogLevel::Error,
-			u"Could not write data/settings.json."_q);
-	}
+	_private->saveSettingsLater(id);
 	if (const auto j = _private->running.find(id)
 		; j != _private->running.end()) {
 		j->second->settingChanged(key, value);
