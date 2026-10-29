@@ -23,6 +23,7 @@ DATA = PLUGINS + 'plugin_host_ext_data.cpp'
 ENGINE = PLUGINS + 'js/js_engine.cpp'
 SESSION = SRC + 'data/data_session.cpp'
 UPDATES = SRC + 'api/api_updates.cpp'
+CLOUD = SRC + 'data/data_cloud_file.cpp'
 EXAMPLE = 'docs/plugins/examples/auto-moderate'
 
 MAIN = r'''
@@ -79,6 +80,12 @@ int main() {
 	CHECK(!MessageIdArg(json("12x")));
 	CHECK(!MessageIdArg(json(0)));
 	CHECK(!MessageIdArg(json(-3)));
+	CHECK(MessageIdArg(json(2147483647)) == 2147483647);
+	CHECK(MessageIdArg(json("2147483647")) == 2147483647);
+	CHECK(!MessageIdArg(json(std::int64_t(2147483648))));
+	CHECK(!MessageIdArg(json("2147483648")));
+	CHECK(!MessageIdArg(json(std::int64_t(1) << 56)));
+	CHECK(!MessageIdsArg(json::array({ 1, std::int64_t(1) << 40 })));
 	CHECK(MessageIdsArg(json("7"))->size() == 1);
 	CHECK(MessageIdsArg(json::array({ 1, "2" }))->size() == 2);
 	CHECK(!MessageIdsArg(json::array()));
@@ -168,7 +175,9 @@ LOGIC_MUTANTS = (
     (PAYLOADS, 'value.size() > std::size_t(kMaxHistoryLimit)', 'value.size() > std::size_t(kMaxHistoryLimit + 1)'),
     (PAYLOADS, 'return a.offset < b.offset;', 'return a.offset > b.offset;'),
     (PAYLOADS, "result += ((byte & 0xF8) == 0xF0) ? 2 : 1;", 'result += 1;'),
-    (PAYLOADS, '(result > 0) ? std::make_optional(result)', '(result >= 0) ? std::make_optional(result)'),
+    (PAYLOADS, 'return (result > 0 && result <= kMaxMessageId)', 'return (result >= 0 && result <= kMaxMessageId)'),
+    (PAYLOADS, 'return (result > 0 && result <= kMaxMessageId)', 'return (result > 0)'),
+    (PAYLOADS, 'std::numeric_limits<std::int32_t>::max());', 'std::numeric_limits<std::int64_t>::max());'),
     (LOGIC, 'fold.changed = fold.replyChanged = true;', 'fold.changed = true;'),
     (LOGIC, 'fold.entities = nlohmann::json::array();\n\t\tfold.changed = fold.entitiesChanged = true;',
      'fold.changed = true;'),
@@ -235,6 +244,37 @@ def check_sources(files):
     assert 'IsSafeRelativePath(path)' in branch(data, 'messages.sendFile'), 'sendFile reads any path'
     assert 'item->forbidsSaving()' in branch(data, 'messages.downloadMedia'), \
         'downloadMedia ignores chats that restrict saving'
+    # Neither waits for the upload or the forward, so the in-flight cap
+    # cannot hold them: both share one rate limit (ToastAllowed, tested by
+    # plugin_host), checked before sending.
+    for name, call in (('messages.sendFile', 'session->api().sendFile('),
+                       ('messages.forward', 'session->api().forwardMessages(')):
+        body = branch(data, name)
+        assert body.index('if (!ToastAllowed(now, _lastMediaSend)) {') \
+            < body.index('_lastMediaSend = now;') < body.index(call), f'{name} is not rate limited'
+    # A refused sendFile reads nothing.
+    send_file = branch(data, 'messages.sendFile')
+    assert send_file.index('if (!ToastAllowed(now, _lastMediaSend)) {') \
+        < send_file.index('auto bytes = QByteArray();'), 'sendFile reads the file before the rate limit'
+    # replyTo is a message id: a dialog id would let 2^32 + 5 reply to 5.
+    reply = function(host, 'Js::HostResult Instance::send(')
+    assert 'const auto replyTo = MessageIdArg(options.value("replyTo", json()));' in reply \
+        and 'if (replyTo) {' in reply, 'messages.send reads replyTo as a dialog id'
+    # A cancelled or failed load and an account switch settle at once;
+    # a cancel calls neither done nor fail, so LoadCloudFile reports it as
+    # progress, whichever path cancelled the loader.
+    cloud = files[CLOUD]
+    finish = cloud[cloud.index('const auto finish = [done, progress](CloudFile &file) {'):]
+    finish = finish[:finish.index('\n\t};\n')]
+    assert 'if (file.flags & CloudFile::Flag::Cancelled) {\n\t\t\tif (const auto onstack = progress) {' \
+        in finish, 'a cancelled photo download waits out the timeout'
+    download = branch(data, 'messages.downloadMedia')
+    assert 'session->data().documentLoadProgress(\n' in download \
+        and 'session->data().photoLoadProgress(\n' in download, 'downloadMedia waits out a failed load'
+    assert '|| photo->cancelled()) {' in download, 'downloadMedia waits out a cancelled photo'
+    assert 'session->data().sessionDataAboutToBeCleared(),' in download \
+        and 'Core::App().domain().activeSessionChanges() | rpl::to_empty' in download, \
+        'downloadMedia outlives the account'
     me = branch(data, 'account.me')
     assert '"phone"' not in me and 'phone()' not in me, 'account.me leaks the phone'
 
@@ -262,6 +302,25 @@ SOURCE_MUTANTS = (
     (DATA, '{ "premium", user->isPremium() },', '{ "premium", user->isPremium() }, { "phone", user->phone() },'),
     (ENGINE, "} else if (result && typeof result.then === 'function') {", '} else if (false) {'),
     (ENGINE, "if (object && ('replyTo' in result)) {", 'if (false) {'),
+    (DATA, '\t\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n\t\t\t\treturn RateLimited("messages.forward");\n\t\t\t}\n', ''),
+    (DATA, '\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n', ''),
+    (DATA, '\t\t_lastMediaSend = now;\n\t\tauto action', '\t\tauto action'),
+    # The sendFile rate limit back after the 10 MiB read.
+    (DATA, ('\t\tconst auto now = crl::now();\n\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n'
+            '\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n\t\tauto bytes',
+            '\t\t_lastMediaSend = now;\n\t\tauto action'),
+           ('\t\tauto bytes',
+            '\t\tconst auto now = crl::now();\n\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n'
+            '\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n\t\t_lastMediaSend = now;\n\t\tauto action')),
+    (HOST, 'const auto replyTo = MessageIdArg(options.value(', 'const auto replyTo = DialogId(options.value('),
+    (HOST, 'if (replyTo) {', 'if (replyTo && *replyTo > 0) {'),
+    (CLOUD, '\t\tif (file.flags & CloudFile::Flag::Cancelled) {\n\t\t\tif (const auto onstack = progress) {',
+     '\t\tif (false) {\n\t\t\tif (const auto onstack = progress) {'),
+    (CLOUD, 'const auto finish = [done, progress](CloudFile &file) {', 'const auto finish = [done](CloudFile &file) {'),
+    (DATA, '\t\t\tsession->data().documentLoadProgress(\n', '\t\t\trpl::never<not_null<DocumentData*>>(\n'),
+    (DATA, '\t\t\tsession->data().photoLoadProgress(\n', '\t\t\trpl::never<not_null<PhotoData*>>(\n'),
+    (DATA, 'Large)\n\t\t\t\t\t|| photo->cancelled()) {', 'Large)) {'),
+    (DATA, '\t\t\tsession->data().sessionDataAboutToBeCleared(),\n', ''),
 )
 
 
@@ -288,12 +347,15 @@ EXAMPLE_MUTANTS = (
 
 
 def check(root, read=source):
-    files = {path: crlf(read(path)) for path in (HOOKS, HOST, DATA, ENGINE, SESSION, UPDATES)}
+    files = {path: crlf(read(path)) for path in (HOOKS, HOST, DATA, ENGINE, SESSION, UPDATES, CLOUD)}
     check_sources(files)
     for path, before, after in SOURCE_MUTANTS:
-        assert files[path].count(before) == 1, f'source mutant anchor moved: {before!r}'
+        # Tuples edit several sites at once, as a moved check needs.
+        pairs = zip(before, after) if isinstance(before, tuple) else [(before, after)]
         mutated = dict(files)
-        mutated[path] = files[path].replace(before, after)
+        for one, other in pairs:
+            assert files[path].count(one) == 1, f'source mutant anchor moved: {one!r}'
+            mutated[path] = mutated[path].replace(one, other)
         try:
             check_sources(mutated)
         except (AssertionError, ValueError):

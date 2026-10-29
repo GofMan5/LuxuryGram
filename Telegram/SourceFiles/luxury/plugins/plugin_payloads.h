@@ -12,6 +12,7 @@
 #include <charconv>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -28,6 +29,11 @@ inline constexpr auto kMaxMediaBytes = std::int64_t(10 * 1024 * 1024);
 inline constexpr auto kMaxHistoryLimit = 100;
 inline constexpr auto kMaxChatsLimit = 500;
 inline constexpr auto kMaxEntities = 1000;
+
+// Message ids travel as 32-bit MTP ints and readInboxTill expects a
+// server id, so anything past INT32_MAX is not a message id.
+inline constexpr auto kMaxMessageId = std::int64_t(
+	std::numeric_limits<std::int32_t>::max());
 
 // The permission a data function needs, nullopt for any other name.
 [[nodiscard]] inline std::optional<Permission> DataPermission(
@@ -268,7 +274,9 @@ struct EntityDraft {
 	} else {
 		return std::nullopt;
 	}
-	return (result > 0) ? std::make_optional(result) : std::nullopt;
+	return (result > 0 && result <= kMaxMessageId)
+		? std::make_optional(result)
+		: std::nullopt;
 }
 
 // messages.delete and messages.forward take one id or an array of ids;

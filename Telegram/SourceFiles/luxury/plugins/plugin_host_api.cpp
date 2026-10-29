@@ -879,7 +879,7 @@ Js::HostResult Instance::send(const json &options, std::uint64_t promiseId) {
 	} else if (!Data::CanSendTexts(peer)) {
 		return Result::Error("Error", "you cannot write to this chat");
 	}
-	const auto replyTo = DialogId(options.value("replyTo", json()));
+	const auto replyTo = MessageIdArg(options.value("replyTo", json()));
 	const auto silent = options.value("silent", json()).is_boolean()
 		&& options["silent"].get<bool>();
 	const auto weak = base::make_weak(this);
@@ -893,7 +893,7 @@ Js::HostResult Instance::send(const json &options, std::uint64_t promiseId) {
 		const auto history = session->data().history(peer);
 		auto action = Api::SendAction(history);
 		action.options.silent = silent;
-		if (replyTo && *replyTo > 0) {
+		if (replyTo) {
 			action.replyTo.messageId = FullMsgId(peer->id, MsgId(*replyTo));
 		}
 		auto message = Api::MessageToSend(std::move(action));

@@ -50,7 +50,7 @@ tdata/luxury_plugins/
     pending.json             swap journal {ref, fresh, rollback}, see below
     .starting                exists while the plugin is starting
     data/storage.json        lux.storage (quota 5 MiB)
-    data/settings.json       values of manifest settings
+    data/settings.json       values of manifest settings (see lux.settings)
   .staging/<random>/         install/update in progress, renamed into place
 ```
 
@@ -432,8 +432,11 @@ lux.messages.forward(peer, ids, to) -> count                       messages.mana
 lux.messages.markRead(peer, maxId?)                                messages.manage
 lux.messages.sendFile(peer, ArrayBuffer|view|path, {silent?})      messages.send
 //   path: relative to the plugin's data folder (IsSafeRelativePath)
+//   sendFile and forward return before the upload or forward is done, so
+//   kMaxInFlight cannot hold them: one of the two a second (RangeError)
 lux.messages.downloadMedia(peer, id) -> Promise<ArrayBuffer>       messages.read
-//   photo or file, refused in chats that restrict saving, 60 s timeout
+//   photo or file, refused in chats that restrict saving, 60 s timeout;
+//   a failed or cancelled load and an account switch settle it at once
 //   Files cross the JSON bridge as {$bin: base64}: at most 10 MiB
 //   (kMaxMediaBytes, the client's in-memory download limit)
 lux.chats.get(peer) -> {id, type, title, username, unreadCount}     messages.read
@@ -483,7 +486,10 @@ lux.http.fetch(url, {method, headers, body, binary}) -> Promise<{status, headers
 //   another origin drops Authorization, Cookie, Proxy-* and Host.
 lux.storage.get(key) / set(key, value) / remove(key) / keys()       storage
 lux.settings.get(key) / set(key, value) / onChange(fn)   manifest settings, always allowed
-//   set: a declared key and a value SettingAccepts, otherwise TypeError
+//   set: a declared key and a value SettingAccepts, otherwise TypeError;
+//   data/settings.json is written kSettingsWriteDelay (1 s) after the
+//   first unsaved change, by ~Manager after the plugins unload, and
+//   remove() drops a pending write
 lux.clipboard.read() / write(text)                                  clipboard
 //   within 1 s after a command, menu item or hotkey of the plugin ran,
 //   otherwise NotAllowedError
@@ -496,7 +502,11 @@ hasMedia, media, forward, topicId, editDate, groupedId}` where `peer`/`from`
 are `{id: "<decimal>", type: "user"|"chat"|"channel", title}`, `entities`
 are `{type, offset, length, url?|userId?|emojiId?|language?}` in UTF-16
 units, `media` is `{type, size}` or null and `forward` is
-`{from, name, date, id}` or null. Ids are decimal strings.
+`{from, name, date, id}` or null. Ids are decimal strings; a message id
+argument is 1..INT32_MAX (MessageIdArg). Anything else is a `TypeError`
+(`Error` "unknown message" in messages.edit and downloadMedia); as
+history's offsetId it is ignored, and as a replyTo (send, beforeSend)
+it means no reply, the same as null.
 
 `lux.messages.*` and `lux.chats.*` run in `Instance::data`
 (`plugin_host_ext_data.cpp`); the permission table and argument parsing

@@ -499,7 +499,20 @@ def check_settings(files):
     assert '(i != values.end() && SettingAccepts(setting, *i))\n\t\t\t\t? *i\n\t\t\t\t: SettingDefault(setting);' in read, \
         'a stored value of the wrong type reaches the plugin'
     write = body(text, 'void Manager::setSettingValue(')
-    ordered(write, 'if (i == parsed->settings.end() || !SettingAccepts(*i, value)) {', 'return;', 'values[name] = value;')
+    ordered(write, 'if (i == parsed->settings.end() || !SettingAccepts(*i, value)) {', 'return;', 'values[name] = value;',
+            '_private->saveSettingsLater(id);')
+    # A slider writes settings.json once it settles, and nothing is lost.
+    assert 'WriteFile(' not in write and '_private->saveSettings();' not in write, \
+        'every settings change writes settings.json'
+    later = body(text, 'void Manager::Private::saveSettingsLater(')
+    ordered(later, 'if (!settingsDirty.emplace(id).second || settingsDirty.size() > 1) {', 'return;',
+            'base::call_delayed(kSettingsWriteDelay, this, [=] {', 'saveSettings();')
+    save = body(text, 'void Manager::Private::saveSettings()')
+    ordered(save, 'for (const auto &id : base::take(settingsDirty)) {', 'PluginRoot(id) + u"/data/settings.json"_q,')
+    # After the unload: a plugin may set a value while it stops.
+    ordered(body(text, 'Manager::~Manager()'), 'while (!_private->running.empty()) {', '_private->stop(',
+            '_private->saveSettings();')
+    ordered(body(text, 'void Manager::remove('), '_private->settingsDirty.erase(id);', 'removeRecursively();')
 
 
 def check_updates(files):
@@ -567,6 +580,15 @@ MUTANTS = (
     # A stored setting of the wrong type.
     (check_settings, MANAGER, '(i != values.end() && SettingAccepts(setting, *i))', '(i != values.end())'),
     (check_settings, MANAGER, 'if (i == parsed->settings.end() || !SettingAccepts(*i, value)) {', 'if (i == parsed->settings.end()) {'),
+    (check_settings, MANAGER, '\t_private->saveSettingsLater(id);\n', '\t_private->saveSettingsLater(id);\n\t_private->saveSettings();\n'),
+    (check_settings, MANAGER, '|| settingsDirty.size() > 1) {', ') {'),
+    (check_settings, MANAGER, '\t_private->saveSettings();\n\tCurrent = nullptr;\n', '\tCurrent = nullptr;\n'),
+    (check_settings, MANAGER,
+     'Manager::~Manager() {\n\twhile (!_private->running.empty()) {\n\t\t_private->stop(_private->running.begin()->first);\n\t}\n'
+     '\t// After the unload: a plugin may still set a value while it stops.\n\t_private->saveSettings();\n',
+     'Manager::~Manager() {\n\t_private->saveSettings();\n\twhile (!_private->running.empty()) {\n'
+     '\t\t_private->stop(_private->running.begin()->first);\n\t}\n'),
+    (check_settings, MANAGER, '\t_private->settingsDirty.erase(id);\n', ''),
     # checkUpdates reporting failed=0 on a 403.
     (check_updates, MANAGER, '\t\t\t\tstate->tally.add(\n\t\t\t\t\tlatest.error.toStdString(),\n\t\t\t\t\tlatest.code,\n\t\t\t\t\tfalse);\n', ''),
     (check_updates, MANAGER, '.failed = tally.failed,', '.failed = 0,'),

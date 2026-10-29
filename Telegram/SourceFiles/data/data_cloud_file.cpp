@@ -272,7 +272,7 @@ void LoadCloudFile(
 		autoLoading,
 		cacheTag);
 
-	const auto finish = [done](CloudFile &file) {
+	const auto finish = [done, progress](CloudFile &file) {
 		if (!file.loader || file.loader->cancelled()) {
 			file.flags |= CloudFile::Flag::Cancelled;
 		} else {
@@ -284,6 +284,13 @@ void LoadCloudFile(
 			if ((file.flags & CloudFile::Flag::Cancelled)
 				&& !loader->cancelled()) {
 				loader->cancel();
+			}
+		}
+		// LuxuryGram: a cancel calls neither done nor fail, so report it as
+		// progress: whoever waits on the file sees it settled.
+		if (file.flags & CloudFile::Flag::Cancelled) {
+			if (const auto onstack = progress) {
+				onstack();
 			}
 		}
 	};

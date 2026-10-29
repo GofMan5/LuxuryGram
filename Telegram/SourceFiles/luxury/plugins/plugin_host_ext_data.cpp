@@ -34,6 +34,7 @@
 #include "dialogs/dialogs_row.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "main/main_domain.h"
 #include "main/main_session.h"
 #include "storage/file_download.h"
 #include "storage/localimageloader.h"
@@ -56,6 +57,13 @@ constexpr auto kDownloadTimeout = crl::time(60000);
 		"RangeError",
 		"too many requests in flight, at most "
 			+ std::to_string(kMaxInFlight));
+}
+
+[[nodiscard]] Js::HostResult RateLimited(std::string_view function) {
+	return Js::HostResult::Error(
+		"RangeError",
+		std::string(function)
+			+ ": rate limited, at most one file or forward a second");
 }
 
 [[nodiscard]] Js::HostResult PermissionError(Permission permission) {
@@ -273,9 +281,7 @@ Js::HostResult Instance::data(
 		const auto settle = later();
 		session->api().request(MTPmessages_GetHistory(
 			peer->input(),
-			MTP_int(offset ? int(std::min<std::int64_t>(
-				*offset,
-				std::numeric_limits<int>::max())) : 0),
+			MTP_int(offset ? int(*offset) : 0), // MessageIdArg caps it
 			MTP_int(0), // offset_date
 			MTP_int(0), // add_offset
 			MTP_int(limit),
@@ -372,6 +378,11 @@ Js::HostResult Instance::data(
 		}
 		const auto count = int(items.size());
 		if (count) {
+			const auto now = crl::now();
+			if (!ToastAllowed(now, _lastMediaSend)) {
+				return RateLimited("messages.forward");
+			}
+			_lastMediaSend = now;
 			session->api().forwardMessages(
 				Data::ResolvedForwardDraft{ .items = std::move(items) },
 				Api::SendAction(session->data().history(to)));
@@ -388,6 +399,11 @@ Js::HostResult Instance::data(
 		}
 		return Result::Value(nullptr);
 	} else if (function == "messages.sendFile") {
+		// Before reading up to 10 MiB for a send that is refused anyway.
+		const auto now = crl::now();
+		if (!ToastAllowed(now, _lastMediaSend)) {
+			return RateLimited("messages.sendFile");
+		}
 		auto bytes = QByteArray();
 		const auto bin = Option(second, "$bin");
 		if (bin.is_string()) {
@@ -429,6 +445,7 @@ Js::HostResult Instance::data(
 		} else if (!Data::CanSend(peer, ChatRestriction::SendFiles)) {
 			return Result::Error("Error", "you cannot send files to this chat");
 		}
+		_lastMediaSend = now;
 		auto action = Api::SendAction(session->data().history(peer));
 		action.options.silent = (Option(third, "silent") == json(true));
 		session->api().sendFile(bytes, SendMediaType::File, action);
@@ -505,7 +522,8 @@ Js::HostResult Instance::data(
 					} else {
 						finish(std::move(bytes), {});
 					}
-				} else if (photo->failed(Data::PhotoSize::Large)) {
+				} else if (photo->failed(Data::PhotoSize::Large)
+					|| photo->cancelled()) {
 					finish({}, "the download failed");
 				}
 			}
@@ -518,8 +536,28 @@ Js::HostResult Instance::data(
 			state->photo = photo->createMediaView();
 			state->photo->wanted(Data::PhotoSize::Large, origin);
 		}
+		// A cancelled or failed load reports itself here, not as finished.
 		session->downloaderTaskFinished(
 		) | rpl::on_next(check, state->lifetime);
+		if (document) {
+			session->data().documentLoadProgress(
+			) | rpl::filter([=](not_null<DocumentData*> loaded) {
+				return (loaded == document);
+			}) | rpl::on_next(check, state->lifetime);
+		} else {
+			session->data().photoLoadProgress(
+			) | rpl::filter([=](not_null<PhotoData*> loaded) {
+				return (loaded == photo);
+			}) | rpl::on_next(check, state->lifetime);
+		}
+		// accountChanged() already rejects the promise; this drops the views
+		// and the subscriptions, which hold raw pointers into the session.
+		rpl::merge(
+			session->data().sessionDataAboutToBeCleared(),
+			Core::App().domain().activeSessionChanges() | rpl::to_empty
+		) | rpl::on_next([=] {
+			finish({}, "the active account changed");
+		}, state->lifetime);
 		base::call_delayed(kDownloadTimeout, [=] {
 			finish({}, "the download timed out");
 		});

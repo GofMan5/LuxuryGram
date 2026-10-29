@@ -123,6 +123,11 @@ QString cWorkingDir() { return {}; }
 bool cliGhost = false;
 bool cGhost() { return cliGhost; }
 namespace LuxuryWorker { void wake() {} }
+namespace MTP {
+namespace details { enum class WsMode { Off = 0, Auto = 1, Always = 2 }; }
+int handedWsMode = -1;
+void SetWebSocketMode(details::WsMode mode) { handedWsMode = int(mode); }
+} // namespace MTP
 constexpr auto kMaxSettingsBytes = 4 * 1024 * 1024;
 constexpr auto kMaxGhostAccounts = std::size_t(64);
 @@ENUM@@
@@ -134,6 +139,8 @@ void from_json(const nlohmann::json &j, GhostModeAccountSettings &s);
 struct LuxurySettings {
     std::map<uint64, std::unique_ptr<GhostModeAccountSettings>> _ghostAccounts;
     rpl::variable<bool> _useGlobalGhostMode = true, _disableAds = true;
+    int _webSocketTransport = 1;
+    int webSocketTransport() const { return _webSocketTransport; }
     static LuxurySettings &getInstance() { static LuxurySettings s; return s; }
     static GhostModeAccountSettings &ghost() {
         auto &p = getInstance()._ghostAccounts[0];
@@ -144,7 +151,8 @@ struct LuxurySettings {
     static void applyStartupGhost(GhostModeAccountSettings &);
     static void load();
     static void save() {}
-    void validate() {}
+    // Mirrors validateEnum(_webSocketTransport, defaults, 2) in production.
+    void validate() { if (_webSocketTransport < 0 || _webSocketTransport > 2) _webSocketTransport = 1; }
 };
 void to_json(nlohmann::json &j, const LuxurySettings &s) {
 @@ACCOUNT_WRITER@@
@@ -156,6 +164,7 @@ void from_json(const nlohmann::json &j, LuxurySettings &s) {
 @@ACCOUNT_LOOP@@
     s._useGlobalGhostMode = j.value("useGlobalGhostMode", true);
     s._disableAds = j.value("disableAds", true);
+    s._webSocketTransport = j.value("webSocketTransport", 1);
 }
 @@GHOST_CONSTRUCTOR@@
 @@SETTERS@@
@@ -311,6 +320,14 @@ int main() {
 
     fresh(profileFile().dump()); LuxurySettings::load(); loadedPrivacy();
     assert(!QFile::exists(getSettingsPath() + u".broken"_q));
+    assert(MTP::handedWsMode == 1); // load() hands the WebSocket mode to MTP.
+    {
+        auto data = profileFile(); data["webSocketTransport"] = 2;
+        fresh(data.dump()); LuxurySettings::load(); assert(MTP::handedWsMode == 2);
+        data["webSocketTransport"] = 7; // Out of range: validate() runs before the hand-over.
+        fresh(data.dump()); LuxurySettings::load(); assert(MTP::handedWsMode == 1);
+        fresh(profileFile().dump()); LuxurySettings::load(); loadedPrivacy(); ++cases;
+    }
     writeSettings(); assert(QSaveFile::writes == 1); ++cases;
 
     const std::vector<std::string> fields = {
