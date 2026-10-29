@@ -202,9 +202,6 @@ bool PhotoData::displayLoading() const {
 void PhotoData::cancel() {
 	if (loading()) {
 		_images[PhotoSizeIndex(PhotoSize::Large)].loader->cancel();
-		// LuxuryGram: a cancel reports nothing else; as documentLoadDone does
-		// for DocumentData::cancel, wake whoever waits on this photo.
-		_owner->photoLoadProgress(this);
 	}
 }
 

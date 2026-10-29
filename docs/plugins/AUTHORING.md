@@ -232,8 +232,10 @@ What is never available, whatever is granted:
 ## Messages and chats
 
 Peers are ids as `LuxPeer.id` gives them, a decimal string or a number.
-Message ids are decimal strings from 1 to 2147483647; an id outside that
-range names no message. A message carries its `entities` (bold,
+Message ids are decimal strings from 1 to 2147483647. An id outside that
+range is rejected with `TypeError` (`messages.edit` and `downloadMedia`
+throw `Error` "unknown message"); as `history`'s `offsetId` or a
+`replyTo` it is ignored. A message carries its `entities` (bold,
 links, mentions, ... with offsets in UTF-16 units, as `String.length`
 counts), `media` as `{type, size}`, `forward`, `topicId`, `editDate` and
 `groupedId`.

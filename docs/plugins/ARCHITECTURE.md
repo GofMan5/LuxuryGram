@@ -503,7 +503,9 @@ are `{id: "<decimal>", type: "user"|"chat"|"channel", title}`, `entities`
 are `{type, offset, length, url?|userId?|emojiId?|language?}` in UTF-16
 units, `media` is `{type, size}` or null and `forward` is
 `{from, name, date, id}` or null. Ids are decimal strings; a message id
-argument is 1..INT32_MAX (MessageIdArg), anything else names no message.
+argument is 1..INT32_MAX (MessageIdArg). Anything else is a `TypeError`
+(`Error` "unknown message" in messages.edit and downloadMedia) and is
+ignored as history's offsetId or a replyTo (send, beforeSend).
 
 `lux.messages.*` and `lux.chats.*` run in `Instance::data`
 (`plugin_host_ext_data.cpp`); the permission table and argument parsing

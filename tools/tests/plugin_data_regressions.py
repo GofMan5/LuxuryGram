@@ -23,7 +23,7 @@ DATA = PLUGINS + 'plugin_host_ext_data.cpp'
 ENGINE = PLUGINS + 'js/js_engine.cpp'
 SESSION = SRC + 'data/data_session.cpp'
 UPDATES = SRC + 'api/api_updates.cpp'
-PHOTO = SRC + 'data/data_photo.cpp'
+CLOUD = SRC + 'data/data_cloud_file.cpp'
 EXAMPLE = 'docs/plugins/examples/auto-moderate'
 
 MAIN = r'''
@@ -261,11 +261,13 @@ def check_sources(files):
     assert 'const auto replyTo = MessageIdArg(options.value("replyTo", json()));' in reply \
         and 'if (replyTo) {' in reply, 'messages.send reads replyTo as a dialog id'
     # A cancelled or failed load and an account switch settle at once;
-    # a photo cancel fires nothing else, so PhotoData::cancel reports it.
-    cancel = function(files[PHOTO], 'void PhotoData::cancel()')
-    assert 'loader->cancel();' in cancel \
-        and cancel.index('loader->cancel();') < cancel.find('_owner->photoLoadProgress(this);'), \
-        'a cancelled photo download waits out the timeout'
+    # a cancel calls neither done nor fail, so LoadCloudFile reports it as
+    # progress, whichever path cancelled the loader.
+    cloud = files[CLOUD]
+    finish = cloud[cloud.index('const auto finish = [done, progress](CloudFile &file) {'):]
+    finish = finish[:finish.index('\n\t};\n')]
+    assert 'if (file.flags & CloudFile::Flag::Cancelled) {\n\t\t\tif (const auto onstack = progress) {' \
+        in finish, 'a cancelled photo download waits out the timeout'
     download = branch(data, 'messages.downloadMedia')
     assert 'session->data().documentLoadProgress(\n' in download \
         and 'session->data().photoLoadProgress(\n' in download, 'downloadMedia waits out a failed load'
@@ -312,7 +314,9 @@ SOURCE_MUTANTS = (
             '\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n\t\t_lastMediaSend = now;\n\t\tauto action')),
     (HOST, 'const auto replyTo = MessageIdArg(options.value(', 'const auto replyTo = DialogId(options.value('),
     (HOST, 'if (replyTo) {', 'if (replyTo && *replyTo > 0) {'),
-    (PHOTO, '\t\t_owner->photoLoadProgress(this);\n\t}\n}', '\t}\n}'),
+    (CLOUD, '\t\tif (file.flags & CloudFile::Flag::Cancelled) {\n\t\t\tif (const auto onstack = progress) {',
+     '\t\tif (false) {\n\t\t\tif (const auto onstack = progress) {'),
+    (CLOUD, 'const auto finish = [done, progress](CloudFile &file) {', 'const auto finish = [done](CloudFile &file) {'),
     (DATA, '\t\t\tsession->data().documentLoadProgress(\n', '\t\t\trpl::never<not_null<DocumentData*>>(\n'),
     (DATA, '\t\t\tsession->data().photoLoadProgress(\n', '\t\t\trpl::never<not_null<PhotoData*>>(\n'),
     (DATA, 'Large)\n\t\t\t\t\t|| photo->cancelled()) {', 'Large)) {'),
@@ -343,7 +347,7 @@ EXAMPLE_MUTANTS = (
 
 
 def check(root, read=source):
-    files = {path: crlf(read(path)) for path in (HOOKS, HOST, DATA, ENGINE, SESSION, UPDATES, PHOTO)}
+    files = {path: crlf(read(path)) for path in (HOOKS, HOST, DATA, ENGINE, SESSION, UPDATES, CLOUD)}
     check_sources(files)
     for path, before, after in SOURCE_MUTANTS:
         # Tuples edit several sites at once, as a moved check needs.

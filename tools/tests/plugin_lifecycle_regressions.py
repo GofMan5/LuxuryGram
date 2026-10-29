@@ -582,7 +582,7 @@ MUTANTS = (
     (check_settings, MANAGER, 'if (i == parsed->settings.end() || !SettingAccepts(*i, value)) {', 'if (i == parsed->settings.end()) {'),
     (check_settings, MANAGER, '\t_private->saveSettingsLater(id);\n', '\t_private->saveSettingsLater(id);\n\t_private->saveSettings();\n'),
     (check_settings, MANAGER, '|| settingsDirty.size() > 1) {', ') {'),
-    (check_settings, MANAGER, '\t_private->saveSettings();\n}\n\nManager &Manager::Instance()', '}\n\nManager &Manager::Instance()'),
+    (check_settings, MANAGER, '\t_private->saveSettings();\n\tCurrent = nullptr;\n', '\tCurrent = nullptr;\n'),
     (check_settings, MANAGER,
      'Manager::~Manager() {\n\twhile (!_private->running.empty()) {\n\t\t_private->stop(_private->running.begin()->first);\n\t}\n'
      '\t// After the unload: a plugin may still set a value while it stops.\n\t_private->saveSettings();\n',
