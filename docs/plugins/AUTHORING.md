@@ -18,7 +18,7 @@ is the full contract.
 4. Type `/hello` in any chat or press Ctrl+Shift+H.
 
 The example uses the `select` and `number` setting types, so it installs on
-the first LuxuryGram release after 1.0.21 and later ones; see
+LuxuryGram 1.0.22 and later; see
 [New setting types](#new-setting-types).
 
 For editor completion put this line at the top of each module and keep
@@ -114,8 +114,7 @@ their type before they are saved.
 
 ### New setting types
 
-`select`, `number`, `color` and `secret` are new in the first release after
-LuxuryGram 1.0.21. An older client refuses a manifest that uses them with
+`select`, `number`, `color` and `secret` are new in LuxuryGram 1.0.22. An older client refuses a manifest that uses them with
 `settings[i].type: unknown type "select"`: settings are parsed before
 `minClient` is compared, so `minClient` does not turn this into "update
 LuxuryGram". Use `int`, `string` and `choice` if your plugin must install
