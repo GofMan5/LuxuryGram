@@ -79,10 +79,14 @@ jobs:
         shell: cmd
 
     steps:
+      # C: runs out of space when the libraries are built from scratch
+      # (LNK1180 linking tg_owt), the runner D: has room to spare. The
+      # prepare stage keys hold absolute paths, so the D: trees get their
+      # own cache keys and never fall back to the C:-built win.yml caches.
       - name: Prepare directories.
         run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          mkdir D:\TBuild\Libraries
+          mklink /d %GITHUB_WORKSPACE%\TBuild D:\TBuild
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
@@ -165,8 +169,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-${{ runner.arch }}-third-party-
+          key: ${{ runner.OS }}-${{ runner.arch }}-release-third-party-v1-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.OS }}-${{ runner.arch }}-release-third-party-v1-
 
       - name: Libraries cache.
         uses: actions/cache@v6
@@ -177,10 +181,9 @@ jobs:
             !${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-release-libs-v2-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-release-libs-v3-${{ env.CACHE_KEY }}
           restore-keys: |
-            ${{ runner.OS }}-x64-release-libs-v2-
-            ${{ runner.OS }}-x64-libs-v3-
+            ${{ runner.OS }}-x64-release-libs-v3-
 
       - name: Qt cache.
         uses: actions/cache@v6
@@ -188,10 +191,9 @@ jobs:
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-release-qt6-v1-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-release-qt6-v2-${{ env.CACHE_KEY }}
           restore-keys: |
-            ${{ runner.OS }}-x64-release-qt6-v1-
-            ${{ runner.OS }}-x64-qt6-
+            ${{ runner.OS }}-x64-release-qt6-v2-
 
       - name: Libraries.
         run: |
@@ -219,10 +221,14 @@ jobs:
         shell: cmd
 
     steps:
+      # C: runs out of space when the libraries are built from scratch
+      # (LNK1180 linking tg_owt), the runner D: has room to spare. The
+      # prepare stage keys hold absolute paths, so the D: trees get their
+      # own cache keys and never fall back to the C:-built win.yml caches.
       - name: Prepare directories.
         run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          mkdir D:\TBuild\Libraries
+          mklink /d %GITHUB_WORKSPACE%\TBuild D:\TBuild
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
@@ -312,7 +318,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-${{ runner.arch }}-release-third-party-v1-${{ env.CACHE_KEY }}
           fail-on-cache-miss: true
 
       - name: Libraries cache.
@@ -325,7 +331,7 @@ jobs:
             !${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-release-libs-v2-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-release-libs-v3-${{ env.CACHE_KEY }}
           fail-on-cache-miss: true
 
       - name: Qt cache.
@@ -335,7 +341,7 @@ jobs:
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-release-qt6-v1-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-release-qt6-v2-${{ env.CACHE_KEY }}
           fail-on-cache-miss: true
 
       - name: Read build configuration.

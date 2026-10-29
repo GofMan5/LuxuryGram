@@ -39,13 +39,21 @@ assert "-path '*/src/wallet_engine/*'" in prune
 win = (ROOT / '.github/workflows/win.yml').read_text('utf-8')
 for workflow in (win, release):
     assert prune in [l.strip() for l in workflow.splitlines()]
-assert '-libs-v2-' not in win and '-release-libs-v1-' not in release
+assert '-libs-v2-' not in win and '-release-libs-v2-' not in release
 # The MSBuild legs ran out of compiler heap with a cl.exe per core; only
 # they get the cap, Ninja and the Ninja-built release take no MSBuild flags.
 assert '[ -z "$GENERATOR" ] && MSBUILD_ARGS="-- /p:CL_MPCount=2"' in win
 assert 'cmake --build ..\\out --config Debug --parallel %TDESKTOP_BUILD_NATIVE%' in win
 assert win.count('cmake --build') == 1
 assert 'TDESKTOP_BUILD_GENERATOR=-G "Ninja Multi-Config"' in release
+# Both Windows legs build on D:; C: is too small for a cold prepare.
+assert release.count('mklink /d %GITHUB_WORKSPACE%\\TBuild D:\\TBuild') == 2
+assert '%userprofile%\\TBuild' not in release
+assert release.count('mkdir D:\\TBuild\\Libraries') == 2
+assert release.count('echo TBUILD=%GITHUB_WORKSPACE%\\TBuild>>%GITHUB_ENV%') == 2
+# Prepare keys hold absolute paths: the D: trees never share a C: cache.
+assert release.count('-release-third-party-v1-') == 3 and '}-third-party-' not in release
+assert '-x64-libs-v3-' not in release and '-x64-qt6-' not in release
 
 def opener(product=None, updates=None, failure=None):
     def request(req, timeout):
