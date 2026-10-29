@@ -38,11 +38,11 @@
 ## Take the tour
 
 <div align="center">
-  <a href=".github/assets/showcase/luxurygram-tour.mp4">
+  <a href=".github/assets/showcase/luxurygram-tour.mp4?raw=true">
     <img src=".github/assets/showcase/tour-preview.gif" width="100%" alt="LuxuryGram tour: click to open the video">
   </a>
   <br>
-  <sub>Click the preview to open the full tour video (MP4, 11 MB).</sub>
+  <sub>Click the preview to open the full tour video (MP4, 1080p, 17 MB).</sub>
 </div>
 
 ## Why LuxuryGram
@@ -74,63 +74,71 @@
 
 <table>
   <tr>
-    <td width="50%" valign="top">
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/01-hero.png" width="100%" alt="LuxuryGram main window with chats and folders">
       <p><strong>Telegram, refined for desktop</strong><br>
       Your chats, folders and groups in the familiar Telegram Desktop layout, with LuxuryGram's controls built in.</p>
     </td>
-    <td width="50%" valign="top">
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/02-ghost.png" width="100%" alt="Ghost Mode settings">
       <p><strong>Ghost Mode, your rules</strong><br>
       Read chats and stories, type and come online on your own terms, with each Ghost switch one click away.</p>
     </td>
   </tr>
   <tr>
-    <td width="50%" valign="top">
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/03-antirecall.png" width="100%" alt="Deleted and edited messages marked in a chat">
       <p><strong>Nothing quietly disappears</strong><br>
       Deleted messages stay readable with a trash mark, edited ones get a pencil, and right-click › History shows every earlier version.</p>
     </td>
+  </tr>
+  <tr>
     <td width="50%" valign="top">
       <img src=".github/assets/showcase/04-history.png" width="100%" alt="Edit history of a message">
       <p><strong>Every edit, on record</strong><br>
       The History view lists each saved revision of a message with the time it was captured.</p>
     </td>
+    <td width="50%" valign="top">
+      <img src=".github/assets/showcase/10-shot.png" width="100%" alt="Message Shot turning messages into an image">
+      <p><strong>Messages into polished images</strong><br>
+      Turn selected messages into a clean, themed image you can save or copy, with optional anonymity.</p>
+    </td>
   </tr>
   <tr>
-    <td width="50%" valign="top">
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/05-watcher.png" width="100%" alt="Watcher with online sessions and message events">
       <p><strong>See who's online, when</strong><br>
       Watcher logs each contact's online sessions with durations and keeps edited and deleted messages. Online session logging is off until you turn it on.</p>
     </td>
-    <td width="50%" valign="top">
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/06-plugins.png" width="100%" alt="Plugins page with installed plugins">
       <p><strong>Plugins, straight from GitHub</strong><br>
       Install JavaScript plugins from any GitHub repository, switch them on or off, and get update notices in one place.</p>
     </td>
   </tr>
   <tr>
-    <td width="50%" valign="top">
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/07-consent.png" width="100%" alt="Plugin permission consent box">
       <p><strong>You approve every permission</strong><br>
       Before a plugin installs, LuxuryGram lists each permission it requests and marks the dangerous ones in red.</p>
     </td>
-    <td width="50%" valign="top">
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/08-streamer.png" width="100%" alt="Streamer Mode hiding the window from screen capture">
       <p><strong>Invisible to screen capture</strong><br>
       With Streamer Mode on, the LuxuryGram window disappears from screen capture while you still see it on your desktop (Windows and macOS).</p>
     </td>
   </tr>
   <tr>
-    <td width="50%" valign="top">
+    <td colspan="2" valign="top">
       <img src=".github/assets/showcase/09-translate.png" width="100%" alt="Messages translated in place">
-      <p><strong>Translate with any provider</strong><br>
-      Read French messages in place, translated by the provider you pick: Telegram, Google or Yandex, plus the system translator on macOS and on Linux with Crow Translate installed.</p>
-    </td>
-    <td width="50%" valign="top">
-      <img src=".github/assets/showcase/10-shot.png" width="100%" alt="Message Shot turning messages into an image">
-      <p><strong>Messages into polished images</strong><br>
-      Turn selected messages into a clean, themed image you can save or copy, with optional anonymity.</p>
+      <p><strong>Translate with your choice of provider</strong><br>
+      Read messages in other languages in place, translated by the provider you pick: Telegram, Google or Yandex, plus the system translator on macOS and on Linux with Crow Translate installed.</p>
     </td>
   </tr>
   <tr>
@@ -152,7 +160,7 @@
 ### Also inside
 
 - **Filters and Shadow Ban.** Hide spam and unwanted senders with regex filters, shadow-ban people without blocking them, and share filter sets through import and export.
-- **Power-user message menu.** Inspect a message's full details or repeat it from one right-click, and forward without the sender or caption, or straight to Saved Messages.
+- **Power-user message menu.** Details (hold Shift or Ctrl) and Repeat Message in the right-click menu, both set under **Settings › LuxuryGram Preferences › Chats › Context Menu Elements**, and forward without the sender or caption, or straight to Saved Messages.
 - **Expanded music player.** Cover art, seekable progress and controls, with a button to save the cover.
 - **Cleaner Telegram.** Turn off stories, ads, similar-channel suggestions and link warnings, lift selection and sticker limits, and filter Zalgo text.
 - **Processor-aware performance.** Background work sizes itself to your CPU, keeps a core free for the interface, and decodes first video frames, cached custom emoji and animated sticker files off the interface thread.
@@ -204,7 +212,7 @@ Possibly, as with any third-party client. LuxuryGram talks to Telegram through t
 <details>
 <summary><strong>How do updates work?</strong></summary>
 <br>
-The app checks this repository for a newer release, downloads it and verifies its signature with the LuxuryGram key before unpacking anything. A package that fails the check is refused. You can turn this off under <strong>Settings › Advanced › Update automatically</strong>.
+The app checks this repository for a newer release, downloads it and verifies its signature with the LuxuryGram key before unpacking anything. A package that fails the check is refused. You can turn this off under <strong>Settings › Advanced › Update automatically</strong>. The AUR package updates through pacman instead.
 </details>
 
 <details>
