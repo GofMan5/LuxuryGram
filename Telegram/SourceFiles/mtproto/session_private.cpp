@@ -1437,7 +1437,7 @@ void SessionPrivate::connectingTimedOut() {
 	for (const auto &connection : _testConnections) {
 		racers.push_back(connection.data.get());
 	}
-	for (const auto racer : racers) {
+	for (const auto &racer : racers) {
 		wsRacerEnded(racer);
 	}
 	doDisconnect();
