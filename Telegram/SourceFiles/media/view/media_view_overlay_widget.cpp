@@ -784,6 +784,10 @@ OverlayWidget::OverlayWidget()
 			if (handleContextMenu(position)) {
 				return base::EventFilterResult::Cancel;
 			}
+		} else if (type == QEvent::KeyPress) {
+			handleKeyPress(static_cast<QKeyEvent*>(e.get()));
+		} else if (type == QEvent::KeyRelease) {
+			handleKeyRelease(static_cast<QKeyEvent*>(e.get()));
 		} else if (e->type() == QEvent::WindowStateChange) {
 			const auto state = window()->windowState();
 			if (state == Qt::WindowMinimized || Platform::IsMac()) {
@@ -843,10 +847,6 @@ OverlayWidget::OverlayWidget()
 
 			_widget->setGeometry({ QPoint(), size });
 			updateControlsGeometry();
-		} else if (type == QEvent::KeyPress) {
-			handleKeyPress(static_cast<QKeyEvent*>(e.get()));
-		} else if (type == QEvent::KeyRelease) {
-			handleKeyRelease(static_cast<QKeyEvent*>(e.get()));
 		}
 		return base::EventFilterResult::Continue;
 	});
@@ -8775,6 +8775,7 @@ bool OverlayWidget::filterApplicationEvent(
 			return true;
 		} else if (event == QKeySequence::SaveAs
 			|| event == QKeySequence::Save) {
+			saveAs();
 			return true;
 		}
 		return false;
