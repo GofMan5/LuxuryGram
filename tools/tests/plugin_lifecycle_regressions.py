@@ -509,7 +509,9 @@ def check_settings(files):
             'base::call_delayed(kSettingsWriteDelay, this, [=] {', 'saveSettings();')
     save = body(text, 'void Manager::Private::saveSettings()')
     ordered(save, 'for (const auto &id : base::take(settingsDirty)) {', 'PluginRoot(id) + u"/data/settings.json"_q,')
-    assert '\t_private->saveSettings();\n' in body(text, 'Manager::~Manager()'), 'a pending setting is lost on quit'
+    # After the unload: a plugin may set a value while it stops.
+    ordered(body(text, 'Manager::~Manager()'), 'while (!_private->running.empty()) {', '_private->stop(',
+            '_private->saveSettings();')
     ordered(body(text, 'void Manager::remove('), '_private->settingsDirty.erase(id);', 'removeRecursively();')
 
 
@@ -580,7 +582,12 @@ MUTANTS = (
     (check_settings, MANAGER, 'if (i == parsed->settings.end() || !SettingAccepts(*i, value)) {', 'if (i == parsed->settings.end()) {'),
     (check_settings, MANAGER, '\t_private->saveSettingsLater(id);\n', '\t_private->saveSettingsLater(id);\n\t_private->saveSettings();\n'),
     (check_settings, MANAGER, '|| settingsDirty.size() > 1) {', ') {'),
-    (check_settings, MANAGER, 'Manager::~Manager() {\n\t_private->saveSettings();\n', 'Manager::~Manager() {\n'),
+    (check_settings, MANAGER, '\t_private->saveSettings();\n}\n\nManager &Manager::Instance()', '}\n\nManager &Manager::Instance()'),
+    (check_settings, MANAGER,
+     'Manager::~Manager() {\n\twhile (!_private->running.empty()) {\n\t\t_private->stop(_private->running.begin()->first);\n\t}\n'
+     '\t// After the unload: a plugin may still set a value while it stops.\n\t_private->saveSettings();\n',
+     'Manager::~Manager() {\n\t_private->saveSettings();\n\twhile (!_private->running.empty()) {\n'
+     '\t\t_private->stop(_private->running.begin()->first);\n\t}\n'),
     (check_settings, MANAGER, '\t_private->settingsDirty.erase(id);\n', ''),
     # checkUpdates reporting failed=0 on a 403.
     (check_updates, MANAGER, '\t\t\t\tstate->tally.add(\n\t\t\t\t\tlatest.error.toStdString(),\n\t\t\t\t\tlatest.code,\n\t\t\t\t\tfalse);\n', ''),

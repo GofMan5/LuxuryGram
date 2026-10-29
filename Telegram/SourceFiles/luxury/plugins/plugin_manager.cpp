@@ -32,7 +32,7 @@ namespace {
 using json = nlohmann::json;
 
 constexpr auto kChangesDelay = crl::time(250);
-// A settings slider fires setSettingValue per step: write once it settles.
+// A settings slider fires setSettingValue per step: write at most once a second.
 constexpr auto kSettingsWriteDelay = crl::time(1000);
 
 Manager *Current = nullptr;
@@ -538,10 +538,11 @@ void Manager::startAll() {
 }
 
 Manager::~Manager() {
-	_private->saveSettings();
 	while (!_private->running.empty()) {
 		_private->stop(_private->running.begin()->first);
 	}
+	// After the unload: a plugin may still set a value while it stops.
+	_private->saveSettings();
 	Current = nullptr;
 }
 

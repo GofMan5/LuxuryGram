@@ -232,7 +232,8 @@ What is never available, whatever is granted:
 ## Messages and chats
 
 Peers are ids as `LuxPeer.id` gives them, a decimal string or a number.
-Message ids are decimal strings. A message carries its `entities` (bold,
+Message ids are decimal strings from 1 to 2147483647; an id outside that
+range names no message. A message carries its `entities` (bold,
 links, mentions, ... with offsets in UTF-16 units, as `String.length`
 counts), `media` as `{type, size}`, `forward`, `topicId`, `editDate` and
 `groupedId`.
@@ -286,7 +287,7 @@ chat open in the active window, or null.
 | `messages.sendFile`, `forward` | one a second together; the next one throws `RangeError` |
 | `chats.list` | 500 chats |
 | `messages.sendFile`, `downloadMedia` | 10 MiB; more throws `RangeError`; a download times out after 60 s and fails at once when the load fails, is cancelled or the account switches |
-| `settings.set` | applied and `onChange` fired at once; `data/settings.json` is written 1 s after the first unsaved change |
+| `settings.set` | applied and `onChange` fired at once; `data/settings.json` is written 1 s after the first unsaved change, on quit after the plugins unload, and never for a removed plugin |
 | Commands, message menu items, hotkeys | 100 each; the same name, title or keys replaces the handler |
 | Chat menu items, header buttons, compose menu items | 100 each; the same title replaces the handler |
 | `ui.showForm` | 20 fields, 50 options a select, 256 bytes a text; one dialog or form open at a time |

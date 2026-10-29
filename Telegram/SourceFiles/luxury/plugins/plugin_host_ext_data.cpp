@@ -379,7 +379,7 @@ Js::HostResult Instance::data(
 		const auto count = int(items.size());
 		if (count) {
 			const auto now = crl::now();
-			if (!MediaSendAllowed(now, _lastMediaSend)) {
+			if (!ToastAllowed(now, _lastMediaSend)) {
 				return RateLimited("messages.forward");
 			}
 			_lastMediaSend = now;
@@ -399,6 +399,11 @@ Js::HostResult Instance::data(
 		}
 		return Result::Value(nullptr);
 	} else if (function == "messages.sendFile") {
+		// Before reading up to 10 MiB for a send that is refused anyway.
+		const auto now = crl::now();
+		if (!ToastAllowed(now, _lastMediaSend)) {
+			return RateLimited("messages.sendFile");
+		}
 		auto bytes = QByteArray();
 		const auto bin = Option(second, "$bin");
 		if (bin.is_string()) {
@@ -439,10 +444,6 @@ Js::HostResult Instance::data(
 			return Result::Error("RangeError", "the file is too large");
 		} else if (!Data::CanSend(peer, ChatRestriction::SendFiles)) {
 			return Result::Error("Error", "you cannot send files to this chat");
-		}
-		const auto now = crl::now();
-		if (!MediaSendAllowed(now, _lastMediaSend)) {
-			return RateLimited("messages.sendFile");
 		}
 		_lastMediaSend = now;
 		auto action = Api::SendAction(session->data().history(peer));

@@ -110,7 +110,7 @@ interface LuxForward {
 }
 
 interface LuxMessage {
-	/** Message id in its chat, a decimal string. */
+	/** Message id in its chat, a decimal string from 1 to 2147483647. */
 	id: string;
 	peer: LuxPeer;
 	/** null for a message from the Telegram service account. */

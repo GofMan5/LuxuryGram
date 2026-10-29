@@ -151,7 +151,8 @@ struct LuxurySettings {
     static void applyStartupGhost(GhostModeAccountSettings &);
     static void load();
     static void save() {}
-    void validate() {}
+    // Mirrors validateEnum(_webSocketTransport, defaults, 2) in production.
+    void validate() { if (_webSocketTransport < 0 || _webSocketTransport > 2) _webSocketTransport = 1; }
 };
 void to_json(nlohmann::json &j, const LuxurySettings &s) {
 @@ACCOUNT_WRITER@@
@@ -323,6 +324,8 @@ int main() {
     {
         auto data = profileFile(); data["webSocketTransport"] = 2;
         fresh(data.dump()); LuxurySettings::load(); assert(MTP::handedWsMode == 2);
+        data["webSocketTransport"] = 7; // Out of range: validate() runs before the hand-over.
+        fresh(data.dump()); LuxurySettings::load(); assert(MTP::handedWsMode == 1);
         fresh(profileFile().dump()); LuxurySettings::load(); loadedPrivacy(); ++cases;
     }
     writeSettings(); assert(QSaveFile::writes == 1); ++cases;

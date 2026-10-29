@@ -248,7 +248,10 @@ private:
 	std::int64_t _lastToast = 0;
 	// ui.openUrl: at most one link a second.
 	std::int64_t _lastOpenUrl = 0;
-	std::int64_t _lastMediaSend = 0; // messages.sendFile and forward.
+	// messages.sendFile and messages.forward return before the upload or the
+	// forward is done, so the in-flight cap cannot hold them: they share one
+	// send a second (ToastAllowed) instead.
+	std::int64_t _lastMediaSend = 0;
 	// One ui.alert/confirm/prompt at a time, closed on unload.
 	base::weak_qptr<Ui::BoxContent> _dialog;
 	rpl::lifetime _lifetime;

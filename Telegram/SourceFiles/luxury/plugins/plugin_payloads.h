@@ -35,17 +35,6 @@ inline constexpr auto kMaxEntities = 1000;
 inline constexpr auto kMaxMessageId = std::int64_t(
 	std::numeric_limits<std::int32_t>::max());
 
-// messages.sendFile and messages.forward return before the upload or the
-// forward is done, so the in-flight cap cannot hold them: they share one
-// send a second instead. last is the previous send, 0 when none was.
-inline constexpr auto kMediaSendIntervalMs = std::int64_t(1000);
-
-[[nodiscard]] inline bool MediaSendAllowed(
-		std::int64_t now,
-		std::int64_t last) {
-	return !last || now - last >= kMediaSendIntervalMs;
-}
-
 // The permission a data function needs, nullopt for any other name.
 [[nodiscard]] inline std::optional<Permission> DataPermission(
 		std::string_view function) {

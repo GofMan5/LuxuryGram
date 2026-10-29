@@ -23,6 +23,7 @@ DATA = PLUGINS + 'plugin_host_ext_data.cpp'
 ENGINE = PLUGINS + 'js/js_engine.cpp'
 SESSION = SRC + 'data/data_session.cpp'
 UPDATES = SRC + 'api/api_updates.cpp'
+PHOTO = SRC + 'data/data_photo.cpp'
 EXAMPLE = 'docs/plugins/examples/auto-moderate'
 
 MAIN = r'''
@@ -85,11 +86,6 @@ int main() {
 	CHECK(!MessageIdArg(json("2147483648")));
 	CHECK(!MessageIdArg(json(std::int64_t(1) << 56)));
 	CHECK(!MessageIdsArg(json::array({ 1, std::int64_t(1) << 40 })));
-
-	// sendFile and forward: one a second, the first one always.
-	CHECK(MediaSendAllowed(500, 0));
-	CHECK(!MediaSendAllowed(1999, 1000));
-	CHECK(MediaSendAllowed(2000, 1000));
 	CHECK(MessageIdsArg(json("7"))->size() == 1);
 	CHECK(MessageIdsArg(json::array({ 1, "2" }))->size() == 2);
 	CHECK(!MessageIdsArg(json::array()));
@@ -182,8 +178,6 @@ LOGIC_MUTANTS = (
     (PAYLOADS, 'return (result > 0 && result <= kMaxMessageId)', 'return (result >= 0 && result <= kMaxMessageId)'),
     (PAYLOADS, 'return (result > 0 && result <= kMaxMessageId)', 'return (result > 0)'),
     (PAYLOADS, 'std::numeric_limits<std::int32_t>::max());', 'std::numeric_limits<std::int64_t>::max());'),
-    (PAYLOADS, 'return !last || now - last >= kMediaSendIntervalMs;', 'return now >= 0 || last >= 0;'),
-    (PAYLOADS, 'return !last || now - last >= kMediaSendIntervalMs;', 'return now - last >= kMediaSendIntervalMs;'),
     (LOGIC, 'fold.changed = fold.replyChanged = true;', 'fold.changed = true;'),
     (LOGIC, 'fold.entities = nlohmann::json::array();\n\t\tfold.changed = fold.entitiesChanged = true;',
      'fold.changed = true;'),
@@ -251,13 +245,27 @@ def check_sources(files):
     assert 'item->forbidsSaving()' in branch(data, 'messages.downloadMedia'), \
         'downloadMedia ignores chats that restrict saving'
     # Neither waits for the upload or the forward, so the in-flight cap
-    # cannot hold them: both share one rate limit, checked before sending.
+    # cannot hold them: both share one rate limit (ToastAllowed, tested by
+    # plugin_host), checked before sending.
     for name, call in (('messages.sendFile', 'session->api().sendFile('),
                        ('messages.forward', 'session->api().forwardMessages(')):
         body = branch(data, name)
-        assert body.index('if (!MediaSendAllowed(now, _lastMediaSend)) {') \
+        assert body.index('if (!ToastAllowed(now, _lastMediaSend)) {') \
             < body.index('_lastMediaSend = now;') < body.index(call), f'{name} is not rate limited'
-    # A cancelled or failed load and an account switch settle at once.
+    # A refused sendFile reads nothing.
+    send_file = branch(data, 'messages.sendFile')
+    assert send_file.index('if (!ToastAllowed(now, _lastMediaSend)) {') \
+        < send_file.index('auto bytes = QByteArray();'), 'sendFile reads the file before the rate limit'
+    # replyTo is a message id: a dialog id would let 2^32 + 5 reply to 5.
+    reply = function(host, 'Js::HostResult Instance::send(')
+    assert 'const auto replyTo = MessageIdArg(options.value("replyTo", json()));' in reply \
+        and 'if (replyTo) {' in reply, 'messages.send reads replyTo as a dialog id'
+    # A cancelled or failed load and an account switch settle at once;
+    # a photo cancel fires nothing else, so PhotoData::cancel reports it.
+    cancel = function(files[PHOTO], 'void PhotoData::cancel()')
+    assert 'loader->cancel();' in cancel \
+        and cancel.index('loader->cancel();') < cancel.find('_owner->photoLoadProgress(this);'), \
+        'a cancelled photo download waits out the timeout'
     download = branch(data, 'messages.downloadMedia')
     assert 'session->data().documentLoadProgress(\n' in download \
         and 'session->data().photoLoadProgress(\n' in download, 'downloadMedia waits out a failed load'
@@ -292,9 +300,19 @@ SOURCE_MUTANTS = (
     (DATA, '{ "premium", user->isPremium() },', '{ "premium", user->isPremium() }, { "phone", user->phone() },'),
     (ENGINE, "} else if (result && typeof result.then === 'function') {", '} else if (false) {'),
     (ENGINE, "if (object && ('replyTo' in result)) {", 'if (false) {'),
-    (DATA, '\t\t\tif (!MediaSendAllowed(now, _lastMediaSend)) {\n\t\t\t\treturn RateLimited("messages.forward");\n\t\t\t}\n', ''),
-    (DATA, '\t\tif (!MediaSendAllowed(now, _lastMediaSend)) {\n\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n', ''),
+    (DATA, '\t\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n\t\t\t\treturn RateLimited("messages.forward");\n\t\t\t}\n', ''),
+    (DATA, '\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n', ''),
     (DATA, '\t\t_lastMediaSend = now;\n\t\tauto action', '\t\tauto action'),
+    # The sendFile rate limit back after the 10 MiB read.
+    (DATA, ('\t\tconst auto now = crl::now();\n\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n'
+            '\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n\t\tauto bytes',
+            '\t\t_lastMediaSend = now;\n\t\tauto action'),
+           ('\t\tauto bytes',
+            '\t\tconst auto now = crl::now();\n\t\tif (!ToastAllowed(now, _lastMediaSend)) {\n'
+            '\t\t\treturn RateLimited("messages.sendFile");\n\t\t}\n\t\t_lastMediaSend = now;\n\t\tauto action')),
+    (HOST, 'const auto replyTo = MessageIdArg(options.value(', 'const auto replyTo = DialogId(options.value('),
+    (HOST, 'if (replyTo) {', 'if (replyTo && *replyTo > 0) {'),
+    (PHOTO, '\t\t_owner->photoLoadProgress(this);\n\t}\n}', '\t}\n}'),
     (DATA, '\t\t\tsession->data().documentLoadProgress(\n', '\t\t\trpl::never<not_null<DocumentData*>>(\n'),
     (DATA, '\t\t\tsession->data().photoLoadProgress(\n', '\t\t\trpl::never<not_null<PhotoData*>>(\n'),
     (DATA, 'Large)\n\t\t\t\t\t|| photo->cancelled()) {', 'Large)) {'),
@@ -325,12 +343,15 @@ EXAMPLE_MUTANTS = (
 
 
 def check(root, read=source):
-    files = {path: crlf(read(path)) for path in (HOOKS, HOST, DATA, ENGINE, SESSION, UPDATES)}
+    files = {path: crlf(read(path)) for path in (HOOKS, HOST, DATA, ENGINE, SESSION, UPDATES, PHOTO)}
     check_sources(files)
     for path, before, after in SOURCE_MUTANTS:
-        assert files[path].count(before) == 1, f'source mutant anchor moved: {before!r}'
+        # Tuples edit several sites at once, as a moved check needs.
+        pairs = zip(before, after) if isinstance(before, tuple) else [(before, after)]
         mutated = dict(files)
-        mutated[path] = files[path].replace(before, after)
+        for one, other in pairs:
+            assert files[path].count(one) == 1, f'source mutant anchor moved: {one!r}'
+            mutated[path] = mutated[path].replace(one, other)
         try:
             check_sources(mutated)
         except (AssertionError, ValueError):
