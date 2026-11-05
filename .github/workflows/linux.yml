@@ -10,11 +10,14 @@ on:
   push:
     # '**' only, never tags: path filters do not apply to tag pushes, so a
     # release tag would start a duplicate matrix on a commit CI already built.
-    # The '!-canary' entries keep upstream's canary branches on canary.yml.
+    # The '!-' entries keep upstream's canary and private-ci branches on
+    # canary.yml and private-ci.yml.
     branches:
       - '**'
       - '!public-canary'
       - '!private-canary'
+      - '!private-ci/**'
+      - '!private-ci-*'
     paths-ignore:
       - 'docs/**'
       - '**.md'

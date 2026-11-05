@@ -82,10 +82,6 @@ TranslateTracker::~TranslateTracker() {
 	cancelSentRequest();
 }
 
-rpl::producer<bool> TranslateTracker::trackingLanguage() const {
-	return _trackingLanguage.value();
-}
-
 void TranslateTracker::setup() {
 	_history->peer->updateFull();
 

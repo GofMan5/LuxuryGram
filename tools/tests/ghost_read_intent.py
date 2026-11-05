@@ -104,11 +104,24 @@ READ_TILL_HERE
 QUEUE_HERE
 class RepliesList {
 public:
+ struct CachedUnread { std::optional<int> value; std::optional<int> current() const { return value; } };
  History *_history; int _rootId = 1, local = 0, _readRequestId = 0, _readRequestTill = 0, _explicitReadRequestTill = 0; base::Timer _readRequestTimer;
+ std::vector<int> _list; std::optional<int> _skippedBefore, _skippedAfter; CachedUnread _fullCount, _unreadCount; MsgId _inboxReadTillId = 0;
  explicit RepliesList(History *h) : _history(h) {}
- int computeInboxReadTillFull() { return local; } std::optional<int> computeUnreadCountLocally(int) { return 0; } void setInboxReadTill(int now,std::optional<int>) { local = now; }
+ int computeInboxReadTillFull() { return local; } void setInboxReadTill(int now,std::optional<int>) { local = now; }
  void readTill(int,HistoryItem*,std::optional<bool> = std::nullopt); void sendReadTillRequest(); void reloadUnreadCountIfNeeded() {}
 };
+// Upstream 7.3.5 recounts unread through this shared helper instead of a member;
+// the double answers the "not enough local data to count" case, which is what
+// the ghost read intents below rely on.
+std::optional<int> ComputeUnreadCountLocally(MsgId afterId, MsgId minReadTillId, const std::vector<int> &list, std::optional<int> skippedBefore, std::optional<int> skippedAfter, std::optional<int>, std::optional<int>, MsgId wasReadTillId) {
+ Expects(afterId >= wasReadTillId);
+ const auto readTillId = std::max(afterId, minReadTillId);
+ if (skippedBefore == 0 && skippedAfter == 0 && list.empty()) {
+  return int(list.size());
+ }
+ return std::nullopt;
+}
 REPLY_READ_HERE
 }
 READ_RPC_HERE

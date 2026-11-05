@@ -118,10 +118,9 @@ private:
 
 	std::shared_ptr<Data::PhotoMedia> _nonPersonalView;
 
-	rpl::variable<std::optional<QColor>> _topBarColor;
-
 	Members *_members = nullptr;
 	base::weak_qptr<TopBar> _topBar;
+	rpl::variable<std::optional<QColor>> _topBarColor;
 	Ui::SlideWrap<RpWidget> *_sharedMediaWrap = nullptr;
 	TabsHost *_tabsHost = nullptr;
 	rpl::variable<bool> _tabsDocked = false;

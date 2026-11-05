@@ -4,6 +4,21 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Changed
+
+- Synced with upstream Telegram Desktop 7.3.5. Search in chats has tabs for apps, channels, posts and media, sent text messages fly into their bubbles as they are sent, and mini apps on Windows and macOS can ask for camera and microphone access. The sync also fixes the custom download folder and other settings resetting themselves, a maximized window jittering on Windows, notifications moving off screen on Windows, missing notifications in bots with topics, exports of migrated groups missing the old group history, and code blocks losing the indentation of their first line.
+- Saved music on a profile stays the LuxuryGram cover row in the profile body, with its right-click toggle for the adaptive cover color. The compact music pill that Telegram added next to the Stars balance is not shown, so the same track is not offered twice.
+
+### Security
+
+- The upstream security fixes of 7.3.4 and 7.3.5 are in. Bidirectional control characters no longer survive in names, so a name cannot be made to read backwards in lists and headers. Media and message decoding is bounded: incomplete file data, malformed e-mail entities, unexpected link schemes, deeply nested HEIF images, oversized PNG text chunks and over-long code blocks in syntax highlighting are rejected or cut off instead of being trusted, oversized call frames from a peer are dropped, and the local socket used on Linux is no longer reachable by other local users.
+
+### Fixed
+
+- Upstream's crashes and bugs of 7.3.4 and 7.3.5 are fixed, including several crashes when a forum topic is deleted, a use-after-free when a call is migrated to a conference, and topic notifications that used to stay after the topic was read on another device.
+
 ## 1.0.22
 
 ### Added

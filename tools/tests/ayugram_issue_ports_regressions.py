@@ -314,7 +314,7 @@ def ghost_send_paths():
                 'a forward from the share box'),
             (APIWRAP, 'void ApiWrap::sendSharedContact(', 'sendAction(action)',
                 'wouldSendMedia(', 'a shared contact'),
-            (SENDING, 'void SendSimpleMedia(', 'if (action.options.scheduled)',
+            (SENDING, 'void SendSimpleMedia(', 'FillSendMediaOptionFlags(',
                 None, 'a location or venue'),
             (POLLS, 'void Polls::create(', 'sendAction(action)', None, 'a poll'),
             (TODO, 'void TodoLists::create(', 'sendAction(action)', None,
@@ -558,31 +558,87 @@ DOWNLOAD_SELECTED = r'''
 #include <cstdio>
 #include <deque>
 #include <functional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 struct QString : std::string {
+    enum NormalizationForm { NormalizationForm_C };
     QString() = default;
     QString(const char *s) : std::string(s) {}
     QString(std::string s) : std::string(std::move(s)) {}
     bool isEmpty() const { return empty(); }
+    QString chopped(int count) const {
+        auto result = *this;
+        if (result.size() > std::size_t(count)) {
+            result.resize(result.size() - std::size_t(count));
+        } else {
+            result.clear();
+        }
+        return result;
+    }
+    QString arg(int value) const {
+        auto result = *this;
+        const auto pattern = std::string("%1");
+        const auto index = result.find(pattern);
+        if (index != std::string::npos) {
+            result.replace(index, pattern.size(), std::to_string(value));
+        }
+        return result;
+    }
+    QString normalized(NormalizationForm) const { return *this; }
+    QString toCaseFolded() const {
+        auto result = *this;
+        for (auto &ch : result) {
+            if (ch >= 'A' && ch <= 'Z') {
+                ch = char(ch - 'A' + 'a');
+            }
+        }
+        return result;
+    }
 };
+inline QString operator+(char left, const QString &right) {
+    return QString(std::string(1, left) + right);
+}
+inline QString operator""_q(const char16_t *text, std::size_t size) {
+    auto result = std::string();
+    result.reserve(size);
+    for (auto i = 0; i != size; ++i) {
+        result.push_back(char(text[i]));
+    }
+    return QString(std::move(result));
+}
 template <class T> using Fn = std::function<T>;
 template <class T> using not_null = T;
 namespace Data { using FileOrigin = int; }
-struct QDir {};
+struct QDir {
+    QString path;
+    QDir() = default;
+    explicit QDir(const QString &p) : path(p) {}
+    bool operator==(const QDir &other) const { return path == other.path; }
+};
 struct QFileInfo {
     QString path;
     explicit QFileInfo(const QString &p) : path(p) {}
-    QDir dir() const { return {}; }
+    QDir dir() const { return QDir(); }
+    QDir absoluteDir() const { return QDir(); }
     QString fileName() const { return path; }
+    QString suffix() const {
+        const auto dot = path.rfind('.');
+        return (dot == std::string::npos)
+            ? QString()
+            : QString(path.substr(dot + 1));
+    }
+    static bool exists(const QString&) { return false; }
 };
+namespace base {
+template <class T> using flat_set = std::set<T>;
+}
 struct Session {};
 std::deque<Fn<void()>> queued;
 void *qApp = nullptr;
 void InvokeQueued(void*, Fn<void()> f) { queued.push_back(std::move(f)); }
 namespace crl { template <class F> F guard(Session*, F f) { return f; } }
-namespace base { QString FileNameFromUserString(QString s) { return s; } }
 struct DocumentData {
     bool cache = false;
     QString name;
@@ -592,13 +648,20 @@ struct DocumentData {
     bool forbidsFileSave() const { return false; }
     bool saveToCache() const { return cache; }
     bool saveFromData() { return false; }
+    bool loading() const { return false; }
     QString filepath(bool) const { return {}; }
+    QString loadingFilePath() const { return {}; }
     QString filename() const { return name; }
     Session &session() { return owner; }
     void save(Data::FileOrigin, const QString &to) { saves.push_back(to); }
 };
-QString DocumentFileNameForSave(DocumentData*, bool asNew, const QString&, const QDir&) {
-    return asNew ? "<save as dialog>" : "Downloads/video.mp4";
+QString DocumentFileNameForSave(DocumentData *document, bool asNew, const QString&, const QDir &directory) {
+    if (asNew) {
+        return "<save as dialog>";
+    }
+    return directory.path.isEmpty()
+        ? QString("Downloads/video.mp4")
+        : (directory.path + document->filename());
 }
 struct DocumentSaveClickHandler {
     enum class Mode { ToCacheOrFile, ToFile, ToNewFile };

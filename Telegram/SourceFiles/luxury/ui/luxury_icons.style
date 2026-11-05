@@ -22,6 +22,9 @@ luxuryToBeginningMenuIcon: icon {{ "luxury/to_beginning", menuIconColor }};
 luxuryRepeatMenuIcon: icon {{ "luxury/repeat", menuIconColor }};
 luxuryContactsMutualIcon: icon {{ "luxury/contacts_mutual", contactsStatusFg }};
 luxuryContactsMutualIconOver: icon {{ "luxury/contacts_mutual", contactsStatusFgOver }};
+// Upstream 7.3.5 dropped this entry from menu_icons.style; the fork's
+// expire-media menu items still show the plain clock instead of the TTL clock.
+menuIconTTLAny: icon {{ "menu/auto_delete_plain", menuIconColor }};
 
 messageFieldAttachIcon: icon {{ "luxury/message_field/attach", menuIconColor }};
 messageFieldCommandsIcon: icon {{ "luxury/message_field/commands", menuIconColor }};

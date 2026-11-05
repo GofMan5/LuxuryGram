@@ -17,9 +17,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/dialogs_key.h"
 #include "luxury/features/watch/presence_history.h"
 #include "base/flags.h"
+#include "base/weak_ptr.h"
 
 namespace Data {
 class Forum;
+class Thread;
 struct BotCommand;
 struct BusinessDetails;
 struct WalletCard;
@@ -70,6 +72,9 @@ struct BotInfo {
 	[[nodiscard]] Data::Forum *forum() const;
 	[[nodiscard]] std::unique_ptr<Data::Forum> takeForumData();
 
+	void setInlineReturnTo(Dialogs::EntryState state);
+	[[nodiscard]] Dialogs::EntryState inlineReturnTo() const;
+
 	QString description;
 	QString inlinePlaceholder;
 	std::vector<Data::BotCommand> commands;
@@ -87,7 +92,6 @@ struct BotInfo {
 	QColor botAppColorBodyNight = QColor(0, 0, 0, 0);
 
 	QString startToken;
-	Dialogs::EntryState inlineReturnTo;
 
 	ChatAdminRights groupAdminRights;
 	ChatAdminRights channelAdminRights;
@@ -115,6 +119,9 @@ struct BotInfo {
 
 private:
 	std::unique_ptr<Data::Forum> _forum;
+	Dialogs::EntryState _inlineReturnTo;
+	// A topic or sublist can be freed without a destroyed() event.
+	base::weak_ptr<Data::Thread> _inlineReturnThread;
 
 };
 
@@ -203,7 +210,6 @@ public:
 	[[nodiscard]] bool isScam() const;
 	[[nodiscard]] bool isFake() const;
 	[[nodiscard]] bool isPremium() const;
-	[[nodiscard]] bool isBotInlineGeo() const;
 	[[nodiscard]] bool isBot() const;
 	[[nodiscard]] bool isSupport() const;
 	[[nodiscard]] bool isInaccessible() const;

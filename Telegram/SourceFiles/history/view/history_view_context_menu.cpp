@@ -385,7 +385,7 @@ void AddPhotoActions(
 			&st::menuIconSaveImage);
 		menu->addAction(tr::lng_context_copy_image(tr::now), [=] {
 			const auto item = photo->owner().message(contextId);
-			if (!list->showCopyMediaRestriction(item)) {
+			if (item && !list->showCopyMediaRestriction(item)) {
 				CopyImage(photo);
 			}
 		}, &st::menuIconCopy);
@@ -1970,7 +1970,8 @@ void FillContextMenuItems(
 					.append('\n')
 					.append(item->originalText()))
 				: item->originalText();
-			if (!translate.text.isEmpty()) {
+			if ((!item->translation() || !item->history()->translatedTo())
+				&& !translate.text.isEmpty()) {
 				addedTranslate = LuxuryUi::AddTranslateMessageAction(
 					result,
 					list->controller(),
@@ -2427,6 +2428,7 @@ void AddPollActions(
 		not_null<Window::SessionController*> controller,
 		bool skipRetractVote,
 		bool skipViewStats) {
+	const auto itemId = item->fullId();
 	{
 		constexpr auto kRadio = "\xf0\x9f\x94\x98";
 		const auto radio = QString::fromUtf8(kRadio);
@@ -2448,7 +2450,6 @@ void AddPollActions(
 		&& (context != Context::ChatPreview)) {
 		return;
 	}
-	const auto itemId = item->fullId();
 	if (poll->canViewStats() && item->isRegular() && !skipViewStats) {
 		menu->addAction(tr::lng_polls_view_stats(tr::now), [=] {
 			ShowPollStatsBox(controller, itemId);
@@ -2509,10 +2510,11 @@ void AddSaveSoundForNotifications(
 		return;
 	}
 	const auto show = controller->uiShow();
+	const auto itemId = item->fullId();
 	menu->addAction(tr::lng_context_save_custom_sound(tr::now), [=] {
 		Api::ToggleSavedRingtone(
 			document,
-			item->fullId(),
+			itemId,
 			[=] { show->showToast(
 				tr::lng_ringtones_toast_added(tr::now)); },
 			true);
@@ -2806,8 +2808,8 @@ void ShowWhoReactedMenu(
 		int addedToBottom = 0;
 	};
 	const auto itemId = item->fullId();
+	const auto originPeer = item->history()->peer;
 	const auto participantChosen = [=](Ui::WhoReadParticipant who) {
-		const auto originPeer = item->history()->peer;
 		const auto participant = originPeer->owner().peer(PeerId(who.id));
 		Reactions::ShowReactionParticipantInfo(
 			controller,
@@ -2819,7 +2821,7 @@ void ShowWhoReactedMenu(
 	const auto moderateReactionChosen = MakeModerateReactionChosen(
 		controller,
 		itemId,
-		item->history()->peer,
+		originPeer,
 		[=] {
 			if (*menu) {
 				(*menu)->hideMenu();

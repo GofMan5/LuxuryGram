@@ -405,7 +405,6 @@ Document::Document(
 			_drawTtl = CreateTtlPaintCallback(lifetime, [=] { repaint(); });
 		} else if (!_parent->data()->out()) {
 			const auto &data = &_parent->data()->history()->owner();
-			_parent->data()->removeFromSharedMediaIndex();
 			setDocumentLinks(_data, realParent, [=] {
 				// isMessageSavable(), not the raw switch: a watched chat keeps the
 				// media whatever the global switch says.

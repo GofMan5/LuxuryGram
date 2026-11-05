@@ -1093,7 +1093,7 @@ def check_sites(files):
     assert 'Luxury::Plugins::FillMessageMenu(menu, request.item);' in files[VIEW_MENU], 'view menu lacks the plugin submenu'
 
 
-CANCEL = '\tif (!sent) {\n\t\t// A plugin cancelled it: the text stays in the field.\n\t\treturn;\n\t} else if (animate) {'
+CANCEL = '\tif (!sent) {\n\t\t// A plugin cancelled it: the text stays in the field.\n\t\treturn;\n\t} else if (sendingFrom) {'
 CHECKS = (check_hooks, check_names, check_api_call, check_sandbox, check_commit, check_manager_api, check_resource, check_sites)
 MUTANTS = (
     (check_hooks, HOOKS, 'return (manager && manager->active()) ? manager : nullptr;', 'return manager;'),
@@ -1177,8 +1177,8 @@ MUTANTS = (
     (check_sites, UPDATES, '\t\t\t\t\t\tLuxury::Plugins::MessageSent(local);\n', ''),
     (check_sites, SESSION, '\t\tLuxury::Plugins::IncomingMessage(result);\n', ''),
     (check_sites, WIDGET, '\t\t&& Luxury::Plugins::HasCommands()\n', ''),
-    (check_sites, WIDGET, CANCEL, '	if (animate) {'),
-    (check_sites, CHAT, CANCEL, '	if (animate) {'),
+    (check_sites, WIDGET, CANCEL, '\tif (sendingFrom) {'),
+    (check_sites, CHAT, CANCEL, '\tif (sendingFrom) {'),
     (check_sites, CHAT, '\t} else if (Luxury::Plugins::HasCommands()\n', '\t} else if (false\n'),
     (check_sites, CHAT, '\t\t// A plugin\'s /command runs locally and is never sent.\n\t\t_composeControls->clear();\n', ''),
     (check_sites, WIDGET, '\tconst auto sent = session().api().sendMessage(',

@@ -32,6 +32,7 @@ struct ReactionId;
 
 namespace Iv {
 struct BuiltRichQuote;
+struct RichPageBlocksSlice;
 } // namespace Iv
 
 namespace Window {
@@ -755,7 +756,6 @@ public:
 		Data::ReactionId,
 		std::unique_ptr<Ui::ReactionFlyAnimation>>;
 
-	void animateUnreadEffect();
 	[[nodiscard]] virtual auto takeEffectAnimation()
 	-> std::unique_ptr<Ui::ReactionFlyAnimation>;
 
