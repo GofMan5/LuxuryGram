@@ -231,7 +231,7 @@ No. Deleted messages, edit history and Watcher data are stored locally by your c
 
 | Surface | Status |
 | --- | --- |
-| Product version | [`1.0.22`](VERSIONING.md); bumps are manual or tied to substantial updates |
+| Product version | [`1.0.23`](VERSIONING.md); bumps are manual or tied to substantial updates |
 | Source code | Public on the [`dev`](https://github.com/GofMan5/LuxuryGram/tree/dev) branch |
 | Windows | Portable `x64` archive published |
 | Linux | Portable `x64` archive published |

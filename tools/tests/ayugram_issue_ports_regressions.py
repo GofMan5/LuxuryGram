@@ -328,6 +328,13 @@ def ghost_send_paths():
             require(body.rfind(guard, 0, ghost) != -1,
                 f'ghost mode schedules {surface} to an ephemeral bot, '
                 'which then goes out as an ordinary message')
+    for path, signature, surface in (
+            (POLLS, 'void Polls::create(', 'a poll'),
+            (TODO, 'void TodoLists::create(', 'a checklist')):
+        body = function(source(path), signature)
+        require('StripUnsendableReply(' not in body
+            and 'sendAction(' not in body,
+            f'sending {surface} strips the reply or sends the action twice')
     simple = function(source(SENDING), 'void SendSimpleMedia(')
     require(simple.index('sendSimpleMedia(') < simple.index('applyGhostScheduling('),
         'ghost mode hides a location reply from its ephemeral bot')
@@ -357,10 +364,16 @@ def forum_topic_read_hook():
     updates = source(UPDATES)
     start = updates.index('case mtpc_updateReadHistoryInbox:')
     read = updates[start:updates.index('} break;', start)]
-    require('Luxury::Plugins::ChatRead(' in read
-        and read.index('updateRepliesReadTill(') < read.index(
-            'Luxury::Plugins::ChatRead('),
+    hook = read.index('Luxury::Plugins::ChatRead(')
+    require(read.count('Luxury::Plugins::ChatRead(') == 1,
+        'plugin chatRead is reported more than once for one inbox read')
+    require(read.index('updateRepliesReadTill(') < hook,
         'plugin chatRead skips forum-topic reads')
+    elseStart = read.index('} else {')
+    elseEnd = read.index(
+        '}', read.index('history->applyInboxReadUpdate(', elseStart))
+    require(not (elseStart < hook < elseEnd),
+        'plugin chatRead only fires for non-topic inbox reads')
 
 
 def hidden_translate_bar():

@@ -4,7 +4,7 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
-## Unreleased
+## 1.0.23
 
 ### Changed
 
@@ -19,7 +19,7 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 ### Fixed
 
 - Upstream's crashes and bugs of 7.3.4 and 7.3.5 are fixed, including several crashes when a forum topic is deleted, a use-after-free when a call is migrated to a conference, and topic notifications that used to stay after the topic was read on another device.
-- The expanded audio player's Save Cover and cover preview now use the full-resolution artwork embedded in the audio file instead of the small Telegram thumbnail, and a track without embedded artwork falls back to the largest cover iTunes returns.
+- The expanded audio player's Save Cover and cover preview now use the full-resolution artwork embedded in a downloaded audio file instead of the small Telegram thumbnail; a track that is still streaming keeps the cover already shown, and a track with no Telegram cover falls back to the largest cover iTunes returns.
 - Plugin `chatRead` events are delivered for reads in forum topics again; the merge with Telegram Desktop 7.3.5 had dropped them.
 
 ## 1.0.22

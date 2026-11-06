@@ -49,7 +49,7 @@ interface LuxPluginInfo {
 	readonly version: string;
 	/** The plugin API this client implements: 1. */
 	readonly apiVersion: number;
-	/** LuxuryGram version, "1.0.22". */
+	/** LuxuryGram version, "1.0.23". */
 	readonly clientVersion: string;
 	/** The version this one replaced on update or rollback, else "". */
 	readonly previousVersion: string;
