@@ -28,7 +28,7 @@ namespace Luxury::Ui::Itunes {
 namespace {
 
 constexpr auto kMaxResponseBytes = 8 * 1024 * 1024;
-constexpr auto kMaxArtworkPixels = 4 * 1024 * 1024;
+constexpr auto kMaxArtworkPixels = 16 * 1024 * 1024;
 constexpr auto kArtworkCacheKiB = 16 * 1024;
 constexpr auto kParallelFetchLimit = 3;
 
@@ -300,7 +300,11 @@ QUrl buildItunesUrl(const QString &performer, const QString &title) {
 }
 
 int ArtworkSize(int sizeHint) {
-	return (sizeHint >= 600) ? 600 : (sizeHint >= 300) ? 300 : 100;
+	return (sizeHint >= 3000)
+		? 3000
+		: (sizeHint >= 600)
+		? 600
+		: (sizeHint >= 300) ? 300 : 100;
 }
 
 QString upgradeArtworkSize(QString url, int size) {
@@ -371,7 +375,11 @@ QImage FetchCover(const QString &performer, const QString &title, int sizeHintPx
 		const auto cost = std::max<qsizetype>(
 			1,
 			(image.sizeInBytes() + 1023) / 1024);
-		state.entries.insert(key, new QImage(image), int(cost));
+		// An entry larger than the whole budget would wipe the small covers
+		// the list rows reuse, so an oversized one is simply not cached.
+		if (cost <= kArtworkCacheKiB) {
+			state.entries.insert(key, new QImage(image), int(cost));
+		}
 	}
 	return image;
 }

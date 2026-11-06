@@ -13,6 +13,8 @@
 #include "data/data_document_media.h"
 #include "data/data_file_origin.h"
 #include "data/data_session.h"
+#include "ffmpeg/ffmpeg_bytes_io_wrap.h"
+#include "ffmpeg/ffmpeg_utility.h"
 #include "lang_auto.h"
 #include "luxury/ui/utils/box_buttons.h"
 #include "luxury/ui/utils/itunes_search.h"
@@ -47,6 +49,76 @@
 
 #include <algorithm>
 #include <thread>
+
+namespace {
+
+// Telegram keeps only a thumbnail of a song's cover while the audio file
+// still carries the artwork the uploader embedded, at its original size.
+// A track can be a long set, so the picture is taken only from a bounded file.
+constexpr auto kCoverSourceLimit = int64(256) * 1024 * 1024;
+constexpr auto kSavedCoverSize = 3000;
+
+[[nodiscard]] QImage ExtractEmbeddedCover(const QString &path) {
+	if (path.isEmpty()) {
+		return {};
+	}
+	auto wrap = FFmpeg::ReadFileWrap{ .file = QFile(path) };
+	if (!wrap.file.open(QIODevice::ReadOnly)
+		|| wrap.file.size() <= 0
+		|| wrap.file.size() > kCoverSourceLimit) {
+		return {};
+	}
+	auto input = FFmpeg::MakeFormatPointer(
+		&wrap,
+		&FFmpeg::ReadFileWrap::Read,
+		nullptr,
+		&FFmpeg::ReadFileWrap::Seek);
+	if (!input) {
+		return {};
+	}
+	if (const auto error = FFmpeg::AvErrorWrap(
+			avformat_find_stream_info(input.get(), nullptr))) {
+		return {};
+	}
+	for (auto i = 0u; i != input->nb_streams; ++i) {
+		const auto stream = input->streams[i];
+		if (!(stream->disposition & AV_DISPOSITION_ATTACHED_PIC)) {
+			continue;
+		}
+		const auto &picture = stream->attached_pic;
+		if (picture.size <= 0 || !picture.data) {
+			continue;
+		}
+		if (auto image = QImage::fromData(QByteArray(
+				reinterpret_cast<const char*>(picture.data),
+				picture.size)); !image.isNull()) {
+			return image;
+		}
+	}
+	return {};
+}
+
+[[nodiscard]] QImage BestCoverImage(
+		const QString &path,
+		const QString &performer,
+		const QString &title,
+		bool allowItunes,
+		QImage fallback) {
+	if (const auto embedded = ExtractEmbeddedCover(path); !embedded.isNull()) {
+		return embedded;
+	}
+	if (allowItunes && (!performer.isEmpty() || !title.isEmpty())) {
+		if (const auto fetched = Luxury::Ui::Itunes::FetchCover(
+				performer,
+				title,
+				kSavedCoverSize); !fetched.isNull()) {
+			return fetched;
+		}
+	}
+	return fallback;
+}
+
+} // namespace
 
 ExpandedPlayerBox::ExpandedPlayerBox(
 	QWidget *parent,
@@ -461,6 +533,12 @@ void ExpandedPlayerBox::saveCover() {
 		showToast(tr::luxury_PlayerSaveCoverFailed(tr::now));
 		return;
 	}
+	const auto document = _lastSongId.audio();
+	const auto song = document ? document->song() : nullptr;
+	const auto audioPath = document ? document->filepath() : QString();
+	const auto performer = song ? song->performer : QString();
+	const auto title = song ? song->title : QString();
+	const auto allowItunes = !document || !document->isSongWithCover();
 	auto filter = u"PNG Image (*.png);;"_q
 		+ FileDialog::AllFilesFilter();
 	FileDialog::GetWritePath(
@@ -472,13 +550,19 @@ void ExpandedPlayerBox::saveCover() {
 			if (result.isEmpty()) {
 				return;
 			}
-			const auto path = result.endsWith(u".png"_q, Qt::CaseInsensitive)
+			const auto savePath = result.endsWith(u".png"_q, Qt::CaseInsensitive)
 				? result
 				: (result + u".png"_q);
 			const auto controller = _controller;
 			closeBox();
 			crl::async([=] {
-				if (!image.save(path)) {
+				const auto cover = BestCoverImage(
+					audioPath,
+					performer,
+					title,
+					allowItunes,
+					image);
+				if (!cover.save(savePath)) {
 					crl::on_main(controller, [=] {
 						controller->showToast(
 							tr::luxury_PlayerSaveCoverFailed(tr::now));
@@ -493,13 +577,25 @@ void ExpandedPlayerBox::openCover() {
 	if (image.isNull()) {
 		return;
 	}
+	const auto document = _lastSongId.audio();
+	const auto song = document ? document->song() : nullptr;
+	const auto audioPath = document ? document->filepath() : QString();
+	const auto performer = song ? song->performer : QString();
+	const auto title = song ? song->title : QString();
+	const auto allowItunes = !document || !document->isSongWithCover();
 	const auto folder = _controller->session().local().tempDirectory();
 	// A name per click: quick repeated clicks must not share one file.
 	const auto path = folder + u"cover_%1.png"_q.arg(crl::now());
 	const auto controller = _controller;
 	crl::async([=] {
+		const auto cover = BestCoverImage(
+			audioPath,
+			performer,
+			title,
+			allowItunes,
+			image);
 		QDir().mkpath(folder);
-		if (image.save(path)) {
+		if (cover.save(path)) {
 			File::Launch(path);
 		} else {
 			crl::on_main(controller, [=] {

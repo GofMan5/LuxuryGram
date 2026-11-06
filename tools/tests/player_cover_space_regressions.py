@@ -210,9 +210,9 @@ def check(root):
     assert 'setDisabled(_image.isNull());' in cover, 'the "no cover" placeholder would still look clickable'
     assert '_cover->setClickedCallback([=] { openCover(); });' in box, 'a click on the cover opens nothing'
     open_cover = function(box, 'void ExpandedPlayerBox::openCover()')
-    for needle in ('_cover->image()', 'tempDirectory()', 'image.save(path)', 'File::Launch(path)', 'luxury_PlayerSaveCoverFailed'):
+    for needle in ('_cover->image()', 'tempDirectory()', 'BestCoverImage(', 'File::Launch(path)', 'luxury_PlayerSaveCoverFailed'):
         assert needle in open_cover, f'openCover lost {needle}'
-    assert open_cover.index('image.save(path)') < open_cover.index('File::Launch(path)'), 'the viewer is launched before the file exists'
+    assert open_cover.index('cover.save(path)') < open_cover.index('File::Launch(path)'), 'the viewer is launched before the file exists'
     assert 'void openCover();' in source(BOX_HEADER)
 
     cpp(root, 'space_play_pause', PROGRAM.replace('HANDLER', handler))
