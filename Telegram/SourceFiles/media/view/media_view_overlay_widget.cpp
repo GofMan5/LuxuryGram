@@ -1491,9 +1491,12 @@ bool OverlayWidget::hasCopyMediaRestriction(bool skipPremiumCheck) const {
 		if (story->call()) {
 			return true;
 		}
+		// LuxuryGram: allow downloading any stories
+		return false;
 	}
-	// LuxuryGram: removed; allow downloading any stories
-	return false;
+	return (_history && !_history->peer->allowsForwarding())
+		|| (_message && _message->forbidsSaving())
+		|| (_history && _screenshotProtected);
 }
 
 bool OverlayWidget::showCopyMediaRestriction(bool skipPRemiumCheck) {

@@ -18,7 +18,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
-#include "history/history_item_helpers.h" // StripUnsendableReply
 #include "main/main_session.h"
 #include "luxury/utils/telegram_helpers.h"
 
@@ -40,9 +39,7 @@ void TodoLists::create(
 		SendAction action,
 		Fn<void()> done,
 		Fn<void(QString)> fail) {
-StripUnsendableReply(_session, action.replyTo);
 	applyGhostScheduling(_session, action.options);
-	_session->api().sendAction(action);
 
 	auto starsPaid = 0;
 	const auto sendFlags = PrepareSendMedia(_session, action, starsPaid);

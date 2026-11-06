@@ -14,11 +14,13 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 ### Security
 
 - The upstream security fixes of 7.3.4 and 7.3.5 are in. Bidirectional control characters no longer survive in names, so a name cannot be made to read backwards in lists and headers. Media and message decoding is bounded: incomplete file data, malformed e-mail entities, unexpected link schemes, deeply nested HEIF images, oversized PNG text chunks and over-long code blocks in syntax highlighting are rejected or cut off instead of being trusted, oversized call frames from a peer are dropped, and the local socket used on Linux is no longer reachable by other local users.
+- Media in the media viewer now respects the chat's forwarding restriction: a photo, video or file from a chat or channel that forbids forwarding shows the usual warning instead of being saved or copied. Stories still download without the Premium check, and view-once and timer media stay saveable.
 
 ### Fixed
 
 - Upstream's crashes and bugs of 7.3.4 and 7.3.5 are fixed, including several crashes when a forum topic is deleted, a use-after-free when a call is migrated to a conference, and topic notifications that used to stay after the topic was read on another device.
 - The expanded audio player's Save Cover and cover preview now use the full-resolution artwork embedded in the audio file instead of the small Telegram thumbnail, and a track without embedded artwork falls back to the largest cover iTunes returns.
+- Plugin `chatRead` events are delivered for reads in forum topics again; the merge with Telegram Desktop 7.3.5 had dropped them.
 
 ## 1.0.22
 

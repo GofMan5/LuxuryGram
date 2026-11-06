@@ -32,6 +32,7 @@ SENDING = 'Telegram/SourceFiles/api/api_sending.cpp'
 APIWRAP = 'Telegram/SourceFiles/apiwrap.cpp'
 ITEM = 'Telegram/SourceFiles/history/history_item.cpp'
 OVERLAY = 'Telegram/SourceFiles/media/view/media_view_overlay_widget.cpp'
+UPDATES = 'Telegram/SourceFiles/api/api_updates.cpp'
 SYNC = 'Telegram/SourceFiles/luxury/features/forward/luxury_sync.cpp'
 HISTORY = 'Telegram/SourceFiles/history/history_widget.cpp'
 FORWARD_RICH = (
@@ -316,8 +317,8 @@ def ghost_send_paths():
                 'wouldSendMedia(', 'a shared contact'),
             (SENDING, 'void SendSimpleMedia(', 'FillSendMediaOptionFlags(',
                 None, 'a location or venue'),
-            (POLLS, 'void Polls::create(', 'sendAction(action)', None, 'a poll'),
-            (TODO, 'void TodoLists::create(', 'sendAction(action)', None,
+            (POLLS, 'void Polls::create(', 'PrepareSendMedia(', None, 'a poll'),
+            (TODO, 'void TodoLists::create(', 'PrepareSendMedia(', None,
                 'a checklist')):
         body = function(source(path), signature)
         ghost = body.find('applyGhostScheduling(')
@@ -341,6 +342,25 @@ def ghost_send_paths():
     require(dice.rfind('wouldSend(message)', 0, ghost) != -1,
         'ghost mode schedules a dice to an ephemeral bot, '
         'which then goes out as an ordinary message')
+
+
+def media_viewer_copy_restrictions():
+    body = function(source(OVERLAY), 'bool OverlayWidget::hasCopyMediaRestriction(')
+    require('allowsForwarding()' in body and 'forbidsSaving()' in body
+        and '_screenshotProtected' in body,
+        'the media viewer ignores the chat copy and save restrictions')
+    require(body.index('return false;') < body.index('allowsForwarding()'),
+        'the stories download bypass covers chats as well')
+
+
+def forum_topic_read_hook():
+    updates = source(UPDATES)
+    start = updates.index('case mtpc_updateReadHistoryInbox:')
+    read = updates[start:updates.index('} break;', start)]
+    require('Luxury::Plugins::ChatRead(' in read
+        and read.index('updateRepliesReadTill(') < read.index(
+            'Luxury::Plugins::ChatRead('),
+        'plugin chatRead skips forum-topic reads')
 
 
 def hidden_translate_bar():
@@ -1725,6 +1745,8 @@ def check(root):
     deleted_in_threads(root)
     hidden_join_requests(root)
     hidden_translate_bar()
+    media_viewer_copy_restrictions()
+    forum_topic_read_hook()
     deleted_shared_media()
     square_userpic_upload()
     canvas_clamp(root)

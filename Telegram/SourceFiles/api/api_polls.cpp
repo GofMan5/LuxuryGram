@@ -26,7 +26,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_statistics_chart.h"
 #include "history/history.h"
 #include "history/history_item.h"
-#include "history/history_item_helpers.h" // StripUnsendableReply
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "styles/style_polls.h"
@@ -226,9 +225,7 @@ void Polls::create(
 		SendAction action,
 		Fn<void()> done,
 		Fn<void(bool fileReferenceExpired)> fail) {
-StripUnsendableReply(_session, action.replyTo);
 	applyGhostScheduling(_session, action.options);
-	_session->api().sendAction(action);
 
 	auto starsPaid = 0;
 	auto sendFlags = PrepareSendMedia(_session, action, starsPaid);
