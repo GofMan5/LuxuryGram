@@ -1,0 +1,53 @@
+{
+  "id": "dev.luxurygram.chat-analysis",
+  "name": "Анализ чата",
+  "version": "1.0.0",
+  "description": "Анализирует последние 100 сообщений и предлагает ответы в вашем стиле. Передача переписки в настроенный HTTPS API — только после подтверждения; возможны перенаправления сервера.",
+  "author": "LuxuryGram",
+  "api": 1,
+  "runtime": "js",
+  "minClient": "1.0.22",
+  "main": "main.js",
+  "files": ["main.js"],
+  "permissions": ["ui", "messages.read", "network", "clipboard"],
+  "network": ["*"],
+  "settings": [
+    {
+      "key": "endpoint",
+      "type": "string",
+      "title": "Endpoint API",
+      "description": "OpenAI-совместимый HTTPS API: адрес сервера, /v1 или полный /v1/chat/completions. Только публичный сервер и порт 443.",
+      "placeholder": "https://api.example.com/v1",
+      "default": ""
+    },
+    {
+      "key": "apiKey",
+      "type": "secret",
+      "title": "Ключ API",
+      "description": "Authorization: Bearer для вашего API. Поле скрыто, но ключ хранится в локальных настройках. Используйте прямой endpoint без перенаправлений и не публикуйте ключ.",
+      "default": ""
+    },
+    {
+      "key": "model",
+      "type": "string",
+      "title": "Модель",
+      "description": "Выберите через меню чата → Плагины → Выбрать модель (загрузка из /v1/models). Можно ввести ID вручную.",
+      "default": ""
+    },
+    {
+      "key": "nickname",
+      "type": "string",
+      "title": "Я в чате — ник",
+      "description": "Если пусто, используется @username или имя активного аккаунта. Свои сообщения дополнительно помечаются как мои.",
+      "default": ""
+    },
+    {
+      "key": "context",
+      "type": "string",
+      "title": "Контекст или цель по умолчанию",
+      "description": "Перед каждым анализом можно изменить. Введённый для конкретного чата контекст не сохраняется.",
+      "default": ""
+    }
+  ],
+  "homepage": "https://github.com/GofMan5/LuxuryGram/tree/dev/docs/plugins/examples/chat-analysis"
+}

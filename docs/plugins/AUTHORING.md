@@ -17,6 +17,12 @@ is the full contract.
    `yourname/repo` (or the `tree/<branch>/<folder>` link of the folder).
 4. Type `/hello` in any chat or press Ctrl+Shift+H.
 
+[examples/chat-analysis](examples/chat-analysis/README.md) is an installable
+example using a custom OpenAI-compatible API: model discovery, the last 100
+messages, a per-request context prompt, explicit external-transmission consent
+and separate copy actions (including individual suggested replies). It does
+not ask for permission to send or modify Telegram messages.
+
 For editor completion put this line at the top of each module and keep
 [lux.d.ts](lux.d.ts) next to it:
 

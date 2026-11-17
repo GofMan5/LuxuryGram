@@ -4,6 +4,16 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Added
+
+- An installable JavaScript chat-analysis plugin in `docs/plugins/examples/chat-analysis`. Its Analysis action in the chat menu and header plugins button reads up to the last 100 messages, uses your nickname and additional context, and offers a short analysis plus one or two replies in your style. Configure your own OpenAI-compatible endpoint and API key; choose a model from `/v1/models` with search and paging, or enter its ID manually. Results and individual replies can be copied; the plugin cannot send messages to Telegram.
+
+### Security
+
+- Chat analysis asks before transmitting chat text, sender names, timestamps, nickname and context to the configured external API; media is not downloaded. Its arbitrary-endpoint support requests access to all public HTTPS hosts on port 443 (`network: ["*"]`). The API key is masked in settings, requests and provider errors are not logged, and results are kept only in memory and cleared on account or endpoint/key changes. Plugin settings, including the key, use LuxuryGram's existing local settings storage, not an OS credential vault.
+
 ## 1.0.23
 
 ### Changed
