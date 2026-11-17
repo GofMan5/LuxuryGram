@@ -440,6 +440,12 @@ void Installer::downloadNext(std::shared_ptr<DownloadState> state) {
 			state->done(name + u": "_q + file.errorString());
 			return;
 		}
+		// Completion may rename the staged directory: release Windows handles first.
+		file.close();
+		if (file.error() != QFileDevice::NoError) {
+			state->done(name + u": "_q + file.errorString());
+			return;
+		}
 		state->total += body.size();
 		++state->index;
 		if (const auto strong = weak.get()) {
