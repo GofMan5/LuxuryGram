@@ -26,7 +26,9 @@
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
 #include "ui/toast/toast.h"
+#include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/input_field.h"
+#include "ui/widgets/labels.h"
 #include "window/window_controller.h"
 #include "styles/style_layers.h"
 
@@ -288,6 +290,14 @@ bool Instance::start() {
 		) | rpl::on_next([=](Main::Session *) {
 			accountChanged();
 		}, _lifetime);
+		Core::App().passcodeLockChanges() | rpl::on_next([this](bool locked) {
+			if (locked) {
+				_gestureUntil = 0;
+				if (const auto dialog = _dialog.get()) {
+					dialog->closeBox();
+				}
+			}
+		}, _lifetime);
 	}
 	return run([&] { return _engine->loadMain(_manifest.main); }).ok();
 }
@@ -407,6 +417,10 @@ void Instance::settleLater(
 }
 
 void Instance::accountChanged() {
+	if (const auto dialog = _dialog.get()) {
+		dialog->closeBox();
+	}
+	_gestureUntil = 0;
 	// Replies of the old account are dropped: every reply callback checks
 	// that its promise is still in _requests.
 	_queue.clear();
@@ -677,11 +691,87 @@ Js::HostResult Instance::ui(
 		_dialog = box.data();
 		window->uiShow()->showBox(std::move(box));
 		return Result::Pending();
+	} else if (function == "ui.showResult") {
+		if (!_plugin.granted.has(Permission::Clipboard)) {
+			return PermissionError(Permission::Clipboard);
+		} else if (!ValidResultDialog(options)) {
+			return TypeError("ui.showResult: invalid title, text, copies or action");
+		}
+		const auto copies = options["copies"];
+		const auto action = OptionText(options, "action");
+		const auto session = ActiveSession();
+		const auto canAct = [=] {
+			const auto strong = weak.get();
+			return strong && !strong->_stopping && !*settled
+				&& Core::IsAppLaunched() && !Core::App().passcodeLocked()
+				&& ActiveSession() == session;
+		};
+		auto box = Box([=](not_null<Ui::GenericBox*> box) {
+			box->setTitle(rpl::single(title));
+			box->setWidth(st::boxWideWidth);
+			box->setMaxHeight(st::boxMaxListHeight);
+			const auto addLabel = [=](const QString &line) {
+				const auto label = box->addRow(object_ptr<Ui::FlatLabel>(
+					box,
+					line,
+					st::boxLabel));
+				label->setBreakEverywhere(true);
+			};
+			for (const auto &entry : copies) {
+				const auto copyTitle = OptionText(entry, "title");
+				const auto copyText = OptionText(entry, "text");
+				addLabel(copyTitle + u"\n"_q + copyText);
+				const auto button = box->addRow(object_ptr<Ui::RoundButton>(
+					box,
+					tr::lng_mediaview_copy(),
+					st::defaultBoxButton));
+				button->setFocusPolicy(Qt::TabFocus);
+				button->setAccessibleDescription(copyTitle);
+				button->setClickedCallback([=] {
+					if (!canAct()) {
+						return;
+					}
+					// A native click copies the displayed text, without granting
+					// the plugin a clipboard gesture or entering JavaScript.
+					QGuiApplication::clipboard()->setText(copyText);
+					box->showToast(tr::lng_text_copied(tr::now));
+				});
+				box->addSkip(st::boxLittleSkip);
+			}
+			if (!text.isEmpty()) {
+				addLabel(text);
+			}
+			if (!action.isEmpty()) {
+				box->addButton(rpl::single(action), [=] {
+					if (canAct()) {
+						settle(true);
+						box->closeBox();
+					}
+				});
+			}
+			box->addButton(tr::lng_close(), [=] { box->closeBox(); });
+			box->boxClosing() | rpl::on_next([=] {
+				settle(false);
+			}, box->lifetime());
+		});
+		_dialog = box.data();
+		window->uiShow()->showBox(std::move(box));
+		return Result::Pending();
 	} else if (function == "ui.prompt") {
 		const auto placeholder = OptionText(options, "placeholder");
 		const auto value = OptionText(options, "value");
+		const auto submitLabel = OptionText(options, "submit").left(64);
 		auto box = Box([=](not_null<Ui::GenericBox*> box) {
 			box->setTitle(rpl::single(title));
+			if (!text.isEmpty()) {
+				box->setWidth(st::boxWideWidth);
+				box->setMaxHeight(st::boxMaxListHeight);
+				const auto label = box->addRow(object_ptr<Ui::FlatLabel>(
+					box,
+					text.left(2048),
+					st::boxLabel));
+				label->setBreakEverywhere(true);
+			}
 			const auto field = box->addRow(object_ptr<Ui::InputField>(
 				box,
 				st::defaultInputField,
@@ -693,7 +783,9 @@ Js::HostResult Instance::ui(
 				box->closeBox();
 			};
 			field->submits() | rpl::on_next(submit, field->lifetime());
-			box->addButton(tr::lng_box_ok(), submit);
+			box->addButton(submitLabel.isEmpty()
+				? tr::lng_box_ok()
+				: rpl::single(submitLabel), submit);
 			box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
 			box->boxClosing() | rpl::on_next([=] {
 				settle(nullptr);

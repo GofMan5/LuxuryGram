@@ -4,6 +4,18 @@ This file tracks changes specific to LuxuryGram. Historical Telegram Desktop and
 
 Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryGram/releases) and tagged `luxury-v<version>`.
 
+## Unreleased
+
+### Changed
+
+- Chat Analysis shows when it is loading history and waiting for the model, with elapsed time. The default action asks once before sending; choose Analysis with Context to add a goal or detail. Results now offer three drafts, with the recommended one first and a copy button for each.
+- Refine lets you describe what to change and get three new drafts. Cancelling or an API error leaves the previous drafts available. On older clients the copy and refine actions are in the plugin menu.
+
+### Security
+
+- Refining a draft asks before sending your correction and the previous result to the configured API. It does not attach the transcript again, although the previous result may contain quotes. Copy buttons copy only the displayed draft and do not grant the plugin additional clipboard access.
+- Plugin dialogs close when you switch accounts or lock LuxuryGram, so the previous account’s drafts are not left on screen.
+
 ## 1.0.24
 
 Also includes the Telegram Desktop 7.3.5 sync and the other changes listed under 1.0.23 below; 1.0.23 remained an unpublished draft.

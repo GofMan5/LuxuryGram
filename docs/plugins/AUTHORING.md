@@ -288,6 +288,7 @@ chat open in the active window, or null.
 | Commands, message menu items, hotkeys | 100 each; the same name, title or keys replaces the handler |
 | Chat menu items, header buttons, compose menu items | 100 each; the same title replaces the handler |
 | `ui.showForm` | 20 fields, 50 options a select, 256 bytes a text; one dialog or form open at a time |
+| `ui.showResult` | Requires `ui` and `clipboard`; 1–3 copy rows, 1536 UTF-8 bytes per draft, 3072 per explanation, 96 per title/action label; labels are single-line. Copy always uses the displayed draft; it does not extend the JS clipboard gesture. Feature-detect on API 1 clients. |
 | `ui.openUrl` | http(s) only, not Telegram links (`TypeError`, use `ui.openChat`), one a second, within 1 s after the user runs a command, menu item or hotkey of the plugin; the client's link confirmation applies unless the user turned it off for web links |
 | `ui.decorateMessage` | 32 characters a label, 1000 messages; shown only on incoming messages that show a sender name |
 | `settings.onChange` handlers | 64 |

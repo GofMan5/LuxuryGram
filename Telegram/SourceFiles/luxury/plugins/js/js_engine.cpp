@@ -149,6 +149,7 @@ const lux = {
 		addHeaderButton: (options) => call('ui.addHeaderButton', options),
 		addComposeMenuItem: (options) => call('ui.addComposeMenuItem', options),
 		showForm: (schema) => call('ui.showForm', schema),
+		showResult: (options) => call('ui.showResult', options),
 		currentChat: () => call('ui.currentChat'),
 		openChat: (peer) => call('ui.openChat', peer),
 		openUrl: (url) => call('ui.openUrl', url),

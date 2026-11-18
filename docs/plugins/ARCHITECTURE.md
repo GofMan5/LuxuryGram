@@ -445,7 +445,14 @@ lux.account.me() -> {id, firstName, lastName, username, premium}    messages.rea
 lux.ui.toast(text)                     at most one a second (RangeError)  ui
 lux.ui.notify(text)                    a toast titled with the plugin name  ui
 lux.ui.alert({title, text}) / lux.ui.confirm({...}) -> Promise<bool>  ui
-lux.ui.prompt({title, placeholder?, value?}) -> Promise<string|null>  ui
+lux.ui.prompt({title, placeholder?, value?, text?, submit?}) -> Promise<string|null>  ui
+//   text: optional plain-text explanation (2048 UTF-16 units); submit: button label
+//   (64 UTF-16 units). Older clients ignore these two options.
+lux.ui.showResult({title?, text?, copies, action?}) -> Promise<bool>  ui + clipboard
+//   copies: 1..3 {title, text} entries. Each button copies only its displayed
+//   text on click, without closing or giving JS a clipboard gesture.
+//   action closes and resolves true; ordinary close resolves false.
+//   Feature-detect showResult on older clients.
 lux.ui.addCommand({name, description, handler({peer, args})})       ui
 lux.ui.addMessageMenuItem({title, handler({peer, message})})        ui
 lux.ui.addHotkey({keys: 'Ctrl+Shift+K', handler({peer})})           ui
@@ -469,7 +476,7 @@ lux.ui.decorateMessage({peer, id, text?}) / refreshMessage({peer, id})  ui
 //   on incoming messages with a sender name; at most 1000 messages;
 //   dropped on unload and on an account switch
 //   Dialogs: one at a time per plugin, titled with the plugin name, closed
-//   when the plugin unloads; refused while the app is passcode-locked
+//   on plugin unload, an account switch or passcode lock; refused while locked
 //   Ctrl+C/V/X/A/Z/Y, Ctrl+Enter, Enter and Esc are reserved: TypeError
 lux.http.fetch(url, {method, headers, body, binary}) -> Promise<{status, headers, text(), json(), base64}>  network
 //   https only, to a manifest host, on port 443 unless that host entry

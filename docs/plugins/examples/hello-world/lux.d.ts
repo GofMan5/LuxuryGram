@@ -214,8 +214,22 @@ interface LuxDialogOptions {
 	text?: string;
 }
 
+interface LuxResultOptions {
+	title?: string;
+	/** Optional plain-text explanation, below the copyable entries. */
+	text?: string;
+	/** 1–3 entries. Clicking a copy button copies only its text and leaves the dialog open. */
+	copies: { title: string; text: string }[];
+	/** Optional button label; clicking it closes the box and resolves true. */
+	action?: string;
+}
+
 interface LuxPromptOptions {
 	title?: string;
+	/** Plain-text explanation (on clients with ui.showResult). */
+	text?: string;
+	/** Submit button label (on clients with ui.showResult). */
+	submit?: string;
 	placeholder?: string;
 	/** Initial text of the field. */
 	value?: string;
@@ -413,6 +427,12 @@ declare namespace lux {
 		 * at a time; closed when the plugin unloads.
 		 */
 		function showForm(schema: LuxFormSchema): Promise<{ [key: string]: string | boolean } | null>;
+		/**
+		 * Native copy buttons. Needs `ui` and `clipboard`; does not grant a
+		 * clipboard gesture. Resolves false when closed, true on action.
+		 * Optional on API 1 clients; feature-detect before use.
+		 */
+		const showResult: ((options: LuxResultOptions) => Promise<boolean>) | undefined;
 		/** The chat open in the active window, or null. */
 		function currentChat(): LuxPeer | null;
 		/** Opens the chat in the active window. */

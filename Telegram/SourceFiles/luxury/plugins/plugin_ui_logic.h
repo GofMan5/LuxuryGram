@@ -198,6 +198,51 @@ struct FormField {
 	return result;
 }
 
+// ui.showResult copies only the plain text shown in the corresponding row.
+[[nodiscard]] inline bool ValidResultDialog(const nlohmann::json &options) {
+	const auto bounded = [](const nlohmann::json &value, std::size_t limit) {
+		return value.is_string()
+			&& value.get_ref<const std::string&>().size() <= limit;
+	};
+	const auto label = [&](const nlohmann::json &value) {
+		return bounded(value, 96)
+			&& value.get_ref<const std::string&>().find_first_not_of(' ')
+				!= std::string::npos
+			&& value.get_ref<const std::string&>().find_first_of("\r\n\t")
+				== std::string::npos;
+	};
+	if (!options.is_object()) {
+		return false;
+	}
+	for (const auto &[key, value] : options.items()) {
+		if (key == "title" || key == "action") {
+			if (!label(value)) {
+				return false;
+			}
+		} else if (key == "text") {
+			if (!bounded(value, 3072)) {
+				return false;
+			}
+		} else if (key != "copies") {
+			return false;
+		}
+	}
+	const auto copies = options.find("copies");
+	if (copies == options.end() || !copies->is_array()
+		|| copies->empty() || copies->size() > 3) {
+		return false;
+	}
+	for (const auto &entry : *copies) {
+		if (!entry.is_object() || entry.size() != 2
+			|| !entry.contains("title") || !label(entry["title"])
+			|| !entry.contains("text") || !bounded(entry["text"], 1536)
+			|| entry["text"].get_ref<const std::string&>().empty()) {
+			return false;
+		}
+	}
+	return true;
+}
+
 // ui.openUrl: a web page only. tg:, file: and the rest of the schemes are
 // refused here, the link still goes through the client's confirmation.
 [[nodiscard]] inline bool IsPluginOpenableUrl(std::string_view url) {

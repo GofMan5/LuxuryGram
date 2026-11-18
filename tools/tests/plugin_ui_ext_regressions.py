@@ -4,6 +4,7 @@ plugin_ui_logic.h is compiled with g++ and checked by a MAIN with asserts:
 - IsUiExtFunction routes exactly the nine ui.* extension functions;
 - ParseFormSchema is strict: an unknown field type or member, a repeated
   key, a bad default or too many fields is a TypeError naming the path;
+- ValidResultDialog bounds the plain-text result and its copy rows;
 - IsPluginOpenableUrl takes http(s) links only;
 - DecorationText makes one trimmed line of at most 32 code points.
 Each logic rule is also broken by a compile-time mutant the MAIN must reject.
@@ -17,6 +18,8 @@ against a mutant it must reject:
   only right after a user gesture, since the box can be turned off;
 - unload removes every menu item, header button and label, and an open
   form settles null when its box closes;
+- native copy is permission-gated and limited to a displayed draft; the
+  result dialog closes on account switch or lock;
 - the dispatch reaches uiExt before the generic ui. branch, forms are
   refused while passcode-locked, the service chat is never shown, and menu
   clicks reach the plugin asynchronously;
@@ -81,6 +84,24 @@ int main() {
 	CHECK(!IsUiExtFunction("ui.addCommand"));
 	CHECK(!IsUiExtFunction("ui.prompt"));
 	CHECK(!IsUiExtFunction(""));
+	CHECK(!IsUiExtFunction("ui.showResult"));
+
+	const auto result = json::parse(R"({"title":"Drafts","text":"Notes","action":"Revise","copies":[{"title":"Best","text":"first\nline"},{"title":"Alternative","text":"second"},{"title":"Third","text":"third"}]})");
+	CHECK(ValidResultDialog(result));
+	auto invalid = result;
+	invalid["copies"].push_back(result["copies"][0]);
+	CHECK(!ValidResultDialog(invalid));
+	invalid = result;
+	invalid["copies"][0]["text"] = std::string(1537, 'x');
+	CHECK(!ValidResultDialog(invalid));
+	invalid = result;
+	invalid["copies"][0]["value"] = "different from the displayed draft";
+	CHECK(!ValidResultDialog(invalid));
+	invalid = result;
+	invalid["action"] = "Revise\nSend";
+	CHECK(!ValidResultDialog(invalid));
+	CHECK(!ValidResultDialog(json::parse(R"({"copies":[]})")));
+	CHECK(!ValidResultDialog(json::parse(R"({"copies":[{"title":"Best","text":1}]})")));
 
 	auto error = std::string();
 	const auto form = ParseFormSchema(json::parse(R"({
@@ -326,7 +347,24 @@ def check_wiring(files):
     assert 'Luxury::Plugins::PluginCommands(peer)' in field, 'plugin commands are not listed'
 
 
-CHECKS = (check_paint, check_open_url, check_unload, check_dispatch, check_hidden, check_clicks, check_wiring)
+def check_result_dialog(files):
+    host = files[HOST]
+    ui = function(host, 'Js::HostResult Instance::ui(')
+    result = ui.split('function == "ui.showResult"', 1)[1].split('function == "ui.prompt"', 1)[0]
+    before_click, after_click = result.split('button->setClickedCallback([=] {', 1)
+    assert 'if (!_plugin.granted.has(Permission::Clipboard))' in before_click
+    assert 'ValidResultDialog(options)' in before_click
+    assert 'Ui::FlatLabel' in before_click and 'addLabel(copyTitle + u"\\n"_q + copyText)' in before_click
+    assert 'passcodeLocked()' in before_click and 'ActiveSession() == session' in before_click
+    assert 'if (!canAct())' in after_click and 'clipboard()->setText(copyText)' in after_click
+    assert 'clipboard()->' not in before_click and '_gestureUntil' not in result
+    assert 'settle(false)' in after_click
+    assert 'dialog->closeBox()' in function(host, 'void Instance::accountChanged(')
+    lock = function(host, 'bool Instance::start(').split('passcodeLockChanges()', 1)[1]
+    assert 'if (locked)' in lock and 'dialog->closeBox()' in lock
+
+
+CHECKS = (check_paint, check_open_url, check_unload, check_dispatch, check_hidden, check_clicks, check_wiring, check_result_dialog)
 
 STATIC_MUTANTS = (
     # Decorate calls the engine in layout or paint.
@@ -357,6 +395,9 @@ STATIC_MUTANTS = (
     (check_unload, EXT, '''			settle(nullptr);
 ''', ''),
     (check_unload, EXT, '''	} else if (_dialog) {''', '''	} else if (false) {'''),
+    (check_result_dialog, HOST, '''		if (!_plugin.granted.has(Permission::Clipboard)) {''', '''		if (false) {'''),
+    (check_result_dialog, HOST, '''					QGuiApplication::clipboard()->setText(copyText);''', '''					QGuiApplication::clipboard()->setText(copyTitle);'''),
+    (check_result_dialog, HOST, '''				&& ActiveSession() == session;''', '''				&& true;'''),
     (check_dispatch, HOST, '''	} else if (IsUiExtFunction(function)) {
 		return uiExt(function, args, context.promiseId);
 ''', ''),
@@ -418,7 +459,8 @@ def check(root):
           'items, labels and forms dropped on unload, uiExt dispatch, passcode '
           'and service chat guards, async menu clicks and wired client hooks; '
           'no t.me links, links only on a user gesture, compose menu for the '
-          'field chat, chatOpened from the main window once per chat')
+          'field chat, chatOpened from the main window once per chat, '
+          'bounded result rows, permission-gated copy and dialog close on account switch or lock')
 
 
 if __name__ == '__main__':
