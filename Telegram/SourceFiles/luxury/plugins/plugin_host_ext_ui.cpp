@@ -199,12 +199,11 @@ Js::HostResult Instance::uiExt(
 	}
 	const auto controller = ActiveController(session);
 	if (function == "ui.currentChat") {
-		const auto peer = controller
-			? controller->activeChatCurrent().peer()
-			: nullptr;
+		const auto key = controller ? controller->activeChatCurrent() : Dialogs::Key();
+		const auto peer = key.peer();
 		return Result::Value((peer
 				&& peer->id != PeerData::kServiceNotificationsId)
-			? PeerJson(peer)
+			? ChatContextJson(peer, key.topic())
 			: json());
 	} else if (!controller) {
 		return Result::Error("Error", "no window of the active account");

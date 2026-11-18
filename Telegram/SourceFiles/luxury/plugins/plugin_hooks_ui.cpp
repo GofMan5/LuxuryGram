@@ -73,13 +73,15 @@ using Items = const std::vector<Instance::Handler> &(Instance::*)() const;
 void FillItems(
 		not_null<Ui::PopupMenu*> menu,
 		not_null<PeerData*> peer,
-		Items items) {
+		Items items,
+		Data::ForumTopic *topic = nullptr) {
 	const auto manager = Active();
 	if (!manager) {
 		return;
 	}
 	const auto session = base::make_weak(&peer->session());
 	const auto peerId = peer->id;
+	const auto context = ChatContextJson(peer, topic);
 	for (const auto &instance : manager->instances()) {
 		if (!instance->plugin().granted.has(Permission::Ui)) {
 			continue;
@@ -108,7 +110,7 @@ void FillItems(
 					});
 				if (alive) {
 					target->callLater(fn, {
-						{ "peer", PeerJson(chat) },
+						{ "peer", context },
 					}, true);
 				}
 			});
@@ -118,7 +120,10 @@ void FillItems(
 
 } // namespace
 
-void FillChatMenu(PeerData *peer, const Ui::Menu::MenuCallback &addAction) {
+void FillChatMenu(
+		PeerData *peer,
+		const Ui::Menu::MenuCallback &addAction,
+		Data::ForumTopic *topic) {
 	if (!HasItems(peer, &Instance::chatMenuItems)) {
 		return;
 	}
@@ -127,7 +132,7 @@ void FillChatMenu(PeerData *peer, const Ui::Menu::MenuCallback &addAction) {
 		.handler = nullptr,
 		.icon = &st::menuIconCustomize,
 		.fillSubmenu = [=](not_null<Ui::PopupMenu*> menu) {
-			FillItems(menu, peer, &Instance::chatMenuItems);
+			FillItems(menu, peer, &Instance::chatMenuItems, topic);
 		},
 	});
 }
@@ -136,9 +141,12 @@ bool HasHeaderButtons(PeerData *peer) {
 	return HasItems(peer, &Instance::headerButtons);
 }
 
-void FillHeaderMenu(not_null<Ui::PopupMenu*> menu, not_null<PeerData*> peer) {
+void FillHeaderMenu(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<PeerData*> peer,
+		Data::ForumTopic *topic) {
 	if (Shown(peer)) {
-		FillItems(menu, peer, &Instance::headerButtons);
+		FillItems(menu, peer, &Instance::headerButtons, topic);
 	}
 }
 

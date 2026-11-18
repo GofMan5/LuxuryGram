@@ -325,7 +325,7 @@ def check_clicks(files):
 
 
 def check_wiring(files):
-    assert files[PEER_MENU].count('Luxury::Plugins::FillChatMenu(_peer, _addAction);') == 2, 'chat menu items are not wired'
+    assert files[PEER_MENU].count('Luxury::Plugins::FillChatMenu(_peer, _addAction, _topic);') == 2, 'chat menu items are not wired'
     top = files[TOP_BAR]
     for call in ('FillHeaderMenu(', 'HasHeaderButtons(', 'HeaderButtonsChanges('):
         assert 'Luxury::Plugins::' + call in top, f'the top bar misses {call}'
@@ -355,7 +355,9 @@ def check_result_dialog(files):
     assert 'if (!_plugin.granted.has(Permission::Clipboard))' in before_click
     assert 'ValidResultDialog(options)' in before_click
     assert 'Ui::FlatLabel' in before_click and 'addLabel(copyTitle + u"\\n"_q + copyText)' in before_click
+    assert before_click.index('addLabel(text);') < before_click.index('for (const auto &entry : copies)')
     assert 'passcodeLocked()' in before_click and 'ActiveSession() == session' in before_click
+    assert 'ActiveWindow() == owner.get()' in before_click and 'controller->activeChatCurrent() == view' in before_click
     assert 'if (!canAct())' in after_click and 'clipboard()->setText(copyText)' in after_click
     assert 'clipboard()->' not in before_click and '_gestureUntil' not in result
     assert 'settle(false)' in after_click
@@ -396,8 +398,9 @@ STATIC_MUTANTS = (
 ''', ''),
     (check_unload, EXT, '''	} else if (_dialog) {''', '''	} else if (false) {'''),
     (check_result_dialog, HOST, '''		if (!_plugin.granted.has(Permission::Clipboard)) {''', '''		if (false) {'''),
+    (check_result_dialog, HOST, 'addLabel(text);', 'addLabel(title);'),
     (check_result_dialog, HOST, '''					QGuiApplication::clipboard()->setText(copyText);''', '''					QGuiApplication::clipboard()->setText(copyTitle);'''),
-    (check_result_dialog, HOST, '''				&& ActiveSession() == session;''', '''				&& true;'''),
+    (check_result_dialog, HOST, 'ActiveSession() == session', 'true'),
     (check_dispatch, HOST, '''	} else if (IsUiExtFunction(function)) {
 		return uiExt(function, args, context.promiseId);
 ''', ''),
@@ -412,7 +415,7 @@ STATIC_MUTANTS = (
 		return result;'''),
     (check_clicks, HOOKS, '''					target->callLater(fn, {''', '''					target->callFunction(fn, {'''),
     (check_clicks, HOOKS, '''						return (handler.fn == fn);''', '''						return true;'''),
-    (check_wiring, PEER_MENU, '''	Luxury::Plugins::FillChatMenu(_peer, _addAction);
+    (check_wiring, PEER_MENU, '''	Luxury::Plugins::FillChatMenu(_peer, _addAction, _topic);
 	addDeleteChat();''', '''	addDeleteChat();'''),
     (check_wiring, SESSION, '''	if (_isPrimary) {
 		activeChatChanges(''', '''	if (true) {

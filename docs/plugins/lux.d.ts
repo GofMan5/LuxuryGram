@@ -62,6 +62,13 @@ interface LuxPluginInfo {
 	readonly lang: string;
 }
 
+interface LuxChatContext extends LuxPeer {
+	/** Missing on older API 1 clients and callbacks without topic context. */
+	forum?: boolean;
+	topicId?: string | null;
+	topicTitle?: string | null;
+}
+
 interface LuxPeer {
 	/** Dialog id as a decimal string: users > 0, chats and channels < 0. */
 	id: string;
@@ -115,6 +122,10 @@ interface LuxMessage {
 	peer: LuxPeer;
 	/** null for a message from the Telegram service account. */
 	from: LuxPeer | null;
+	/** Whether Telegram supplied a sender, rather than falling back to the chat. */
+	hasFromId?: boolean;
+	/** Broadcast post published as the channel when it has no explicit sender. */
+	channelPost?: boolean;
 	/** Unix time, seconds. */
 	date: number;
 	text: string;
@@ -122,8 +133,12 @@ interface LuxMessage {
 	out: boolean;
 	/** Id of the replied message, a decimal string, or null. */
 	replyTo: string | null;
+	/** True if replyTo refers to another chat. Absent on older clients. */
+	externalReply?: boolean;
 	hasMedia: boolean;
 	media: LuxMedia | null;
+	/** True if media comes from a link preview. Absent on older clients. */
+	linkPreview?: boolean;
 	forward: LuxForward | null;
 	/** Topic root id in a forum, a decimal string, else null. */
 	topicId: string | null;
@@ -216,7 +231,7 @@ interface LuxDialogOptions {
 
 interface LuxResultOptions {
 	title?: string;
-	/** Optional plain-text explanation, below the copyable entries. */
+	/** Optional plain-text explanation, above the copyable entries on current clients. */
 	text?: string;
 	/** 1–3 entries. Clicking a copy button copies only its text and leaves the dialog open. */
 	copies: { title: string; text: string }[];
@@ -263,7 +278,7 @@ interface LuxHotkeyOptions {
 interface LuxUiItemOptions {
 	/** Not empty. Shown under "Plugins"; the same title again replaces it. */
 	title: string;
-	handler: (event: { peer: LuxPeer }) => void | Promise<void>;
+	handler: (event: { peer: LuxChatContext }) => void | Promise<void>;
 }
 
 /** One row of ui.showForm; `key` is [A-Za-z0-9_]{1,32}, unique. */
@@ -288,7 +303,20 @@ interface LuxDecorateOptions {
 	text?: string;
 }
 
+interface LuxExportHistoryOptions {
+	limit?: number;
+	offsetId?: string | number;
+	/** A selected forum topic; absent/null exports across all topics. */
+	topicId?: string | null;
+	/** A positive safe integer, unique among in-flight calls by this plugin. */
+	requestId: number;
+}
+
 interface LuxFetchOptions {
+	/** Reject redirects without following them. Default: follow. */
+	redirect?: 'error' | 'follow';
+	/** A positive safe integer, unique among in-flight calls by this plugin. */
+	requestId?: number;
 	/** GET (default), POST, PUT, PATCH, DELETE, HEAD; any case. */
 	method?: string;
 	headers?: { [name: string]: string };
@@ -317,6 +345,8 @@ declare namespace lux {
 	 * PermissionError when the event needs a permission not granted.
 	 */
 	function on<E extends keyof LuxEvents>(event: E, fn: LuxEvents[E]): () => void;
+	/** Abort a matching request from this plugin. Optional on API 1 clients. */
+	const cancelRequest: ((id: number) => void) | undefined;
 
 	namespace messages {
 		/**
@@ -337,6 +367,8 @@ declare namespace lux {
 		function history(
 			peer: string | number,
 			options?: { limit?: number; offsetId?: string | number }): Promise<LuxMessage[]>;
+		/** Like history, but omits protected, deleted and expiring messages. Optional on API 1 clients. */
+		const exportHistory: ((peer: Pick<LuxPeer, 'id' | 'type'>, options: LuxExportHistoryOptions) => Promise<LuxMessage[]>) | undefined;
 		/**
 		 * Replaces the text (or caption) of a message this account may
 		 * edit. Needs `messages.manage`.
@@ -434,7 +466,9 @@ declare namespace lux {
 		 */
 		const showResult: ((options: LuxResultOptions) => Promise<boolean>) | undefined;
 		/** The chat open in the active window, or null. */
-		function currentChat(): LuxPeer | null;
+		function currentChat(): LuxChatContext | null;
+		/** Close this plugin's current dialog. Optional on API 1 clients. */
+		const closeDialog: (() => void) | undefined;
 		/** Opens the chat in the active window. */
 		function openChat(peer: string | number): void;
 		/**

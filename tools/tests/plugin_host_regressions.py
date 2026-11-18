@@ -895,7 +895,7 @@ def check_sandbox(files):
     assert ui.index('"ui.add"') < locked < ui.index('function == "ui.toast"'), 'ui must refuse while locked'
     assert 'if (!ToastAllowed(now, _lastToast)) {' in ui and '_lastToast = now;' in ui, 'toasts must be rate-limited'
     assert '} else if (_dialog) {\n\t\treturn Result::Error(' in ui, 'one dialog per plugin'
-    assert ui.count('_dialog = box.data();') == 2 and 'strong->_dialog = nullptr;' in ui, 'dialogs must be tracked'
+    assert ui.count('_dialog = box.data();') == 3 and 'strong->_dialog = nullptr;' in ui, 'dialogs must be tracked'
     assert 'const auto title = custom.isEmpty() ? name : (name + u": "_q + custom);' in ui \
         and '.title = v::text::data(title),' in ui and 'box->setTitle(rpl::single(title));' in ui, \
         'dialog titles must name the plugin'
@@ -943,6 +943,14 @@ def check_sandbox(files):
     assert 'if (!SameOrigin(reply->url(), next)) {' in sent \
         and 'return StripOnCrossOrigin(header.first.toStdString());' in sent and 'std::move(kept),' in sent, \
         'cross-origin redirects must drop credentials'
+    assert sent.index('if (!followRedirects) {') < sent.index('strong->fetchStep('), \
+        'a request opting out of redirects must not replay its body'
+    assert 'setReadBufferSize(kFetchLimit + 1)' in sent and '&QNetworkReply::readyRead' in sent, \
+        'large decoded responses must not stall an unread read buffer'
+    cancel = body(host, 'void Instance::cancelRequest(')
+    assert cancel.index('_cancellable.extract(promiseId)') < cancel.index('settleLater(') < cancel.index('entry.mapped().abort()'), \
+        'cancellation must retire the promise before aborting the reply'
+    assert fetch.index('expireRequest(promiseId, kFetchDeadline)') < fetch.index('\n\tfetchStep(')
     assert 'if (binary) {\n\t\t\tresult["base64"] = bytes.toBase64().toStdString();' in sent, 'binary bodies come as base64'
     same = body(host, '[[nodiscard]] bool SameOrigin(const QUrl &a, const QUrl &b) {')
     assert '(a.host().toLower() == b.host().toLower())' in same and '(port(a) == port(b))' in same \
@@ -1215,7 +1223,7 @@ MUTANTS = (
     (check_sandbox, HOST, '} else if (_dialog) {', '} else if (false) {'),
     (check_sandbox, HOST, 'strong->_dialog = nullptr;', ''),
     (check_sandbox, HOST, 'const auto title = custom.isEmpty() ? name : (name + u": "_q + custom);', 'const auto title = custom;'),
-    (check_sandbox, HOST, '\t_stopping = true;\n\t_queue.clear();\n\tif (const auto dialog = _dialog.get()) {\n\t\tdialog->closeBox();\n\t}\n',
+    (check_sandbox, HOST, '\t_stopping = true;\n\tcancelRequests();\n\t_queue.clear();\n\tif (const auto dialog = _dialog.get()) {\n\t\tdialog->closeBox();\n\t}\n',
      '\t_stopping = true;\n\t_queue.clear();\n'),
     (check_sandbox, HOST, '\t\t\taccountChanged();', '\t\t\t;'),
     (check_sandbox, HOST, 'for (const auto promiseId : base::take(_requests)) {', 'for (const auto promiseId : _requests) {'),
@@ -1231,6 +1239,7 @@ MUTANTS = (
     (check_sandbox, HOST, '.toLower() == "host") {\n\t\t\t\tcontinue;', '.toLower() == "host") {\n\t\t\t\t;'),
     (check_sandbox, HOST, '\t\tif (isLiteral && !IsPublic(literal)) {\n', '\t\tif (false) {\n'),
     (check_sandbox, HOST, '\t\t\tif (!IsPublic(address)) {\n', '\t\t\tif (false) {\n'),
+    (check_sandbox, HOST, 'if (!followRedirects) {', 'if (false) {'),
     (check_sandbox, HOST, 'if (!SameOrigin(reply->url(), next)) {', 'if (false) {'),
     (check_sandbox, HOST, 'std::move(kept),', 'headers,'),
     (check_sandbox, HOST, '(port(a) == port(b))', 'true'),

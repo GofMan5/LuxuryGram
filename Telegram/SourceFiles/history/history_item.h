@@ -240,6 +240,7 @@ public:
 		return _history;
 	}
 	[[nodiscard]] Data::ForumTopic *topic() const;
+	[[nodiscard]] bool hasFromId() const;
 	[[nodiscard]] not_null<PeerData*> from() const {
 		return _from;
 	}

@@ -16,6 +16,7 @@
 #include "data/data_chat_participant_status.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
+#include "dialogs/dialogs_key.h"
 #include "history/history.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
@@ -30,6 +31,7 @@
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/labels.h"
 #include "window/window_controller.h"
+#include "window/window_session_controller.h"
 #include "styles/style_layers.h"
 
 #include <QClipboard>
@@ -37,6 +39,7 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QKeySequence>
+#include <QPointer>
 #include <QSaveFile>
 #include <QTimer>
 #include <QUrl>
@@ -60,6 +63,7 @@ using json = nlohmann::json;
 
 constexpr auto kStack = std::size_t(256) * 1024;
 constexpr auto kFetchTimeout = 30000;
+constexpr auto kFetchDeadline = 120000;
 constexpr auto kStorageWriteDelay = 1000;
 constexpr auto kMaxHandlers = 100;
 
@@ -271,6 +275,7 @@ Instance::~Instance() {
 	// _network is destroyed must already see this instance as gone.
 	invalidate_weak_ptrs(this);
 	_stopping = true;
+	cancelRequests();
 	if (const auto dialog = _dialog.get()) {
 		dialog->closeBox();
 	}
@@ -293,6 +298,7 @@ bool Instance::start() {
 		Core::App().passcodeLockChanges() | rpl::on_next([this](bool locked) {
 			if (locked) {
 				_gestureUntil = 0;
+				cancelRequests();
 				if (const auto dialog = _dialog.get()) {
 					dialog->closeBox();
 				}
@@ -312,6 +318,7 @@ void Instance::unload() {
 		});
 	}
 	_stopping = true;
+	cancelRequests();
 	_queue.clear();
 	if (const auto dialog = _dialog.get()) {
 		dialog->closeBox();
@@ -404,6 +411,10 @@ void Instance::settleLater(
 		std::string name,
 		std::string message) {
 	_requests.erase(promiseId);
+	_cancellable.erase(promiseId);
+	if (_stopping) {
+		return;
+	}
 	crl::on_main(this, [=] {
 		if (_stopping) {
 			return;
@@ -416,7 +427,62 @@ void Instance::settleLater(
 	});
 }
 
+bool Instance::trackRequest(std::uint64_t promiseId, const json &value) {
+	if (value.is_null()) {
+		_cancellable.emplace(promiseId, CancellableRequest{ .id = 0 });
+		return true;
+	} else if (!value.is_number_integer()) {
+		return false;
+	}
+	const auto id = value.get<std::int64_t>();
+	const auto duplicate = std::any_of(
+		_cancellable.begin(),
+		_cancellable.end(),
+		[&](const auto &entry) { return entry.second.id == id; });
+	if (id <= 0 || id > 9007199254740991LL || duplicate) {
+		return false;
+	}
+	_cancellable.emplace(promiseId, CancellableRequest{ .id = id });
+	return true;
+}
+
+void Instance::expireRequest(std::uint64_t promiseId, int timeoutMs) {
+	auto timer = std::make_unique<QTimer>();
+	timer->setSingleShot(true);
+	const auto weak = base::make_weak(this);
+	QObject::connect(timer.get(), &QTimer::timeout, timer.get(), [=] {
+		if (const auto strong = weak.get()) {
+			strong->cancelRequest(promiseId, true);
+		}
+	}, Qt::QueuedConnection);
+	timer->start(timeoutMs);
+	_cancellable.at(promiseId).deadline = std::move(timer);
+}
+
+void Instance::cancelRequest(std::uint64_t promiseId, bool timedOut) {
+	auto entry = _cancellable.extract(promiseId);
+	if (entry.empty()) {
+		return;
+	}
+	settleLater(
+		promiseId,
+		false,
+		nullptr,
+		timedOut ? "TimeoutError" : "AbortError",
+		timedOut ? "request deadline exceeded" : "request cancelled");
+	if (entry.mapped().abort) {
+		entry.mapped().abort();
+	}
+}
+
+void Instance::cancelRequests() {
+	while (!_cancellable.empty()) {
+		cancelRequest(_cancellable.begin()->first);
+	}
+}
+
 void Instance::accountChanged() {
+	cancelRequests();
 	if (const auto dialog = _dialog.get()) {
 		dialog->closeBox();
 	}
@@ -564,6 +630,19 @@ Js::HostResult Instance::call(
 		return ui(function, args, context.promiseId);
 	} else if (function == "messages.send") {
 		return send(first, context.promiseId);
+	} else if (function == "request.cancel") {
+		if (!first.is_number_integer()) {
+			return TypeError("cancelRequest: id must be an integer");
+		}
+		const auto id = first.get<std::int64_t>();
+		const auto i = std::find_if(
+			_cancellable.begin(),
+			_cancellable.end(),
+			[&](const auto &entry) { return entry.second.id == id; });
+		if (id > 0 && i != _cancellable.end()) {
+			cancelRequest(i->first);
+		}
+		return Result::Value(nullptr);
 	} else if (function == "http.fetch") {
 		return fetch(args, context.promiseId);
 	} else if (function == "api.call") {
@@ -635,6 +714,11 @@ Js::HostResult Instance::ui(
 	const auto &options = Arg(args, 0);
 	if (function.substr(0, 6) == "ui.add") {
 		return addHandler(function, options);
+	} else if (function == "ui.closeDialog") {
+		if (const auto dialog = _dialog.get()) {
+			dialog->closeBox();
+		}
+		return Result::Value(nullptr);
 	} else if (Core::IsAppLaunched() && Core::App().passcodeLocked()) {
 		return Result::Error("Error", "the app is locked with a passcode");
 	} else if (function == "ui.toast") {
@@ -700,11 +784,16 @@ Js::HostResult Instance::ui(
 		const auto copies = options["copies"];
 		const auto action = OptionText(options, "action");
 		const auto session = ActiveSession();
+		const auto controller = window->sessionController();
+		const auto view = controller ? controller->activeChatCurrent() : Dialogs::Key();
+		const auto owner = base::make_weak(window);
 		const auto canAct = [=] {
 			const auto strong = weak.get();
 			return strong && !strong->_stopping && !*settled
 				&& Core::IsAppLaunched() && !Core::App().passcodeLocked()
-				&& ActiveSession() == session;
+				&& ActiveSession() == session && ActiveWindow() == owner.get()
+				&& owner.get() && owner.get()->sessionController() == controller
+				&& (!controller || controller->activeChatCurrent() == view);
 		};
 		auto box = Box([=](not_null<Ui::GenericBox*> box) {
 			box->setTitle(rpl::single(title));
@@ -717,6 +806,10 @@ Js::HostResult Instance::ui(
 					st::boxLabel));
 				label->setBreakEverywhere(true);
 			};
+			if (!text.isEmpty()) {
+				addLabel(text);
+				box->addSkip(st::boxLittleSkip);
+			}
 			for (const auto &entry : copies) {
 				const auto copyTitle = OptionText(entry, "title");
 				const auto copyText = OptionText(entry, "text");
@@ -737,9 +830,6 @@ Js::HostResult Instance::ui(
 					box->showToast(tr::lng_text_copied(tr::now));
 				});
 				box->addSkip(st::boxLittleSkip);
-			}
-			if (!text.isEmpty()) {
-				addLabel(text);
 			}
 			if (!action.isEmpty()) {
 				box->addButton(rpl::single(action), [=] {
@@ -1048,8 +1138,24 @@ Js::HostResult Instance::fetch(const json &args, std::uint64_t promiseId) {
 	const auto body = OptionText(options, "body").toUtf8();
 	const auto binary = options.is_object()
 		&& (options.value("binary", json()) == json(true));
+	const auto redirect = options.is_object()
+		? options.value("redirect", json("follow"))
+		: json("follow");
+	const auto followRedirects = redirect == "follow";
+	if (!followRedirects && redirect != "error") {
+		return TypeError("http.fetch: redirect must be follow or error");
+	}
+	const auto requestId = options.is_object()
+		? options.value("requestId", json())
+		: json();
+	if (!requestId.is_null() && Core::IsAppLaunched() && Core::App().passcodeLocked()) {
+		return Result::Error("Error", "the app is locked with a passcode");
+	} else if (!trackRequest(promiseId, requestId)) {
+		return TypeError("http.fetch: invalid or duplicate requestId");
+	}
 	// Before fetchStep: it may settle, and so erase, right away.
 	_requests.emplace(promiseId);
+	expireRequest(promiseId, kFetchDeadline);
 	fetchStep(
 		promiseId,
 		method,
@@ -1057,7 +1163,8 @@ Js::HostResult Instance::fetch(const json &args, std::uint64_t promiseId) {
 		std::move(headers),
 		body,
 		0,
-		binary);
+		binary,
+		followRedirects);
 	return Result::Pending();
 }
 
@@ -1068,7 +1175,8 @@ void Instance::fetchStep(
 		std::vector<std::pair<QByteArray, QByteArray>> headers,
 		QByteArray body,
 		int redirects,
-		bool binary) {
+		bool binary,
+		bool followRedirects) {
 	const auto parsed = QUrl(url, QUrl::StrictMode);
 	if (!parsed.isValid()
 		|| !FetchAllowed(
@@ -1112,7 +1220,8 @@ void Instance::fetchStep(
 			std::move(headers),
 			body,
 			redirects,
-			binary);
+			binary,
+			followRedirects);
 	}
 	// ponytail: QHostInfo caches this answer for 60 s and the connection
 	// reads that cache, so it goes to a checked address; a host rebinding
@@ -1148,7 +1257,8 @@ void Instance::fetchStep(
 			headers,
 			body,
 			redirects,
-			binary);
+			binary,
+			followRedirects);
 	});
 }
 
@@ -1159,7 +1269,8 @@ void Instance::fetchSend(
 		std::vector<std::pair<QByteArray, QByteArray>> headers,
 		QByteArray body,
 		int redirects,
-		bool binary) {
+		bool binary,
+		bool followRedirects) {
 	auto request = QNetworkRequest(url);
 	request.setAttribute(
 		QNetworkRequest::RedirectPolicyAttribute,
@@ -1173,11 +1284,25 @@ void Instance::fetchSend(
 		request,
 		method.toUtf8(),
 		body);
+	if (const auto i = _cancellable.find(promiseId); i != _cancellable.end()) {
+		i->second.abort = [weak = QPointer<QNetworkReply>(reply)] {
+			if (weak && !weak->isFinished()) {
+				weak->abort();
+			}
+		};
+	}
+	reply->setReadBufferSize(kFetchLimit + 1);
 	const auto tooBig = std::make_shared<bool>(false);
+	QObject::connect(reply, &QNetworkReply::readyRead, [=] {
+		if (reply->bytesAvailable() > kFetchLimit) {
+			*tooBig = true;
+			reply->abort();
+		}
+	});
 	QObject::connect(reply, &QNetworkReply::downloadProgress, [=](
 			qint64 received,
 			qint64) {
-		if (received > kFetchLimit) {
+		if (received > kFetchLimit || reply->bytesAvailable() > kFetchLimit) {
 			*tooBig = true;
 			reply->abort();
 		}
@@ -1203,12 +1328,20 @@ void Instance::fetchSend(
 		};
 		if (*tooBig) {
 			return fail("RangeError", "the response is over 10 MiB");
-		} else if (status <= 0) {
+		} else if (reply->error() == QNetworkReply::TimeoutError) {
+			return fail("TimeoutError", "request timed out");
+		}
+		const auto error = reply->error();
+		const auto httpError = (status >= 400)
+			&& ((error >= 200 && error < 300) || (error >= 400 && error < 500));
+		if (status <= 0 || (error != QNetworkReply::NoError && !httpError)) {
 			return fail("NetworkError", reply->errorString().toStdString());
 		}
 		const auto location = reply->rawHeader("Location");
 		if (status >= 300 && status < 400 && !location.isEmpty()) {
-			if (redirects >= kMaxRedirects) {
+			if (!followRedirects) {
+				return fail("RedirectError", "redirect not allowed");
+			} else if (redirects >= kMaxRedirects) {
 				return fail("NetworkError", "too many redirects");
 			}
 			const auto next = reply->url().resolved(
@@ -1230,7 +1363,8 @@ void Instance::fetchSend(
 				std::move(kept),
 				get ? QByteArray() : body,
 				redirects + 1,
-				binary);
+				binary,
+				followRedirects);
 			return;
 		}
 		const auto bytes = reply->read(kFetchLimit + 1);

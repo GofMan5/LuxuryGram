@@ -208,6 +208,20 @@ def check_sources(files):
     message = function(hooks, 'json MessageJson(')
     for key in ('"entities"', '"media"', '"forward"', '"topicId"', '"editDate"', '"groupedId"'):
         assert '{ ' + key + ',' in message, f'MessageJson lost {key}'
+    assert 'item->replyToFullId()' in message and '{ "externalReply", reply && reply.peer != peer->id }' in message, \
+        'cross-chat replies must not be joined to local messages by id'
+    assert '{ "linkPreview", media && media->webpage() }' in message, \
+        'web page previews can also carry photo/document metadata'
+    assert '{ "hasFromId", item->hasFromId() }' in message
+    assert '{ "channelPost", peer->isBroadcast() && item->isPost() }' in message
+    export = function(data, 'bool ExportableMessage(')
+    assert 'PeerFromMessage(raw) != peer' in export and 'is_noforwards()' in export
+    assert 'vttl_period()' in export and export.count('vttl_seconds().has_value()') == 2
+    history = data[data.index('function == "messages.history" || exporting'):data.index('function == "messages.edit"')]
+    assert 'MTPmessages_GetReplies(' in history and 'item->topicRootId() != MsgId(*topic)' in history
+    assert history.index('!ExportableMessage(raw, peer->id)') < history.index('auto value = ItemJson(item)')
+    assert 'item->isDeleted()' in history and 'item->isLuxuryNoForwards()' in history
+    assert history.index('!strong->_requests.contains(promiseId)') < history.index('processExistingMessages(')
     send = function(hooks, 'bool BeforeSend(')
     assert '{ "entities", fold.entities }' in send, 'beforeSend does not pass the entities'
     assert '{ "replyTo", fold.replyTo }' in send, 'beforeSend drops replyTo'
@@ -292,6 +306,8 @@ def check_sources(files):
 
 SOURCE_MUTANTS = (
     (HOOKS, '\t\t{ "entities", EntitiesJson(text.entities) },\n', ''),
+    (HOOKS, '{ "externalReply", reply && reply.peer != peer->id }', '{ "externalReply", false }'),
+    (HOOKS, '{ "linkPreview", media && media->webpage() }', '{ "linkPreview", false }'),
     (HOOKS, '\t\t\t\t{ "replyTo", fold.replyTo },\n', ''),
     (HOOKS, 'message.action.replyTo = PluginReply(', 'const auto unused = PluginReply('),
     (DATA, 'if (!_plugin.granted.has(Permission::MessagesManage)) {', 'if (false) {'),

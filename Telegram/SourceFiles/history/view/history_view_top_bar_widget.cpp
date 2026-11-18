@@ -203,7 +203,10 @@ TopBarWidget::TopBarWidget(
 		if (!peer || !createMenu(_plugins, false)) {
 			return;
 		}
-		Luxury::Plugins::FillHeaderMenu(_menu.get(), peer);
+		Luxury::Plugins::FillHeaderMenu(
+			_menu.get(),
+			peer,
+			_activeChat.key.topic());
 		if (_menu->empty()) {
 			closeMenu();
 			return;

@@ -42,6 +42,7 @@ inline constexpr auto kMaxMessageId = std::int64_t(
 		|| function == "chats.list"
 		|| function == "messages.get"
 		|| function == "messages.history"
+		|| function == "messages.exportHistory"
 		|| function == "messages.downloadMedia"
 		|| function == "account.me") {
 		return Permission::MessagesRead;

@@ -2360,6 +2360,10 @@ bool HistoryItem::isSponsored() const {
 	return _flags & MessageFlag::Sponsored;
 }
 
+bool HistoryItem::hasFromId() const {
+	return _flags & MessageFlag::HasFromId;
+}
+
 bool HistoryItem::isLuxuryNoForwards() const {
 	return _flags & MessageFlag::LuxuryNoForwards;
 }

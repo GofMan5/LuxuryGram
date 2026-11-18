@@ -8,13 +8,19 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Changed
 
-- Chat Analysis shows when it is loading history and waiting for the model, with elapsed time. The default action asks once before sending; choose Analysis with Context to add a goal or detail. Results now offer three drafts, with the recommended one first and a copy button for each.
-- Refine lets you describe what to change and get three new drafts. Cancelling or an API error leaves the previous drafts available. On older clients the copy and refine actions are in the plugin menu.
+- Chat Analysis recommends a concrete next step, including waiting or not replying when appropriate. It shows verified quotes or attachment types as evidence and offers three drafts with distinct intentions. Reasoning effort defaults to `high`; `default` leaves it up to the API.
+- Chat Analysis shows the current stage and elapsed time. The result has a copy button for each draft and lets you change the tone or length without replacing the original goal, advice or evidence. Cancelling or getting an incomplete or invalid response leaves the previous drafts intact.
+
+### Fixed
+
+- Chat Analysis distinguishes the sender of a photo, video, GIF or sticker from a known forwarding source. It does not attribute anonymous group posts to you, mistake link previews for uploads, or infer what's in an attachment.
+- You can cancel while loading history or waiting for the model. Changing the chat, topic, account or settings discards stale results and errors without blocking a new analysis.
 
 ### Security
 
-- Refining a draft asks before sending your correction and the previous result to the configured API. It does not attach the transcript again, although the previous result may contain quotes. Copy buttons copy only the displayed draft and do not grant the plugin additional clipboard access.
-- Plugin dialogs close when you switch accounts or lock LuxuryGram, so the previous account’s drafts are not left on screen.
+- Consent shows the exact API URL and chat or forum scope, using a separate confirmation if the context prompt would cut it off. An action in a topic exports only that topic. Protected, deleted and self-destructing messages are excluded. No media content or participant IDs are sent as transcript metadata. Clients without the required export and cancellation APIs send nothing.
+- Chat Analysis refuses HTTP redirects. Refinement asks for separate consent and sends only the original goal, advice, drafts and requested tone or length, not the transcript or evidence quotes.
+- Plugin dialogs close on account switch or passcode lock. Result buttons cannot copy a draft after the active window or chat changes.
 
 ## 1.0.24
 

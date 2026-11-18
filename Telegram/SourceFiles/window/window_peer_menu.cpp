@@ -1937,7 +1937,7 @@ void Filler::fillContextMenuActions() {
 	addBanFromChannel();
 	addClearHistory();
 	LuxuryUi::AddDeleteOwnMessagesAction(_peer, _topic, _controller, _addAction);
-	Luxury::Plugins::FillChatMenu(_peer, _addAction);
+	Luxury::Plugins::FillChatMenu(_peer, _addAction, _topic);
 	addDeleteChat();
 	addLeaveChat();
 	addDeleteTopic();
@@ -1950,7 +1950,7 @@ void Filler::fillHistoryActions() {
 	addInfo();
 	LuxuryUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
 	LuxuryUi::AddOpenChannelAction(_peer, _controller, _addAction);
-	Luxury::Plugins::FillChatMenu(_peer, _addAction);
+	Luxury::Plugins::FillChatMenu(_peer, _addAction, _topic);
 	LuxuryUi::AddWatchChatAction(_peer, _controller, _addAction);
 	addViewAsTopics();
 	addManageChat();

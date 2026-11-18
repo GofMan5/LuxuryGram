@@ -3,8 +3,7 @@
 //
 // lux.chats, lux.messages beyond send, lux.account, settings.set and
 // ui.notify: Instance::data(), reached from Instance::call. Call() has
-// checked DataPermission() already; every peer resolves through
-// ResolvePeer, so the service chat never shows up.
+// checked DataPermission() already. Peer resolution excludes the service chat.
 #include "luxury/plugins/plugin_host_api.h"
 
 #include "luxury/plugins/plugin_hooks.h"
@@ -19,6 +18,8 @@
 #include "base/call_delayed.h"
 #include "base/unixtime.h"
 #include "core/application.h"
+#include "data/data_channel.h"
+#include "data/data_chat.h"
 #include "data/data_chat_participant_status.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
@@ -51,6 +52,25 @@ using json = nlohmann::json;
 static_assert(kMaxMediaBytes == Storage::kMaxFileInMemory);
 
 constexpr auto kDownloadTimeout = crl::time(60000);
+constexpr auto kExportTimeout = 30000;
+
+[[nodiscard]] bool ExportableMessage(const MTPmessage &raw, PeerId peer) {
+	if (raw.type() != mtpc_message || PeerFromMessage(raw) != peer) {
+		return false;
+	}
+	const auto &message = raw.c_message();
+	if (message.is_noforwards() || message.vttl_period()) {
+		return false;
+	}
+	if (const auto media = message.vmedia()) {
+		return media->match([](const MTPDmessageMediaPhoto &photo) {
+			return !photo.vttl_seconds().has_value();
+		}, [](const MTPDmessageMediaDocument &document) {
+			return !document.vttl_seconds().has_value();
+		}, [](const auto &) { return true; });
+	}
+	return true;
+}
 
 [[nodiscard]] Js::HostResult TooManyRequests() {
 	return Js::HostResult::Error(
@@ -222,8 +242,35 @@ Js::HostResult Instance::data(
 		return Result::Value(std::move(result));
 	}
 
+	const auto exporting = (function == "messages.exportHistory");
 	auto error = Result();
-	const auto peer = PeerArg(session, first, error);
+	const auto peer = [&]() -> PeerData* {
+		if (!exporting) {
+			return PeerArg(session, first, error);
+		}
+		const auto id = DialogId(Option(first, "id"));
+		const auto type = Option(first, "type");
+		if (session && id && IsBareDialogId(*id)) {
+			const auto bare = getBareDialogId(*id);
+			auto &data = session->data();
+			if (*id > 0 && type == "user") {
+				if (const auto user = data.userLoaded(UserId(bare));
+					user && user->id != PeerData::kServiceNotificationsId) {
+					return user;
+				}
+			} else if (*id < 0 && type == "chat") {
+				if (const auto chat = data.chatLoaded(ChatId(bare))) {
+					return chat;
+				}
+			} else if (*id < 0 && type == "channel") {
+				if (const auto channel = data.channelLoaded(ChannelId(bare))) {
+					return channel;
+				}
+			}
+		}
+		error = TypeError("messages.exportHistory: unknown peer");
+		return nullptr;
+	}();
 	if (!peer) {
 		return error;
 	}
@@ -269,7 +316,14 @@ Js::HostResult Instance::data(
 			settle(true, ItemJson(session->data().message(peer, msgId)), {});
 		});
 		return Result::Pending();
-	} else if (function == "messages.history") {
+	} else if (function == "messages.history" || exporting) {
+		const auto topicValue = Option(second, "topicId");
+		const auto topic = exporting ? MessageIdArg(topicValue) : std::nullopt;
+		if (exporting && (peer->isLuxuryNoForwards() || peer->isMonoforum())) {
+			return Result::Error("PermissionError", "chat history cannot be exported");
+		} else if (exporting && !topicValue.is_null() && (!topic || !peer->isForum())) {
+			return TypeError("messages.exportHistory: invalid topicId");
+		}
 		const auto offset = MessageIdArg(Option(second, "offsetId"));
 		const auto limit = LimitArg(
 			Option(second, "limit"),
@@ -278,34 +332,82 @@ Js::HostResult Instance::data(
 		if (!InFlightAllowed(int(_requests.size()))) {
 			return TooManyRequests();
 		}
+		if (exporting && (Core::App().passcodeLocked()
+			|| Option(second, "requestId").is_null())) {
+			return Result::Error("Error", "history export unavailable");
+		} else if (exporting && !trackRequest(promiseId, Option(second, "requestId"))) {
+			return TypeError("messages.exportHistory: invalid or duplicate requestId");
+		}
 		const auto settle = later();
-		session->api().request(MTPmessages_GetHistory(
-			peer->input(),
-			MTP_int(offset ? int(*offset) : 0), // MessageIdArg caps it
-			MTP_int(0), // offset_date
-			MTP_int(0), // add_offset
-			MTP_int(limit),
-			MTP_int(0), // max_id
-			MTP_int(0), // min_id
-			MTP_long(0) // hash
-		)).done([=](const MTPmessages_Messages &result) {
+		const auto weakSession = base::make_weak(session);
+		const auto done = [=](const MTPmessages_Messages &result) {
+			const auto strong = weak.get();
+			if (!strong || strong->_stopping || !weakSession.get()
+				|| ActiveSession() != weakSession.get()
+				|| !strong->_requests.contains(promiseId)) {
+				return;
+			}
 			session->data().processExistingMessages(peer->asChannel(), result);
+			if (exporting && (Core::App().passcodeLocked() || peer->isLuxuryNoForwards())) {
+				settle(false, nullptr, "chat history cannot be exported");
+				return;
+			}
 			auto list = json::array();
 			result.match([](const MTPDmessages_messagesNotModified &) {
 			}, [&](const auto &data) {
-				for (const auto &item : data.vmessages().v) {
-					auto value = ItemJson(session->data().message(
-						peer,
-						IdFromMessage(item)));
+				for (const auto &raw : data.vmessages().v) {
+					if (exporting && !ExportableMessage(raw, peer->id)) {
+						continue;
+					}
+					const auto item = session->data().message(peer, IdFromMessage(raw));
+					if (exporting && (!item || item->isDeleted() || item->isEphemeral()
+						|| item->isLuxuryNoForwards() || item->ttlDestroyAt()
+						|| (item->media() && item->media()->ttlSeconds())
+						|| (topic && item->topicRootId() != MsgId(*topic)))) {
+						continue;
+					}
+					auto value = ItemJson(item);
 					if (!value.is_null()) {
 						list.push_back(std::move(value));
 					}
 				}
 			});
 			settle(true, std::move(list), {});
-		}).fail([=](const MTP::Error &failure) {
+		};
+		const auto fail = [=](const MTP::Error &failure) {
 			settle(false, nullptr, failure.type().toStdString());
-		}).send();
+		};
+		const auto offsetId = MTP_int(offset ? int(*offset) : 0);
+		const auto requestId = topic
+			? session->api().request(MTPmessages_GetReplies(
+				peer->input(),
+				MTP_int(int(*topic)),
+				offsetId,
+				MTP_int(0), // offset_date
+				MTP_int(0), // add_offset
+				MTP_int(limit),
+				MTP_int(0), // max_id
+				MTP_int(0), // min_id
+				MTP_long(0) // hash
+			)).done(done).fail(fail).send()
+			: session->api().request(MTPmessages_GetHistory(
+				peer->input(),
+				offsetId,
+				MTP_int(0), // offset_date
+				MTP_int(0), // add_offset
+				MTP_int(limit),
+				MTP_int(0), // max_id
+				MTP_int(0), // min_id
+				MTP_long(0) // hash
+			)).done(done).fail(fail).send();
+		if (exporting) {
+			expireRequest(promiseId, kExportTimeout);
+			_cancellable.at(promiseId).abort = [weakSession, requestId] {
+				if (const auto strong = weakSession.get()) {
+					strong->api().request(requestId).cancel();
+				}
+			};
+		}
 		return Result::Pending();
 	} else if (function == "messages.edit") {
 		const auto item = message(second);

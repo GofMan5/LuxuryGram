@@ -9,6 +9,9 @@
 
 class History;
 class HistoryItem;
+namespace Data {
+class ForumTopic;
+} // namespace Data
 class PeerData;
 class QKeyEvent;
 class QObject;
@@ -31,6 +34,9 @@ namespace Luxury::Plugins {
 // What plugins see of a chat and of a message, see LuxPeer and LuxMessage
 // in docs/plugins/lux.d.ts. Never called for the service chat.
 [[nodiscard]] nlohmann::json PeerJson(not_null<PeerData*> peer);
+[[nodiscard]] nlohmann::json ChatContextJson(
+	not_null<PeerData*> peer,
+	Data::ForumTopic *topic);
 [[nodiscard]] nlohmann::json MessageJson(not_null<HistoryItem*> item);
 // A plugin's text and LuxEntity list, as messages.edit sends it. Invalid
 // entities and mentions of unknown users are dropped.

@@ -11,6 +11,9 @@
 
 class HistoryItem;
 class PeerData;
+namespace Data {
+class ForumTopic;
+} // namespace Data
 
 namespace Ui {
 class PopupMenu;
@@ -19,10 +22,16 @@ class PopupMenu;
 namespace Luxury::Plugins {
 
 // Window::FillDialogsEntryMenu: the "Plugins" submenu of a chat.
-void FillChatMenu(PeerData *peer, const Ui::Menu::MenuCallback &addAction);
+void FillChatMenu(
+	PeerData *peer,
+	const Ui::Menu::MenuCallback &addAction,
+	Data::ForumTopic *topic);
 // TopBarWidget: whether the plugins button shows for the chat, and its menu.
 [[nodiscard]] bool HasHeaderButtons(PeerData *peer);
-void FillHeaderMenu(not_null<Ui::PopupMenu*> menu, not_null<PeerData*> peer);
+void FillHeaderMenu(
+	not_null<Ui::PopupMenu*> menu,
+	not_null<PeerData*> peer,
+	Data::ForumTopic *topic);
 // Fires when a plugin adds or drops a header button, or unloads.
 [[nodiscard]] rpl::producer<> HeaderButtonsChanges();
 void NotifyHeaderButtons();

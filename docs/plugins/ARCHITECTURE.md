@@ -425,6 +425,11 @@ lux.messages.send({peer, text, replyTo?, silent?})   -> Promise   messages.send
 lux.messages.get(peer, id) -> message|null, or a Promise when not loaded  messages.read
 lux.messages.history(peer, {limit?, offsetId?}) -> Promise<message[]>  messages.read
 //   limit 1..100 (default 20), newest first
+lux.messages.exportHistory({id,type}, {requestId, topicId?, limit?, offsetId?}) -> Promise<message[]>  messages.read
+//   exact loaded peer type; limit 1..100 (default 20), newest first, 30 s timeout
+//   set topicId for one forum topic, null/omitted for the entire chat
+//   refuses protected chats, skips protected/deleted/ephemeral messages,
+//   and rejects replies that no longer belong to the active account
 lux.messages.edit(peer, id, {text, entities?}) -> Promise          messages.manage
 lux.messages.remove(peer, ids, {revoke?}) -> count                 messages.manage
 //   the host function is messages.delete; ids: one id or 1..100
@@ -449,10 +454,13 @@ lux.ui.prompt({title, placeholder?, value?, text?, submit?}) -> Promise<string|n
 //   text: optional plain-text explanation (2048 UTF-16 units); submit: button label
 //   (64 UTF-16 units). Older clients ignore these two options.
 lux.ui.showResult({title?, text?, copies, action?}) -> Promise<bool>  ui + clipboard
+//   text: optional plain-text explanation, shown before the copyable entries.
 //   copies: 1..3 {title, text} entries. Each button copies only its displayed
 //   text on click, without closing or giving JS a clipboard gesture.
 //   action closes and resolves true; ordinary close resolves false.
+//   Copy/action also require the original active window, account and chat view.
 //   Feature-detect showResult on older clients.
+lux.ui.closeDialog()                       closes only this plugin's dialog  ui
 lux.ui.addCommand({name, description, handler({peer, args})})       ui
 lux.ui.addMessageMenuItem({title, handler({peer, message})})        ui
 lux.ui.addHotkey({keys: 'Ctrl+Shift+K', handler({peer})})           ui
@@ -465,7 +473,9 @@ lux.ui.showForm({title?, fields}) -> Promise<{key: value}|null>    ui
 //   fields: 1..20 of {type: 'text'|'toggle'|'select', key, label?,
 //   default?, placeholder? (text), options (select)}; an unknown type or
 //   member throws TypeError; a dialog, see below
-lux.ui.currentChat() -> peer|null / lux.ui.openChat(peer)           ui
+lux.ui.currentChat() -> chatContext|null / lux.ui.openChat(peer)    ui
+//   chatContext adds forum, topicId and topicTitle to peer; the chat menu
+//   and header callbacks report the target chatContext, not the active view
 lux.ui.openUrl(url)              http(s), one a second, within 1 s of a
 //                               user gesture (NotAllowedError); a link
 //                               TryConvertUrlToLocal changes (t.me, tg:,
@@ -478,7 +488,7 @@ lux.ui.decorateMessage({peer, id, text?}) / refreshMessage({peer, id})  ui
 //   Dialogs: one at a time per plugin, titled with the plugin name, closed
 //   on plugin unload, an account switch or passcode lock; refused while locked
 //   Ctrl+C/V/X/A/Z/Y, Ctrl+Enter, Enter and Esc are reserved: TypeError
-lux.http.fetch(url, {method, headers, body, binary}) -> Promise<{status, headers, text(), json(), base64}>  network
+lux.http.fetch(url, {method, headers, body, binary, redirect?, requestId?}) -> Promise<{status, headers, text(), json(), base64}>  network
 //   https only, to a manifest host, on port 443 unless that host entry
 //   names a port ("api.example.com:8443")
 //   binary: true returns the body as base64 instead of text
@@ -491,6 +501,12 @@ lux.http.fetch(url, {method, headers, body, binary}) -> Promise<{status, headers
 //   resolves the name, so there is no local lookup that would leak it:
 //   only an IP literal is checked. A Host header is dropped; a redirect to
 //   another origin drops Authorization, Cookie, Proxy-* and Host.
+//   redirect: "error" rejects redirects before sending another request.
+//   30 s inactivity timeout and 120 s total deadline, 10 MiB response limit.
+lux.cancelRequest(id)            current plugin only, does not recall sent data
+//   requestId: positive safe integer unique among this plugin's pending requests.
+//   Cancelling a pending export or fetch rejects it with AbortError;
+//   an expired total deadline rejects with TimeoutError.
 lux.storage.get(key) / set(key, value) / remove(key) / keys()       storage
 lux.settings.get(key) / set(key, value) / onChange(fn)   manifest settings, always allowed
 //   set: a declared key and a value SettingAccepts, otherwise TypeError;
@@ -505,11 +521,14 @@ setTimeout / clearTimeout / setInterval / clearInterval              always
 ```
 
 A `message` object: `{id, peer, from, date, text, entities, out, replyTo,
-hasMedia, media, forward, topicId, editDate, groupedId}` where `peer`/`from`
-are `{id: "<decimal>", type: "user"|"chat"|"channel", title}`, `entities`
-are `{type, offset, length, url?|userId?|emojiId?|language?}` in UTF-16
+externalReply?, hasMedia, media, linkPreview?, forward, topicId, editDate,
+groupedId, hasFromId?, channelPost?}` where `peer`/`from` are `{id: "<decimal>", type: "user"|"chat"|"channel", title}`,
+`entities` are `{type, offset, length, url?|userId?|emojiId?|language?}` in UTF-16
 units, `media` is `{type, size}` or null and `forward` is
-`{from, name, date, id}` or null. Ids are decimal strings; a message id
+`{from, name, date, id}` or null. `externalReply` is true if `replyTo` is
+in another chat. `linkPreview` is true for a link preview, including ones
+whose `media` reports a photo or video. Older clients omit both flags.
+Ids are decimal strings; a message id
 argument is 1..INT32_MAX (MessageIdArg). Anything else is a `TypeError`
 (`Error` "unknown message" in messages.edit and downloadMedia); as
 history's offsetId it is ignored, and as a replyTo (send, beforeSend)

@@ -11,6 +11,7 @@
 #include "api/api_common.h"
 #include "core/application.h"
 #include "data/data_document.h"
+#include "data/data_forum_topic.h"
 #include "data/data_media_types.h"
 #include "data/data_peer.h"
 #include "data/data_photo.h"
@@ -241,11 +242,20 @@ void EmitMessage(not_null<HistoryItem*> item, const std::string &event) {
 	};
 }
 
+json ChatContextJson(not_null<PeerData*> peer, Data::ForumTopic *topic) {
+	auto result = PeerJson(peer);
+	result["forum"] = peer->isForum();
+	result["topicId"] = topic ? json(std::to_string(topic->rootId().bare)) : json();
+	result["topicTitle"] = topic ? json(topic->title().toStdString()) : json();
+	return result;
+}
+
 [[nodiscard]] json MessageJson(not_null<HistoryItem*> item) {
 	const auto peer = item->history()->peer;
 	const auto from = item->from();
 	const auto &text = item->originalText();
-	const auto reply = item->replyToId();
+	const auto reply = item->replyToFullId();
+	const auto media = item->media();
 	const auto edited = item->Get<HistoryMessageEdited>();
 	const auto group = item->groupId();
 	return {
@@ -258,9 +268,13 @@ void EmitMessage(not_null<HistoryItem*> item, const std::string &event) {
 		{ "text", text.text.toStdString() },
 		{ "entities", EntitiesJson(text.entities) },
 		{ "out", item->out() },
-		{ "replyTo", reply ? json(std::to_string(reply.bare)) : json() },
-		{ "hasMedia", item->media() != nullptr },
-		{ "media", MediaJson(item->media()) },
+		{ "hasFromId", item->hasFromId() },
+		{ "channelPost", peer->isBroadcast() && item->isPost() },
+		{ "replyTo", reply ? json(std::to_string(reply.msg.bare)) : json() },
+		{ "externalReply", reply && reply.peer != peer->id },
+		{ "hasMedia", media != nullptr },
+		{ "media", MediaJson(media) },
+		{ "linkPreview", media && media->webpage() },
 		{ "forward", ForwardJson(item) },
 		{ "topicId", peer->isForum()
 			? json(std::to_string(item->topicRootId().bare))

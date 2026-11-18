@@ -116,7 +116,9 @@ const lux = {
 			}
 		};
 	},
+	cancelRequest: (id) => call('request.cancel', id),
 	messages: {
+		exportHistory: (peer, options) => call('messages.exportHistory', peer, options),
 		send: (options) => call('messages.send', options),
 		get: (peer, id) => call('messages.get', peer, id),
 		history: (peer, options) => call('messages.history', peer, options),
@@ -149,6 +151,7 @@ const lux = {
 		addHeaderButton: (options) => call('ui.addHeaderButton', options),
 		addComposeMenuItem: (options) => call('ui.addComposeMenuItem', options),
 		showForm: (schema) => call('ui.showForm', schema),
+		closeDialog: () => call('ui.closeDialog'),
 		showResult: (options) => call('ui.showResult', options),
 		currentChat: () => call('ui.currentChat'),
 		openChat: (peer) => call('ui.openChat', peer),

@@ -190,7 +190,8 @@ private:
 		std::vector<std::pair<QByteArray, QByteArray>> headers,
 		QByteArray body,
 		int redirects,
-		bool binary);
+		bool binary,
+		bool followRedirects);
 	// fetchStep once the address is known to be public.
 	void fetchSend(
 		std::uint64_t promiseId,
@@ -199,7 +200,20 @@ private:
 		std::vector<std::pair<QByteArray, QByteArray>> headers,
 		QByteArray body,
 		int redirects,
-		bool binary);
+		bool binary,
+		bool followRedirects);
+	struct CancellableRequest {
+		std::int64_t id = 0;
+		Fn<void()> abort;
+		std::unique_ptr<QTimer> deadline;
+	};
+	void cancelRequest(std::uint64_t promiseId, bool timedOut = false);
+	void expireRequest(std::uint64_t promiseId, int timeoutMs);
+	void cancelRequests();
+	[[nodiscard]] bool trackRequest(
+		std::uint64_t promiseId,
+		const nlohmann::json &id);
+
 	// The active account changed: its requests and events are void.
 	void accountChanged();
 	[[nodiscard]] Result apiCall(
@@ -225,6 +239,7 @@ private:
 	CpuBudget _budget;
 	// fetch and api.call promises not settled yet, at most kMaxInFlight.
 	std::set<std::uint64_t> _requests;
+	std::map<std::uint64_t, CancellableRequest> _cancellable;
 
 	std::map<std::int64_t, std::unique_ptr<QTimer>> _timers;
 	std::int64_t _nextTimer = 0;
