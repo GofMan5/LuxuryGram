@@ -52,6 +52,18 @@ Goal: `goal-ee1acc77-35bc-46e8-9b6a-72fc9c3045f5` (full Rust rewrite, 100 rounds
   reference binary and is gitignored; rebuild with `build-reference.ps1`.
 - Only 7 hand-written cases; no fuzzing or real dictionary corpus yet.
 
+## Next checkpoint
+
+1. Pin/vendor `gpui-ce` 0.3.0 sources, verify the API against its own examples
+   (not from memory), then add the M0 empty-window crate and design tokens
+   generated from the fork's `.style` files. Update `MAPPING.md` only with
+   verified APIs.
+2. Get explicit user confirmation on ADR-004 before adding any MTProto/crypto
+   dependency; then start M1 with `grammers-*`.
+3. Expand `FORK_DELTA.md` from a path inventory into a classified per-feature
+   delta, with fork-only features given port priority.
+4. Keep the commit+push checkpoint discipline after each verified step.
+
 ## Blocked
 
 - Nothing currently. ADR-004 awaits user confirmation before adding MTProto
