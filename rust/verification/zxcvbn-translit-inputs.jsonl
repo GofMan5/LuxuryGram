@@ -1,0 +1,7 @@
+{"name":"cyrillic-basic","args":["input.txt","output.txt"],"stdin":"","env":{},"files":{"input.txt":"Привет\nМир\n"}}
+{"name":"uppercase-mixed","args":["input.txt","output.txt"],"stdin":"","env":{},"files":{"input.txt":"ПРИВЕТ\nПривет мир\nЁлка Ґа\n"}}
+{"name":"crlf-tabs","args":["input.txt","output.txt"],"stdin":"","env":{},"files":{"input.txt":"ПРИВЕТ\r\nМир\tignored\n  \n\r\n"}}
+{"name":"short-and-unmapped","args":["input.txt","output.txt"],"stdin":"","env":{},"files":{"input.txt":"a\nя\n日本語\nАБ\n"}}
+{"name":"dropped-markup","args":["input.txt","output.txt"],"stdin":"","env":{},"files":{"input.txt":"chffffff\nfntahoma\nb1\nB1\ni0\nx\n"}}
+{"name":"empty-input","args":["input.txt","output.txt"],"stdin":"","env":{},"files":{"input.txt":""}}
+{"name":"non-cyrillic-then-valid","args":["input.txt","output.txt"],"stdin":"","env":{},"files":{"input.txt":"hello world\nελληνικά\nПривет\n"}}

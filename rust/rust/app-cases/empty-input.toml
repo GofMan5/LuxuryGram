@@ -1,0 +1,5 @@
+bin.name = "zxcvbn_translit"
+args = ["input.txt", "output.txt"]
+status.code = 1
+fs.sandbox = true
+fs.base = "empty-input.in"

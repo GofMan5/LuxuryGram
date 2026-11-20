@@ -15,7 +15,7 @@
 4. Reuse repository code, platform facilities, standard library, and installed dependencies in that order. Add no speculative abstraction or dependency.
 5. Keep the diff focused, but do not simplify away validation, error handling, security, accessibility, compatibility, or requested behavior.
 6. Infer ordinary implementation details from repository evidence. Ask only when a destructive or externally visible choice cannot be recovered or safely inferred.
-7. Do not commit, push, publish, create a release, or open a pull request unless the current task requests delivery. Stage only explicit task-owned paths.
+7. Commit and push task-owned work at every verified checkpoint: intermediate commits and pushes are mandatory for every task, not an optional step at the end. Stage only explicit task-owned paths; never include unrelated or pre-existing work. Publishing a release, creating a tag, or opening a pull request still requires a separate explicit request.
 
 ## Branding
 

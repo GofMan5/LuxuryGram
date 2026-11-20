@@ -1,0 +1,8 @@
+{
+  "schema": "rust-anything/app-cases@1",
+  "name": "zxcvbn_translit",
+  "run": [
+    "verification/zxcvbn-translit/reference/zxcvbn_translit.exe"
+  ],
+  "timeout_secs": 30
+}

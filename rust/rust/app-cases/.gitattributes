@@ -1,0 +1,3 @@
+# Recorded black-box cases are byte-exact fixtures: CRLF inside input.txt
+# is part of the test, so Git must not normalize their line endings.
+* -text
