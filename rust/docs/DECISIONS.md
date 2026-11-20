@@ -81,3 +81,24 @@ fork-specific style files (`luxury_styles.style`, `luxury_icons.style`,
 generator (`rust/tools/generate-tokens.ps1`). Every generated constant keeps
 its source file and line in a doc comment. Composite values stay a documented
 gap; no raw pixel constants are added to Rust views instead.
+
+## ADR-010 — Hybrid bottleneck optimization replaces the full rewrite (2026-11-20)
+
+**User decision:** stop treating "rewrite all 2.9M lines" as the objective.
+Replace only the bottlenecks, keep proven native libraries where there is no
+speed to gain.
+
+| Area | Decision | Rationale |
+| --- | --- | --- |
+| UI / compositing | Rust + GPUI-CE instead of Qt/QPainter | GPU rendering of bubbles, blur, glyphs and texture atlases; target smooth 4K/120Hz scrolling |
+| MTProto / TL | Rust with `grammers-*` + tokio | async deserialization of large update batches off the main thread |
+| Message/chat storage | LSM (Fjall or RocksDB) + Zstd | compact sequential writes, no VACUUM-style blocking, 3–5x less disk for repetitive text |
+| Full-text search | Tantivy | indexed search instead of linear scans; morphology-aware |
+| Media cache | content-addressed store by SHA-256, WebP/AVIF previews | deduplicate reposts, keep large blobs out of the LSM cache |
+| Media decoding / calls | keep FFmpeg, WebRTC, dav1d, rlottie as C/C++ behind FFI | already SIMD-optimized; rewriting gives no benefit |
+
+**Consequences:** the M0 GPUI shell and generated design tokens remain valid
+(first UI slice). The old M1–M7 monolithic milestones are replaced by measured
+bottleneck slices. Every slice needs a baseline measurement and a focused
+before/after check; no component is migrated just for the sake of "all Rust".
+rust-anything stays useful only for CLI/C-ABI oracles, not for Qt proof.

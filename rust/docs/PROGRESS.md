@@ -3,21 +3,19 @@
 Branch: `luxurygram-rust` (created from `dev` at `779e13d4c5`).
 Goal: `goal-ee1acc77-35bc-46e8-9b6a-72fc9c3045f5` (full Rust rewrite, 100 rounds).
 
-## Milestones
+## Milestones (hybrid plan, ADR-010)
 
 | ID | Scope | Status |
 | --- | --- | --- |
-| M0 | Workspace, build/CI discipline, first behavior-proven port, GPUI shell | **in progress** — first slice verified; shell compiles; tokens generated |
-| M1 | TL + MTProto + login via a reviewed crate | not started (ADR-004 needs confirmation) |
-| M2 | Data model + local storage | not started |
-| M3 | Dialogs list on GPUI-CE | not started |
-| M4 | Message history | not started |
-| M5 | Composer + media | not started |
-| M6 | Stickers/emoji/viewer | not started |
-| M7 | Settings/folders/search/notifications | not started |
-| Out of scope for now | Calls, secret chats | explicitly deferred |
+| H0 | Bottleneck inventory + baseline measurements | **in progress** — fork delta and GPUI API maps being finished |
+| H1 | UI slice: virtualized message list on GPUI-CE | next |
+| H2 | MTProto/TL slice: grammers + tokio off the main thread | blocked on ADR-004 confirmation |
+| H3 | Storage/search slice: LSM + Zstd and Tantivy | not started |
+| H4 | Media cache: SHA-256 CAS + WebP/AVIF previews | not started |
+| Out of scope | Rewriting FFmpeg, WebRTC, dav1d, rlottie | stays C/C++ behind FFI |
+| Kept from old plan | M0 GPUI shell, design tokens, zxcvbn_translit oracle | done and still valid |
 
-## Done in M0 (2026-11-20)
+## Done so far (still valid under the hybrid plan)
 
 - `cargo install rust-anything` → 2.1.0, `rust-anything setup` registered MCP/skill
   for the five supported agents; MCP `initialize` smoke test passed.
@@ -38,6 +36,12 @@ Goal: `goal-ee1acc77-35bc-46e8-9b6a-72fc9c3045f5` (full Rust rewrite, 100 rounds
 - Generated 51 scalar design tokens from the fork's three `luxury*.style`
   files into `rust/crates/design-tokens/src/lib.rs` using
   `rust/tools/generate-tokens.ps1`; each token records its source file and line.
+- **Visual check (2026-11-20):** launched `target/debug/luxurygram-shell.exe`,
+  it stayed alive for 5 s with no stdout/stderr, and a desktop screenshot
+  showed the "LuxuryGram" title bar and centered M0 text. Cropped evidence:
+  `rust/docs/assets/m0-shell.png`. Process was stopped afterwards.
+- User replaced the full-rewrite objective with the hybrid bottleneck plan
+  (ADR-010); no full-app rewrite claim is made.
 
 ## Checks actually run
 
@@ -72,17 +76,18 @@ Goal: `goal-ee1acc77-35bc-46e8-9b6a-72fc9c3045f5` (full Rust rewrite, 100 rounds
 - The GPUI dependency tree adds 723 locked packages and a heavy first build;
   CI/fresh-machine cost has not been measured.
 
-## Next checkpoint
+## Next checkpoint (hybrid plan)
 
-1. Launch the M0 shell once and capture a screenshot/frame-time evidence;
-   then move verified GPUI-CE API facts from the draft into `MAPPING.md`.
-2. Apply design tokens to a first real view (not a placeholder) and extend the
-   generator to composite style values.
-3. Get explicit user confirmation on ADR-004 before adding any MTProto/crypto
-   dependency; then start M1 with `grammers-*`.
-4. Expand `FORK_DELTA.md` from a path inventory into a classified per-feature
-   delta, with fork-only features given port priority.
-5. Keep the commit+push checkpoint discipline after each verified step.
+1. Finish H0: collect the fork-bottleneck inventory and the verified GPUI API
+   map from the two subagents, then choose the first measurable slice.
+2. Define a baseline for the UI slice (message-list scroll under a large
+   synthetic dataset) before changing rendering code; record the command and
+   numbers in this file.
+3. ADR-004 still needs explicit user confirmation before adding
+   `grammers-*` / tokio dependencies (H2).
+4. H3 needs a small ADR comparing Fjall vs RocksDB and Tantivy integration
+   cost; do not add a database crate on intuition alone.
+5. Commit and push the verified H0 docs and screenshot evidence.
 
 ## Blocked
 
