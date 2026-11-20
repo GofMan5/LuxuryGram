@@ -62,3 +62,22 @@ without Qt. Proven 7/7 against the original binary.
 User request. Added as rule 7 of the root `AGENTS.md`. Commit only verified,
 task-owned changes; push the task branch at each checkpoint. No release, tag
 or PR without a separate explicit request.
+
+## ADR-008 — Pin GPUI-CE 0.3.0 exactly (2026-11-20)
+
+The published 0.3.0 "Start a project" guide still shows `gpui-ce 0.2` and
+`gpui_ce_platform 0.1`. crates.io metadata shows the actual current pair is
+`0.3.0`/`0.3.0`, both published 2026-10-20, Apache-2.0, edition 2024.
+**Decision:** use exact `=0.3.0` pins for both packages and verify every API
+against the downloaded crate's `examples/` and `src/` before use. `cargo check
+-p luxurygram-shell` passed with these pins; the guide's stale versions were
+not used.
+
+## ADR-009 — Generate fork design tokens from `.style` (2026-11-20)
+
+**Decision:** extract only top-level scalar declarations from the three
+fork-specific style files (`luxury_styles.style`, `luxury_icons.style`,
+`luxury_settings.style`) into a `design-tokens` crate with a checked-in
+generator (`rust/tools/generate-tokens.ps1`). Every generated constant keeps
+its source file and line in a doc comment. Composite values stay a documented
+gap; no raw pixel constants are added to Rust views instead.

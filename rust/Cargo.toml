@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/zxcvbn-translit"]
+members = ["crates/zxcvbn-translit", "crates/design-tokens", "apps/luxurygram-shell"]
 
 [workspace.package]
 edition = "2024"
