@@ -1,16 +1,16 @@
 # Port progress
 
 Branch: `luxurygram-rust` (created from `dev` at `779e13d4c5`).
-Goal: `goal-ee1acc77-35bc-46e8-9b6a-72fc9c3045f5` (full Rust rewrite, 100 rounds).
+Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per ADR-010, 100 rounds).
 
 ## Milestones (hybrid plan, ADR-010)
 
 | ID | Scope | Status |
 | --- | --- | --- |
-| H0 | Bottleneck inventory + baseline measurements | **in progress** — fork delta and GPUI API maps being finished |
-| H1 | UI slice: virtualized message list on GPUI-CE | next |
+| H0 | Bottleneck inventory + baseline measurements | **done** — fork delta (`FORK_DELTA.md`), GPUI API map (`MAPPING.md`), H3 storage options (`research/storage-options.md`), and H1 scroll baseline recorded |
+| H1 | UI slice: virtualized message list on GPUI-CE | **next** — extract feed component into `luxurygram-shell`, wire `design-tokens`, entity spans, and interactive controls |
 | H2 | MTProto/TL slice: grammers + tokio off the main thread | blocked on ADR-004 confirmation |
-| H3 | Storage/search slice: LSM + Zstd and Tantivy | not started |
+| H3 | Storage/search slice: LSM + Zstd and Tantivy | pre-ADR research done (`research/storage-options.md`); synthetic 1M/5M benchmark + ADR next |
 | H4 | Media cache: SHA-256 CAS + WebP/AVIF previews | not started |
 | Out of scope | Rewriting FFmpeg, WebRTC, dav1d, rlottie | stays C/C++ behind FFI |
 | Kept from old plan | M0 GPUI shell, design tokens, zxcvbn_translit oracle | done and still valid |
@@ -42,8 +42,18 @@ Goal: `goal-ee1acc77-35bc-46e8-9b6a-72fc9c3045f5` (full Rust rewrite, 100 rounds
   `rust/docs/assets/m0-shell.png`. Process was stopped afterwards.
 - User replaced the full-rewrite objective with the hybrid bottleneck plan
   (ADR-010); no full-app rewrite claim is made.
+- Completed H0 inventory & research artifacts:
+  - `rust/docs/FORK_DELTA.md` — fork delta vs `upstream/dev` (`3a2a9a34e833d3243a13787215b8a7cdcf5dc3c3`) and bottleneck inventory (MTProto/WebSocket, `ayudata.db`, unindexed search, message list).
+  - `rust/docs/MAPPING.md` — verified C++/Qt → GPUI-CE `0.3.0` API mapping against pinned Cargo registry sources (`gpui-ce-0.3.0`, `gpui_ce_platform-0.3.0`).
+  - `rust/docs/research/storage-options.md` — verified crate comparison (`fjall 3.1.13` + `zstd 0.14.4`, `rocksdb 0.25.0`, `tantivy 0.27.0`, `surrealkv 1.4.0` rejected) and 1M/5M synthetic benchmark plan.
+- Added and ran H1 UI scroll baseline benchmark (`rust/apps/luxurygram-shell/benches/message_list_scroll.rs`, gated behind `bench-support` feature) using `#[gpui::bench(fps = 120)]` + `BenchAppContext::bench_renderer` over `gpui::list()` (`ListAlignment::Bottom`, `ListState::scroll_by`) with synthetic message bubbles, `StyledText` highlights, and `design_tokens::LUXURY_WATCHER_CARD_RADIUS`.
 
 ## Checks actually run
+
+- `cargo bench -p luxurygram-shell --features bench-support --bench message_list_scroll` — exit 0 (2026-11-21, Windows x64, `BenchAppContext` headless without GPU present; `current_headless_renderer()` returns `Ok(None)` on Windows so measurements cover layout, `ParleyTextSystem` shaping, prepaint, and scene build):
+  - `10000-msgs-step-48px`: Criterion median **1.3150 ms** (`[1.2957 ms .. 1.3400 ms]`); `window dirty-to-draw` mean **1.320 ms** (p50 **1.264 ms**, p95 **1.580 ms**, p99 **1.846 ms**, max **2.365 ms**, 0 budget overruns at 120 FPS / 3333 samples); `2.555 K` allocs / `1.155 M` bytes per iter.
+  - `100000-msgs-step-48px`: Criterion median **1.3341 ms** (`[1.2997 ms .. 1.3914 ms]`); `window dirty-to-draw` mean **1.319 ms** (p50 **1.266 ms**, p95 **1.573 ms**, p99 **1.931 ms**, max **11.289 ms**, 1 overrun); `2.557 K` allocs / `1.157 M` bytes per iter.
+  - `100000-msgs-step-480px`: Criterion median **1.4107 ms** (`[1.3353 ms .. 1.4957 ms]`); `window dirty-to-draw` mean **1.361 ms** (p50 **1.278 ms**, p95 **1.725 ms**, p99 **2.402 ms**, max **4.772 ms**, 0 overruns); `2.557 K` allocs / `1.157 M` bytes per iter.
 
 - `cargo test --workspace` — 7 passed, 0 failed (1 design-tokens + 6 zxcvbn-translit).
 - `cargo clippy --workspace --all-targets -- -D warnings` — exit 0 (final full run).
@@ -60,34 +70,19 @@ Goal: `goal-ee1acc77-35bc-46e8-9b6a-72fc9c3045f5` (full Rust rewrite, 100 rounds
 
 ## Known gaps
 
-- **The GPUI-CE shell is compiled, not visually verified.** It builds with
-  pinned 0.3.0 sources and its own examples were checked, but no window was
-  launched and no UI parity with Qt exists yet.
-- **rust-anything cannot parse C++/Qt.** Only black-box CLI recording and a
-  future flat C ABI seam are usable. Everything ported so far uses the
-  black-box path; UI equivalence needs separate visual tests.
-- `rust/verification/zxcvbn-translit/reference/` holds a locally built C++
-  reference binary and is gitignored; rebuild with `build-reference.ps1`.
-- Only 7 hand-written cases; no fuzzing or real dictionary corpus yet.
-- The M0 window has been compiled but not visually launched, so no screenshot
-  or frame-time evidence exists yet.
-- Design tokens are generated but not yet applied to any view; composite style
-  values (`margins()`, `point()`, `icon()`, colors) are not extracted.
-- The GPUI dependency tree adds 723 locked packages and a heavy first build;
-  CI/fresh-machine cost has not been measured.
+- **H1 baseline is CPU/scene-build only on Windows (`gpui-ce = 0.3.0`).** `gpui_ce_platform::current_headless_renderer()` returns `Ok(None)` on Windows (`gpui_ce_platform-0.3.0/src/gpui_platform.rs:239-242`), so `message_list_scroll` excludes DirectX/wgpu GPU atlas upload and present cost; windowed GPU frame-time verification is still needed in H1.
+- **M0 shell visual check (`rust/docs/assets/m0-shell.png`)** verified the window launches and renders the M0 placeholder, but no UI parity with Qt (`history_inner` / `history_item` / `history_section`) exists yet.
+- **rust-anything cannot parse C++/Qt.** Only black-box CLI recording and a future flat C ABI seam are usable. Everything ported so far uses the black-box path; UI equivalence needs separate visual tests.
+- `rust/verification/zxcvbn-translit/reference/` holds a locally built C++ reference binary and is gitignored; rebuild with `build-reference.ps1`.
+- Only 7 hand-written `zxcvbn_translit` cases; no fuzzing or real dictionary corpus yet.
+- Design tokens (`rust/crates/design-tokens/src/lib.rs`) only cover 51 scalar tokens from the three `luxury*.style` files; composite style values (`margins()`, `point()`, `icon()`, colors) and upstream `.style` files are not extracted yet.
+- The GPUI dependency tree (plus `bench-support` dev/bench deps) adds heavy first-build compile time (~6m56s for release bench build); CI/fresh-machine cost has not been measured.
 
 ## Next checkpoint (hybrid plan)
 
-1. Finish H0: collect the fork-bottleneck inventory and the verified GPUI API
-   map from the two subagents, then choose the first measurable slice.
-2. Define a baseline for the UI slice (message-list scroll under a large
-   synthetic dataset) before changing rendering code; record the command and
-   numbers in this file.
-3. ADR-004 still needs explicit user confirmation before adding
-   `grammers-*` / tokio dependencies (H2).
-4. H3 needs a small ADR comparing Fjall vs RocksDB and Tantivy integration
-   cost; do not add a database crate on intuition alone.
-5. Commit and push the verified H0 docs and screenshot evidence.
+1. Begin H1: build the virtualized chat message feed view in `luxurygram-shell` (extracting shared bubble/message model from the benchmark, adding entity-styled runs, message reactions/headers, and live scroll controls) and visually verify in a real window.
+2. Run the standalone 1M/5M synthetic storage/search benchmark (`research/storage-options.md`) and write the H3 ADR (`fjall` + `zstd` vs `rocksdb` + `tantivy`) before adding any storage crate.
+3. Confirm ADR-004 (`grammers-*` + `tokio`) with the user before starting H2.
 
 ## Blocked
 
