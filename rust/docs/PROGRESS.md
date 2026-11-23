@@ -8,7 +8,7 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
 | ID | Scope | Status |
 | --- | --- | --- |
 | H0 | Bottleneck inventory + baseline measurements | **done** — fork delta (`FORK_DELTA.md`), GPUI API map (`MAPPING.md`), H3 storage options (`research/storage-options.md`), and H1 scroll baseline recorded |
-| H1 | UI slice: virtualized message list on GPUI-CE | **in progress** — `message.rs` + `feed.rs` landed: bottom-aligned `ListState` with tail following, date separators, sender grouping, entity-styled runs, and two passing virtualization tests; search controls and before/after bench wiring remain |
+| H1 | UI slice: virtualized message list on GPUI-CE | **in progress** — `message.rs` + `feed.rs` landed: bottom-aligned `ListState` with tail following, date separators, sender grouping, entity-styled runs, Ctrl+F search with live filtering, and 4 passing tests; before/after bench wired, release run pending |
 | H2 | MTProto/TL slice: grammers + tokio off the main thread | blocked on ADR-004 confirmation |
 | H3 | Storage/search slice: LSM + Zstd and Tantivy | pre-ADR research done (`research/storage-options.md`); synthetic 1M/5M benchmark + ADR next |
 | H4 | Media cache: SHA-256 CAS + WebP/AVIF previews | not started |
@@ -123,8 +123,16 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
   --all-targets -- -D warnings` and `cargo test -p luxurygram-shell` pass;
   tests prove only visible rows are rendered out of 10,000 and that tail
   following is restored after a scroll up + `scroll_to_bottom`.
-- Still to do for H1: search top bar with actions, and wiring this view into the
-  `message_list_scroll` bench so a before/after number exists.
+- Search bar added: Ctrl+F opens a core-GPUI focused field (no external
+  `gpui_ce_elements` dependency), printable keys and Backspace update the query,
+  Escape closes it, and the list is filtered/reset in place. `End` scrolls to
+  bottom. Four `TestApp` tests now cover virtualization, tail following,
+  query filtering and key handling.
+- The shell is now a lib + bin so benchmarks measure the shipped view.
+  `message_list_scroll` gained `scroll_feed_production` using the real
+  `feed::MessageFeed`, alongside the H0 baseline `scroll_feed`. `cargo check
+  -p luxurygram-shell --features bench-support --benches` passes; the release
+  before/after run is in progress.
 
 ## Next checkpoint (hybrid plan)
 

@@ -17,6 +17,7 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, StyledText, Window, colors::Colors, div,
     list, prelude::FluentBuilder as _, px, rgb_to_hsla,
 };
+use luxurygram_shell::feed::MessageFeed as ProductionFeed;
 
 #[derive(Clone)]
 struct SyntheticMessage {
@@ -257,6 +258,56 @@ fn scroll_feed(input: &ScrollBenchCase, cx: &mut BenchAppContext) {
     );
 }
 
+/// Measures the shipped `luxurygram_shell::feed::MessageFeed` so H1's new view
+/// is compared with the H0 baseline above under the same scroll workload.
+#[gpui::bench(
+    inputs = [
+        ScrollBenchCase { message_count: 10_000, scroll_step_px: 48.0 },
+        ScrollBenchCase { message_count: 100_000, scroll_step_px: 48.0 },
+        ScrollBenchCase { message_count: 100_000, scroll_step_px: 480.0 },
+    ],
+    input_name = "case",
+    group = "message_list_scroll_production",
+    fps = 120
+)]
+fn scroll_feed_production(input: &ScrollBenchCase, cx: &mut BenchAppContext) {
+    if cfg!(debug_assertions) {
+        panic!("benchmarks require release mode");
+    }
+
+    let mut window = cx.add_empty_window();
+    let feed = window.update(|window, cx| {
+        window.replace_root(cx, |_, cx| {
+            ProductionFeed::new(input.message_count, Rc::new(Cell::new(0)), cx)
+        })
+    });
+    cx.run_until_idle();
+
+    let initial_items = feed.read_with(cx, |view, _| view.rendered_items());
+    assert!(
+        initial_items > 0 && initial_items < 200,
+        "production feed rendered {initial_items} rows initially"
+    );
+
+    let mut steps = 0usize;
+    let mut direction = -1.0f32;
+    cx.bench_renderer(feed.clone(), |view, _window, cx| {
+        if steps >= 200 {
+            direction = -direction;
+            steps = 0;
+        }
+        view.scroll_by(input.scroll_step_px * direction);
+        steps += 1;
+        cx.notify();
+    });
+
+    let items = feed.read_with(cx, |view, _| view.rendered_items());
+    assert!(
+        items > 0 && items < 200,
+        "production feed rendered {items} rows"
+    );
+}
+
 gpui::bench_group! {
     name = benches;
     config = criterion::Criterion::default()
@@ -264,6 +315,6 @@ gpui::bench_group! {
         .warm_up_time(Duration::from_secs(1))
         .measurement_time(Duration::from_secs(3))
         .without_plots();
-    targets = scroll_feed
+    targets = scroll_feed, scroll_feed_production
 }
 gpui::bench_main!(benches);
