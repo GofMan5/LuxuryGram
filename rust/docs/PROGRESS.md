@@ -8,7 +8,7 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
 | ID | Scope | Status |
 | --- | --- | --- |
 | H0 | Bottleneck inventory + baseline measurements | **done** — fork delta (`FORK_DELTA.md`), GPUI API map (`MAPPING.md`), H3 storage options (`research/storage-options.md`), and H1 scroll baseline recorded |
-| H1 | UI slice: virtualized message list on GPUI-CE | **in progress** — `message.rs` + `feed.rs` landed: bottom-aligned `ListState` with tail following, date separators, sender grouping, entity-styled runs, Ctrl+F search with live filtering, and 4 passing tests; before/after bench wired, release run pending |
+| H1 | UI slice: virtualized message list on GPUI-CE | **in progress** — `message.rs` + `feed.rs` landed: bottom-aligned `ListState` with tail following, date separators, sender grouping, entity-styled runs, Ctrl+F search with live filtering, and 4 passing tests; release bench wired and run; found and fixed a whole-vector clone in render (27 ms → 0.15 ms/frame) |
 | H2 | MTProto/TL slice: grammers + tokio off the main thread | blocked on ADR-004 confirmation |
 | H3 | Storage/search slice: LSM + Zstd and Tantivy | pre-ADR research done (`research/storage-options.md`); synthetic 1M/5M benchmark + ADR next |
 | H4 | Media cache: SHA-256 CAS + WebP/AVIF previews | not started |
@@ -130,9 +130,18 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
   query filtering and key handling.
 - The shell is now a lib + bin so benchmarks measure the shipped view.
   `message_list_scroll` gained `scroll_feed_production` using the real
-  `feed::MessageFeed`, alongside the H0 baseline `scroll_feed`. `cargo check
-  -p luxurygram-shell --features bench-support --benches` passes; the release
-  before/after run is in progress.
+  `feed::MessageFeed`, alongside the H0 baseline `scroll_feed`.
+- First bench run exposed a real bug in the new view: `render()` cloned the
+  whole 100k-message vector every frame (240K allocations, 27 ms/frame). Fixed
+  by holding `Rc<Vec<Message>>` and cloning only the `Rc`. Also corrected the
+  bench to count rows per frame instead of cumulatively.
+- Release bench after the fix (`cargo bench -p luxurygram-shell --features
+  bench-support --bench message_list_scroll`, 20 samples per case):
+  `message_list_scroll_production` 10k/48px **152 µs**, 100k/48px **157 µs**,
+  100k/480px **424 µs**, versus 27.3 ms / 27.3 ms / 27.4 ms before the fix
+  (−93.9% / −99.4% / −98.3%). H0 baseline `message_list_scroll` stayed at
+  1.34 / 1.37 / 1.33 ms. The two groups use different row content, so treat
+  their absolute values as separate series, not a strict A/B.
 
 ## Next checkpoint (hybrid plan)
 

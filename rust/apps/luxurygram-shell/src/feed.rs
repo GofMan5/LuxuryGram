@@ -20,8 +20,8 @@ const FEED_CONTEXT: &str = "LuxuryGramFeed";
 actions!(feed, [ToggleSearch, CloseSearch, ScrollToBottom]);
 
 pub struct MessageFeed {
-    all_messages: Vec<crate::message::Message>,
-    messages: Vec<crate::message::Message>,
+    all_messages: Rc<Vec<crate::message::Message>>,
+    messages: Rc<Vec<crate::message::Message>>,
     list_state: ListState,
     rendered_items: Rc<Cell<usize>>,
     search_open: bool,
@@ -39,6 +39,8 @@ impl MessageFeed {
         apply_grouping(&mut all_messages);
         let mut messages = all_messages.clone();
         apply_grouping(&mut messages);
+        let messages = Rc::new(messages);
+        let all_messages = Rc::new(all_messages);
         let list_state = ListState::new(messages.len(), ListAlignment::Bottom, px(240.0));
         list_state.set_follow_mode(FollowMode::Tail);
         Self {
@@ -63,6 +65,10 @@ impl MessageFeed {
         self.rendered_items.get()
     }
 
+    pub fn reset_render_counter(&self) {
+        self.rendered_items.set(0);
+    }
+
     #[cfg(test)]
     pub fn query(&self) -> &str {
         &self.query
@@ -76,8 +82,8 @@ impl MessageFeed {
     fn set_query(&mut self, query: String, cx: &mut Context<Self>) {
         self.query = query;
         let needle = self.query.to_lowercase();
-        self.messages = if needle.is_empty() {
-            self.all_messages.clone()
+        let filtered: Vec<_> = if needle.is_empty() {
+            (*self.all_messages).clone()
         } else {
             self.all_messages
                 .iter()
@@ -85,7 +91,9 @@ impl MessageFeed {
                 .cloned()
                 .collect()
         };
-        apply_grouping(&mut self.messages);
+        let mut messages = filtered;
+        apply_grouping(&mut messages);
+        self.messages = Rc::new(messages);
         self.list_state.reset(self.messages.len());
         if !self.messages.is_empty() {
             self.list_state.scroll_to_reveal_item(0);
@@ -174,7 +182,7 @@ impl MessageFeed {
 impl Render for MessageFeed {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = Colors::for_appearance(window);
-        let messages = self.messages.clone();
+        let messages = Rc::clone(&self.messages);
         let rendered = Rc::clone(&self.rendered_items);
         let search_open = self.search_open;
         let query = self.query.clone();

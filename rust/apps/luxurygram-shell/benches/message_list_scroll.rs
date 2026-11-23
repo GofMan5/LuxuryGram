@@ -285,11 +285,13 @@ fn scroll_feed_production(input: &ScrollBenchCase, cx: &mut BenchAppContext) {
 
     let initial_items = feed.read_with(cx, |view, _| view.rendered_items());
     assert!(
-        initial_items > 0 && initial_items < 200,
-        "production feed rendered {initial_items} rows initially"
+        initial_items > 0,
+        "production feed rendered no rows initially"
     );
+    feed.read_with(cx, |view, _| view.reset_render_counter());
 
     let mut steps = 0usize;
+    let mut total_steps = 0usize;
     let mut direction = -1.0f32;
     cx.bench_renderer(feed.clone(), |view, _window, cx| {
         if steps >= 200 {
@@ -298,13 +300,17 @@ fn scroll_feed_production(input: &ScrollBenchCase, cx: &mut BenchAppContext) {
         }
         view.scroll_by(input.scroll_step_px * direction);
         steps += 1;
+        total_steps += 1;
         cx.notify();
     });
 
     let items = feed.read_with(cx, |view, _| view.rendered_items());
+    assert!(total_steps > 0 && items > 0);
+    let avg_items_per_frame = items as f64 / total_steps as f64;
     assert!(
-        items > 0 && items < 200,
-        "production feed rendered {items} rows"
+        avg_items_per_frame < 200.0,
+        "virtualization failed: averaged {avg_items_per_frame:.1} items/frame out of {}",
+        input.message_count
     );
 }
 
