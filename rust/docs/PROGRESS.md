@@ -143,6 +143,25 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
   1.34 / 1.37 / 1.33 ms. The two groups use different row content, so treat
   their absolute values as separate series, not a strict A/B.
 
+## H3 baseline measured (2026-11-23)
+
+Disposable harness `.ai/h3-bench/` (outside the workspace, gitignored) reproduces
+the exact C++ query shapes from `luxury_database.cpp`: WAL `deleted_message`
+with the composite index, the `luxury_contains_ignoring_case` scalar UDF and
+`ORDER BY message_id DESC LIMIT 50`. Deterministic 200-dialog mixed
+ASCII/Cyrillic payloads; `rusqlite 0.41.1` bundled.
+
+| rows | ingest | db size | indexed read p50/p99 | substring search p50/p99 |
+| --- | --- | --- | --- | --- |
+| 1,000,000 | 10.794 s (92.6k rows/s) | 533.9 MiB | 28.8 / 65.9 ms | 59.8 / 79.7 ms |
+| 5,000,000 | 69.656 s (71.8k rows/s) | 2675.7 MiB | 166.2 / 371.3 ms | 303.3 / 382.0 ms |
+
+These are warm-cache numbers on Windows x64; they already miss the ADR-010
+targets (read p99 < 5 ms, search p99 < 20 ms) by 74× for reads and 19× for
+search at 5M rows. The harness is not committed; only this evidence is. No
+storage/search dependency has been added to the workspace — the Fjall vs
+RocksDB vs Tantivy decision still needs candidate runs and an ADR.
+
 ## Next checkpoint (hybrid plan)
 
 1. Begin H1: build the virtualized chat message feed view in `luxurygram-shell` (extracting shared bubble/message model from the benchmark, adding entity-styled runs, message reactions/headers, and live scroll controls) and visually verify in a real window.
