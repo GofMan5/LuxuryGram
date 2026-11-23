@@ -8,7 +8,7 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
 | ID | Scope | Status |
 | --- | --- | --- |
 | H0 | Bottleneck inventory + baseline measurements | **done** — fork delta (`FORK_DELTA.md`), GPUI API map (`MAPPING.md`), H3 storage options (`research/storage-options.md`), and H1 scroll baseline recorded |
-| H1 | UI slice: virtualized message list on GPUI-CE | **next** — extract feed component into `luxurygram-shell`, wire `design-tokens`, entity spans, and interactive controls |
+| H1 | UI slice: virtualized message list on GPUI-CE | **in progress** — `message.rs` + `feed.rs` landed: bottom-aligned `ListState` with tail following, date separators, sender grouping, entity-styled runs, and two passing virtualization tests; search controls and before/after bench wiring remain |
 | H2 | MTProto/TL slice: grammers + tokio off the main thread | blocked on ADR-004 confirmation |
 | H3 | Storage/search slice: LSM + Zstd and Tantivy | pre-ADR research done (`research/storage-options.md`); synthetic 1M/5M benchmark + ADR next |
 | H4 | Media cache: SHA-256 CAS + WebP/AVIF previews | not started |
@@ -108,6 +108,23 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
 - Output is byte-identical to the reference binary on both dictionaries and all
   7 recorded oracle cases. `cargo fmt --all`, both clippy runs with `-D warnings`
   and `cargo test --workspace` pass. Details in `docs/fast-anything-trial.md`.
+
+## H1 first slice (2026-11-23)
+
+- Added `apps/luxurygram-shell/src/message.rs`: deterministic message model
+  (sender, text, byte-range entity spans, timestamp), date separators by day and
+  15-minute consecutive-sender grouping, mirroring `recountDisplayDateInBlocks`
+  and `computeIsAttachToPrevious`.
+- Added `apps/luxurygram-shell/src/feed.rs`: `list()` with
+  `ListAlignment::Bottom` + `FollowMode::Tail`, variable-height bubbles, date
+  headers, `StyledText` highlights for bold/italic/link/code entities, and
+  `scroll_to_end`. Wired as the shell's main view.
+- `cargo check --workspace --all-targets`, `cargo clippy --workspace
+  --all-targets -- -D warnings` and `cargo test -p luxurygram-shell` pass;
+  tests prove only visible rows are rendered out of 10,000 and that tail
+  following is restored after a scroll up + `scroll_to_bottom`.
+- Still to do for H1: search top bar with actions, and wiring this view into the
+  `message_list_scroll` bench so a before/after number exists.
 
 ## Next checkpoint (hybrid plan)
 

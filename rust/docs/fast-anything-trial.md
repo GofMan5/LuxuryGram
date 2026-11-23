@@ -126,6 +126,23 @@ port is attempted: the Qt-free WebSocket framing core
 confirmation is required) and fork-owned plugin/TL helpers. Do not enable a port
 whose `fast-anything bench` result is not faster than the original.
 
+## Triage: Qt-free WebSocket framing (2026-11-23)
+
+Standalone harness `.ai/ws-bench.cpp` (200k encode + decode cycles, 700 ms)
+profiled with both `.ai/ws-bench.cpp` and
+`Telegram/SourceFiles/mtproto/details/mtproto_websocket_logic.cpp` as sources:
+
+| function | share | blocker |
+| --- | --- | --- |
+| `WsEncodeFrame` | 48.9% | takes a `WsOpcode` enum |
+| `WsFrameDecoder::parseFrame` | 17.7% | method defined outside its class |
+| four decoder helpers | 1.3–6.5% | same |
+
+Nothing is portable without changing public signatures and class structure, and
+the work per call is linear masking/copying (~1.8 µs), close to fast-anything's
+JSON bridge cost. No port attempted: expected payoff is negative. This is a
+measured triage result, not a claim that WebSocket cannot be optimized later.
+
 ## Artifacts
 
 - `.fast/` — generated profiler state, recordings and port crates (gitignored;
