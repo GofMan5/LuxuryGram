@@ -122,3 +122,23 @@ favor compute-dense work (small inputs, heavy CPU), not streaming transforms.
 This does not replace ADR-010's slice plan; it is the tool for proving individual
 function ports inside those slices. ADR-004 still needs user confirmation before
 any MTProto/network dependency is added.
+
+## ADR-012 — binary C ABI for verified ports (2026-11-23)
+
+**Context:** ADR-011's verified Rust port lost end to end only because
+fast-anything's generated C bridge JSON-serializes the whole argument and
+result. The function itself was correct (786/786 calls matched).
+
+**Decision:** keep fast-anything for profiling, recording and verification, but
+ship verified ports through a minimal binary C ABI (raw byte pointers and
+lengths, one crossing per batch) with an allocation-free Rust implementation.
+For `zxcvbn_translit` this yields 1.78× on an English dictionary and 2.52× on a
+Cyrillic one in-process, with byte-identical output. The call site is opt-in via
+`LUXURY_ZXCVBN_RUST` / `LUXURY_ZXCVBN_RUST_DLL` and falls back to the original
+C++ when disabled or unavailable; no build system or runtime product behaviour
+changes in this checkpoint.
+
+**Consequences:** fast-anything remains the proof tool; its generated bridge is
+not the shipping transport for this repo. Future ports should measure both the
+tool's own `bench` and an in-process binary-ABI benchmark before being enabled.
+Build-system integration (shipping the cdylib with the CLI) is a separate step.

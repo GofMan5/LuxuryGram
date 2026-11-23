@@ -97,6 +97,18 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
 - Selection rule recorded: only port functions whose CPU work dominates their
   JSON bridge cost; do not enable anything that loses `fast-anything bench`.
 
+## Binary FFI follow-up (same checkpoint)
+
+- fast-anything's JSON bridge was the only reason the verified port lost end to
+  end. Replaced it with a binary C ABI (`ffi` feature on `zxcvbn-translit`) and
+  an opt-in call site in `zxcvbn_translit.cpp`; default behavior stays C++.
+- `transform_optimized` removes a per-word `String` allocation. In-process,
+  20 interleaved iterations: 8.038 ms → 4.521 ms (1.78×) on the 2.46 MB English
+  dictionary and 31.250 ms → 12.403 ms (2.52×) on the 2.26 MB Cyrillic one.
+- Output is byte-identical to the reference binary on both dictionaries and all
+  7 recorded oracle cases. `cargo fmt --all`, both clippy runs with `-D warnings`
+  and `cargo test --workspace` pass. Details in `docs/fast-anything-trial.md`.
+
 ## Next checkpoint (hybrid plan)
 
 1. Begin H1: build the virtualized chat message feed view in `luxurygram-shell` (extracting shared bubble/message model from the benchmark, adding entity-styled runs, message reactions/headers, and live scroll controls) and visually verify in a real window.

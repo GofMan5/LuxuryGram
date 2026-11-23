@@ -7,11 +7,26 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "ui/passcode_strength_translit.h"
 
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 namespace {
 
@@ -102,6 +117,70 @@ struct Decoded {
 // The whole stream transformation as one pure call. Keeping the loop here lets
 // an optimizer (or a native port) cross the boundary once per dictionary
 // instead of once per word. Empty result means no word was mapped.
+// Optional Rust implementation behind a binary C ABI. The default path stays
+// C++; set LUXURY_ZXCVBN_RUST=1 and LUXURY_ZXCVBN_RUST_DLL=<library> to use it.
+// A missing or incompatible library silently falls back to TransformDictionary.
+[[nodiscard]] std::optional<std::string> TryRustTransform(const std::string &input) {
+	const auto enabled = std::getenv("LUXURY_ZXCVBN_RUST");
+	if (!enabled || std::string_view(enabled) != "1") {
+		return std::nullopt;
+	}
+	const auto path = std::getenv("LUXURY_ZXCVBN_RUST_DLL");
+	if (!path || !*path) {
+		return std::nullopt;
+	}
+#ifdef _WIN32
+	const auto library = LoadLibraryA(path);
+#else
+	const auto library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+#endif
+	if (!library) {
+		return std::nullopt;
+	}
+	using Transform = uint8_t *(*)(const uint8_t *, size_t, size_t *);
+	using Release = void (*)(uint8_t *, size_t);
+#ifdef _WIN32
+	const auto transform = reinterpret_cast<Transform>(
+		reinterpret_cast<void *>(GetProcAddress(library, "luxury_zxcvbn_transform")));
+	const auto release = reinterpret_cast<Release>(
+		reinterpret_cast<void *>(GetProcAddress(library, "luxury_zxcvbn_free")));
+#else
+	const auto transform = reinterpret_cast<Transform>(
+		dlsym(library, "luxury_zxcvbn_transform"));
+	const auto release = reinterpret_cast<Release>(
+		dlsym(library, "luxury_zxcvbn_free"));
+#endif
+	if (!transform || !release) {
+#ifdef _WIN32
+		FreeLibrary(library);
+#else
+		dlclose(library);
+#endif
+		return std::nullopt;
+	}
+	auto length = size_t(0);
+	const auto bytes = transform(
+		reinterpret_cast<const uint8_t *>(input.data()),
+		input.size(),
+		&length);
+	if (!bytes) {
+#ifdef _WIN32
+		FreeLibrary(library);
+#else
+		dlclose(library);
+#endif
+		return std::string();
+	}
+	auto result = std::string(reinterpret_cast<const char *>(bytes), length);
+	release(bytes, length);
+#ifdef _WIN32
+	FreeLibrary(library);
+#else
+	dlclose(library);
+#endif
+	return result;
+}
+
 [[nodiscard]] std::string TransformDictionary(const std::string &input) {
 	auto output = std::string();
 	auto line = std::string();
@@ -155,7 +234,8 @@ int main(int argc, char *argv[]) {
 		std::remove(tmpPath.c_str());
 		return Fail("read", argv[1]);
 	}
-	const auto mapped = TransformDictionary(bytes);
+	auto rust = TryRustTransform(bytes);
+	const auto mapped = rust ? std::move(*rust) : TransformDictionary(bytes);
 	output << mapped;
 	output.close();
 	if (!output) {

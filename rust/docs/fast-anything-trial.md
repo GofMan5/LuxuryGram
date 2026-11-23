@@ -77,6 +77,39 @@ transform saves. `fast-anything disable <id>` restored the original code; the
 final C++ source contains zero `fast-anything` markers and both output hashes
 above were re-checked after disabling.
 
+## Binary C ABI: the verified port becomes a real win
+
+The fast-anything port was correct but bridge-bound. Keeping the same verified
+logic, we replaced its JSON bridge with a binary C ABI in the existing
+`zxcvbn-translit` crate (`ffi` feature) and added an opt-in call site in the
+C++ CLI:
+
+- `luxury_zxcvbn_transform(input, len, out_len) -> bytes` and
+  `luxury_zxcvbn_free(bytes, len)` pass raw byte buffers, no JSON, one crossing
+  per dictionary.
+- `transform_optimized` reuses a single scratch buffer for mapped words. The
+  original `map_word` allocated a `String` per word and was 2× slower than C++
+  on short ASCII words; the optimized version has no per-word heap allocation.
+- The C++ path is unchanged by default. Set `LUXURY_ZXCVBN_RUST=1` and
+  `LUXURY_ZXCVBN_RUST_DLL=<path to rust/target/release/zxcvbn_translit.dll>`
+  after `cargo build -p zxcvbn-translit --features ffi --release`. Missing or
+  incompatible library falls back silently to `TransformDictionary`.
+
+In-process benchmark (20 interleaved iterations, same binary and inputs,
+`.ai/bench-ffi.cpp`; process startup and file I/O excluded):
+
+| workload | C++ native | Rust binary FFI | speedup |
+| --- | --- | --- | --- |
+| `words-eng_wiki.txt` | 8.038 ms | 4.521 ms | **1.78×** |
+| `.ai/cyrillic-dictionary.txt` | 31.250 ms | 12.403 ms | **2.52×** |
+
+Correctness after the FFI path: both dictionary outputs are byte-identical to
+the pre-existing reference binary (SHA-256 values above), and all 7 recorded
+oracle cases match exit code and output. `cargo fmt --all`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo clippy -p zxcvbn-translit --features ffi --all-targets -- -D warnings`
+and `cargo test --workspace` pass.
+
 ## Decision rule for the next candidate
 
 fast-anything's C/C++ path pays a fixed per-call and per-byte JSON cost. It only
@@ -99,5 +132,6 @@ whose `fast-anything bench` result is not faster than the original.
   can be deleted and rebuilt). The two `src/port.rs` implementations are kept
   there for reuse if the target is revisited.
 - `.ai/` — local workload and intermediate outputs (gitignored).
-- No runtime product behavior changed: the only source edit is the verified
-  behavior-preserving refactoring of `zxcvbn_translit.cpp`.
+- No runtime product behavior changed: the only source edits are the verified
+  behavior-preserving refactoring of `zxcvbn_translit.cpp` plus an opt-in Rust
+  FFI call site (disabled unless both environment variables are set).

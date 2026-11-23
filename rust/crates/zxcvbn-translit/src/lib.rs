@@ -162,6 +162,123 @@ pub fn transform(input: &[u8]) -> Result<Vec<u8>, TransformError> {
     }
 }
 
+/// Same result as `transform`, but reuses one scratch buffer for mapped words
+/// and works on bytes throughout. Short ASCII words need no heap allocation,
+/// which matters for million-word dictionaries.
+pub fn transform_optimized(input: &[u8]) -> Result<Vec<u8>, TransformError> {
+    let mut output = Vec::with_capacity(input.len());
+    let mut mapped = Vec::with_capacity(64);
+    let mut pos = 0usize;
+    let mut written = 0usize;
+
+    while pos < input.len() {
+        let line_end = input[pos..]
+            .iter()
+            .position(|&byte| byte == b'\n')
+            .map_or(input.len(), |offset| pos + offset);
+        let next = if line_end == input.len() {
+            input.len()
+        } else {
+            line_end + 1
+        };
+        let mut word = &input[pos..line_end];
+        pos = next;
+
+        if word.last() == Some(&b'\r') {
+            word = &word[..word.len() - 1];
+        }
+        if let Some(end) = word.iter().position(|&byte| byte == b' ' || byte == b'\t') {
+            word = &word[..end];
+        }
+        if word.is_empty() {
+            continue;
+        }
+
+        mapped.clear();
+        let mut from = 0usize;
+        let mut mappable = true;
+        while from < word.len() {
+            let Some(decoded) = decode_utf8(word, from) else {
+                mappable = false;
+                break;
+            };
+            from += decoded.length;
+            if decoded.point.is_ascii() {
+                mapped.push(decoded.point as u8);
+                continue;
+            }
+            let Some(latin) = transliterate_cyrillic(lowercase_cyrillic(decoded.point)) else {
+                mappable = false;
+                break;
+            };
+            mapped.extend_from_slice(latin.as_bytes());
+        }
+
+        if mappable
+            && mapped.len() >= 2
+            && !matches!(mapped.as_slice(), b"chffffff" | b"fntahoma" | b"b1" | b"i0")
+        {
+            output.extend_from_slice(&mapped);
+            output.push(b'\n');
+            written += 1;
+        }
+    }
+
+    if written == 0 {
+        Err(TransformError::NoWordsMapped)
+    } else {
+        Ok(output)
+    }
+}
+
+/// Minimal binary C ABI for hosts that cannot afford a JSON round trip.
+/// Enabled with the `ffi` feature; the pure functions above are unchanged.
+#[cfg(feature = "ffi")]
+mod ffi {
+    use crate::transform_optimized;
+
+    /// Transform a whole dictionary in one call.
+    ///
+    /// # Safety
+    /// `input` must be valid for `len` bytes and `out_len` must point to a
+    /// writable `usize`. The returned buffer belongs to the caller and must be
+    /// released with `luxury_zxcvbn_free`. A null result means no word mapped
+    /// (the C++ CLI reports that as an error), or invalid arguments.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn luxury_zxcvbn_transform(
+        input: *const u8,
+        len: usize,
+        out_len: *mut usize,
+    ) -> *mut u8 {
+        if input.is_null() || out_len.is_null() {
+            return std::ptr::null_mut();
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(input, len) };
+        match transform_optimized(bytes) {
+            Ok(output) => {
+                let boxed = output.into_boxed_slice();
+                unsafe { *out_len = boxed.len() };
+                Box::into_raw(boxed) as *mut u8
+            }
+            Err(_) => {
+                unsafe { *out_len = 0 };
+                std::ptr::null_mut()
+            }
+        }
+    }
+
+    /// # Safety
+    /// `ptr` must come from `luxury_zxcvbn_transform` with the same `len`.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn luxury_zxcvbn_free(ptr: *mut u8, len: usize) {
+        if !ptr.is_null() && len > 0 {
+            unsafe {
+                drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len)));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,6 +318,25 @@ mod tests {
     fn transforms_lines_with_crlf_and_tabs() {
         let input = "ПРИВЕТ\r\nМир\tignored\n  \n\r\n".as_bytes();
         assert_eq!(transform(input).unwrap(), b"privet\nmir\n");
+        assert_eq!(transform_optimized(input).unwrap(), b"privet\nmir\n");
+    }
+
+    #[test]
+    fn optimized_matches_transform() {
+        let cases: [&[u8]; 9] = [
+            b"",
+            b"a\n",
+            b"hello\nworld\n",
+            "Привет\r\nМир\tignored\n  \n\r\n".as_bytes(),
+            "Ёлка Ґа\n日本語\n".as_bytes(),
+            b"\xC0\x80\n",
+            b"chffffff\nfntahoma\nb1\ni0\n",
+            b"one two three\n\nfour",
+            b"the                124933855\r\nof                 59700086\n",
+        ];
+        for case in cases {
+            assert_eq!(transform(case), transform_optimized(case), "case: {case:?}");
+        }
     }
 
     #[test]
