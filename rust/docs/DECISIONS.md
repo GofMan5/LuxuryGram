@@ -102,3 +102,23 @@ speed to gain.
 bottleneck slices. Every slice needs a baseline measurement and a focused
 before/after check; no component is migrated just for the sake of "all Rust".
 rust-anything stays useful only for CLI/C-ABI oracles, not for Qt proof.
+
+## ADR-011 — fast-anything for measured function-level ports (2026-11-23)
+
+**User request:** use `EL4CTEO/fast-anything` on LuxuryGram and rewrite what is
+slow in Rust. Verified facts in `docs/fast-anything-trial.md`.
+
+**Decision:** use fast-anything's scan → port → verify → enable → bench loop for
+hot functions that can be compiled into a standalone C/C++ command, but enable a
+port **only when `fast-anything bench` beats the original end to end**. The tool's
+C bridge serializes arguments and results through JSON; per-call and per-byte
+cost is high. A correct but bridge-bound port must be disabled (as happened with
+`TransformDictionary`: 1.2× faster per call, 0.8× slower whole app).
+
+**Consequences:** a small behavior-preserving refactoring of
+`zxcvbn_translit.cpp` is kept (two pure functions, byte-identical output); the
+port crates and recordings live in gitignored `.fast/`. Candidate selection must
+favor compute-dense work (small inputs, heavy CPU), not streaming transforms.
+This does not replace ADR-010's slice plan; it is the tool for proving individual
+function ports inside those slices. ADR-004 still needs user confirmation before
+any MTProto/network dependency is added.

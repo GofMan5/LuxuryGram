@@ -72,6 +72,9 @@ settings.local.json
 # AI work folder (session-specific, not for version control)
 .ai
 
+# fast-anything generated profiler state, recordings and port crates
+.fast/
+
 # Generated changelog page (built by CI, deployed to GitHub Pages)
 /docs/changelog/
 

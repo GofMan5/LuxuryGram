@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <string_view>
 
@@ -62,12 +63,12 @@ struct Decoded {
 	return { point, length };
 }
 
-[[nodiscard]] bool MapWord(std::string_view word, std::string &mapped) {
-	mapped.clear();
+[[nodiscard]] std::string MapWord(const std::string &word) {
+	auto mapped = std::string();
 	for (auto from = std::size_t(0); from < word.size();) {
 		const auto decoded = DecodeUtf8(word, from);
 		if (!decoded.length) {
-			return false;
+			return {};
 		}
 		from += decoded.length;
 		if (decoded.point < 0x80) {
@@ -77,11 +78,13 @@ struct Decoded {
 		const auto latin = Ui::TransliterateCyrillic(
 			Ui::LowercaseCyrillic(decoded.point));
 		if (!latin) {
-			return false;
+			return {};
 		}
 		mapped.append(latin);
 	}
-	return mapped.size() >= kMinimumMappedLength;
+	return (mapped.size() >= kMinimumMappedLength)
+		? mapped
+		: std::string();
 }
 
 [[nodiscard]] bool IsDroppedMarkup(std::string_view word) {
@@ -94,6 +97,37 @@ struct Decoded {
 [[nodiscard]] int Fail(const char *action, const char *path) {
 	std::fprintf(stderr, "zxcvbn_translit: cannot %s %s\n", action, path);
 	return 1;
+}
+
+// The whole stream transformation as one pure call. Keeping the loop here lets
+// an optimizer (or a native port) cross the boundary once per dictionary
+// instead of once per word. Empty result means no word was mapped.
+[[nodiscard]] std::string TransformDictionary(const std::string &input) {
+	auto output = std::string();
+	auto line = std::string();
+	for (auto pos = std::size_t(0); pos < input.size();) {
+		const auto end = input.find('\n', pos);
+		if (end == std::string::npos) {
+			line.assign(input, pos, input.size() - pos);
+			pos = input.size();
+		} else {
+			line.assign(input, pos, end - pos);
+			pos = end + 1;
+		}
+		auto word = std::string_view(line);
+		if (!word.empty() && word.back() == '\r') {
+			word.remove_suffix(1);
+		}
+		word = word.substr(0, word.find_first_of(" \t"));
+		if (!word.empty()) {
+			auto mapped = MapWord(std::string(word));
+			if (!mapped.empty() && !IsDroppedMarkup(mapped)) {
+				output += mapped;
+				output.push_back('\n');
+			}
+		}
+	}
+	return output;
 }
 
 } // namespace
@@ -113,33 +147,22 @@ int main(int argc, char *argv[]) {
 	if (!output) {
 		return Fail("write", argv[2]);
 	}
-	auto line = std::string();
-	auto mapped = std::string();
-	auto written = std::size_t(0);
-	while (std::getline(input, line)) {
-		auto word = std::string_view(line);
-		if (!word.empty() && word.back() == '\r') {
-			word.remove_suffix(1);
-		}
-		word = word.substr(0, word.find_first_of(" \t"));
-		if (!word.empty()
-			&& MapWord(word, mapped)
-			&& !IsDroppedMarkup(mapped)) {
-			output << mapped << '\n';
-			++written;
-		}
-	}
+	const auto bytes = std::string(
+		std::istreambuf_iterator<char>(input),
+		std::istreambuf_iterator<char>());
 	if (input.bad()) {
 		output.close();
 		std::remove(tmpPath.c_str());
 		return Fail("read", argv[1]);
 	}
+	const auto mapped = TransformDictionary(bytes);
+	output << mapped;
 	output.close();
 	if (!output) {
 		std::remove(tmpPath.c_str());
 		return Fail("write", argv[2]);
 	}
-	if (!written) {
+	if (mapped.empty()) {
 		std::remove(tmpPath.c_str());
 		std::fprintf(
 			stderr,

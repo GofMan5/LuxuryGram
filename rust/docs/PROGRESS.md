@@ -78,6 +78,25 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
 - Design tokens (`rust/crates/design-tokens/src/lib.rs`) only cover 51 scalar tokens from the three `luxury*.style` files; composite style values (`margins()`, `point()`, `icon()`, colors) and upstream `.style` files are not extracted yet.
 - The GPUI dependency tree (plus `bench-support` dev/bench deps) adds heavy first-build compile time (~6m56s for release bench build); CI/fresh-machine cost has not been measured.
 
+## fast-anything trial (2026-11-23, user-requested tool)
+
+- Installed fast-anything 0.8.0 (npm; the local crates.io index does not have
+  `fast-anything`), `doctor` ready. Full evidence: `docs/fast-anything-trial.md`.
+- Profiled the real C++ transliterator on a 2.46 MB English dictionary and a
+  2.26 MB Cyrillic workload. `TransformDictionary` is 95.3% / 98.6% of the run.
+- Refactored `zxcvbn_translit.cpp` into pure, portable functions with **no
+  behavior change**: output SHA-256 matches the pre-existing reference binary on
+  both workloads.
+- Wrote and verified two Rust ports: `MapWord` 786/786 calls matched,
+  `TransformDictionary` 35/35 and 36/36 matched. Per-call: 20× slower for
+  `MapWord`; 1.2× faster for `TransformDictionary` on Cyrillic input.
+- `fast-anything bench --runs 5` measured **250 ms C++ vs 299 ms Rust end to end**
+  (0.8×): the generated C-bridge JSON-copies the whole dictionary. The verified
+  port was disabled; the source has no fast-anything markers and the two output
+  hashes were re-checked after disabling. No runtime behavior changed.
+- Selection rule recorded: only port functions whose CPU work dominates their
+  JSON bridge cost; do not enable anything that loses `fast-anything bench`.
+
 ## Next checkpoint (hybrid plan)
 
 1. Begin H1: build the virtualized chat message feed view in `luxurygram-shell` (extracting shared bubble/message model from the benchmark, adding entity-styled runs, message reactions/headers, and live scroll controls) and visually verify in a real window.
