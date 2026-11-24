@@ -555,6 +555,10 @@ ChatWidget::ChatWidget(
 		_scroll->viewport());
 	if (_gpuiSurface->active()) {
 		// The GPUI feed is the chat surface; the Qt list stays out of its way.
+		// The Qt compose area stays as it is: it is still the complete composer
+		// (IME, emoji, attachments, replies, editing), so the feed's own
+		// composer is left without a send handler and does not show. Porting
+		// the compose area switches it on with HistoryView::EnableGpuiCompose.
 		_inner->hide();
 	}
 	_topControls = std::make_unique<TopControls>(

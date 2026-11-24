@@ -18,7 +18,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <optional>
+#include <string>
 #include <vector>
 
 #ifdef Q_OS_WIN
@@ -69,11 +71,41 @@ using Start = int (*)();
 using Apply = int (*)(const RowAbi *, size_t, const RekeyAbi *, size_t);
 using Clear = int (*)();
 using Window = std::intptr_t (*)();
+using SendCallback = int (*)(
+	void *context,
+	const char *text,
+	size_t text_len);
+using SetSendCallback = int (*)(SendCallback, void *);
 
 Start StartFn = nullptr;
 Apply ApplyFn = nullptr;
 Clear ClearFn = nullptr;
 Window WindowFn = nullptr;
+SetSendCallback SetSendCallbackFn = nullptr;
+
+// The single composer destination. Written on the main thread, read on the
+// GPUI thread inside the callback, so it is kept behind a mutex.
+std::mutex SendMutex;
+Fn<void(std::string)> SendHandler;
+
+int OnComposerSubmit(void *context, const char *text, size_t text_len) {
+	std::string copy(text, text_len);
+	std::unique_lock lock(SendMutex);
+	if (!SendHandler) {
+		return 0;
+	}
+	const auto handler = SendHandler;
+	lock.unlock();
+	crl::on_main([=] {
+		std::unique_lock inner(SendMutex);
+		const auto current = SendHandler;
+		inner.unlock();
+		if (current) {
+			current(copy);
+		}
+	});
+	return 1;
+}
 
 // The DLL is optional: the client without it behaves exactly as before.
 bool LoadBridge() {
@@ -98,7 +130,11 @@ bool LoadBridge() {
 			&& base::Platform::LoadMethod(
 				library,
 				"luxurygram_history_window",
-				WindowFn);
+				WindowFn)
+			&& base::Platform::LoadMethod(
+				library,
+				"luxurygram_history_set_send_callback",
+				SetSendCallbackFn);
 	}();
 	return loaded;
 }
@@ -165,6 +201,25 @@ void ShowGpuiHistory(
 		}
 		ApplyFn(rows.data(), rows.size(), rekeys.data(), rekeys.size());
 	}, lifetime);
+#endif // Q_OS_WIN
+}
+
+void EnableGpuiCompose([[maybe_unused]] Fn<void(std::string)> send) {
+#ifdef Q_OS_WIN
+	{
+		const std::lock_guard lock(SendMutex);
+		SendHandler = std::move(send);
+	}
+	if (!TryStartGpuiHistory()) {
+		return;
+	}
+	static const auto registered = [] {
+		return SetSendCallbackFn(&OnComposerSubmit, nullptr) == 0;
+	}();
+	if (!registered) {
+		const std::lock_guard lock(SendMutex);
+		SendHandler = nullptr;
+	}
 #endif // Q_OS_WIN
 }
 

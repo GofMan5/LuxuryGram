@@ -40,6 +40,17 @@ using Apply = int (*)(const HistoryRowAbi *, std::size_t, const HistoryRekeyAbi 
 using Clear = int (*)();
 using Count = std::intptr_t (*)();
 using ExportedWindow = std::intptr_t (*)();
+using SendCallback = int (*)(void *, const char *, std::size_t);
+using SetSendCallback = int (*)(SendCallback, void *);
+
+std::atomic<int> g_sentCount{ 0 };
+std::string g_sentText;
+
+int onComposerSubmit(void *, const char *text, std::size_t len) {
+	g_sentText.assign(text, len);
+	++g_sentCount;
+	return 1;
+}
 
 struct FindState {
 	DWORD pid = 0;
@@ -89,7 +100,8 @@ int wmain(int argc, wchar_t **argv) {
 	const auto clear = reinterpret_cast<Clear>(GetProcAddress(dll, "luxurygram_history_clear"));
 	const auto count = reinterpret_cast<Count>(GetProcAddress(dll, "luxurygram_history_visible_count"));
 	const auto exportedWindow = reinterpret_cast<ExportedWindow>(GetProcAddress(dll, "luxurygram_history_window"));
-	if (!start || !apply || !clear || !count || !exportedWindow) {
+	const auto setSendCallback = reinterpret_cast<SetSendCallback>(GetProcAddress(dll, "luxurygram_history_set_send_callback"));
+	if (!start || !apply || !clear || !count || !exportedWindow || !setSendCallback) {
 		std::fputs("GetProcAddress failed\n", stderr);
 		return 1;
 	}
@@ -147,6 +159,39 @@ int wmain(int argc, wchar_t **argv) {
 	const auto shown = hidden
 		&& (ShowWindow(handle, SW_SHOWNOACTIVATE), IsWindowVisible(handle));
 
+	// Composer: a null callback is refused (1), a real one accepted (0). Then
+	// type into the GPUI window from the host thread: 'h', 'i', Enter. The
+	// callback runs on the GPUI thread and must receive exactly "hi" once.
+	const auto nullRefused = (setSendCallback(nullptr, nullptr) == 1);
+	const auto callbackSet = (setSendCallback(&onComposerSubmit, nullptr) == 0);
+	bool composed = false;
+	if (callbackSet && shown) {
+		// The composer appears only once a callback exists: the feed learns
+		// of it through its command channel and needs a frame to render the
+		// focused field, so give it that before typing.
+		std::this_thread::sleep_for(std::chrono::milliseconds(300));
+		// GPUI derives `key_char` from WM_KEYDOWN via ToUnicode and routes keys
+		// along its own focus path. The host posts the keys asynchronously, as a
+		// real keyboard would: GPUI does not run its focus dispatch for a
+		// synchronous cross-thread SendMessage. Two letter keys are sent, so
+		// the text the callback receives has two characters in the host's
+		// current keyboard layout; the exact letters are layout-dependent.
+		const auto keyDown = [&](WPARAM vk) {
+			const auto scan = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_VSC);
+			PostMessageW(handle, WM_KEYDOWN, vk, LPARAM(scan << 16) | 1);
+		};
+		keyDown('H');
+		keyDown('I');
+		keyDown(VK_RETURN);
+		for (int attempt = 0; attempt < 40 && g_sentCount.load() == 0; ++attempt) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			QCoreApplication::processEvents();
+		}
+		const auto text = QString::fromUtf8(g_sentText.c_str());
+		composed = (g_sentCount.load() == 1) && (text.size() == 2);
+		setSendCallback(nullptr, nullptr);
+	}
+
 	int exit = 0;
 	if (window) {
 		PostMessageW(window, WM_CLOSE, 0, 0);
@@ -159,9 +204,12 @@ int wmain(int argc, wchar_t **argv) {
 	const auto clearedHandle = (exportedWindow() == 0);
 	std::fprintf(stderr,
 		"Qt ticks: %d; rejected: %d; queued: %d; populated: %d; revoked: %d; "
-		"same window: %d; geometry: %d; hide/show: %d; handle cleared: %d; exit: %d\n",
+		"same window: %d; geometry: %d; hide/show: %d; null callback refused: %d; "
+		"callback set: %d; composed: %d; handle cleared: %d; exit: %d\n",
 		ticks, rejected ? 1 : 0, queued ? 1 : 0, populated ? 1 : 0, revoked ? 1 : 0,
-		sameWindow ? 1 : 0, geometryOk ? 1 : 0, shown ? 1 : 0, clearedHandle ? 1 : 0, exit);
+		sameWindow ? 1 : 0, geometryOk ? 1 : 0, shown ? 1 : 0, nullRefused ? 1 : 0,
+		callbackSet ? 1 : 0, composed ? 1 : 0, clearedHandle ? 1 : 0, exit);
 	return (ticks > 0 && rejected && queued && populated && revoked
-		&& sameWindow && geometryOk && shown && clearedHandle) ? 0 : 1;
+		&& sameWindow && geometryOk && shown && nullRefused && callbackSet
+		&& composed && clearedHandle) ? 0 : 1;
 }

@@ -12,7 +12,8 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ### Changed
 
-- When the optional GPUI history library (`luxurygram_shell.dll`) sits next to the executable, the open chat's message area is drawn by the GPUI-CE feed instead of the Qt message list, tracking the area on move, resize, show and hide and clearing on lock, logout or chat switch. Without that library nothing changes. This is a migration step: the Qt frame, compose area, media and every other screen are unchanged.
+- When the optional GPUI history library (`luxurygram_shell.dll`) sits next to the executable, the open chat's message area is drawn by the GPUI-CE feed instead of the Qt message list, tracking the area on move, resize, show and hide and clearing on lock, logout or chat switch. Without that library nothing changes. This is a migration step: the Qt frame, the compose area, media and every other screen are unchanged.
+- `luxurygram_shell.dll` is now built from source by the Windows build (the `luxurygram_shell` prepare stage) and placed next to the executable automatically; it no longer has to be copied by hand.
 - Chat Analysis recommends a concrete next step, including waiting or not replying when appropriate. It shows verified quotes or attachment types as evidence and offers three drafts with distinct intentions. Reasoning effort defaults to `high`; `default` leaves it up to the API.
 - Chat Analysis shows the current stage and elapsed time. The result has a copy button for each draft and lets you change the tone or length without replacing the original goal, advice or evidence. Cancelling or getting an incomplete or invalid response leaves the previous drafts intact.
 

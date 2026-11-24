@@ -25,6 +25,11 @@ actions!(feed, [ToggleSearch, CloseSearch, ScrollToBottom]);
 #[derive(Clone)]
 pub struct HistorySubscription(Rc<()>);
 
+/// Receives the text the user submits from the composer. The native host
+/// routes it through its own send path; the feed never talks to the network.
+/// Returns `false` when nothing accepted the text, so the draft is kept.
+pub type SendHandler = Rc<dyn Fn(String) -> bool>;
+
 pub struct MessageFeed {
     subscription: Option<HistorySubscription>,
     store: MessageStore,
@@ -34,6 +39,10 @@ pub struct MessageFeed {
     search_open: bool,
     query: String,
     search_focus: FocusHandle,
+    /// The text being composed, cleared when the send handler accepts it.
+    draft: String,
+    compose_focus: FocusHandle,
+    send_handler: Option<SendHandler>,
 }
 
 impl MessageFeed {
@@ -66,7 +75,23 @@ impl MessageFeed {
             search_open: false,
             query: String::new(),
             search_focus: cx.focus_handle(),
+            draft: String::new(),
+            compose_focus: cx.focus_handle(),
+            send_handler: None,
         }
+    }
+
+    /// Install the native send path and show the composer. Passing `None`
+    /// hides it again; the draft is kept either way.
+    pub fn set_send_handler(&mut self, handler: Option<SendHandler>, cx: &mut Context<Self>) {
+        self.send_handler = handler;
+        cx.notify();
+    }
+
+    /// The composer's current text, for checks.
+    #[cfg(test)]
+    pub fn draft(&self) -> &str {
+        &self.draft
     }
 
     #[cfg(test)]
@@ -230,6 +255,37 @@ impl MessageFeed {
         }
     }
 
+    fn on_compose_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        if event.keystroke.modifiers.control || event.keystroke.modifiers.platform {
+            return;
+        }
+        let key = event.keystroke.key.as_str();
+        if key == "enter" {
+            let text = self.draft.trim();
+            if text.is_empty() {
+                return;
+            }
+            let Some(handler) = self.send_handler.clone() else {
+                return;
+            };
+            if handler(text.to_owned()) {
+                self.draft.clear();
+            }
+            cx.notify();
+        } else if key == "backspace" {
+            self.draft.pop();
+            cx.notify();
+        } else if let Some(character) = event
+            .keystroke
+            .key_char
+            .as_ref()
+            .filter(|value| !value.is_empty() && !value.chars().any(char::is_control))
+        {
+            self.draft.push_str(character);
+            cx.notify();
+        }
+    }
+
     fn render_styled_text(message: &crate::message::Message, colors: &Colors) -> StyledText {
         let mut highlights = Vec::new();
         for entity in &message.entities {
@@ -266,10 +322,14 @@ impl MessageFeed {
 impl Render for MessageFeed {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = Colors::for_appearance(window);
+        // The list closure takes its own copy; the composer keeps the original.
+        let list_colors = colors.clone();
         let messages = Rc::clone(&self.messages);
         let rendered = Rc::clone(&self.rendered_items);
         let search_open = self.search_open;
         let query = self.query.clone();
+        let draft = self.draft.clone();
+        let can_send = self.send_handler.is_some();
 
         let top_bar = if search_open {
             div()
@@ -313,6 +373,39 @@ impl Render for MessageFeed {
                 .items_center()
                 .child("LuxuryGram — message feed (Ctrl+F to search)")
         };
+
+        // The composer shows only once a send handler is installed: the host
+        // owns the complete Qt compose area until it is ported, and two
+        // composers on one chat would be a defect.
+        let composer = can_send.then(|| {
+            div()
+                .flex_none()
+                .px_4()
+                .py_2()
+                .border_t_1()
+                .border_color(colors.border)
+                .child(
+                    div()
+                        .id("feed-compose")
+                        .track_focus(&self.compose_focus)
+                        .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                            this.on_compose_key(event, cx);
+                        }))
+                        .w_full()
+                        .px_3()
+                        .py_2()
+                        .rounded(px(RADIUS))
+                        .bg(colors.container)
+                        .border_1()
+                        .border_color(colors.border)
+                        .text_color(colors.text)
+                        .child(if draft.is_empty() {
+                            "Write a message…".into()
+                        } else {
+                            SharedString::from(format!("{draft}▏"))
+                        }),
+                )
+        });
 
         div()
             .id("message-feed")
@@ -362,9 +455,9 @@ impl Render for MessageFeed {
                                         .px_3()
                                         .py_1()
                                         .rounded_full()
-                                        .bg(colors.container)
+                                        .bg(list_colors.container)
                                         .text_xs()
-                                        .text_color(colors.disabled)
+                                        .text_color(list_colors.disabled)
                                         .child(SharedString::from(message.date_label.clone())),
                                 )
                                 .into_any_element();
@@ -386,9 +479,9 @@ impl Render for MessageFeed {
                                     .py_2()
                                     .rounded(px(RADIUS))
                                     .bg(if message.outgoing {
-                                        colors.selected
+                                        list_colors.selected
                                     } else {
-                                        colors.container
+                                        list_colors.container
                                     })
                                     .flex()
                                     .flex_col()
@@ -397,17 +490,17 @@ impl Render for MessageFeed {
                                         el.child(
                                             div()
                                                 .text_xs()
-                                                .text_color(colors.disabled)
+                                                .text_color(list_colors.disabled)
                                                 .child(SharedString::from(message.sender.clone())),
                                         )
                                     })
-                                    .child(Self::render_styled_text(message, &colors))
+                                    .child(Self::render_styled_text(message, &list_colors))
                                     .child(
                                         div()
                                             .flex()
                                             .justify_end()
                                             .text_xs()
-                                            .text_color(colors.disabled)
+                                            .text_color(list_colors.disabled)
                                             .child(formatted_time(message.timestamp)),
                                     ),
                             )
@@ -415,6 +508,7 @@ impl Render for MessageFeed {
                     }))
                     .size_full(),
             )
+            .children(composer)
             .into_any_element()
     }
 }
@@ -466,6 +560,12 @@ pub(crate) fn open_feed_window(
             move |_window, _cx| window_feed.clone(),
         )
         .expect("open the feed window");
+    // The composer takes keyboard focus at once, so typing goes into the
+    // message draft without a click; the key dispatch follows GPUI's focus,
+    // not the Win32 foreground window.
+    window
+        .update(cx, |feed, window, cx| window.focus(&feed.compose_focus, cx))
+        .expect("focus the composer in the fresh window");
     cx.activate(true);
     (feed, window)
 }
@@ -532,6 +632,92 @@ mod tests {
             assert_eq!(feed.query(), "");
             assert_eq!(feed.message_count(), 1_000);
         });
+    }
+
+    fn key(key: &str, key_char: Option<&str>) -> KeyDownEvent {
+        KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: Default::default(),
+                key: key.into(),
+                key_char: key_char.map(str::to_owned),
+            },
+            is_held: false,
+            prefer_character_input: false,
+        }
+    }
+
+    #[test]
+    fn composer_sends_on_enter_only_with_a_handler_and_non_empty_text() {
+        let sent = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let sink = Rc::clone(&sent);
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, cx| MessageFeed::new(4, Rc::new(Cell::new(0)), cx));
+        window.draw();
+
+        // Without a handler the composer is read-only: Enter neither sends nor clears.
+        window.update(|feed, _, cx| {
+            feed.on_compose_key(&key("h", Some("h")), cx);
+            feed.on_compose_key(&key("i", Some("i")), cx);
+            assert_eq!(feed.draft(), "hi");
+            feed.on_compose_key(&key("enter", None), cx);
+            assert_eq!(feed.draft(), "hi");
+        });
+        assert!(sent.borrow().is_empty());
+
+        // A handler makes Enter send exactly the trimmed text and clear the draft.
+        window.update(|feed, _, cx| {
+            feed.set_send_handler(
+                Some(Rc::new(move |text| {
+                    sink.borrow_mut().push(text);
+                    true
+                })),
+                cx,
+            );
+            feed.on_compose_key(&key("enter", None), cx);
+            assert_eq!(feed.draft(), "");
+            // A handler that refuses keeps the draft, so nothing is lost.
+            feed.on_compose_key(&key("x", Some("x")), cx);
+            feed.set_send_handler(Some(Rc::new(|_| false)), cx);
+            feed.on_compose_key(&key("enter", None), cx);
+            assert_eq!(feed.draft(), "x");
+            feed.on_compose_key(&key("backspace", None), cx);
+            // Empty or whitespace drafts are refused, never sent.
+            feed.on_compose_key(&key("space", Some(" ")), cx);
+            feed.on_compose_key(&key("enter", None), cx);
+            assert_eq!(feed.draft(), " ");
+            // Backspace edits the draft; Ctrl-modified keys are left to bindings.
+            feed.on_compose_key(&key("backspace", None), cx);
+            assert_eq!(feed.draft(), "");
+        });
+        assert_eq!(*sent.borrow(), vec!["hi".to_string()]);
+    }
+
+    #[test]
+    fn composer_receives_real_key_dispatch_through_gpui_focus() {
+        // The Win32 host posts WM_KEYDOWN; GPUI turns it into a KeyDownEvent
+        // and routes it along its focus path. This checks that path, not the
+        // handler: the composer must be focused and its listener must fire.
+        let sent = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let sink = Rc::clone(&sent);
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, cx| {
+            let mut feed = MessageFeed::new(4, Rc::new(Cell::new(0)), cx);
+            feed.set_send_handler(
+                Some(Rc::new(move |text| {
+                    sink.borrow_mut().push(text);
+                    true
+                })),
+                cx,
+            );
+            feed
+        });
+        window.draw();
+        window.update(|feed, window, cx| window.focus(&feed.compose_focus, cx));
+        window.draw();
+
+        window.simulate_keystrokes("h i enter");
+        window.read(|feed, _| assert_eq!(feed.draft(), ""));
+        assert_eq!(*sent.borrow(), vec!["hi".to_string()]);
     }
 
     #[test]

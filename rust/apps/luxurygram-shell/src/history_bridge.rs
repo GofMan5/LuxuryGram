@@ -43,6 +43,8 @@ pub struct HistoryRekeyAbi {
 enum Command {
     Apply(Vec<Message>, Vec<(MessageId, MessageId)>),
     Clear,
+    /// Show or hide the composer: a send callback is installed or removed.
+    Composer(bool),
 }
 
 static SENDER: Mutex<Option<mpsc::Sender<Command>>> = Mutex::new(None);
@@ -61,6 +63,52 @@ const POLL: std::time::Duration = std::time::Duration::from_millis(33);
 #[unsafe(no_mangle)]
 pub extern "C" fn luxurygram_history_window() -> isize {
     WINDOW.load(Ordering::SeqCst)
+}
+
+/// Called on the GPUI thread with UTF-8 text the user submitted from the
+/// composer. `context` is the pointer passed to
+/// `luxurygram_history_set_send_callback`. The callee must marshal to its own
+/// thread; the text is only valid for the duration of the call. Return nonzero
+/// when the text was accepted, zero to keep it in the composer.
+pub type SendCallback =
+    unsafe extern "C" fn(context: *mut std::ffi::c_void, text: *const u8, text_len: usize) -> i32;
+
+static SEND_CALLBACK: Mutex<Option<(SendCallback, usize)>> = Mutex::new(None);
+
+/// Route composer submissions to the native send path.
+///
+/// Must be called before `luxurygram_history_start` for the composer to accept
+/// text at all; the feed stays read-only while no callback is set. Passing a
+/// null callback removes it again. The callback is invoked on the GPUI thread.
+///
+/// # Safety
+/// `context` must stay valid until the callback is replaced or removed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn luxurygram_history_set_send_callback(
+    callback: Option<SendCallback>,
+    context: *mut std::ffi::c_void,
+) -> i32 {
+    let mut slot = SEND_CALLBACK.lock().unwrap();
+    *slot = callback.map(|callback| (callback, context as usize));
+    let installed = slot.is_some();
+    drop(slot);
+    // Tell the feed on its own thread, if it is running. A feed that starts
+    // later reads the slot itself, so a missing or closed channel is fine.
+    send(Command::Composer(installed));
+    if installed { 0 } else { 1 }
+}
+
+/// The feed's send handler: forwards the submitted text through the callback
+/// that is installed at call time, so a late `set_send_callback` takes effect.
+/// Returns `false` when no callback is installed, so the feed keeps the draft.
+fn forward_send(text: String) -> bool {
+    let slot = SEND_CALLBACK.lock().unwrap();
+    let Some((callback, context)) = *slot else {
+        return false;
+    };
+    // SAFETY: the caller of `set_send_callback` guarantees `context` is alive
+    // and the callback reads `text` only during the call.
+    unsafe { callback(context as *mut std::ffi::c_void, text.as_ptr(), text.len()) != 0 }
 }
 
 /// Start the GPUI feed on its own thread and accept snapshots afterwards.
@@ -88,6 +136,13 @@ pub extern "C" fn luxurygram_history_start() -> i32 {
                         Some(MessageStore::default()),
                         "LuxuryGram — History",
                     );
+                    let composer_installed = SEND_CALLBACK.lock().unwrap().is_some();
+                    feed.update(cx, |feed, cx| {
+                        feed.set_send_handler(
+                            composer_installed.then(|| std::rc::Rc::new(forward_send) as _),
+                            cx,
+                        );
+                    });
                     publish_window_handle(&window, cx);
                     let subscription = feed.update(cx, |feed, cx| feed.begin_history(cx));
                     VISIBLE_COUNT.store(0, Ordering::SeqCst);
@@ -118,6 +173,15 @@ pub extern "C" fn luxurygram_history_start() -> i32 {
                                     Command::Clear => {
                                         feed.update(cx, |feed, cx| feed.clear_history(cx));
                                         VISIBLE_COUNT.store(0, Ordering::SeqCst);
+                                    }
+                                    Command::Composer(installed) => {
+                                        feed.update(cx, |feed, cx| {
+                                            feed.set_send_handler(
+                                                installed
+                                                    .then(|| std::rc::Rc::new(forward_send) as _),
+                                                cx,
+                                            );
+                                        });
                                     }
                                 }
                             }
