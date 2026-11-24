@@ -325,6 +325,7 @@ public:
 
 	void lockBySetupEmail();
 	void unlockSetupEmail();
+	[[nodiscard]] rpl::producer<bool> setupEmailLockValue() const;
 
 	void checkAutoLock(crl::time lastNonIdleTime = 0);
 	void checkAutoLockIn(crl::time time);

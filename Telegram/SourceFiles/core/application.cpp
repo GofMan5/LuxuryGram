@@ -1589,6 +1589,10 @@ void Application::unlockSetupEmail() {
 	checkStartUrls();
 }
 
+rpl::producer<bool> Application::setupEmailLockValue() const {
+	return _setupEmailLock.value();
+}
+
 bool Application::someSessionExists() const {
 	for (const auto &[index, account] : _domain->accounts()) {
 		if (account->sessionExists()) {

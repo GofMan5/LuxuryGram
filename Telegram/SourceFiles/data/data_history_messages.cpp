@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_history_messages.h"
 
 #include "apiwrap.h"
+#include "core/application.h"
 #include "data/data_changes.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
@@ -18,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_user.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "main/main_domain.h"
 #include "main/main_session.h"
 
 namespace Data {
@@ -500,6 +502,7 @@ template <typename Slice, typename Project>
 	return [=](auto consumer) {
 		auto lifetime = rpl::lifetime();
 		const auto viewer = lifetime.make_state<HistoryMessagesViewerState>();
+
 		const auto push = [=] {
 			if (!viewer->scheduled || !viewer->sparse) {
 				viewer->scheduled = false;
@@ -618,7 +621,9 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 		nullptr);
 }
 
-rpl::producer<HistoryTextSlice> HistoryTextViewer(
+namespace {
+
+rpl::producer<HistoryTextSlice> ProjectHistoryText(
 		not_null<History*> history,
 		MessagePosition aroundId,
 		int limitBefore,
@@ -664,6 +669,46 @@ rpl::producer<HistoryTextSlice> HistoryTextViewer(
 	};
 	return HistoryMessagesViewerImpl<HistoryTextSlice>(
 		history, aroundId, limitBefore, limitAfter, project);
+}
+
+} // namespace
+
+rpl::producer<std::optional<HistoryTextSlice>> HistoryTextViewer(
+		not_null<History*> history,
+		MessagePosition aroundId,
+		int limitBefore,
+		int limitAfter) {
+	using Update = std::optional<HistoryTextSlice>;
+	const auto weak = base::make_weak(&history->session());
+	const auto peer = history->peer->id;
+	return rpl::deferred([=]() -> rpl::producer<Update> {
+		const auto session = weak.get();
+		if (!session || Core::App().maybePrimarySession() != session) {
+			return rpl::single(Update());
+		}
+		return rpl::combine(
+			Core::App().passcodeLockValue(),
+			Core::App().setupEmailLockValue(),
+			Core::App().screenIsLockedValue(),
+			session->termsLockValue(),
+			Core::App().domain().activeSessionValue(),
+			[=](bool passcode, bool email, bool screen, bool terms, Main::Session *active) {
+				return !passcode && !email && !screen && !terms && active == session;
+			}
+		) | rpl::distinct_until_changed(
+		) | rpl::take_while(rpl::mappers::_1
+		) | rpl::then(rpl::single(false)
+		) | rpl::map([=](bool allowed) -> rpl::producer<Update> {
+			if (!allowed) {
+				return rpl::single(Update());
+			}
+			return ProjectHistoryText(
+				session->data().history(peer), aroundId, limitBefore, limitAfter
+			) | rpl::map([](HistoryTextSlice &&slice) {
+				return Update(std::move(slice));
+			});
+		}) | rpl::flatten_latest();
+	});
 }
 
 } // namespace Data
