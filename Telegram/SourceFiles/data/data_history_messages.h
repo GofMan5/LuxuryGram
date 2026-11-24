@@ -79,8 +79,15 @@ struct HistoryTextRow {
 	std::string text;
 };
 
+struct HistoryTextRekey {
+	FullMsgId oldId;
+	FullMsgId newId;
+};
+
 struct HistoryTextSlice {
 	std::vector<HistoryTextRow> rows;
+	// In event order, since the previous delivered slice.
+	std::vector<HistoryTextRekey> rekeys;
 	std::optional<int> skippedBefore;
 	std::optional<int> skippedAfter;
 };

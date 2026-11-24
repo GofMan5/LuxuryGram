@@ -27,6 +27,7 @@ struct HistoryMessagesViewerState {
 	MessagePosition around;
 	MsgId queryAroundId = 0;
 	base::flat_set<FullMsgId> confirmed;
+	std::vector<HistoryTextRekey> rekeys;
 	base::has_weak_ptr guard;
 	bool scheduled = false;
 };
@@ -466,12 +467,14 @@ rpl::producer<SparseIdsMergedSlice> HistoryMergedViewer(
 
 namespace {
 
-[[nodiscard]] rpl::producer<MessagesSlice> HistoryMessagesViewerImpl(
+template <typename Slice, typename Project>
+[[nodiscard]] rpl::producer<Slice> HistoryMessagesViewerImpl(
 		not_null<History*> history,
 		MessagePosition aroundId,
 		int limitBefore,
 		int limitAfter,
-		bool emitContentChanges) {
+		Project project) {
+	constexpr auto emitContentChanges = std::is_same_v<Slice, HistoryTextSlice>;
 	const auto around = NormalizeHistoryMessagesAround(history, aroundId);
 	return [=](auto consumer) {
 		auto lifetime = rpl::lifetime();
@@ -501,7 +504,13 @@ namespace {
 			if (unresolvedCountOnly) {
 				return;
 			}
-			consumer.put_next_copy(viewer->slice);
+			if constexpr (emitContentChanges) {
+				consumer.put_next(project(
+					viewer->slice,
+					std::exchange(viewer->rekeys, {})));
+			} else {
+				consumer.put_next_copy(viewer->slice);
+			}
 		};
 		const auto pushInstant = [=] {
 			viewer->scheduled = true;
@@ -554,6 +563,7 @@ namespace {
 				&& ranges::contains(viewer->slice.ids, oldId);
 			RewriteHistorySliceIds(&viewer->slice, oldId, event.newId);
 			if (visible) {
+				viewer->rekeys.push_back({ oldId, event.newId });
 				pushDelayed();
 			}
 		}, lifetime);
@@ -569,8 +579,12 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 		MessagePosition aroundId,
 		int limitBefore,
 		int limitAfter) {
-	return HistoryMessagesViewerImpl(
-		history, aroundId, limitBefore, limitAfter, false);
+	return HistoryMessagesViewerImpl<MessagesSlice>(
+		history,
+		aroundId,
+		limitBefore,
+		limitAfter,
+		nullptr);
 }
 
 rpl::producer<HistoryTextSlice> HistoryTextViewer(
@@ -578,14 +592,11 @@ rpl::producer<HistoryTextSlice> HistoryTextViewer(
 		MessagePosition aroundId,
 		int limitBefore,
 		int limitAfter) {
-	return HistoryMessagesViewerImpl(
-		history,
-		aroundId,
-		limitBefore,
-		limitAfter,
-		true
-	) | rpl::map([history](const MessagesSlice &slice) {
+	const auto project = [history](
+			const MessagesSlice &slice,
+			std::vector<HistoryTextRekey> rekeys) {
 		auto result = HistoryTextSlice();
+		result.rekeys = std::move(rekeys);
 		result.skippedBefore = slice.skippedBefore;
 		result.skippedAfter = slice.skippedAfter;
 		result.rows.reserve(slice.ids.size());
@@ -616,7 +627,9 @@ rpl::producer<HistoryTextSlice> HistoryTextViewer(
 			});
 		}
 		return result;
-	});
+	};
+	return HistoryMessagesViewerImpl<HistoryTextSlice>(
+		history, aroundId, limitBefore, limitAfter, project);
 }
 
 } // namespace Data
