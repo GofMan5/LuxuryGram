@@ -428,11 +428,21 @@ pub fn run(cx: &mut App, store: Option<MessageStore>) {
     open_feed(cx, store, title);
 }
 
-pub(crate) fn open_feed(cx: &mut App, store: Option<MessageStore>, title: &'static str) {
+pub(crate) fn open_feed(
+    cx: &mut App,
+    store: Option<MessageStore>,
+    title: &'static str,
+) -> gpui::Entity<MessageFeed> {
     cx.bind_keys([
         KeyBinding::new("ctrl-f", ToggleSearch, Some(FEED_CONTEXT)),
         KeyBinding::new("end", ScrollToBottom, Some(FEED_CONTEXT)),
     ]);
+    let rendered = Rc::new(Cell::new(0));
+    let feed = cx.new(|cx| match store {
+        Some(store) => MessageFeed::from_store(store, rendered, cx),
+        None => MessageFeed::new(10_000, rendered, cx),
+    });
+    let window_feed = feed.clone();
     let bounds = gpui::Bounds::centered(None, gpui::size(px(960.), px(640.)), cx);
     cx.open_window(
         gpui::WindowOptions::default()
@@ -441,18 +451,11 @@ pub(crate) fn open_feed(cx: &mut App, store: Option<MessageStore>, title: &'stat
                 title: Some(title.into()),
                 ..Default::default()
             }),
-        move |_window, cx| {
-            cx.new(|cx| {
-                let rendered = Rc::new(Cell::new(0));
-                match store {
-                    Some(store) => MessageFeed::from_store(store, rendered, cx),
-                    None => MessageFeed::new(10_000, rendered, cx),
-                }
-            })
-        },
+        move |_window, _cx| window_feed.clone(),
     )
     .expect("open the feed window");
     cx.activate(true);
+    feed
 }
 
 #[cfg(test)]
