@@ -433,6 +433,17 @@ pub(crate) fn open_feed(
     store: Option<MessageStore>,
     title: &'static str,
 ) -> gpui::Entity<MessageFeed> {
+    open_feed_window(cx, store, title).0
+}
+
+/// Open the feed window and also return its handle, so a native host can
+/// read the platform window (e.g. its HWND) and place it over its own chat
+/// rectangle while the Qt frame still owns the main loop.
+pub(crate) fn open_feed_window(
+    cx: &mut App,
+    store: Option<MessageStore>,
+    title: &'static str,
+) -> (gpui::Entity<MessageFeed>, gpui::WindowHandle<MessageFeed>) {
     cx.bind_keys([
         KeyBinding::new("ctrl-f", ToggleSearch, Some(FEED_CONTEXT)),
         KeyBinding::new("end", ScrollToBottom, Some(FEED_CONTEXT)),
@@ -444,18 +455,19 @@ pub(crate) fn open_feed(
     });
     let window_feed = feed.clone();
     let bounds = gpui::Bounds::centered(None, gpui::size(px(960.), px(640.)), cx);
-    cx.open_window(
-        gpui::WindowOptions::default()
-            .window_bounds(gpui::WindowBounds::Windowed(bounds))
-            .titlebar(gpui::TitlebarOptions {
-                title: Some(title.into()),
-                ..Default::default()
-            }),
-        move |_window, _cx| window_feed.clone(),
-    )
-    .expect("open the feed window");
+    let window = cx
+        .open_window(
+            gpui::WindowOptions::default()
+                .window_bounds(gpui::WindowBounds::Windowed(bounds))
+                .titlebar(gpui::TitlebarOptions {
+                    title: Some(title.into()),
+                    ..Default::default()
+                }),
+            move |_window, _cx| window_feed.clone(),
+        )
+        .expect("open the feed window");
     cx.activate(true);
-    feed
+    (feed, window)
 }
 
 #[cfg(test)]

@@ -39,6 +39,7 @@ using Start = int (*)();
 using Apply = int (*)(const HistoryRowAbi *, std::size_t, const HistoryRekeyAbi *, std::size_t);
 using Clear = int (*)();
 using Count = std::intptr_t (*)();
+using ExportedWindow = std::intptr_t (*)();
 
 struct FindState {
 	DWORD pid = 0;
@@ -87,7 +88,8 @@ int wmain(int argc, wchar_t **argv) {
 	const auto apply = reinterpret_cast<Apply>(GetProcAddress(dll, "luxurygram_history_apply"));
 	const auto clear = reinterpret_cast<Clear>(GetProcAddress(dll, "luxurygram_history_clear"));
 	const auto count = reinterpret_cast<Count>(GetProcAddress(dll, "luxurygram_history_visible_count"));
-	if (!start || !apply || !clear || !count) {
+	const auto exportedWindow = reinterpret_cast<ExportedWindow>(GetProcAddress(dll, "luxurygram_history_window"));
+	if (!start || !apply || !clear || !count || !exportedWindow) {
 		std::fputs("GetProcAddress failed\n", stderr);
 		return 1;
 	}
@@ -122,6 +124,29 @@ int wmain(int argc, wchar_t **argv) {
 	const auto populated = waitFor(count, 2, &window);
 	const auto revoked = (clear() == 0) && waitFor(count, 0, nullptr);
 
+	// The exported handle must be the same window the title lookup found, so a
+	// host can place the feed over its own chat rectangle without guessing.
+	const auto handle = reinterpret_cast<HWND>(exportedWindow());
+	const auto sameWindow = (handle != nullptr) && (handle == window);
+	// Cross-thread SetWindowPos: the Qt thread moves the GPUI-owned window.
+	const auto moved = sameWindow
+		&& SetWindowPos(handle, nullptr, 120, 140, 700, 480, SWP_NOZORDER | SWP_NOACTIVATE);
+	RECT placed = {};
+	if (moved) {
+		GetWindowRect(handle, &placed);
+	}
+	const auto geometryOk = moved
+		&& (placed.left == 120)
+		&& (placed.top == 140)
+		&& (placed.right - placed.left == 700)
+		&& (placed.bottom - placed.top == 480);
+	// Hiding and showing from the host thread must reach the GPUI window.
+	// ShowWindow reports the *previous* visibility, so only the resulting
+	// state is checked, never its return value.
+	const auto hidden = sameWindow && (ShowWindow(handle, SW_HIDE), !IsWindowVisible(handle));
+	const auto shown = hidden
+		&& (ShowWindow(handle, SW_SHOWNOACTIVATE), IsWindowVisible(handle));
+
 	int exit = 0;
 	if (window) {
 		PostMessageW(window, WM_CLOSE, 0, 0);
@@ -131,7 +156,12 @@ int wmain(int argc, wchar_t **argv) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		QCoreApplication::processEvents();
 	}
-	std::fprintf(stderr, "Qt ticks: %d; rejected: %d; queued: %d; populated: %d; revoked: %d; exit: %d\n",
-		ticks, rejected ? 1 : 0, queued ? 1 : 0, populated ? 1 : 0, revoked ? 1 : 0, exit);
-	return (ticks > 0 && rejected && queued && populated && revoked) ? 0 : 1;
+	const auto clearedHandle = (exportedWindow() == 0);
+	std::fprintf(stderr,
+		"Qt ticks: %d; rejected: %d; queued: %d; populated: %d; revoked: %d; "
+		"same window: %d; geometry: %d; hide/show: %d; handle cleared: %d; exit: %d\n",
+		ticks, rejected ? 1 : 0, queued ? 1 : 0, populated ? 1 : 0, revoked ? 1 : 0,
+		sameWindow ? 1 : 0, geometryOk ? 1 : 0, shown ? 1 : 0, clearedHandle ? 1 : 0, exit);
+	return (ticks > 0 && rejected && queued && populated && revoked
+		&& sameWindow && geometryOk && shown && clearedHandle) ? 0 : 1;
 }

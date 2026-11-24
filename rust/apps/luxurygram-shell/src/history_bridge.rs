@@ -13,6 +13,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::mpsc;
 
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
 use crate::message::{Message, MessageId, MessageStore};
 
 /// One row of a snapshot. Mirrors `Data::HistoryTextRow`.
@@ -45,10 +47,21 @@ enum Command {
 
 static SENDER: Mutex<Option<mpsc::Sender<Command>>> = Mutex::new(None);
 static VISIBLE_COUNT: AtomicIsize = AtomicIsize::new(0);
+// The Win32 window of the feed, or 0 while no feed window exists. The native
+// host reads it once to place the window over its own chat rectangle.
+static WINDOW: AtomicIsize = AtomicIsize::new(0);
 const MAX_ROWS: usize = 100_000;
 const MAX_TEXT: usize = 65_536;
 const MAX_SENDER: usize = 4_096;
 const POLL: std::time::Duration = std::time::Duration::from_millis(33);
+
+/// The feed window's HWND, or 0 when the feed is not running.
+///
+/// The handle stays valid until the window closes; the bridge clears it then.
+#[unsafe(no_mangle)]
+pub extern "C" fn luxurygram_history_window() -> isize {
+    WINDOW.load(Ordering::SeqCst)
+}
 
 /// Start the GPUI feed on its own thread and accept snapshots afterwards.
 ///
@@ -70,11 +83,12 @@ pub extern "C" fn luxurygram_history_start() -> i32 {
             gpui_platform::application()
                 .with_quit_mode(gpui::QuitMode::LastWindowClosed)
                 .run(move |cx| {
-                    let feed = crate::feed::open_feed(
+                    let (feed, window) = crate::feed::open_feed_window(
                         cx,
                         Some(MessageStore::default()),
                         "LuxuryGram — History",
                     );
+                    publish_window_handle(&window, cx);
                     let subscription = feed.update(cx, |feed, cx| feed.begin_history(cx));
                     VISIBLE_COUNT.store(0, Ordering::SeqCst);
                     cx.spawn(async move |cx| {
@@ -112,6 +126,7 @@ pub extern "C" fn luxurygram_history_start() -> i32 {
                     .detach();
                 });
             *SENDER.lock().unwrap() = None;
+            WINDOW.store(0, Ordering::SeqCst);
         });
     match spawned {
         Ok(_) => 0,
@@ -120,6 +135,26 @@ pub extern "C" fn luxurygram_history_start() -> i32 {
             1
         }
     }
+}
+
+/// Publish the feed window's native handle for the host.
+///
+/// Runs on the GPUI thread right after the window opens, so the handle is
+/// valid before `luxurygram_history_start` reports the feed as running.
+fn publish_window_handle(
+    window: &gpui::WindowHandle<crate::feed::MessageFeed>,
+    cx: &mut gpui::App,
+) {
+    let handle = window.update(cx, |_, window, _| {
+        window
+            .window_handle()
+            .ok()
+            .and_then(|handle| match handle.as_raw() {
+                RawWindowHandle::Win32(win32) => Some(win32.hwnd.get()),
+                _ => None,
+            })
+    });
+    WINDOW.store(handle.ok().flatten().unwrap_or(0), Ordering::SeqCst);
 }
 
 /// Read a UTF-8 slice supplied by the native caller.
