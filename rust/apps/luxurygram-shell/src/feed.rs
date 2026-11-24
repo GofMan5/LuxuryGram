@@ -411,16 +411,20 @@ impl Render for MessageFeed {
 }
 
 pub fn run(cx: &mut App, store: Option<MessageStore>) {
-    cx.bind_keys([
-        KeyBinding::new("ctrl-f", ToggleSearch, Some(FEED_CONTEXT)),
-        KeyBinding::new("end", ScrollToBottom, Some(FEED_CONTEXT)),
-    ]);
-    let bounds = gpui::Bounds::centered(None, gpui::size(px(960.), px(640.)), cx);
     let title = if store.is_some() {
         "LuxuryGram — Read-only chat export"
     } else {
         "LuxuryGram — Demo message feed"
     };
+    open_feed(cx, store, title);
+}
+
+pub(crate) fn open_feed(cx: &mut App, store: Option<MessageStore>, title: &'static str) {
+    cx.bind_keys([
+        KeyBinding::new("ctrl-f", ToggleSearch, Some(FEED_CONTEXT)),
+        KeyBinding::new("end", ScrollToBottom, Some(FEED_CONTEXT)),
+    ]);
+    let bounds = gpui::Bounds::centered(None, gpui::size(px(960.), px(640.)), cx);
     cx.open_window(
         gpui::WindowOptions::default()
             .window_bounds(gpui::WindowBounds::Windowed(bounds))
