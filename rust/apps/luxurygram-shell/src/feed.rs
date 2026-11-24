@@ -13,7 +13,7 @@ use gpui::{
 };
 
 use crate::message::{
-    EntityKind, MessageStore, apply_grouping, build_synthetic_messages, formatted_time,
+    EntityKind, MessageId, MessageStore, apply_grouping, build_synthetic_messages, formatted_time,
 };
 
 const RADIUS: f32 = 12.0; // design-tokens LUXURY_WATCHER_CARD_RADIUS
@@ -113,12 +113,14 @@ impl MessageFeed {
         cx.notify();
     }
 
-    /// Apply an ordered snapshot for the active subscription. IDs must be
-    /// unique and stable for this subscription, including across pages.
+    /// Apply an ordered snapshot for the active subscription. Rows must have
+    /// unique full IDs. Rekeys, in event order, carry the scroll anchor from
+    /// the prior snapshot to the new one (e.g. local send to server ID).
     pub fn update_history(
         &mut self,
         subscription: &HistorySubscription,
         store: MessageStore,
+        rekeys: &[(MessageId, MessageId)],
         cx: &mut Context<Self>,
     ) -> bool {
         if !self
@@ -130,7 +132,14 @@ impl MessageFeed {
         }
         let following = self.list_state.is_following_tail();
         let mut top = self.list_state.logical_scroll_top();
-        let anchor = self.messages.get(top.item_ix).map(|message| message.id);
+        let anchor = self.messages.get(top.item_ix).map(|message| {
+            rekeys.iter().fold(
+                message.id,
+                |id, &(old, new)| {
+                    if id == old { new } else { id }
+                },
+            )
+        });
         self.store = store;
         self.refresh_messages();
         if following {
@@ -544,21 +553,21 @@ mod tests {
         window.update(|feed, _, cx| {
             let chat_a = feed.begin_history(cx);
             let rows = MessageStore::new(build_synthetic_messages(3));
-            assert!(feed.update_history(&chat_a, rows.clone(), cx));
+            assert!(feed.update_history(&chat_a, rows.clone(), &[], cx));
             feed.search_open = true;
             feed.set_query("GPUI".into(), cx);
 
             let chat_b = feed.begin_history(cx);
-            assert!(!feed.update_history(&chat_a, rows.clone(), cx));
+            assert!(!feed.update_history(&chat_a, rows.clone(), &[], cx));
             assert!(feed.store.messages().is_empty());
             assert_eq!(feed.message_count(), 0);
             assert!(feed.query().is_empty());
             assert!(!feed.search_open());
-            assert!(feed.update_history(&chat_b, rows.clone(), cx));
+            assert!(feed.update_history(&chat_b, rows.clone(), &[], cx));
             assert_eq!(feed.message_count(), 3);
 
             feed.clear_history(cx);
-            assert!(!feed.update_history(&chat_b, rows, cx));
+            assert!(!feed.update_history(&chat_b, rows, &[], cx));
             assert!(feed.store.messages().is_empty());
             assert_eq!(feed.message_count(), 0);
         });
@@ -567,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    fn live_history_preserves_anchor_with_equal_message_numbers_in_two_peers() {
+    fn live_history_preserves_anchor_across_rekey_and_migrated_page() {
         let mut app = TestApp::new();
         let mut window = app.open_window(|_, cx| {
             MessageFeed::from_store(MessageStore::default(), Rc::new(Cell::new(0)), cx)
@@ -580,15 +589,23 @@ mod tests {
         let mut store = MessageStore::new(rows);
         window.update(|feed, _, cx| {
             let subscription = feed.begin_history(cx);
-            assert!(feed.update_history(&subscription, store.clone(), cx));
+            assert!(feed.update_history(&subscription, store.clone(), &[], cx));
             assert!(feed.list_state.is_following_tail());
             let mut anchor = feed.list_state.logical_scroll_top();
             anchor.item_ix = 50;
             anchor.offset_in_item = px(4.);
             feed.list_state.scroll_to(anchor);
 
+            let old = store.messages()[50].id;
+            let new = MessageId {
+                message: 900,
+                ..old
+            };
+            let mut updated = store.messages().to_vec();
+            updated[50].id = new;
+            store = MessageStore::new(updated);
             store.prepend(vec![first]);
-            assert!(feed.update_history(&subscription, store, cx));
+            assert!(feed.update_history(&subscription, store, &[(old, new)], cx));
             let top = feed.list_state.logical_scroll_top();
             assert_eq!(top.item_ix, 51);
             assert_eq!(top.offset_in_item, px(4.));
