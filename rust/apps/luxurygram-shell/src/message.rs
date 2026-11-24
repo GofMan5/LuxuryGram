@@ -49,33 +49,34 @@ fn span(text: &str, needle: &str, kind: EntityKind) -> Option<EntitySpan> {
 /// renderer to MTProto, SQLite, or Qt. Ordering is oldest-to-newest.
 #[derive(Debug, Clone, Default)]
 pub struct MessageStore {
-    messages: Vec<Message>,
+    messages: std::rc::Rc<Vec<Message>>,
 }
 
 impl MessageStore {
-    pub fn new(messages: Vec<Message>) -> Self {
-        let mut store = Self { messages };
-        store.recompute_grouping();
-        store
+    pub fn new(mut messages: Vec<Message>) -> Self {
+        apply_grouping(&mut messages);
+        Self {
+            messages: messages.into(),
+        }
     }
 
     pub fn messages(&self) -> &[Message] {
         &self.messages
     }
 
+    pub(crate) fn snapshot(&self) -> std::rc::Rc<Vec<Message>> {
+        self.messages.clone()
+    }
+
     pub fn append(&mut self, mut page: Vec<Message>) {
-        self.messages.append(&mut page);
-        self.recompute_grouping();
+        let messages = std::rc::Rc::make_mut(&mut self.messages);
+        messages.append(&mut page);
+        apply_grouping(messages);
     }
 
     pub fn prepend(&mut self, mut page: Vec<Message>) {
-        page.append(&mut self.messages);
-        self.messages = page;
-        self.recompute_grouping();
-    }
-
-    fn recompute_grouping(&mut self) {
-        apply_grouping(&mut self.messages);
+        page.append(std::rc::Rc::make_mut(&mut self.messages));
+        *self = Self::new(page);
     }
 }
 

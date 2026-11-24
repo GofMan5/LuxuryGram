@@ -23,7 +23,6 @@ actions!(feed, [ToggleSearch, CloseSearch, ScrollToBottom]);
 
 pub struct MessageFeed {
     store: MessageStore,
-    all_messages: Rc<Vec<crate::message::Message>>,
     messages: Rc<Vec<crate::message::Message>>,
     list_state: ListState,
     rendered_items: Rc<Cell<usize>>,
@@ -38,17 +37,23 @@ impl MessageFeed {
         rendered_items: Rc<Cell<usize>>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let store = MessageStore::new(build_synthetic_messages(message_count));
-        let all_messages = store.messages().to_vec();
-        let mut messages = all_messages.clone();
-        apply_grouping(&mut messages);
-        let messages = Rc::new(messages);
-        let all_messages = Rc::new(all_messages);
+        Self::from_store(
+            MessageStore::new(build_synthetic_messages(message_count)),
+            rendered_items,
+            cx,
+        )
+    }
+
+    pub fn from_store(
+        store: MessageStore,
+        rendered_items: Rc<Cell<usize>>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let messages = store.snapshot();
         let list_state = ListState::new(messages.len(), ListAlignment::Bottom, px(240.0));
         list_state.set_follow_mode(FollowMode::Tail);
         Self {
             store,
-            all_messages,
             messages,
             list_state,
             rendered_items,
@@ -85,20 +90,20 @@ impl MessageFeed {
 
     fn set_query(&mut self, query: String, cx: &mut Context<Self>) {
         self.query = query;
-        self.all_messages = Rc::new(self.store.messages().to_vec());
         let needle = self.query.to_lowercase();
-        let filtered: Vec<_> = if needle.is_empty() {
-            (*self.all_messages).clone()
+        self.messages = if needle.is_empty() {
+            self.store.snapshot()
         } else {
-            self.all_messages
+            let mut filtered: Vec<_> = self
+                .store
+                .messages()
                 .iter()
                 .filter(|message| message.text.to_lowercase().contains(&needle))
                 .cloned()
-                .collect()
+                .collect();
+            apply_grouping(&mut filtered);
+            Rc::new(filtered)
         };
-        let mut messages = filtered;
-        apply_grouping(&mut messages);
-        self.messages = Rc::new(messages);
         self.list_state.reset(self.messages.len());
         if !self.messages.is_empty() {
             self.list_state.scroll_to_reveal_item(0);
@@ -418,6 +423,31 @@ mod tests {
             assert_eq!(feed.query(), "");
             assert_eq!(feed.message_count(), 1_000);
         });
+    }
+
+    #[test]
+    fn supplied_history_renders_filters_and_restores_shared_snapshot() {
+        let mut app = TestApp::new();
+        let mut input = build_synthetic_messages(2);
+        input[0].text = "Привет из внешней истории".into();
+        input[0].entities.clear();
+        let store = MessageStore::new(input);
+        let snapshot = store.snapshot();
+        let mut window =
+            app.open_window(|_, cx| MessageFeed::from_store(store, Rc::new(Cell::new(0)), cx));
+        window.draw();
+        window.read(|feed, _| {
+            assert!(Rc::ptr_eq(&feed.messages, &snapshot));
+            assert_eq!(feed.rendered_items(), 2);
+        });
+        window.update(|feed, _, cx| feed.set_query("ВНЕШНЕЙ".into(), cx));
+        window.draw();
+        window.read(|feed, _| {
+            assert_eq!(feed.message_count(), 1);
+            assert_eq!(feed.messages[0].id, snapshot[0].id);
+        });
+        window.update(|feed, _, cx| feed.close_search(cx));
+        window.read(|feed, _| assert!(Rc::ptr_eq(&feed.messages, &snapshot)));
     }
 
     #[test]
