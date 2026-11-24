@@ -6,7 +6,6 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-windows-host-smoke = []
 bench-support = ["gpui/bench-support", "gpui_platform/bench-support"]
 
 [dependencies]
