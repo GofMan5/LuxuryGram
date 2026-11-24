@@ -68,4 +68,27 @@ private:
 	int limitBefore,
 	int limitAfter);
 
+// Owned text projection of the model's live history, with no widget references.
+// The caller must destroy its subscription before the history/session dies,
+// and discard pending rows on chat/account changes and passcode lock.
+struct HistoryTextRow {
+	FullMsgId id;
+	TimeId date = 0;
+	bool outgoing = false;
+	std::string sender;
+	std::string text;
+};
+
+struct HistoryTextSlice {
+	std::vector<HistoryTextRow> rows;
+	std::optional<int> skippedBefore;
+	std::optional<int> skippedAfter;
+};
+
+[[nodiscard]] rpl::producer<HistoryTextSlice> HistoryTextViewer(
+	not_null<History*> history,
+	MessagePosition aroundId,
+	int limitBefore,
+	int limitAfter);
+
 } // namespace Data

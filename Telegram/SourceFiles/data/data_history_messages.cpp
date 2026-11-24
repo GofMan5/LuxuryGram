@@ -546,4 +546,49 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 	};
 }
 
+rpl::producer<HistoryTextSlice> HistoryTextViewer(
+		not_null<History*> history,
+		MessagePosition aroundId,
+		int limitBefore,
+		int limitAfter) {
+	return HistoryMessagesViewer(
+		history,
+		aroundId,
+		limitBefore,
+		limitAfter
+	) | rpl::map([history](const MessagesSlice &slice) {
+		auto result = HistoryTextSlice();
+		result.skippedBefore = slice.skippedBefore;
+		result.skippedAfter = slice.skippedAfter;
+		result.rows.reserve(slice.ids.size());
+		for (const auto &id : slice.ids) {
+			const auto item = history->owner().message(id);
+			if (!item
+				|| item->isService()
+				|| item->isSponsored()
+				|| item->forbidsForward()
+				|| item->isLuxuryNoForwards()
+				|| item->ttlDestroyAt()
+				|| item->media()
+				|| item->emptyText()) {
+				continue;
+			}
+			const auto &text = item->originalText();
+			if (ranges::any_of(text.entities, [](const EntityInText &entity) {
+				return entity.type() == EntityType::Spoiler;
+			})) {
+				continue;
+			}
+			result.rows.push_back({
+				.id = id,
+				.date = item->date(),
+				.outgoing = item->out(),
+				.sender = item->from()->name().toUtf8().toStdString(),
+				.text = text.text.toUtf8().toStdString(),
+			});
+		}
+		return result;
+	});
+}
+
 } // namespace Data
