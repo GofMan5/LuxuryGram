@@ -255,12 +255,26 @@ impl MessageFeed {
         }
     }
 
+    /// The longest draft the composer accepts; the send path caps text too,
+    /// and a huge paste must not freeze the frame that draws it.
+    const MAX_DRAFT: usize = 4_096;
+
     fn on_compose_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
-        if event.keystroke.modifiers.control || event.keystroke.modifiers.platform {
+        let modifiers = event.keystroke.modifiers;
+        let key = event.keystroke.key.as_str();
+        if modifiers.control && !modifiers.alt && !modifiers.shift && key == "v" {
+            self.paste_from_clipboard(cx);
             return;
         }
-        let key = event.keystroke.key.as_str();
+        if modifiers.control || modifiers.platform {
+            return;
+        }
         if key == "enter" {
+            if modifiers.shift {
+                // Shift+Enter is the line break the Qt field also uses.
+                self.push_draft("\n", cx);
+                return;
+            }
             let text = self.draft.trim();
             if text.is_empty() {
                 return;
@@ -281,9 +295,34 @@ impl MessageFeed {
             .as_ref()
             .filter(|value| !value.is_empty() && !value.chars().any(char::is_control))
         {
-            self.draft.push_str(character);
-            cx.notify();
+            self.push_draft(character, cx);
         }
+    }
+
+    /// Append text to the draft, stopping at the length limit.
+    fn push_draft(&mut self, text: &str, cx: &mut Context<Self>) {
+        let room = Self::MAX_DRAFT.saturating_sub(self.draft.len());
+        if room == 0 {
+            return;
+        }
+        let cut = text
+            .char_indices()
+            .take_while(|(offset, _)| *offset < room)
+            .last()
+            .map_or(0, |(offset, character)| offset + character.len_utf8());
+        self.draft.push_str(&text[..cut]);
+        cx.notify();
+    }
+
+    /// Paste the clipboard's text into the draft. Only text is taken; the
+    /// client's rich paste (files, images, formatted text) is a compose-area
+    /// feature that is not ported yet.
+    fn paste_from_clipboard(&mut self, cx: &mut Context<Self>) {
+        let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+            return;
+        };
+        let normalized = text.replace("\r\n", "\n");
+        self.push_draft(&normalized, cx);
     }
 
     fn render_styled_text(message: &crate::message::Message, colors: &Colors) -> StyledText {
@@ -690,6 +729,69 @@ mod tests {
             assert_eq!(feed.draft(), "");
         });
         assert_eq!(*sent.borrow(), vec!["hi".to_string()]);
+    }
+
+    fn key_with(key: &str, key_char: Option<&str>, modifiers: gpui::Modifiers) -> KeyDownEvent {
+        KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers,
+                key: key.into(),
+                key_char: key_char.map(str::to_owned),
+            },
+            is_held: false,
+            prefer_character_input: false,
+        }
+    }
+
+    #[test]
+    fn composer_takes_shift_enter_newlines_and_pastes_plain_text_with_a_limit() {
+        let sent = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let sink = Rc::clone(&sent);
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, cx| {
+            let mut feed = MessageFeed::new(4, Rc::new(Cell::new(0)), cx);
+            feed.set_send_handler(
+                Some(Rc::new(move |text| {
+                    sink.borrow_mut().push(text);
+                    true
+                })),
+                cx,
+            );
+            feed
+        });
+        window.draw();
+        let shift = gpui::Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+        let ctrl = gpui::Modifiers {
+            control: true,
+            ..Default::default()
+        };
+        window.update(|feed, _, cx| {
+            feed.on_compose_key(&key("a", Some("a")), cx);
+            // Shift+Enter breaks the line; plain Enter sends.
+            feed.on_compose_key(&key_with("enter", None, shift), cx);
+            feed.on_compose_key(&key("b", Some("b")), cx);
+            assert_eq!(feed.draft(), "a\nb");
+            // Other control combinations stay with the key bindings.
+            feed.on_compose_key(&key_with("c", None, ctrl), cx);
+            assert_eq!(feed.draft(), "a\nb");
+            // Ctrl+V pastes the clipboard's text with line endings normalized.
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string("x\r\ny".into()));
+            feed.on_compose_key(&key_with("v", None, ctrl), cx);
+            assert_eq!(feed.draft(), "a\nbx\ny");
+            // The draft is capped: a paste larger than the room left is cut on
+            // a character boundary and nothing after it grows the draft.
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string("п".repeat(10_000)));
+            feed.on_compose_key(&key_with("v", None, ctrl), cx);
+            let length = feed.draft().len();
+            assert!(length <= MessageFeed::MAX_DRAFT, "draft is {length} bytes");
+            assert!(feed.draft().ends_with('п'));
+            feed.on_compose_key(&key_with("v", None, ctrl), cx);
+            assert_eq!(feed.draft().len(), length);
+        });
+        assert!(sent.borrow().is_empty());
     }
 
     #[test]
