@@ -6,6 +6,10 @@ Releases are published on the [Releases page](https://github.com/GofMan5/LuxuryG
 
 ## Unreleased
 
+### Added
+
+- The standalone GPUI preview can open a single chat exported as JSON for offline, read-only text browsing and search. This does not change the main desktop app or import anything into your account.
+
 ### Changed
 
 - Chat Analysis recommends a concrete next step, including waiting or not replying when appropriate. It shows verified quotes or attachment types as evidence and offers three drafts with distinct intentions. Reasoning effort defaults to `high`; `default` leaves it up to the API.

@@ -48,6 +48,13 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
   - `rust/docs/research/storage-options.md` — verified crate comparison (`fjall 3.1.13` + `zstd 0.14.4`, `rocksdb 0.25.0`, `tantivy 0.27.0`, `surrealkv 1.4.0` rejected) and 1M/5M synthetic benchmark plan.
 - Added and ran H1 UI scroll baseline benchmark (`rust/apps/luxurygram-shell/benches/message_list_scroll.rs`, gated behind `bench-support` feature) using `#[gpui::bench(fps = 120)]` + `BenchAppContext::bench_renderer` over `gpui::list()` (`ListAlignment::Bottom`, `ListState::scroll_by`) with synthetic message bubbles, `StyledText` highlights, and `design_tokens::LUXURY_WATCHER_CARD_RADIUS`.
 
+## Known gaps
+
+- The GPUI shell is a tested standalone binary, not the production `Telegram` target. The active desktop application still starts `Telegram/SourceFiles/main.cpp` and uses Qt; full GPUI replacement remains a separate migration.
+- Run `cargo run -p luxurygram-shell -- --history-json <result.json>` from `rust/` to preview a single-chat JSON export (up to 16 MiB) without starting Qt or logging in. This uses the root format from `Telegram/SourceFiles/export/output/export_output_json.cpp:2956–3000`; no arguments opens the synthetic demo.
+- The preview uses the export’s `from`, `date_unixtime` and `text`, not a live chat. It shows text and captions without entity styling, does not infer outgoing direction, and skips service, rich-document and media-only rows (`export_output_json.cpp:1534–1567, 1618–1631, 2125–2337`). Dates/times are UTC-based demo labels, not the Qt export’s local ISO dates.
+- The existing `HistoryInner` and `ListWidget` paths remain Qt (`Telegram/SourceFiles/history/history_inner_widget.cpp`, `Telegram/SourceFiles/history/view/history_view_list_widget.cpp`). The preview has no live updates, pagination, media playback, selection, accessibility parity, or context menus. The main window, dialogs, compose, settings, authentication, calls and platform integration are unchanged.
+
 ## Checks actually run
 
 - `cargo bench -p luxurygram-shell --features bench-support --bench message_list_scroll` — exit 0 (2026-11-21, Windows x64, `BenchAppContext` headless without GPU present; `current_headless_renderer()` returns `Ok(None)` on Windows so measurements cover layout, `ParleyTextSystem` shaping, prepaint, and scene build):
@@ -58,7 +65,7 @@ Goal: `goal-18aca4b2-a37a-4279-bd0a-bb61496d2351` (hybrid bottleneck plan per AD
 - `cargo test --workspace` — 7 passed, 0 failed (1 design-tokens + 6 zxcvbn-translit).
 - `cargo clippy --workspace --all-targets -- -D warnings` — exit 0 (final full run).
 - `cargo build --release` — exit 0.
-- `cargo check -p luxurygram-shell` → exit 0 with the pinned 0.3.0 crates.
+- Offline workspace check, Clippy with warnings denied, workspace tests (16 passed), and Debug shell build passed. On Windows, a BOM-free fixture opened a native window titled `LuxuryGram — Read-only chat export`, closed normally, and retained its input hash. Account-archive shape was rejected. This smoke test did not inspect pixels or use an account.
 - `rust-anything app record rust --inputs … --no-traps -- …` — 7 cases recorded.
 - `rust-anything app replay rust` — 7/7 (original).
 - `rust-anything app replay rust --build "target/release/zxcvbn-translit.exe"`

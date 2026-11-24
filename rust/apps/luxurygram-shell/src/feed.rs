@@ -342,20 +342,33 @@ impl Render for MessageFeed {
     }
 }
 
-pub fn run(cx: &mut App) {
+pub fn run(cx: &mut App, store: Option<MessageStore>) {
     cx.bind_keys([
         KeyBinding::new("ctrl-f", ToggleSearch, Some(FEED_CONTEXT)),
         KeyBinding::new("end", ScrollToBottom, Some(FEED_CONTEXT)),
     ]);
     let bounds = gpui::Bounds::centered(None, gpui::size(px(960.), px(640.)), cx);
+    let title = if store.is_some() {
+        "LuxuryGram — Read-only chat export"
+    } else {
+        "LuxuryGram — Demo message feed"
+    };
     cx.open_window(
         gpui::WindowOptions::default()
             .window_bounds(gpui::WindowBounds::Windowed(bounds))
             .titlebar(gpui::TitlebarOptions {
-                title: Some("LuxuryGram — Message Feed".into()),
+                title: Some(title.into()),
                 ..Default::default()
             }),
-        |_window, cx| cx.new(|cx| MessageFeed::new(10_000, Rc::new(Cell::new(0)), cx)),
+        move |_window, cx| {
+            cx.new(|cx| {
+                let rendered = Rc::new(Cell::new(0));
+                match store {
+                    Some(store) => MessageFeed::from_store(store, rendered, cx),
+                    None => MessageFeed::new(10_000, rendered, cx),
+                }
+            })
+        },
     )
     .expect("open the feed window");
     cx.activate(true);
