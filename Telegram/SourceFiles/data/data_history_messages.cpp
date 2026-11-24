@@ -9,11 +9,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "apiwrap.h"
 #include "data/data_changes.h"
+#include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_forum_topic.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "data/data_sparse_ids.h"
+#include "data/data_user.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "main/main_session.h"
@@ -467,6 +469,25 @@ rpl::producer<SparseIdsMergedSlice> HistoryMergedViewer(
 
 namespace {
 
+[[nodiscard]] bool AllowsTextProjection(not_null<PeerData*> peer) {
+	return peer->allowsForwarding() && !peer->isLuxuryNoForwards();
+}
+
+[[nodiscard]] rpl::producer<bool> TextProjectionAllowedValue(
+		not_null<PeerData*> peer) {
+	const auto allowed = [=](const auto &) {
+		return AllowsTextProjection(peer);
+	};
+	if (const auto user = peer->asUser()) {
+		return user->flagsValue() | rpl::map(allowed);
+	} else if (const auto chat = peer->asChat()) {
+		return chat->flagsValue() | rpl::map(allowed);
+	} else if (const auto channel = peer->asChannel()) {
+		return channel->flagsValue() | rpl::map(allowed);
+	}
+	return rpl::single(false);
+}
+
 template <typename Slice, typename Project>
 [[nodiscard]] rpl::producer<Slice> HistoryMessagesViewerImpl(
 		not_null<History*> history,
@@ -540,7 +561,17 @@ template <typename Slice, typename Project>
 			HistoryUpdate::Flag::ClientSideMessages
 		) | rpl::on_next(pushDelayed, lifetime);
 
-		if (emitContentChanges) {
+		if constexpr (emitContentChanges) {
+			const auto watchProtection = [&](not_null<PeerData*> peer) {
+				TextProjectionAllowedValue(peer)
+					| rpl::distinct_until_changed()
+					| rpl::skip(1)
+					| rpl::on_next(pushDelayed, lifetime);
+			};
+			watchProtection(history->peer);
+			if (const auto migrated = history->peer->migrateFrom()) {
+				watchProtection(migrated);
+			}
 			history->session().changes().messageUpdates(
 				MessageUpdate::Flag::Edited
 			) | rpl::filter([=](const MessageUpdate &update) {
@@ -599,13 +630,16 @@ rpl::producer<HistoryTextSlice> HistoryTextViewer(
 		result.rekeys = std::move(rekeys);
 		result.skippedBefore = slice.skippedBefore;
 		result.skippedAfter = slice.skippedAfter;
+		if (!AllowsTextProjection(history->peer)) {
+			return result;
+		}
 		result.rows.reserve(slice.ids.size());
 		for (const auto &id : slice.ids) {
 			const auto item = history->owner().message(id);
 			if (!item
 				|| item->isService()
 				|| item->isSponsored()
-				|| item->forbidsForward()
+				|| !AllowsTextProjection(item->history()->peer)
 				|| item->isLuxuryNoForwards()
 				|| item->ttlDestroyAt()
 				|| item->media()

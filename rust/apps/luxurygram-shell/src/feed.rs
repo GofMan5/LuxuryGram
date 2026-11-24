@@ -601,11 +601,15 @@ mod tests {
                 message: 900,
                 ..old
             };
+            let final_id = MessageId {
+                message: 901,
+                ..old
+            };
             let mut updated = store.messages().to_vec();
-            updated[50].id = new;
+            updated[50].id = final_id;
             store = MessageStore::new(updated);
             store.prepend(vec![first]);
-            assert!(feed.update_history(&subscription, store, &[(old, new)], cx));
+            assert!(feed.update_history(&subscription, store, &[(old, new), (new, final_id)], cx));
             let top = feed.list_state.logical_scroll_top();
             assert_eq!(top.item_ix, 51);
             assert_eq!(top.offset_in_item, px(4.));
