@@ -47,6 +47,8 @@ pub struct MessageFeed {
     /// The UTF-16 range of the draft that the input method is still composing,
     /// or `None` when the composition has ended. The cursor is at the end.
     marked: Option<Range<usize>>,
+    /// The composer field's last painted bounds.
+    compose_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
 }
 
 impl MessageFeed {
@@ -83,6 +85,7 @@ impl MessageFeed {
             compose_focus: cx.focus_handle(),
             send_handler: None,
             marked: None,
+            compose_bounds: Rc::new(Cell::new(None)),
         }
     }
 
@@ -103,6 +106,12 @@ impl MessageFeed {
     #[cfg(test)]
     pub fn compose_focus_for_test(&self) -> &FocusHandle {
         &self.compose_focus
+    }
+
+    /// The composer field's last painted bounds, or `None` before its first
+    /// paint or while it is hidden for want of a send handler.
+    pub fn compose_bounds(&self) -> Option<Bounds<Pixels>> {
+        self.compose_bounds.get()
     }
 
     #[cfg(test)]
@@ -269,6 +278,10 @@ impl MessageFeed {
     /// The longest draft the composer accepts; the send path caps text too,
     /// and a huge paste must not freeze the frame that draws it.
     const MAX_DRAFT: usize = 4_096;
+
+    /// Draft lines shown in the field, which is what fits the capped height
+    /// at the standard line height; a longer draft shows only its tail.
+    const COMPOSE_VISIBLE_LINES: usize = 10;
 
     fn on_compose_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let modifiers = event.keystroke.modifiers;
@@ -561,6 +574,7 @@ impl Render for MessageFeed {
         // composers on one chat would be a defect.
         let entity = cx.entity();
         let compose_focus = self.compose_focus.clone();
+        let compose_bounds = self.compose_bounds.clone();
         let composer = can_send.then(|| {
             div()
                 .flex_none()
@@ -576,6 +590,9 @@ impl Render for MessageFeed {
                             this.on_compose_key(event, cx);
                         }))
                         .w_full()
+                        // The Qt field grows with its text up to
+                        // historyComposeFieldMaxHeight.
+                        .max_h(px(224.0))
                         .px_3()
                         .py_2()
                         .rounded(px(RADIUS))
@@ -583,10 +600,24 @@ impl Render for MessageFeed {
                         .border_1()
                         .border_color(colors.border)
                         .text_color(colors.text)
+                        // Draft lines are laid out one element each: GPUI-CE
+                        // 0.3.0 wraps text at the width but does not start a
+                        // new line at a `\n` inside a text element.
                         .child(if draft.is_empty() {
-                            "Write a message…".into()
+                            div().child("Write a message…")
                         } else {
-                            SharedString::from(format!("{draft}▏"))
+                            let mut lines: Vec<SharedString> =
+                                draft.split('\n').map(SharedString::from).collect();
+                            let last = lines.last_mut().expect("split yields a line");
+                            *last = SharedString::from(format!("{last}▏"));
+                            let tail = lines.len().saturating_sub(Self::COMPOSE_VISIBLE_LINES);
+                            // An empty line still needs a line's height.
+                            div().flex().flex_col().children(
+                                lines
+                                    .into_iter()
+                                    .skip(tail)
+                                    .map(|line| if line.is_empty() { " ".into() } else { line }),
+                            )
                         })
                         // Installs the platform text input for this field on
                         // every paint; without it typed characters, dead keys
@@ -595,6 +626,7 @@ impl Render for MessageFeed {
                             canvas(
                                 move |_, _, _| (),
                                 move |bounds, _, window, cx| {
+                                    compose_bounds.set(Some(bounds));
                                     window.handle_input(
                                         &compose_focus,
                                         ElementInputHandler::new(bounds, entity.clone()),
@@ -715,12 +747,34 @@ impl Render for MessageFeed {
 }
 
 pub fn run(cx: &mut App, store: Option<MessageStore>) {
+    run_with_compose(cx, store, None);
+}
+
+/// Open the feed, optionally with a composer that hands what `Enter` sends to
+/// `sink` (the standalone `--compose-preview` mode, used to see and drive the
+/// composer without the client).
+pub fn run_with_compose(
+    cx: &mut App,
+    store: Option<MessageStore>,
+    sink: Option<Box<dyn Fn(String) + 'static>>,
+) {
     let title = if store.is_some() {
         "LuxuryGram — Read-only chat export"
     } else {
         "LuxuryGram — Demo message feed"
     };
-    open_feed(cx, store, title);
+    let feed = open_feed(cx, store, title);
+    if let Some(sink) = sink {
+        feed.update(cx, |feed, cx| {
+            feed.set_send_handler(
+                Some(Rc::new(move |text| {
+                    sink(text);
+                    true
+                })),
+                cx,
+            );
+        });
+    }
 }
 
 pub(crate) fn open_feed(
@@ -1020,6 +1074,59 @@ mod tests {
             assert_eq!(feed.draft(), "かん");
         });
         assert!(sent.borrow().is_empty());
+    }
+
+    #[test]
+    fn composer_grows_with_multiline_text_up_to_the_field_height_cap() {
+        let shift_enter = key_with(
+            "enter",
+            None,
+            gpui::Modifiers {
+                shift: true,
+                ..Default::default()
+            },
+        );
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, cx| {
+            let mut feed = MessageFeed::new(4, Rc::new(Cell::new(0)), cx);
+            feed.set_send_handler(Some(Rc::new(|_| true)), cx);
+            feed
+        });
+        let height = |window: &mut gpui::TestAppWindow<MessageFeed>| {
+            window
+                .read(|feed, _| feed.compose_bounds())
+                .map(|bounds| f32::from(bounds.size.height))
+                .unwrap_or(0.0)
+        };
+        window.draw();
+        assert!(window.read(|feed, _| feed.compose_bounds()).is_some());
+        let empty = height(&mut window);
+        // Ten lines, each ended by a Shift+Enter line break.
+        window.update(|feed, window, cx| {
+            for _ in 0..10 {
+                EntityInputHandler::replace_text_in_range(feed, None, "ab", window, cx);
+                feed.on_compose_key(&shift_enter, cx);
+            }
+        });
+        window.draw();
+        let ten = height(&mut window);
+        // Far more lines than the field is tall enough to show.
+        window.update(|feed, _, cx| {
+            for _ in 0..60 {
+                feed.on_compose_key(&shift_enter, cx);
+            }
+            // Each break ends a line; `lines` does not count the empty tail
+            // after the last break.
+            assert_eq!(feed.draft().lines().count(), 70);
+        });
+        window.draw();
+        let capped = height(&mut window);
+        eprintln!(
+            "composer height: empty {empty:.1}px, ten lines {ten:.1}px, seventy-one lines {capped:.1}px"
+        );
+        assert!(ten > empty + 20.0, "ten lines did not grow the field");
+        assert!(capped <= 224.0 + 2.0, "the cap was not applied: {capped}px");
+        assert!(capped >= ten - 0.1, "more lines shrank the field");
     }
 
     #[test]
