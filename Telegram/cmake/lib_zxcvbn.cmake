@@ -60,6 +60,11 @@ add_executable(zxcvbn_translit
 )
 init_target(zxcvbn_translit "(codegen)")
 target_include_directories(zxcvbn_translit PRIVATE ${src_loc})
+if (MSVC)
+    target_link_libraries(zxcvbn_translit PRIVATE lib_zxcvbn_warnings_off)
+else()
+    target_compile_options(zxcvbn_translit PRIVATE -w)
+endif()
 
 # The generator drops every word with a byte above 0x7F, so the Cyrillic lists
 # are transliterated first, by the table the estimator itself applies.
