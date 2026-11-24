@@ -1351,6 +1351,8 @@ PRIVATE
     history/view/history_view_context_menu.h
     history/view/history_view_copy_selection.cpp
     history/view/history_view_copy_selection.h
+    history/view/history_view_gpui_bridge.cpp
+    history/view/history_view_gpui_bridge.h
     history/view/history_view_corner_buttons.cpp
     history/view/history_view_corner_buttons.h
     history/view/history_view_cursor_state.cpp

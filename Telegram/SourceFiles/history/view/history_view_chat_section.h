@@ -615,6 +615,7 @@ private:
 	std::unique_ptr<Support::Autocomplete> _supportAutocomplete;
 	rpl::lifetime _topicLifetime;
 	rpl::lifetime _historySponsoredPreloading;
+	rpl::lifetime _gpuiHistory;
 	bool _injectingSponsored = false;
 
 	Ui::Controls::SwipeContextData _gestureHorizontal;
