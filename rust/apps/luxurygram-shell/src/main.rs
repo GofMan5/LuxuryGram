@@ -13,18 +13,22 @@ use luxurygram_shell::message::MessageStore;
 fn main() -> ExitCode {
     let args: Vec<_> = env::args_os().skip(1).collect();
     let mut compose_preview = false;
+    let mut dialogs_preview = false;
     let mut rest: Vec<_> = Vec::new();
     for arg in args {
         if arg == "--compose-preview" {
             compose_preview = true;
+        } else if arg == "--dialogs-preview" {
+            dialogs_preview = true;
         } else {
             rest.push(arg);
         }
     }
+    let usage = "Usage: luxurygram-shell [--compose-preview | --dialogs-preview] [--history-json <result.json>]";
     let store = match rest.as_slice() {
         [] => None,
         [flag] if flag == "--help" => {
-            println!("Usage: luxurygram-shell [--compose-preview] [--history-json <result.json>]");
+            println!("{usage}");
             return ExitCode::SUCCESS;
         }
         [flag, path] if flag == "--history-json" => match history_json::load(Path::new(path)) {
@@ -35,14 +39,16 @@ fn main() -> ExitCode {
             }
         },
         _ => {
-            eprintln!("Usage: luxurygram-shell [--compose-preview] [--history-json <result.json>]");
+            eprintln!("{usage}");
             return ExitCode::FAILURE;
         }
     };
     gpui_platform::application()
         .with_quit_mode(QuitMode::LastWindowClosed)
         .run(move |cx| {
-            if compose_preview {
+            if dialogs_preview {
+                luxurygram_shell::dialogs::run(cx);
+            } else if compose_preview {
                 luxurygram_shell::feed::run_with_compose(
                     cx,
                     store,
