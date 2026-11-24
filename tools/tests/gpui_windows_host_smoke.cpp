@@ -1,7 +1,12 @@
 // Test host for the opt-in GPUI DLL. Never uses a LuxuryGram profile.
 #include <windows.h>
 
+#include <QtCore/QCoreApplication>
+#include <QtCore/QMetaObject>
+#include <QtCore/QTimer>
+
 #include <cstdio>
+#include <cstdlib>
 #include <thread>
 
 // GPUI imports TaskDialogIndirect, which requires Common Controls v6.
@@ -25,8 +30,25 @@ int wmain(int argc, wchar_t **argv) {
 		std::fprintf(stderr, "GetProcAddress failed: %lu\n", GetLastError());
 		return 1;
 	}
-	int result = 1;
-	std::thread ui([&] { result = run(); });
+	char appName[] = "gpui_windows_host_smoke";
+	char *appArgs[] = { appName, nullptr };
+	int appArgc = 1;
+	QCoreApplication app(appArgc, appArgs);
+	QTimer heartbeat;
+	int ticks = 0;
+	QObject::connect(&heartbeat, &QTimer::timeout, &app, [&] { ++ticks; });
+	heartbeat.start(50);
+
+	std::thread ui([&] {
+		const auto result = run();
+		if (!QMetaObject::invokeMethod(&app, [&app, result] {
+			app.exit(result);
+		}, Qt::QueuedConnection)) {
+			std::abort();
+		}
+	});
+	const auto result = app.exec();
 	ui.join();
-	return result;
+	std::fprintf(stderr, "Qt timer ticks: %d; GPUI exit: %d\n", ticks, result);
+	return (ticks > 0) ? result : 1;
 }
