@@ -22,6 +22,8 @@ The [production target](../../Telegram/CMakeLists.txt#L82) links both Qt and Qt 
 
 ## Release evidence
 
+On Windows with the CMake Visual Studio generator, run `python -B tools/tests/check_windows_qt_link_inputs.py out/Telegram/Telegram.vcxproj` from the repository root. Exit `1` means a recognized direct Qt input was found; exit `2` means the project could not be inspected; exit `0` clears only this preliminary check. The current Debug production project is a negative control: it reports `Qt5Cored.lib`, `Qt5Guid.lib`, `Qt5Widgetsd.lib` and the static-plugin inputs even before the executable is linked.
+
 For each supported OS and architecture, verify the Debug production target and the actual packaged entry point, native helpers and libraries. Keep package hashes, build identity, compiler/linker inputs and linker maps. Inspect dynamic dependencies (including delay loads) and runtime module/child-process loads on a clean host. Dynamic imports alone cannot rule out Qt: the [native Qt link configuration](../../cmake/external/qt/CMakeLists.txt#L90) explicitly supplies static libraries. Require a known static Qt build to fail the check, and do not count a missing map, absent package member inventory or an untested platform as a pass.
 
 Run end-to-end parity scenarios against disposable profiles: fresh and existing account login, lock/unlock and switch, chat read/search/send/edit/delete, attachments and calls, settings persistence, notifications, deep links, restart and update verification. The cutover requires these checks and a Qt-free installed package, not a successful preview launch.
