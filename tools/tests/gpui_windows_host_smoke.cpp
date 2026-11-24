@@ -168,20 +168,47 @@ int wmain(int argc, wchar_t **argv) {
 	if (callbackSet && shown) {
 		// The composer appears only once a callback exists: the feed learns
 		// of it through its command channel and needs a frame to render the
-		// focused field, so give it that before typing.
+		// focused field, and the platform text input is installed during the
+		// paint after that. Two forced redraws make both current before typing.
 		std::this_thread::sleep_for(std::chrono::milliseconds(300));
-		// GPUI derives `key_char` from WM_KEYDOWN via ToUnicode and routes keys
-		// along its own focus path. The host posts the keys asynchronously, as a
-		// real keyboard would: GPUI does not run its focus dispatch for a
-		// synchronous cross-thread SendMessage. Two letter keys are sent, so
-		// the text the callback receives has two characters in the host's
-		// current keyboard layout; the exact letters are layout-dependent.
+		for (int i = 0; i < 2; ++i) {
+			RedrawWindow(handle, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		// GPUI routes keys along its own focus path, and delivers typed text
+		// through the platform text input: WM_KEYDOWN names the key and
+		// WM_CHAR carries the character, as TranslateMessage produces after a
+		// real key press. The host posts both asynchronously, as a keyboard
+		// would: GPUI does not run its focus dispatch for a synchronous
+		// cross-thread SendMessage. Two letter keys are sent, so the text the
+		// callback receives has two characters in the host's current keyboard
+		// layout; the exact letters are layout-dependent.
+		const auto scanOf = [&](WPARAM vk) {
+			return MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_VSC);
+		};
 		const auto keyDown = [&](WPARAM vk) {
-			const auto scan = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_VSC);
-			PostMessageW(handle, WM_KEYDOWN, vk, LPARAM(scan << 16) | 1);
+			PostMessageW(handle, WM_KEYDOWN, vk, LPARAM(scanOf(vk) << 16) | 1);
+		};
+		const auto charOf = [&](WPARAM vk) {
+			// ToUnicode with no keyboard state gives the unshifted US-layout
+			// letter for these virtual keys, which is what the test types.
+			const UINT vkCode = UINT(vk);
+			std::wstring buffer(8, L'\0');
+			const int written = ToUnicode(vkCode, scanOf(vk), nullptr, buffer.data(), 8, 0x4);
+			const auto count = written > 0 ? written : 0;
+			for (int i = 0; i < count; ++i) {
+				PostMessageW(handle, WM_CHAR, WPARAM(buffer[i]), 0);
+			}
+		};
+		const auto pause = [] {
+			std::this_thread::sleep_for(std::chrono::milliseconds(150));
 		};
 		keyDown('H');
+		charOf('H');
+		pause();
 		keyDown('I');
+		charOf('I');
+		pause();
 		keyDown(VK_RETURN);
 		for (int attempt = 0; attempt < 40 && g_sentCount.load() == 0; ++attempt) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));

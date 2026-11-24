@@ -4,12 +4,13 @@
 //! `FollowMode::Tail`, mirroring a chat log. Rows are built only for the
 //! visible range plus overdraw. Search filters the same list in place.
 
-use std::{cell::Cell, rc::Rc};
+use std::{cell::Cell, ops::Range, rc::Rc};
 
 use gpui::{
-    App, AppContext, Context, FocusHandle, FollowMode, HighlightStyle, IntoElement, KeyBinding,
-    KeyDownEvent, ListAlignment, ListState, Render, SharedString, StyledText, UnderlineStyle,
-    Window, actions, colors::Colors, div, list, prelude::*, px, rgb_to_hsla,
+    App, AppContext, Bounds, Context, ElementInputHandler, EntityInputHandler, FocusHandle,
+    FollowMode, HighlightStyle, IntoElement, KeyBinding, KeyDownEvent, ListAlignment, ListState,
+    Pixels, Render, SharedString, StyledText, UTF16Selection, UnderlineStyle, Window, actions,
+    canvas, colors::Colors, div, list, prelude::*, px, rgb_to_hsla,
 };
 
 use crate::message::{
@@ -43,6 +44,9 @@ pub struct MessageFeed {
     draft: String,
     compose_focus: FocusHandle,
     send_handler: Option<SendHandler>,
+    /// The UTF-16 range of the draft that the input method is still composing,
+    /// or `None` when the composition has ended. The cursor is at the end.
+    marked: Option<Range<usize>>,
 }
 
 impl MessageFeed {
@@ -78,6 +82,7 @@ impl MessageFeed {
             draft: String::new(),
             compose_focus: cx.focus_handle(),
             send_handler: None,
+            marked: None,
         }
     }
 
@@ -92,6 +97,12 @@ impl MessageFeed {
     #[cfg(test)]
     pub fn draft(&self) -> &str {
         &self.draft
+    }
+
+    /// The composer's focus handle, for checks that drive the real key path.
+    #[cfg(test)]
+    pub fn compose_focus_for_test(&self) -> &FocusHandle {
+        &self.compose_focus
     }
 
     #[cfg(test)]
@@ -264,12 +275,17 @@ impl MessageFeed {
         let key = event.keystroke.key.as_str();
         if modifiers.control && !modifiers.alt && !modifiers.shift && key == "v" {
             self.paste_from_clipboard(cx);
+            // Consumed here; the platform's text input must not also insert "v".
+            cx.stop_propagation();
             return;
         }
         if modifiers.control || modifiers.platform {
             return;
         }
         if key == "enter" {
+            // Enter is the composer's own key in both forms; neither may also
+            // reach the text input, which would add a newline to the draft.
+            cx.stop_propagation();
             if modifiers.shift {
                 // Shift+Enter is the line break the Qt field also uses.
                 self.push_draft("\n", cx);
@@ -287,16 +303,18 @@ impl MessageFeed {
             }
             cx.notify();
         } else if key == "backspace" {
-            self.draft.pop();
-            cx.notify();
-        } else if let Some(character) = event
-            .keystroke
-            .key_char
-            .as_ref()
-            .filter(|value| !value.is_empty() && !value.chars().any(char::is_control))
-        {
-            self.push_draft(character, cx);
+            // A composing input method consumes its own backspaces before they
+            // reach the key path; this one edits the committed text.
+            if self.marked.is_none() {
+                cx.stop_propagation();
+                self.draft.pop();
+                cx.notify();
+            }
         }
+        // Typed characters are not taken from `key_char`: the platform delivers
+        // text, including input-method composition, through the input handler
+        // installed in paint (see `impl EntityInputHandler`). Taking both would
+        // insert every character twice.
     }
 
     /// Append text to the draft, stopping at the length limit.
@@ -323,6 +341,37 @@ impl MessageFeed {
         };
         let normalized = text.replace("\r\n", "\n");
         self.push_draft(&normalized, cx);
+    }
+
+    /// The draft as UTF-16 units, which is what the platform's text input
+    /// ranges count.
+    fn draft_utf16(&self) -> Vec<u16> {
+        self.draft.encode_utf16().collect()
+    }
+
+    /// Replace the UTF-16 `range` (or the composing range, or append) with
+    /// `text`, keeping the cursor at the end of the result.
+    fn replace_utf16_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let units = self.draft_utf16();
+        let (start, end) = match range.or_else(|| self.marked.clone()) {
+            Some(range) => (range.start.min(units.len()), range.end.min(units.len())),
+            None => (units.len(), units.len()),
+        };
+        let mut composed = String::from_utf16(&units[..start]).unwrap_or_default();
+        composed.push_str(&String::from_utf16(&units[end..]).unwrap_or_default());
+        let inserted: String = text
+            .chars()
+            .filter(|c| !c.is_control() || *c == '\n')
+            .collect();
+        composed.push_str(&inserted);
+        // Enforce the cap on the whole result, not only on the insertion.
+        self.draft.clear();
+        self.push_draft(&composed, cx);
     }
 
     fn render_styled_text(message: &crate::message::Message, colors: &Colors) -> StyledText {
@@ -355,6 +404,100 @@ impl MessageFeed {
         }
         highlights.sort_by_key(|(range, _)| range.start);
         StyledText::new(SharedString::from(message.text.clone())).with_highlights(highlights)
+    }
+}
+
+/// The platform's text input for the composer: typed characters, dead keys and
+/// input-method composition arrive here, not as key events.
+impl EntityInputHandler for MessageFeed {
+    fn text_for_range(
+        &mut self,
+        range: Range<usize>,
+        adjusted_range: &mut Option<Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<String> {
+        let units = self.draft_utf16();
+        let start = range.start.min(units.len());
+        let end = range.end.min(units.len());
+        if (start..end) != range {
+            *adjusted_range = Some(start..end);
+        }
+        String::from_utf16(&units[start..end]).ok()
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _ignore_disabled_input: bool,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        // The cursor sits at the end of the draft; there is no selection.
+        let end = self.draft.encode_utf16().count();
+        Some(UTF16Selection {
+            range: end..end,
+            reversed: false,
+        })
+    }
+
+    fn marked_text_range(
+        &self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Range<usize>> {
+        self.marked.clone()
+    }
+
+    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.marked = None;
+        cx.notify();
+    }
+
+    fn replace_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.replace_utf16_range(range, text, cx);
+        self.marked = None;
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        new_text: &str,
+        _new_selected_range: Option<Range<usize>>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.replace_utf16_range(range, new_text, cx);
+        // The composition is the tail the input method just wrote.
+        let end = self.draft.encode_utf16().count();
+        let start = end.saturating_sub(new_text.encode_utf16().count());
+        self.marked = Some(start..end);
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _range_utf16: Range<usize>,
+        _element_bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        // The composer draws its text as one line without measurement, so no
+        // per-range geometry exists for the candidate window to follow.
+        None
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _point: gpui::Point<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        None
     }
 }
 
@@ -416,6 +559,8 @@ impl Render for MessageFeed {
         // The composer shows only once a send handler is installed: the host
         // owns the complete Qt compose area until it is ported, and two
         // composers on one chat would be a defect.
+        let entity = cx.entity();
+        let compose_focus = self.compose_focus.clone();
         let composer = can_send.then(|| {
             div()
                 .flex_none()
@@ -426,7 +571,7 @@ impl Render for MessageFeed {
                 .child(
                     div()
                         .id("feed-compose")
-                        .track_focus(&self.compose_focus)
+                        .track_focus(&compose_focus)
                         .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                             this.on_compose_key(event, cx);
                         }))
@@ -442,7 +587,24 @@ impl Render for MessageFeed {
                             "Write a message…".into()
                         } else {
                             SharedString::from(format!("{draft}▏"))
-                        }),
+                        })
+                        // Installs the platform text input for this field on
+                        // every paint; without it typed characters, dead keys
+                        // and input-method composition never reach the draft.
+                        .child(
+                            canvas(
+                                move |_, _, _| (),
+                                move |bounds, _, window, cx| {
+                                    window.handle_input(
+                                        &compose_focus,
+                                        ElementInputHandler::new(bounds, entity.clone()),
+                                        cx,
+                                    );
+                                },
+                            )
+                            .absolute()
+                            .size_full(),
+                        ),
                 )
         });
 
@@ -694,9 +856,10 @@ mod tests {
         window.draw();
 
         // Without a handler the composer is read-only: Enter neither sends nor clears.
-        window.update(|feed, _, cx| {
-            feed.on_compose_key(&key("h", Some("h")), cx);
-            feed.on_compose_key(&key("i", Some("i")), cx);
+        window.update(|feed, window, cx| {
+            // Text comes through the platform text input, never from key_char.
+            EntityInputHandler::replace_text_in_range(feed, None, "h", window, cx);
+            EntityInputHandler::replace_text_in_range(feed, None, "i", window, cx);
             assert_eq!(feed.draft(), "hi");
             feed.on_compose_key(&key("enter", None), cx);
             assert_eq!(feed.draft(), "hi");
@@ -704,7 +867,7 @@ mod tests {
         assert!(sent.borrow().is_empty());
 
         // A handler makes Enter send exactly the trimmed text and clear the draft.
-        window.update(|feed, _, cx| {
+        window.update(|feed, window, cx| {
             feed.set_send_handler(
                 Some(Rc::new(move |text| {
                     sink.borrow_mut().push(text);
@@ -715,13 +878,13 @@ mod tests {
             feed.on_compose_key(&key("enter", None), cx);
             assert_eq!(feed.draft(), "");
             // A handler that refuses keeps the draft, so nothing is lost.
-            feed.on_compose_key(&key("x", Some("x")), cx);
+            EntityInputHandler::replace_text_in_range(feed, None, "x", window, cx);
             feed.set_send_handler(Some(Rc::new(|_| false)), cx);
             feed.on_compose_key(&key("enter", None), cx);
             assert_eq!(feed.draft(), "x");
             feed.on_compose_key(&key("backspace", None), cx);
             // Empty or whitespace drafts are refused, never sent.
-            feed.on_compose_key(&key("space", Some(" ")), cx);
+            EntityInputHandler::replace_text_in_range(feed, None, " ", window, cx);
             feed.on_compose_key(&key("enter", None), cx);
             assert_eq!(feed.draft(), " ");
             // Backspace edits the draft; Ctrl-modified keys are left to bindings.
@@ -768,11 +931,13 @@ mod tests {
             control: true,
             ..Default::default()
         };
-        window.update(|feed, _, cx| {
-            feed.on_compose_key(&key("a", Some("a")), cx);
+        window.update(|feed, window, cx| {
+            // Typed text arrives through the platform's text input, not as a
+            // key event: this is the handler the field installs while painting.
+            EntityInputHandler::replace_text_in_range(feed, None, "a", window, cx);
             // Shift+Enter breaks the line; plain Enter sends.
             feed.on_compose_key(&key_with("enter", None, shift), cx);
-            feed.on_compose_key(&key("b", Some("b")), cx);
+            EntityInputHandler::replace_text_in_range(feed, None, "b", window, cx);
             assert_eq!(feed.draft(), "a\nb");
             // Other control combinations stay with the key bindings.
             feed.on_compose_key(&key_with("c", None, ctrl), cx);
@@ -790,6 +955,69 @@ mod tests {
             assert!(feed.draft().ends_with('п'));
             feed.on_compose_key(&key_with("v", None, ctrl), cx);
             assert_eq!(feed.draft().len(), length);
+        });
+        assert!(sent.borrow().is_empty());
+    }
+
+    #[test]
+    fn composer_holds_input_method_composition_until_it_is_committed() {
+        let sent = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let sink = Rc::clone(&sent);
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, cx| {
+            let mut feed = MessageFeed::new(4, Rc::new(Cell::new(0)), cx);
+            feed.set_send_handler(
+                Some(Rc::new(move |text| {
+                    sink.borrow_mut().push(text);
+                    true
+                })),
+                cx,
+            );
+            feed
+        });
+        window.draw();
+        window.update(|feed, window, cx| {
+            EntityInputHandler::replace_text_in_range(feed, None, "か", window, cx);
+            // An input method builds a word in steps: each step replaces the
+            // text it is still composing, not the committed text before it.
+            EntityInputHandler::replace_and_mark_text_in_range(
+                feed,
+                Some(1..1),
+                "ん",
+                None,
+                window,
+                cx,
+            );
+            assert_eq!(feed.draft(), "かん");
+            assert_eq!(
+                EntityInputHandler::marked_text_range(feed, window, cx),
+                Some(1..2)
+            );
+            EntityInputHandler::replace_and_mark_text_in_range(
+                feed,
+                Some(1..2),
+                "んに",
+                None,
+                window,
+                cx,
+            );
+            assert_eq!(feed.draft(), "かんに");
+            assert_eq!(
+                EntityInputHandler::marked_text_range(feed, window, cx),
+                Some(1..3)
+            );
+            // While composing, Backspace is the input method's to handle, so
+            // the composer leaves the draft alone.
+            feed.on_compose_key(&key("backspace", None), cx);
+            assert_eq!(feed.draft(), "かんに");
+            // Committing ends the composition and keeps its text.
+            EntityInputHandler::unmark_text(feed, window, cx);
+            assert_eq!(
+                EntityInputHandler::marked_text_range(feed, window, cx),
+                None
+            );
+            feed.on_compose_key(&key("backspace", None), cx);
+            assert_eq!(feed.draft(), "かん");
         });
         assert!(sent.borrow().is_empty());
     }
@@ -814,7 +1042,10 @@ mod tests {
             feed
         });
         window.draw();
-        window.update(|feed, window, cx| window.focus(&feed.compose_focus, cx));
+        window.update(|feed, window, cx| window.focus(feed.compose_focus_for_test(), cx));
+        // The input handler the composer installs during paint is applied
+        // after that frame, so a second draw makes it current for typing.
+        window.draw();
         window.draw();
 
         window.simulate_keystrokes("h i enter");
