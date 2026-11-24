@@ -21,7 +21,12 @@ const FEED_CONTEXT: &str = "LuxuryGramFeed";
 
 actions!(feed, [ToggleSearch, CloseSearch, ScrollToBottom]);
 
+/// Identifies one active history subscription on the UI thread.
+#[derive(Clone)]
+pub struct HistorySubscription(Rc<()>);
+
 pub struct MessageFeed {
+    subscription: Option<HistorySubscription>,
     store: MessageStore,
     messages: Rc<Vec<crate::message::Message>>,
     list_state: ListState,
@@ -53,6 +58,7 @@ impl MessageFeed {
         let list_state = ListState::new(messages.len(), ListAlignment::Bottom, px(240.0));
         list_state.set_follow_mode(FollowMode::Tail);
         Self {
+            subscription: None,
             store,
             messages,
             list_state,
@@ -88,8 +94,62 @@ impl MessageFeed {
         self.search_open
     }
 
-    fn set_query(&mut self, query: String, cx: &mut Context<Self>) {
-        self.query = query;
+    /// Revoke the previous subscription before requesting another chat.
+    pub fn begin_history(&mut self, cx: &mut Context<Self>) -> HistorySubscription {
+        self.clear_history(cx);
+        let subscription = HistorySubscription(Rc::new(()));
+        self.subscription = Some(subscription.clone());
+        subscription
+    }
+
+    /// Clear visible data and revoke pending snapshots on logout or lock.
+    pub fn clear_history(&mut self, cx: &mut Context<Self>) {
+        self.subscription = None;
+        self.search_open = false;
+        self.query.clear();
+        self.store = MessageStore::default();
+        self.refresh_messages();
+        self.list_state.set_follow_mode(FollowMode::Tail);
+        cx.notify();
+    }
+
+    /// Apply an ordered snapshot for the active subscription. IDs must be
+    /// unique and stable for this subscription, including across pages.
+    pub fn update_history(
+        &mut self,
+        subscription: &HistorySubscription,
+        store: MessageStore,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self
+            .subscription
+            .as_ref()
+            .is_some_and(|active| Rc::ptr_eq(&active.0, &subscription.0))
+        {
+            return false;
+        }
+        let following = self.list_state.is_following_tail();
+        let mut top = self.list_state.logical_scroll_top();
+        let anchor = self.messages.get(top.item_ix).map(|message| message.id);
+        self.store = store;
+        self.refresh_messages();
+        if following {
+            self.list_state.set_follow_mode(FollowMode::Tail);
+        } else if let Some(index) =
+            anchor.and_then(|id| self.messages.iter().position(|message| message.id == id))
+        {
+            top.item_ix = index;
+            self.list_state.scroll_to(top);
+        } else if !self.messages.is_empty() {
+            top.item_ix = top.item_ix.min(self.messages.len() - 1);
+            top.offset_in_item = px(0.);
+            self.list_state.scroll_to(top);
+        }
+        cx.notify();
+        true
+    }
+
+    fn refresh_messages(&mut self) {
         let needle = self.query.to_lowercase();
         self.messages = if needle.is_empty() {
             self.store.snapshot()
@@ -105,6 +165,11 @@ impl MessageFeed {
             Rc::new(filtered)
         };
         self.list_state.reset(self.messages.len());
+    }
+
+    fn set_query(&mut self, query: String, cx: &mut Context<Self>) {
+        self.query = query;
+        self.refresh_messages();
         if !self.messages.is_empty() {
             self.list_state.scroll_to_reveal_item(0);
         }
@@ -461,6 +526,68 @@ mod tests {
         });
         window.update(|feed, _, cx| feed.close_search(cx));
         window.read(|feed, _| assert!(Rc::ptr_eq(&feed.messages, &snapshot)));
+    }
+
+    #[test]
+    fn live_history_drops_old_chat_and_locked_session_snapshots() {
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, cx| {
+            MessageFeed::from_store(MessageStore::default(), Rc::new(Cell::new(0)), cx)
+        });
+        window.update(|feed, _, cx| {
+            let chat_a = feed.begin_history(cx);
+            let rows = MessageStore::new(build_synthetic_messages(3));
+            assert!(feed.update_history(&chat_a, rows.clone(), cx));
+            feed.search_open = true;
+            feed.set_query("GPUI".into(), cx);
+
+            let chat_b = feed.begin_history(cx);
+            assert!(!feed.update_history(&chat_a, rows.clone(), cx));
+            assert!(feed.store.messages().is_empty());
+            assert_eq!(feed.message_count(), 0);
+            assert!(feed.query().is_empty());
+            assert!(!feed.search_open());
+            assert!(feed.update_history(&chat_b, rows.clone(), cx));
+            assert_eq!(feed.message_count(), 3);
+
+            feed.clear_history(cx);
+            assert!(!feed.update_history(&chat_b, rows, cx));
+            assert!(feed.store.messages().is_empty());
+            assert_eq!(feed.message_count(), 0);
+        });
+        window.draw();
+        window.read(|feed, _| assert_eq!(feed.rendered_items(), 0));
+    }
+
+    #[test]
+    fn live_history_preserves_scrolled_anchor_and_tail_following() {
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, cx| {
+            MessageFeed::from_store(MessageStore::default(), Rc::new(Cell::new(0)), cx)
+        });
+        let rows = build_synthetic_messages(100);
+        let mut first = rows[0].clone();
+        first.id = 0;
+        first.timestamp -= 60;
+        let mut store = MessageStore::new(rows);
+        window.update(|feed, _, cx| {
+            let subscription = feed.begin_history(cx);
+            assert!(feed.update_history(&subscription, store.clone(), cx));
+            assert!(feed.list_state.is_following_tail());
+            let mut anchor = feed.list_state.logical_scroll_top();
+            anchor.item_ix = 50;
+            anchor.offset_in_item = px(4.);
+            feed.list_state.scroll_to(anchor);
+
+            store.prepend(vec![first]);
+            assert!(feed.update_history(&subscription, store, cx));
+            let top = feed.list_state.logical_scroll_top();
+            assert_eq!(top.item_ix, 51);
+            assert_eq!(top.offset_in_item, px(4.));
+            assert!(!feed.list_state.is_following_tail());
+        });
+        window.draw();
+        window.read(|feed, _| assert_eq!(feed.list_state.logical_scroll_top().item_ix, 51));
     }
 
     #[test]

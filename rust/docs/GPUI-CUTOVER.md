@@ -8,6 +8,8 @@ The acceptance target is the installed LuxuryGram client, not the `luxurygram-sh
 - Subscribe at the session boundary, not inside a Qt widget. Project owned values keyed by account and the full message ID (peer and message), and consume message-change notifications as well as slice changes: replacing text does not necessarily change a slice of IDs. Required regression cases: pagination with scroll anchor preserved, message edit/delete, pending ID replaced by server ID, and migrated history with equal numeric IDs from different peers.
 - Clear the view and invalidate queued work on account/chat switch, passcode lock and logout. An account may remain alive after switching, so weak pointers alone do not reject stale deliveries. Do not extend the existing local automation socket to carry chat content. Validate with the [Test-session fixtures](../../Telegram/SourceFiles/test/README.md), without a real user profile or transcript in logs.
 
+The [GPUI feed](../apps/luxurygram-shell/src/feed.rs) can now replace its visible snapshot without jumping away from a retained scroll anchor, and rejects updates from revoked subscriptions. The tests exercise the receiver only. The C++ producer and real account/screen lifecycle are not connected yet. The projection must still map `FullMsgId` to stable unique row IDs across pages and handle ID replacement; the GPUI receiver assumes snapshots arrive in order within one subscription.
+
 ## Removing Qt, not just widgets
 
 The [production target](../../Telegram/CMakeLists.txt#L82) links both Qt and Qt static plugins. Engine work remains even after stopping Qt painting:
