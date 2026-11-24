@@ -109,6 +109,7 @@ PRIVATE
     desktop-app::external_zlib
     desktop-app::external_minizip
     desktop-app::external_kcoreaddons
+    desktop-app::external_luxurygram_shell
     desktop-app::external_qt_static_plugins
     desktop-app::external_qt
     desktop-app::external_qr_code_generator
@@ -2804,6 +2805,24 @@ if (WIN32)
 
     if (QT_VERSION LESS 6 OR DESKTOP_APP_WIN7_BASELINE)
         target_link_libraries(Telegram PRIVATE desktop-app::win_directx_helper)
+    endif()
+
+    # The GPUI history bridge is loaded at run time, never linked (see
+    # cmake/external/luxurygram_shell). Placing it beside the executable is
+    # all the optional chat surface needs; without it the client is unchanged.
+    get_target_property(luxurygram_shell_dll
+        desktop-app::external_luxurygram_shell
+        LUXURYGRAM_SHELL_DLL)
+    if (luxurygram_shell_dll)
+        add_custom_command(TARGET Telegram POST_BUILD
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            ${luxurygram_shell_dll}
+            $<TARGET_FILE_DIR:Telegram>/luxurygram_shell.dll
+        COMMENT
+            "Copying luxurygram_shell.dll (GPUI history bridge)."
+        VERBATIM
+        )
     endif()
 
     if (DESKTOP_APP_WIN7_BASELINE)

@@ -2187,6 +2187,47 @@ mac:
     mv $USED_PREFIX/include/wallet_engine/wallet_engine.cpp $USED_PREFIX/src/wallet_engine/wallet_engine.cpp
 """)
 
+# The GPUI history bridge is a separate DLL, not another crate inside
+# tdesktop_rust: both would link their own Rust runtime into one process.
+# It targets win7-msvc with a static CRT, like tdesktop_rust, so it shares the
+# client's CRT model and loads beside Telegram.exe through the C ABI in
+# rust/apps/luxurygram-shell/src/history_bridge.rs. The win7 target ships no
+# prebuilt std, so it builds std from the rust-src component the rust stage
+# installs, exactly like tdesktop_rust. The version hashes the lock file and
+# the crate's own sources, so any change rebuilds it; the stage runs after the
+# rust stage, which owns the toolchain it uses.
+luxurygramRustDir = os.path.realpath(os.path.join(scriptPath, '../../../rust'))
+luxurygramShellDir = os.path.join(luxurygramRustDir, 'apps', 'luxurygram-shell')
+luxurygramShellVersion = '.'.join(computeFileHash(path)
+    for path in sorted(
+        [os.path.join(luxurygramRustDir, 'Cargo.lock'),
+         os.path.join(luxurygramShellDir, 'Cargo.toml')]
+        + glob.glob(os.path.join(luxurygramShellDir, 'src', '*.rs'))))
+stage('luxurygram_shell', """
+version: 1.""" + luxurygramShellVersion + """
+win64:
+    SET "RUSTUP_HOME=%THIRDPARTY_DIR%\\rust\\rustup"
+    SET "CARGO_HOME=%THIRDPARTY_DIR%\\rust\\cargo"
+    SET RUSTUP_TOOLCHAIN=""" + rustToolchain + """
+    SET "PATH=%CARGO_HOME%\\bin;%PATH%"
+    SET "RUST_TARGET=x86_64-win7-windows-msvc"
+    SET "RUST_BUILD_STD=-Z build-std=std,panic_abort"
+    SET RUSTC_BOOTSTRAP=1
+win64:
+    cargo rustc --manifest-path """ + os.path.join(luxurygramRustDir, 'Cargo.toml') + """ ^
+        --locked -p luxurygram-shell --lib --crate-type cdylib ^
+        --release ^
+        %RUST_BUILD_STD% ^
+        --target %RUST_TARGET% ^
+        --config "profile.release.opt-level='z'" ^
+        --config "profile.release.lto='thin'" ^
+        --config "profile.release.codegen-units=1" ^
+        --config "profile.release.panic='unwind'" ^
+        --config "target.%RUST_TARGET%.rustflags=['-C','target-feature=+crt-static']"
+    mkdir out
+    copy """ + os.path.join(luxurygramRustDir, 'target', '%RUST_TARGET%', 'release', 'luxurygram_shell.dll') + """ out\\luxurygram_shell.dll
+""")
+
 if win:
     currentCodePage = subprocess.run('chcp', capture_output=True, shell=True, text=True, env=modifiedEnv).stdout.strip().split()[-1]
     subprocess.run('chcp 65001 > nul', shell=True, env=modifiedEnv)
