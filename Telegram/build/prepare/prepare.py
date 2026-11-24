@@ -2204,7 +2204,7 @@ luxurygramShellVersion = '.'.join(computeFileHash(path)
          os.path.join(luxurygramShellDir, 'Cargo.toml')]
         + glob.glob(os.path.join(luxurygramShellDir, 'src', '*.rs'))))
 stage('luxurygram_shell', """
-version: 1.""" + luxurygramShellVersion + """
+version: 2.""" + luxurygramShellVersion + """
 win64:
     SET "RUSTUP_HOME=%THIRDPARTY_DIR%\\rust\\rustup"
     SET "CARGO_HOME=%THIRDPARTY_DIR%\\rust\\cargo"
