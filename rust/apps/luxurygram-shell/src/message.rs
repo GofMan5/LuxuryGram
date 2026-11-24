@@ -43,7 +43,43 @@ fn span(text: &str, needle: &str, kind: EntityKind) -> Option<EntitySpan> {
     })
 }
 
-/// Deterministic synthetic history, shared by the feed view and its tests.
+/// In-memory history seam used by the GPUI view.
+///
+/// The native Qt model can be adapted to this contract without coupling the
+/// renderer to MTProto, SQLite, or Qt. Ordering is oldest-to-newest.
+#[derive(Debug, Clone, Default)]
+pub struct MessageStore {
+    messages: Vec<Message>,
+}
+
+impl MessageStore {
+    pub fn new(messages: Vec<Message>) -> Self {
+        let mut store = Self { messages };
+        store.recompute_grouping();
+        store
+    }
+
+    pub fn messages(&self) -> &[Message] {
+        &self.messages
+    }
+
+    pub fn append(&mut self, mut page: Vec<Message>) {
+        self.messages.append(&mut page);
+        self.recompute_grouping();
+    }
+
+    pub fn prepend(&mut self, mut page: Vec<Message>) {
+        page.append(&mut self.messages);
+        self.messages = page;
+        self.recompute_grouping();
+    }
+
+    fn recompute_grouping(&mut self) {
+        apply_grouping(&mut self.messages);
+    }
+}
+
+/// Deterministic synthetic history used only as the shell's local fixture.
 pub fn build_synthetic_messages(count: usize) -> Vec<Message> {
     const SENDERS: [&str; 6] = [
         "Alice",
@@ -122,4 +158,30 @@ pub fn apply_grouping(messages: &mut [Message]) {
 pub fn formatted_time(timestamp: u64) -> String {
     let seconds = timestamp % 86_400;
     format!("{:02}:{:02}", seconds / 3_600, (seconds / 60) % 60)
+}
+
+#[cfg(test)]
+mod store_tests {
+    use super::*;
+
+    #[test]
+    fn prepend_and_append_keep_history_order_and_recompute_boundaries() {
+        let mut store = MessageStore::new(build_synthetic_messages(2));
+        let first = store.messages()[0].clone();
+        let mut older = first.clone();
+        older.id = 0;
+        older.timestamp -= 86_400;
+        store.prepend(vec![older]);
+        let mut newer = first;
+        newer.id = 3;
+        newer.timestamp += 86_400;
+        store.append(vec![newer]);
+
+        assert_eq!(
+            store.messages().iter().map(|m| m.id).collect::<Vec<_>>(),
+            [0, 1, 2, 3]
+        );
+        assert!(store.messages()[0].show_date_header);
+        assert!(store.messages()[3].show_date_header);
+    }
 }

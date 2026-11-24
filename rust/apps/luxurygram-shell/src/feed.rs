@@ -12,7 +12,9 @@ use gpui::{
     Window, actions, colors::Colors, div, list, prelude::*, px, rgb_to_hsla,
 };
 
-use crate::message::{EntityKind, apply_grouping, build_synthetic_messages, formatted_time};
+use crate::message::{
+    EntityKind, MessageStore, apply_grouping, build_synthetic_messages, formatted_time,
+};
 
 const RADIUS: f32 = 12.0; // design-tokens LUXURY_WATCHER_CARD_RADIUS
 const FEED_CONTEXT: &str = "LuxuryGramFeed";
@@ -20,6 +22,7 @@ const FEED_CONTEXT: &str = "LuxuryGramFeed";
 actions!(feed, [ToggleSearch, CloseSearch, ScrollToBottom]);
 
 pub struct MessageFeed {
+    store: MessageStore,
     all_messages: Rc<Vec<crate::message::Message>>,
     messages: Rc<Vec<crate::message::Message>>,
     list_state: ListState,
@@ -35,8 +38,8 @@ impl MessageFeed {
         rendered_items: Rc<Cell<usize>>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let mut all_messages = build_synthetic_messages(message_count);
-        apply_grouping(&mut all_messages);
+        let store = MessageStore::new(build_synthetic_messages(message_count));
+        let all_messages = store.messages().to_vec();
         let mut messages = all_messages.clone();
         apply_grouping(&mut messages);
         let messages = Rc::new(messages);
@@ -44,6 +47,7 @@ impl MessageFeed {
         let list_state = ListState::new(messages.len(), ListAlignment::Bottom, px(240.0));
         list_state.set_follow_mode(FollowMode::Tail);
         Self {
+            store,
             all_messages,
             messages,
             list_state,
@@ -81,6 +85,7 @@ impl MessageFeed {
 
     fn set_query(&mut self, query: String, cx: &mut Context<Self>) {
         self.query = query;
+        self.all_messages = Rc::new(self.store.messages().to_vec());
         let needle = self.query.to_lowercase();
         let filtered: Vec<_> = if needle.is_empty() {
             (*self.all_messages).clone()
