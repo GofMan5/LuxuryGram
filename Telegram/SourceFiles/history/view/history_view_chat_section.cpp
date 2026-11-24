@@ -551,6 +551,12 @@ ChatWidget::ChatWidget(
 		static_cast<ListDelegate*>(this)));
 	_inner->lower();
 	HistoryView::ShowGpuiHistory(_history, _gpuiHistory);
+	_gpuiSurface = std::make_unique<HistoryView::GpuiHistorySurface>(
+		_scroll->viewport());
+	if (_gpuiSurface->active()) {
+		// The GPUI feed is the chat surface; the Qt list stays out of its way.
+		_inner->hide();
+	}
 	_topControls = std::make_unique<TopControls>(
 		this,
 		TopControlsDescriptor{

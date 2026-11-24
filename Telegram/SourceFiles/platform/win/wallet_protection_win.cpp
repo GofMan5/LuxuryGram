@@ -61,10 +61,24 @@ using namespace winrt::Windows::Security::Credentials;
 using winrt::Windows::Foundation::IAsyncAction;
 using winrt::Windows::Foundation::IAsyncInfo;
 using winrt::Windows::Foundation::IAsyncOperation;
+
 using AsyncStatus = winrt::Windows::Foundation::AsyncStatus;
 using winrt::Windows::Storage::Streams::IBuffer;
 using winrt::Windows::Security::Cryptography::CryptographicBuffer;
 using winrt::Windows::UI::WindowId;
+
+// The owned overloads arrived in a UniversalApiContract newer than 19.0. The
+// C++/WinRT projection splits a namespace per contract version, so the next
+// version after the one an SDK carries is a fourth impl header. Detecting that
+// header rather than the SDK number keeps a build against an older SDK honest:
+// it compiles the unowned ask, which is exactly what an older Windows runs.
+// A preprocessor guard is required: `if constexpr` still needs every name in
+// the discarded branch to be declared.
+#if __has_include(<winrt/impl/Windows.Security.Credentials.3.h>)
+#define LUXURY_HAS_OWNED_HELLO 1
+#else
+#define LUXURY_HAS_OWNED_HELLO 0
+#endif
 
 constexpr auto kPayloadVersion = quint32(1);
 constexpr auto kCredentialIdSize = 16;
@@ -202,8 +216,9 @@ void FocusUnownedPrompt(int attemptsLeft = kPromptFocusAttempts) {
 // with the prompt brought forward by its class name instead.
 [[nodiscard]] IAsyncOperation<KeyCredentialRetrievalResult> RequestCreate(
 		const winrt::hstring &name,
-		const std::optional<WindowId> &owner) {
+		[[maybe_unused]] const std::optional<WindowId> &owner) {
 	const auto option = KeyCredentialCreationOption::ReplaceExisting;
+#if LUXURY_HAS_OWNED_HELLO
 	if (owner) {
 		auto owned = base::WinRT::Try([&] {
 			return KeyCredentialManager::RequestCreateForWindowAsync(
@@ -215,6 +230,7 @@ void FocusUnownedPrompt(int attemptsLeft = kPromptFocusAttempts) {
 			return std::move(*owned);
 		}
 	}
+#endif
 	auto result = KeyCredentialManager::RequestCreateAsync(name, option);
 	FocusUnownedPrompt();
 	return result;
@@ -223,7 +239,8 @@ void FocusUnownedPrompt(int attemptsLeft = kPromptFocusAttempts) {
 [[nodiscard]] IAsyncOperation<KeyCredentialOperationResult> RequestSign(
 		const KeyCredential &credential,
 		const IBuffer &data,
-		const std::optional<WindowId> &owner) {
+		[[maybe_unused]] const std::optional<WindowId> &owner) {
+#if LUXURY_HAS_OWNED_HELLO
 	if (owner) {
 		if (const auto owned = credential.try_as<IKeyCredentialWithWindow>()) {
 			auto request = base::WinRT::Try([&] {
@@ -234,6 +251,7 @@ void FocusUnownedPrompt(int attemptsLeft = kPromptFocusAttempts) {
 			}
 		}
 	}
+#endif
 	auto result = credential.RequestSignAsync(data);
 	FocusUnownedPrompt();
 	return result;

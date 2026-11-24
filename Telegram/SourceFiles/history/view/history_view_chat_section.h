@@ -85,6 +85,7 @@ class TopBarWidget;
 class ChatMemento;
 class ComposeControls;
 class ComposeSearch;
+class GpuiHistorySurface;
 class TopControls;
 class SendActionPainter;
 class StickerToast;
@@ -616,6 +617,7 @@ private:
 	rpl::lifetime _topicLifetime;
 	rpl::lifetime _historySponsoredPreloading;
 	rpl::lifetime _gpuiHistory;
+	std::unique_ptr<HistoryView::GpuiHistorySurface> _gpuiSurface;
 	bool _injectingSponsored = false;
 
 	Ui::Controls::SwipeContextData _gestureHorizontal;

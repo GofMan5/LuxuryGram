@@ -11,12 +11,18 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "data/data_messages.h"
 
+#include <QtCore/QEvent>
+#include <QtCore/QPoint>
+#include <QtWidgets/QWidget>
+
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
 
 #ifdef Q_OS_WIN
+#include "base/event_filter.h"
 #include "base/platform/win/base_windows_safe_library.h"
 
 #include <QtCore/QCoreApplication>
@@ -27,6 +33,14 @@ namespace HistoryView {
 namespace {
 
 #ifdef Q_OS_WIN
+
+// Only one chat area may own the single feed window: the most recently shown
+// one. A ChatWidget for a reply thread, a topic or a separate window that is
+// hidden or switched away releases it, so the feed never covers two areas.
+GpuiHistorySurface **ActiveSurfaceSlot() {
+	static GpuiHistorySurface *active = nullptr;
+	return &active;
+}
 
 // Mirrors `HistoryRowAbi` in rust/apps/luxurygram-shell/src/history_bridge.rs.
 struct RowAbi {
@@ -54,10 +68,12 @@ constexpr auto kWindowCount = 50;
 using Start = int (*)();
 using Apply = int (*)(const RowAbi *, size_t, const RekeyAbi *, size_t);
 using Clear = int (*)();
+using Window = std::intptr_t (*)();
 
 Start StartFn = nullptr;
 Apply ApplyFn = nullptr;
 Clear ClearFn = nullptr;
+Window WindowFn = nullptr;
 
 // The DLL is optional: the client without it behaves exactly as before.
 bool LoadBridge() {
@@ -78,7 +94,11 @@ bool LoadBridge() {
 			&& base::Platform::LoadMethod(
 				library,
 				"luxurygram_history_clear",
-				ClearFn);
+				ClearFn)
+			&& base::Platform::LoadMethod(
+				library,
+				"luxurygram_history_window",
+				WindowFn);
 	}();
 	return loaded;
 }
@@ -143,7 +163,91 @@ void ShowGpuiHistory(
 				.new_message = rekey.newId.msg.bare,
 			});
 		}
+		ApplyFn(rows.data(), rows.size(), rekeys.data(), rekeys.size());
 	}, lifetime);
+#endif // Q_OS_WIN
+}
+
+GpuiHistorySurface::GpuiHistorySurface(not_null<QWidget*> area)
+: _area(area) {
+#ifdef Q_OS_WIN
+	if (!TryStartGpuiHistory()) {
+		return;
+	}
+	// The handle is published on the GPUI thread right after the window opens,
+	// so it may still be zero when the first chat is shown.
+	base::install_event_filter(_area, [=](not_null<QEvent*> event) {
+		switch (event->type()) {
+		case QEvent::Resize:
+		case QEvent::Move:
+		case QEvent::Show:
+		case QEvent::Hide:
+		case QEvent::WindowStateChange:
+			sync();
+			break;
+		default:
+			break;
+		}
+		return base::EventFilterResult::Continue;
+	}, _lifetime);
+	sync();
+#endif // Q_OS_WIN
+}
+
+GpuiHistorySurface::~GpuiHistorySurface() {
+	release();
+}
+
+bool GpuiHistorySurface::active() const {
+#ifdef Q_OS_WIN
+	return _window != nullptr;
+#else
+	return false;
+#endif
+}
+
+void GpuiHistorySurface::release() {
+#ifdef Q_OS_WIN
+	if (*ActiveSurfaceSlot() == this) {
+		*ActiveSurfaceSlot() = nullptr;
+	}
+	if (_window) {
+		ShowWindow(static_cast<HWND>(_window), SW_HIDE);
+	}
+	_window = nullptr;
+	ClearFn();
+#endif // Q_OS_WIN
+}
+
+void GpuiHistorySurface::sync() {
+#ifdef Q_OS_WIN
+	if (!_window) {
+		_window = reinterpret_cast<void*>(WindowFn());
+		if (!_window) {
+			return;
+		}
+	}
+	const auto window = static_cast<HWND>(_window);
+	const auto visible = _area->isVisible()
+		&& !_area->window()->isMinimized();
+	if (!visible) {
+		if (*ActiveSurfaceSlot() == this) {
+			ShowWindow(window, SW_HIDE);
+		}
+		return;
+	}
+	*ActiveSurfaceSlot() = this;
+	// The feed covers the area in screen coordinates, like a native child.
+	const auto origin = _area->mapToGlobal(QPoint());
+	const auto size = _area->size();
+	SetWindowPos(
+		window,
+		HWND_TOP,
+		origin.x(),
+		origin.y(),
+		std::max(size.width(), 1),
+		std::max(size.height(), 1),
+		SWP_NOACTIVATE | SWP_SHOWWINDOW);
 #endif // Q_OS_WIN
 }
 

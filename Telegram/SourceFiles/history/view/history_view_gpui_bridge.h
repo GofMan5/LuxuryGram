@@ -10,6 +10,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_history_messages.h"
 #include "rpl/lifetime.h"
 
+class QWidget;
+
 namespace HistoryView {
 
 // Forward the model's owned text projection of one chat to the GPUI feed.
@@ -24,5 +26,36 @@ namespace HistoryView {
 void ShowGpuiHistory(
 	not_null<History*> history,
 	rpl::lifetime &lifetime);
+
+// Keeps the GPUI feed window exactly over the Qt message area, so the feed is
+// the chat surface while the Qt frame still owns the main loop.
+//
+// gpui-ce 0.3.0 creates top-level windows only (no child or owned HWND), so
+// the surface tracks the native rectangle with SetWindowPos on every move or
+// resize of the host widget, and shows or hides with it. The host widget's own
+// list stays hidden while the surface is visible. Destroying the surface hides
+// the feed window and releases the handle; the bridge outlives it.
+class GpuiHistorySurface {
+public:
+	explicit GpuiHistorySurface(not_null<QWidget*> area);
+	~GpuiHistorySurface();
+
+	GpuiHistorySurface(const GpuiHistorySurface &) = delete;
+	GpuiHistorySurface &operator=(const GpuiHistorySurface &) = delete;
+
+	// Bring the window to the area's current rectangle and visibility.
+	void sync();
+
+	// Hide the feed and forget the handle, e.g. on chat switch or lock.
+	void release();
+
+	[[nodiscard]] bool active() const;
+
+private:
+	const not_null<QWidget*> _area;
+	rpl::lifetime _lifetime;
+	void *_window = nullptr;
+
+};
 
 } // namespace HistoryView
