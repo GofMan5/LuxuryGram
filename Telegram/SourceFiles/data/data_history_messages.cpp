@@ -464,11 +464,14 @@ rpl::producer<SparseIdsMergedSlice> HistoryMergedViewer(
 		std::move(createSimpleViewer));
 }
 
-rpl::producer<MessagesSlice> HistoryMessagesViewer(
+namespace {
+
+[[nodiscard]] rpl::producer<MessagesSlice> HistoryMessagesViewerImpl(
 		not_null<History*> history,
 		MessagePosition aroundId,
 		int limitBefore,
-		int limitAfter) {
+		int limitAfter,
+		bool emitContentChanges) {
 	const auto around = NormalizeHistoryMessagesAround(history, aroundId);
 	return [=](auto consumer) {
 		auto lifetime = rpl::lifetime();
@@ -528,6 +531,14 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 			HistoryUpdate::Flag::ClientSideMessages
 		) | rpl::on_next(pushDelayed, lifetime);
 
+		if (emitContentChanges) {
+			history->session().changes().messageUpdates(
+				MessageUpdate::Flag::Edited
+			) | rpl::filter([=](const MessageUpdate &update) {
+				return ranges::contains(viewer->slice.ids, update.item->fullId());
+			}) | rpl::on_next(pushDelayed, lifetime);
+		}
+
 		history->session().data().itemIdChanged(
 		) | rpl::filter([=](const Session::IdChange &event) {
 			return (event.newId.peer == history->peer->id);
@@ -539,11 +550,27 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 			if (viewer->around.fullId == oldId) {
 				viewer->around.fullId = event.newId;
 			}
+			const auto visible = emitContentChanges
+				&& ranges::contains(viewer->slice.ids, oldId);
 			RewriteHistorySliceIds(&viewer->slice, oldId, event.newId);
+			if (visible) {
+				pushDelayed();
+			}
 		}, lifetime);
 
 		return lifetime;
 	};
+}
+
+} // namespace
+
+rpl::producer<MessagesSlice> HistoryMessagesViewer(
+		not_null<History*> history,
+		MessagePosition aroundId,
+		int limitBefore,
+		int limitAfter) {
+	return HistoryMessagesViewerImpl(
+		history, aroundId, limitBefore, limitAfter, false);
 }
 
 rpl::producer<HistoryTextSlice> HistoryTextViewer(
@@ -551,11 +578,12 @@ rpl::producer<HistoryTextSlice> HistoryTextViewer(
 		MessagePosition aroundId,
 		int limitBefore,
 		int limitAfter) {
-	return HistoryMessagesViewer(
+	return HistoryMessagesViewerImpl(
 		history,
 		aroundId,
 		limitBefore,
-		limitAfter
+		limitAfter,
+		true
 	) | rpl::map([history](const MessagesSlice &slice) {
 		auto result = HistoryTextSlice();
 		result.skippedBefore = slice.skippedBefore;
