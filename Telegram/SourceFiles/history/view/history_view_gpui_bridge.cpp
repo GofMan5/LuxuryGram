@@ -84,9 +84,13 @@ Window WindowFn = nullptr;
 SetSendCallback SetSendCallbackFn = nullptr;
 
 // The single composer destination. Written on the main thread, read on the
-// GPUI thread inside the callback, so it is kept behind a mutex.
+// GPUI thread inside the callback, so it is kept behind a mutex. The
+// generation identifies the registration a submission was accepted for, so a
+// chat that was switched away, locked or destroyed in between never receives
+// it, and a stale owner releasing its registration never clears a newer one.
 std::mutex SendMutex;
 Fn<void(std::string)> SendHandler;
+uint64_t SendGeneration = 0;
 
 int OnComposerSubmit(void *context, const char *text, size_t text_len) {
 	std::string copy(text, text_len);
@@ -94,17 +98,27 @@ int OnComposerSubmit(void *context, const char *text, size_t text_len) {
 	if (!SendHandler) {
 		return 0;
 	}
-	const auto handler = SendHandler;
+	const auto generation = SendGeneration;
 	lock.unlock();
 	crl::on_main([=] {
 		std::unique_lock inner(SendMutex);
-		const auto current = SendHandler;
+		const auto current = (generation == SendGeneration)
+			? SendHandler
+			: nullptr;
 		inner.unlock();
 		if (current) {
 			current(copy);
 		}
 	});
 	return 1;
+}
+
+// Make the composer read-only again, unless a newer registration owns it.
+void ReleaseCompose(uint64_t generation) {
+	const std::lock_guard lock(SendMutex);
+	if (generation == SendGeneration) {
+		SendHandler = nullptr;
+	}
 }
 
 // The DLL is optional: the client without it behaves exactly as before.
@@ -204,23 +218,32 @@ void ShowGpuiHistory(
 #endif // Q_OS_WIN
 }
 
-void EnableGpuiCompose([[maybe_unused]] Fn<void(std::string)> send) {
+rpl::lifetime EnableGpuiCompose([[maybe_unused]] Fn<void(std::string)> send) {
+	rpl::lifetime result;
 #ifdef Q_OS_WIN
-	{
-		const std::lock_guard lock(SendMutex);
-		SendHandler = std::move(send);
+	if (!send) {
+		return result;
 	}
 	if (!TryStartGpuiHistory()) {
-		return;
+		return result;
 	}
 	static const auto registered = [] {
 		return SetSendCallbackFn(&OnComposerSubmit, nullptr) == 0;
 	}();
 	if (!registered) {
-		const std::lock_guard lock(SendMutex);
-		SendHandler = nullptr;
+		return result;
 	}
+	uint64_t generation = 0;
+	{
+		const std::lock_guard lock(SendMutex);
+		generation = ++SendGeneration;
+		SendHandler = std::move(send);
+	}
+	result.add([=] {
+		ReleaseCompose(generation);
+	});
 #endif // Q_OS_WIN
+	return result;
 }
 
 GpuiHistorySurface::GpuiHistorySurface(not_null<QWidget*> area)

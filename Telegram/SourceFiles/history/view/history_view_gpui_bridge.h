@@ -32,8 +32,11 @@ void ShowGpuiHistory(
 // `send` runs on the main thread, like every other send in the client. The
 // bridge marshals the GPUI thread's submission to it and keeps the composer's
 // draft when `send` is absent, so nothing is lost while no chat is ready.
-// Passing `nullptr` makes the composer read-only again.
-void EnableGpuiCompose(Fn<void(std::string)> send);
+// The returned lifetime owns the registration: destroying it makes the
+// composer read-only again before `send` could dangle, so the caller keeps
+// it next to the object `send` captures and never stores it beyond that
+// object's lifetime.
+[[nodiscard]] rpl::lifetime EnableGpuiCompose(Fn<void(std::string)> send);
 
 // Keeps the GPUI feed window exactly over the Qt message area, so the feed is
 // the chat surface while the Qt frame still owns the main loop.
