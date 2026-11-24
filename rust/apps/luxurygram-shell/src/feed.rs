@@ -361,7 +361,10 @@ impl Render for MessageFeed {
                                 .into_any_element();
                         }
                         div()
-                            .id(("message", message.id))
+                            .id(format!(
+                                "message:{}:{}",
+                                message.id.peer, message.id.message
+                            ))
                             .w_full()
                             .px_4()
                             .py_1()
@@ -560,14 +563,15 @@ mod tests {
     }
 
     #[test]
-    fn live_history_preserves_scrolled_anchor_and_tail_following() {
+    fn live_history_preserves_anchor_with_equal_message_numbers_in_two_peers() {
         let mut app = TestApp::new();
         let mut window = app.open_window(|_, cx| {
             MessageFeed::from_store(MessageStore::default(), Rc::new(Cell::new(0)), cx)
         });
         let rows = build_synthetic_messages(100);
-        let mut first = rows[0].clone();
-        first.id = 0;
+        let mut first = rows[50].clone();
+        first.id.peer = 1;
+        first.timestamp = rows[0].timestamp;
         first.timestamp -= 60;
         let mut store = MessageStore::new(rows);
         window.update(|feed, _, cx| {

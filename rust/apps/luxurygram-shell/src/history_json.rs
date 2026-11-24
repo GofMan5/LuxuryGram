@@ -8,7 +8,7 @@ use std::{
 
 use serde_json::Value;
 
-use luxurygram_shell::message::Message;
+use luxurygram_shell::message::{Message, MessageId};
 
 // ponytail: the prototype loads one small snapshot in memory; use streaming
 // and paging when larger histories need to be opened.
@@ -61,15 +61,18 @@ fn parse(bytes: &[u8]) -> io::Result<Vec<Message>> {
             continue;
         }
         let id = item["id"]
-            .as_u64()
-            .and_then(|id| usize::try_from(id).ok())
+            .as_i64()
+            .filter(|id| *id > 0)
             .ok_or_else(|| invalid("invalid message id"))?;
         let timestamp = item["date_unixtime"]
             .as_str()
             .and_then(|date| date.parse().ok())
             .ok_or_else(|| invalid("invalid message timestamp"))?;
         messages.push(Message {
-            id,
+            id: MessageId {
+                peer: 0,
+                message: id,
+            },
             sender: item["from"].as_str().unwrap_or("Unknown sender").to_owned(),
             text,
             entities: Vec::new(),
@@ -101,7 +104,7 @@ mod tests {
         assert_eq!(
             messages
                 .iter()
-                .map(|message| message.id)
+                .map(|message| message.id.message)
                 .collect::<Vec<_>>(),
             [1, 2]
         );

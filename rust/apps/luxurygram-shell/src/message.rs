@@ -22,9 +22,16 @@ pub struct EntitySpan {
     pub kind: EntityKind,
 }
 
+/// Identifier within the active history subscription, including migrated peers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MessageId {
+    pub peer: u64,
+    pub message: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub id: usize,
+    pub id: MessageId,
     pub sender: String,
     pub text: String,
     pub entities: Vec<EntitySpan>,
@@ -122,7 +129,10 @@ pub fn build_synthetic_messages(count: usize) -> Vec<Message> {
                 entities.push(s);
             }
             Message {
-                id: ix + 1,
+                id: MessageId {
+                    peer: 0,
+                    message: ix as i64 + 1,
+                },
                 sender,
                 text,
                 entities,
@@ -170,16 +180,20 @@ mod store_tests {
         let mut store = MessageStore::new(build_synthetic_messages(2));
         let first = store.messages()[0].clone();
         let mut older = first.clone();
-        older.id = 0;
+        older.id.message = 0;
         older.timestamp -= 86_400;
         store.prepend(vec![older]);
         let mut newer = first;
-        newer.id = 3;
+        newer.id.message = 3;
         newer.timestamp += 86_400;
         store.append(vec![newer]);
 
         assert_eq!(
-            store.messages().iter().map(|m| m.id).collect::<Vec<_>>(),
+            store
+                .messages()
+                .iter()
+                .map(|m| m.id.message)
+                .collect::<Vec<_>>(),
             [0, 1, 2, 3]
         );
         assert!(store.messages()[0].show_date_header);
