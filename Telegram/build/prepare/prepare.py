@@ -2224,8 +2224,11 @@ win64:
         --config "profile.release.codegen-units=1" ^
         --config "profile.release.panic='unwind'" ^
         --config "target.%RUST_TARGET%.rustflags=['-C','target-feature=+crt-static']"
+    mkdir luxurygram_shell
+    cd luxurygram_shell
     mkdir out
     copy """ + os.path.join(luxurygramRustDir, 'target', '%RUST_TARGET%', 'release', 'luxurygram_shell.dll') + """ out\\luxurygram_shell.dll
+    if not exist out\\luxurygram_shell.dll exit /b 1
 """)
 
 if win:
