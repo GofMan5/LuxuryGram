@@ -1084,6 +1084,8 @@ PRIVATE
     dialogs/dialogs_entry.h
     dialogs/dialogs_indexed_list.cpp
     dialogs/dialogs_indexed_list.h
+    dialogs/dialogs_gpui_bridge.cpp
+    dialogs/dialogs_gpui_bridge.h
     dialogs/dialogs_inner_widget.cpp
     dialogs/dialogs_inner_widget.h
     dialogs/dialogs_inner_widget_accessibility.cpp

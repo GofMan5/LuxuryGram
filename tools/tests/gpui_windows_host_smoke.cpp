@@ -266,15 +266,28 @@ int wmain(int argc, wchar_t **argv) {
 	};
 	const auto nullOpenRefused = (setDialogOpenCallback(nullptr, nullptr) == 1);
 	const auto openCallbackSet = (setDialogOpenCallback(&onDialogOpen, nullptr) == 0);
-	const auto dialogsQueued = (dialogsOpen() == 0) && (dialogsApply(dialogs, 2) == 0);
-	std::intptr_t dialogsCountValue = 0;
+	// The window opens on the GPUI thread; rows sent before it exists are
+	// dropped, as the client only sends them once its surface sees the window.
+	const auto dialogsQueued = (dialogsOpen() == 0);
 	HWND dialogsWnd = nullptr;
-	for (int attempt = 0; attempt < 40; ++attempt) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-		QCoreApplication::processEvents();
-		dialogsCountValue = dialogsCount();
+	std::intptr_t dialogsCountValue = 0;
+	if (dialogsQueued) {
+		for (int attempt = 0; attempt < 40 && dialogsWindow() == 0; ++attempt) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			QCoreApplication::processEvents();
+		}
 		dialogsWnd = reinterpret_cast<HWND>(dialogsWindow());
-		if (dialogsCountValue == 2 && dialogsWnd != nullptr) break;
+	}
+	if (dialogsWnd) {
+		for (int attempt = 0; attempt < 40; ++attempt) {
+			// Rows apply on the GPUI thread; a row sent just before the list
+			// is ready is dropped, so send again until it reports the count.
+			dialogsApply(dialogs, 2);
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			QCoreApplication::processEvents();
+			dialogsCountValue = dialogsCount();
+			if (dialogsCountValue == 2) break;
+		}
 	}
 	const auto separateWindow = (dialogsWnd != nullptr) && (dialogsWnd != handle);
 	bool dialogsOpened = false;

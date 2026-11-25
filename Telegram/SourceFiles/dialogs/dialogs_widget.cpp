@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/ui/dialogs_suggestions.h"
 #include "dialogs/ui/dialogs_top_bar_suggestion_content.h"
 #include "dialogs/dialogs_inner_widget.h"
+#include "dialogs/dialogs_gpui_bridge.h"
 #include "dialogs/dialogs_search_from_controllers.h"
 #include "dialogs/dialogs_top_bar_suggestion.h"
 #include "dialogs/dialogs_quick_action.h"
@@ -544,6 +545,24 @@ Widget::Widget(
 			_childListPeerId.value(),
 			_childListShown.value(),
 			makeChildListShown)));
+	// The GPUI chat list receives this column's rows and opens chats through
+	// the same navigation the Qt list uses. No surface places its window
+	// over the column yet: the Qt list still owns search, folders, filters,
+	// context menus and swipe actions, which the GPUI list does not have.
+	_gpuiDialogsOpen = Dialogs::EnableGpuiDialogsOpen([=](PeerId peerId) {
+		controller->showPeerInfo(peerId, Window::SectionShow::Way::ClearStack);
+	});
+	const auto showGpuiDialogs = [=] {
+		const auto folder = _inner->shownFolder();
+		if (_gpuiDialogsFolder == folder) {
+			return;
+		}
+		_gpuiDialogsFolder = folder;
+		_gpuiDialogs = rpl::lifetime();
+		Dialogs::ShowGpuiDialogs(&controller->session(), folder, _gpuiDialogs);
+	};
+	showGpuiDialogs();
+	_inner->updated() | rpl::on_next(showGpuiDialogs, lifetime());
 	controller->activeChatsFilter(
 	) | rpl::on_next([=](FilterId id) {
 		switchToChatsFilter(id);

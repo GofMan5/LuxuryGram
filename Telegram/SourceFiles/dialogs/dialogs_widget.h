@@ -24,6 +24,7 @@ class Error;
 } // namespace MTP
 
 namespace Data {
+class Folder;
 class Forum;
 class CommunityInfo;
 enum class StorySourcesList : uchar;
@@ -377,6 +378,11 @@ private:
 	object_ptr<Ui::ElasticScroll> _scroll;
 	Ui::VerticalLayout *_innerList = nullptr;
 	InnerWidget *_inner = nullptr;
+	// The GPUI chat list's subscription for the folder shown now, and the
+	// registration that lets the GPUI list open chats through this widget.
+	rpl::lifetime _gpuiDialogs;
+	rpl::lifetime _gpuiDialogsOpen;
+	Data::Folder *_gpuiDialogsFolder = nullptr;
 	std::unique_ptr<Suggestions> _suggestions;
 	std::vector<std::unique_ptr<Suggestions>> _hidingSuggestions;
 	class BottomButton;

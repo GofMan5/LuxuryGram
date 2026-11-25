@@ -194,7 +194,7 @@ pub unsafe extern "C" fn luxurygram_dialogs_apply(
             outgoing: row.flags & DIALOG_OUTGOING != 0,
         });
     }
-    DIALOGS_COUNT.store(rows_len as isize, Ordering::SeqCst);
+    DIALOGS_COUNT.store(0, Ordering::SeqCst);
     send(Command::Dialogs(dialogs))
 }
 
@@ -348,6 +348,9 @@ pub extern "C" fn luxurygram_history_start() -> i32 {
                                         });
                                     }
                                     Command::Dialogs(rows) => {
+                                        // A closed list drops the rows; the
+                                        // surface asks for the window first
+                                        // and the next snapshot follows.
                                         let count = rows.len();
                                         cx.update(|cx| {
                                             if let Some((list, _)) =
@@ -356,9 +359,10 @@ pub extern "C" fn luxurygram_history_start() -> i32 {
                                                 list.update(cx, |list, cx| {
                                                     list.set_store(DialogStore::new(rows), cx)
                                                 });
+                                                DIALOGS_COUNT
+                                                    .store(count as isize, Ordering::SeqCst);
                                             }
                                         });
-                                        DIALOGS_COUNT.store(count as isize, Ordering::SeqCst);
                                     }
                                     Command::ClearDialogs => {
                                         cx.update(|cx| {
