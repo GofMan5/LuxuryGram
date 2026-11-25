@@ -35,6 +35,20 @@ struct HistoryRekeyAbi {
 	std::int64_t new_message;
 };
 
+// Mirrors DialogRowAbi in history_bridge.rs.
+struct DialogRowAbi {
+	std::uint64_t peer;
+	std::uint32_t unread;
+	std::uint8_t flags;
+	const char *title;
+	std::size_t title_len;
+	const char *subtitle;
+	std::size_t subtitle_len;
+	const char *time;
+	std::size_t time_len;
+};
+static_assert(sizeof(DialogRowAbi) == 64, "ABI layout must match Rust");
+
 using Start = int (*)();
 using Apply = int (*)(const HistoryRowAbi *, std::size_t, const HistoryRekeyAbi *, std::size_t);
 using Clear = int (*)();
@@ -42,13 +56,26 @@ using Count = std::intptr_t (*)();
 using ExportedWindow = std::intptr_t (*)();
 using SendCallback = int (*)(void *, const char *, std::size_t);
 using SetSendCallback = int (*)(SendCallback, void *);
+using DialogsOpen = int (*)();
+using DialogsApply = int (*)(const DialogRowAbi *, std::size_t);
+using DialogsClose = int (*)();
+using DialogOpenCallback = int (*)(void *, std::uint64_t);
+using SetDialogOpenCallback = int (*)(DialogOpenCallback, void *);
 
 std::atomic<int> g_sentCount{ 0 };
 std::string g_sentText;
+std::atomic<int> g_openedCount{ 0 };
+std::atomic<std::uint64_t> g_openedPeer{ 0 };
 
 int onComposerSubmit(void *, const char *text, std::size_t len) {
 	g_sentText.assign(text, len);
 	++g_sentCount;
+	return 1;
+}
+
+int onDialogOpen(void *, std::uint64_t peer) {
+	g_openedPeer.store(peer);
+	++g_openedCount;
 	return 1;
 }
 
@@ -101,7 +128,15 @@ int wmain(int argc, wchar_t **argv) {
 	const auto count = reinterpret_cast<Count>(GetProcAddress(dll, "luxurygram_history_visible_count"));
 	const auto exportedWindow = reinterpret_cast<ExportedWindow>(GetProcAddress(dll, "luxurygram_history_window"));
 	const auto setSendCallback = reinterpret_cast<SetSendCallback>(GetProcAddress(dll, "luxurygram_history_set_send_callback"));
-	if (!start || !apply || !clear || !count || !exportedWindow || !setSendCallback) {
+	const auto dialogsOpen = reinterpret_cast<DialogsOpen>(GetProcAddress(dll, "luxurygram_dialogs_open"));
+	const auto dialogsApply = reinterpret_cast<DialogsApply>(GetProcAddress(dll, "luxurygram_dialogs_apply"));
+	const auto dialogsClose = reinterpret_cast<DialogsClose>(GetProcAddress(dll, "luxurygram_dialogs_close"));
+	const auto dialogsCount = reinterpret_cast<Count>(GetProcAddress(dll, "luxurygram_dialogs_count"));
+	const auto dialogsWindow = reinterpret_cast<ExportedWindow>(GetProcAddress(dll, "luxurygram_dialogs_window"));
+	const auto setDialogOpenCallback = reinterpret_cast<SetDialogOpenCallback>(GetProcAddress(dll, "luxurygram_dialogs_set_open_callback"));
+	if (!start || !apply || !clear || !count || !exportedWindow || !setSendCallback
+		|| !dialogsOpen || !dialogsApply || !dialogsClose || !dialogsCount
+		|| !dialogsWindow || !setDialogOpenCallback) {
 		std::fputs("GetProcAddress failed\n", stderr);
 		return 1;
 	}
@@ -219,6 +254,48 @@ int wmain(int argc, wchar_t **argv) {
 		setSendCallback(nullptr, nullptr);
 	}
 
+	// Chat list: open it, apply two rows, check its own window appears next
+	// to the feed's, then open the first row with Enter and see the callback
+	// receive that row's peer id. Closing it clears the handle and the rows.
+	constexpr char title1[] = "Design team";
+	constexpr char subtitle1[] = "See you tomorrow";
+	constexpr char time1[] = "09:30";
+	const DialogRowAbi dialogs[] = {
+		{ 1001, 3, 0x1, title1, sizeof(title1) - 1, subtitle1, sizeof(subtitle1) - 1, time1, sizeof(time1) - 1 },
+		{ 1002, 0, 0x2, "Alice", 5, "photo", 5, time1, sizeof(time1) - 1 },
+	};
+	const auto nullOpenRefused = (setDialogOpenCallback(nullptr, nullptr) == 1);
+	const auto openCallbackSet = (setDialogOpenCallback(&onDialogOpen, nullptr) == 0);
+	const auto dialogsQueued = (dialogsOpen() == 0) && (dialogsApply(dialogs, 2) == 0);
+	std::intptr_t dialogsCountValue = 0;
+	HWND dialogsWnd = nullptr;
+	for (int attempt = 0; attempt < 40; ++attempt) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		QCoreApplication::processEvents();
+		dialogsCountValue = dialogsCount();
+		dialogsWnd = reinterpret_cast<HWND>(dialogsWindow());
+		if (dialogsCountValue == 2 && dialogsWnd != nullptr) break;
+	}
+	const auto separateWindow = (dialogsWnd != nullptr) && (dialogsWnd != handle);
+	bool dialogsOpened = false;
+	if (separateWindow) {
+		// The list window takes focus when it opens; two forced redraws make
+		// its focused frame current before the key, as for the composer.
+		std::this_thread::sleep_for(std::chrono::milliseconds(300));
+		for (int i = 0; i < 2; ++i) {
+			RedrawWindow(dialogsWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		PostMessageW(dialogsWnd, WM_KEYDOWN, VK_RETURN, LPARAM(MapVirtualKeyW(VK_RETURN, MAPVK_VK_TO_VSC) << 16) | 1);
+		for (int attempt = 0; attempt < 40 && g_openedCount.load() == 0; ++attempt) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			QCoreApplication::processEvents();
+		}
+		dialogsOpened = (g_openedCount.load() == 1) && (g_openedPeer.load() == 1001);
+	}
+	const auto dialogsCleared = (dialogsClose() == 0) && waitFor(dialogsCount, 0, nullptr)
+		&& (dialogsWindow() == 0);
+
 	int exit = 0;
 	if (window) {
 		PostMessageW(window, WM_CLOSE, 0, 0);
@@ -232,11 +309,18 @@ int wmain(int argc, wchar_t **argv) {
 	std::fprintf(stderr,
 		"Qt ticks: %d; rejected: %d; queued: %d; populated: %d; revoked: %d; "
 		"same window: %d; geometry: %d; hide/show: %d; null callback refused: %d; "
-		"callback set: %d; composed: %d; handle cleared: %d; exit: %d\n",
+		"callback set: %d; composed: %d; null open refused: %d; open callback set: %d; "
+		"dialogs queued: %d; dialogs listed: %d; separate window: %d; dialogs opened: %d; "
+		"dialogs cleared: %d; handle cleared: %d; exit: %d\n",
 		ticks, rejected ? 1 : 0, queued ? 1 : 0, populated ? 1 : 0, revoked ? 1 : 0,
 		sameWindow ? 1 : 0, geometryOk ? 1 : 0, shown ? 1 : 0, nullRefused ? 1 : 0,
-		callbackSet ? 1 : 0, composed ? 1 : 0, clearedHandle ? 1 : 0, exit);
+		callbackSet ? 1 : 0, composed ? 1 : 0, nullOpenRefused ? 1 : 0,
+		openCallbackSet ? 1 : 0, dialogsQueued ? 1 : 0,
+		dialogsCountValue == 2 ? 1 : 0, separateWindow ? 1 : 0, dialogsOpened ? 1 : 0,
+		dialogsCleared ? 1 : 0, clearedHandle ? 1 : 0, exit);
 	return (ticks > 0 && rejected && queued && populated && revoked
 		&& sameWindow && geometryOk && shown && nullRefused && callbackSet
-		&& composed && clearedHandle) ? 0 : 1;
+		&& composed && nullOpenRefused && openCallbackSet && dialogsQueued
+		&& dialogsCountValue == 2 && separateWindow && dialogsOpened && dialogsCleared
+		&& clearedHandle) ? 0 : 1;
 }

@@ -168,6 +168,11 @@ impl DialogList {
             .and_then(|&i| self.store.get(i))
     }
 
+    /// The list's focus handle, so a host can focus a freshly opened window.
+    pub fn list_focus(&self) -> &FocusHandle {
+        &self.list_focus
+    }
+
     fn apply_filter(&mut self, cx: &mut Context<Self>) {
         let visible = self.store.matching(&self.query);
         self.list_state.reset(visible.len());
