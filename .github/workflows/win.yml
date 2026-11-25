@@ -333,6 +333,8 @@ jobs:
           set OUT=%TBUILD%\%REPO_NAME%\out\Debug
           mkdir artifact
           move %OUT%\LuxuryGram.exe artifact/
+          rem The GPUI bridge DLL ships beside the executable; without it the client runs the Qt UI only.
+          if exist %OUT%\luxurygram_shell.dll move %OUT%\luxurygram_shell.dll artifact/
       - uses: actions/upload-artifact@v7
         name: Upload artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
